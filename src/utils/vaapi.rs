@@ -55,7 +55,7 @@ pub const FORMAT_MAP: [FormatMap; 2] = [
 
 /// Returns a set of supported decoded formats given `rt_format`
 fn supported_formats_for_rt_format(
-    display: Rc<Display>,
+    display: &Display,
     rt_format: u32,
     profile: i32,
     entrypoint: u32,
@@ -282,9 +282,9 @@ pub(crate) enum StreamMetadataState {
 }
 
 impl StreamMetadataState {
-    pub(crate) fn display(&self) -> Rc<libva::Display> {
+    pub(crate) fn display(&self) -> &Rc<libva::Display> {
         match self {
-            StreamMetadataState::Unparsed { display } => Rc::clone(display),
+            StreamMetadataState::Unparsed { display } => display,
             StreamMetadataState::Parsed { context, .. } => context.display(),
         }
     }
