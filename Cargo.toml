@@ -1,6 +1,9 @@
 [package]
 name = "cros-codecs"
 version = "0.0.1"
+license-file = "LICENSE"
+description = "Hardware-accelerated codecs for Linux"
+repository = "https://github.com/chromeos/cros-codecs"
 authors = ["The ChromiumOS Authors"]
 edition = "2021"
 
