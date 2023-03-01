@@ -4,5 +4,6 @@
 
 #[cfg(test)]
 pub(crate) mod dummy;
+pub(crate) mod nalu_reader;
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
