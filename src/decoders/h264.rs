@@ -5,6 +5,5 @@
 pub mod backends;
 pub mod decoder;
 pub mod dpb;
-pub mod nalu_reader;
 pub mod parser;
 pub mod picture;

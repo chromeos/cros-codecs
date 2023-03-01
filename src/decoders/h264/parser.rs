@@ -14,7 +14,7 @@ use anyhow::Result;
 use bytes::Buf;
 use enumn::N;
 
-use crate::decoders::h264::nalu_reader::NaluReader;
+use crate::utils::nalu_reader::NaluReader;
 
 const DEFAULT_4X4_INTRA: [u8; 16] = [
     6, 13, 13, 20, 20, 20, 28, 28, 28, 28, 32, 32, 32, 37, 37, 42,

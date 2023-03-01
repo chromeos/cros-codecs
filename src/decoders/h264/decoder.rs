@@ -2436,7 +2436,6 @@ pub mod tests {
     use std::io::Cursor;
 
     use crate::decoders::h264::decoder::Decoder;
-    use crate::decoders::h264::nalu_reader::NaluReader;
     use crate::decoders::h264::parser::Nalu;
     use crate::decoders::h264::parser::NaluType;
     use crate::decoders::tests::test_decode_stream;
@@ -2444,6 +2443,7 @@ pub mod tests {
     use crate::decoders::BlockingMode;
     use crate::decoders::DecodedHandle;
     use crate::decoders::VideoDecoder;
+    use crate::utils::nalu_reader::NaluReader;
 
     /// H.264 decoding loop for use with `test_decode_stream`.
     pub fn h264_decoding_loop<D>(
