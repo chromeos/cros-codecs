@@ -48,8 +48,7 @@ enum NegotiationStatus {
     Possible {
         key_frame: (u64, Box<Header>, Vec<u8>, Box<Parser>),
     },
-    /// Processing the queued buffers.
-    DrainingQueuedBuffers,
+
     /// Negotiated. Locks in the format until a new key frame is seen if that
     /// new key frame changes the stream parameters.
     Negotiated,
@@ -227,23 +226,23 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
         frame: Frame<&[u8]>,
         timestamp: u64,
         queued_parser_state: Option<Parser>,
-    ) -> Result<T> {
+    ) -> Result<()> {
         let parser = match &queued_parser_state {
             Some(parser) => parser,
             None => &self.parser,
         };
 
         let block = if matches!(self.blocking_mode, BlockingMode::Blocking)
-            || matches!(
-                self.negotiation_status,
-                NegotiationStatus::DrainingQueuedBuffers
-            ) {
+            || matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
+        {
             BlockingMode::Blocking
         } else {
             BlockingMode::NonBlocking
         };
 
-        let decoded_handle = self
+        let show_frame = frame.header.show_frame();
+
+        let mut decoded_handle = self
             .backend
             .submit_picture(
                 &frame.header,
@@ -267,7 +266,15 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
             &mut self.alt_ref_picture,
         )?;
 
-        Ok(decoded_handle)
+        if show_frame {
+            let order = self.current_display_order;
+
+            decoded_handle.set_display_order(order);
+            self.current_display_order += 1;
+            self.ready_queue.push(decoded_handle);
+        }
+
+        Ok(())
     }
 
     fn negotiation_possible(&self, frame: &Frame<impl AsRef<[u8]>>) -> bool {
@@ -302,7 +309,7 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> VideoDecoder for Decoder<T> 
             }
         }
 
-        let queued_key_frame = match &mut self.negotiation_status {
+        match &mut self.negotiation_status {
             NegotiationStatus::NonNegotiated => {
                 if frame.header.key_frame() {
                     self.backend.poll(BlockingMode::Blocking)?;
@@ -328,54 +335,27 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> VideoDecoder for Decoder<T> 
             }
 
             NegotiationStatus::Possible { key_frame } => {
-                let key_frame = key_frame.clone();
-                self.negotiation_status = NegotiationStatus::DrainingQueuedBuffers;
-                Some(key_frame)
+                let (timestamp, header, bitstream, parser) = key_frame.clone();
+                let key_frame = Frame {
+                    bitstream: bitstream.as_ref(),
+                    header: *header,
+                };
+
+                self.handle_frame(key_frame, timestamp, Some(*parser))?;
+
+                self.negotiation_status = NegotiationStatus::Negotiated;
             }
 
-            NegotiationStatus::DrainingQueuedBuffers | NegotiationStatus::Negotiated => None,
+            NegotiationStatus::Negotiated => (),
         };
 
-        if let Some(queued_key_frame) = queued_key_frame {
-            let (timestamp, header, bitstream, parser) = queued_key_frame;
-
-            let key_frame = Frame {
-                bitstream: bitstream.as_ref(),
-                header: *header,
-            };
-
-            let show_frame = frame.header.show_frame();
-            let mut handle = self.handle_frame(key_frame, timestamp, Some(*parser))?;
-
-            if show_frame {
-                let order = self.current_display_order;
-
-                handle.set_display_order(order);
-                self.current_display_order += 1;
-
-                self.ready_queue.push(handle);
-            }
-
-            self.negotiation_status = NegotiationStatus::Negotiated;
-        }
-
-        let show_frame = frame.header.show_frame();
-        let mut handle = self.handle_frame(frame, timestamp, None)?;
+        self.handle_frame(frame, timestamp, None)?;
 
         if self.backend.num_resources_left() == 0 {
             self.block_on_one()?;
         }
 
         self.backend.poll(self.blocking_mode)?;
-
-        if show_frame {
-            let order = self.current_display_order;
-
-            handle.set_display_order(order);
-            self.current_display_order += 1;
-
-            self.ready_queue.push(handle);
-        }
 
         #[cfg(test)]
         self.steal_pics_for_test();

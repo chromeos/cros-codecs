@@ -128,8 +128,6 @@ enum NegotiationStatus {
     NonNegotiated { queued_buffers: Vec<(u64, Vec<u8>)> },
     /// Saw an SPS. Negotiation is possible until the next call to decode()
     Possible { queued_buffers: Vec<(u64, Vec<u8>)> },
-    /// Processing the queued buffers.
-    DrainingQueuedBuffers,
     /// Negotiated. Locks in the format until a new SPS is seen.
     Negotiated,
 }
@@ -2246,10 +2244,8 @@ where
         let picture = self.cur_pic.take().unwrap();
 
         let block = if matches!(self.blocking_mode, BlockingMode::Blocking)
-            || matches!(
-                self.negotiation_status,
-                NegotiationStatus::DrainingQueuedBuffers
-            ) {
+            || matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
+        {
             BlockingMode::Blocking
         } else {
             BlockingMode::NonBlocking
@@ -2380,7 +2376,7 @@ where
             }
         }
 
-        let queued_buffers = match &mut self.negotiation_status {
+        match &mut self.negotiation_status {
             NegotiationStatus::NonNegotiated { queued_buffers } => {
                 let buffer = Vec::from(bitstream);
                 queued_buffers.push((timestamp, buffer));
@@ -2398,21 +2394,15 @@ where
             }
 
             NegotiationStatus::Possible { queued_buffers } => {
-                let queued_buffers = queued_buffers.clone();
-                self.negotiation_status = NegotiationStatus::DrainingQueuedBuffers;
-                Some(queued_buffers)
+                for (timestamp, buffer) in queued_buffers.clone() {
+                    self.decode_access_unit(timestamp, &buffer)?;
+                }
+
+                self.negotiation_status = NegotiationStatus::Negotiated;
             }
 
-            NegotiationStatus::DrainingQueuedBuffers | NegotiationStatus::Negotiated => None,
+            NegotiationStatus::Negotiated => (),
         };
-
-        if let Some(queued_buffers) = queued_buffers {
-            for (timestamp, buffer) in queued_buffers {
-                self.decode_access_unit(timestamp, &buffer)?;
-            }
-
-            self.negotiation_status = NegotiationStatus::Negotiated;
-        }
 
         self.decode_access_unit(timestamp, bitstream)?;
 

@@ -68,8 +68,7 @@ enum NegotiationStatus {
     Possible {
         key_frame: (u64, Box<Header>, Vec<u8>),
     },
-    /// Processing the queued buffers.
-    DrainingQueuedBuffers,
+
     /// Negotiated. Locks in the format until a new key frame is seen if that
     /// new key frame changes the stream parameters.
     Negotiated,
@@ -222,8 +221,8 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
     }
 
     /// Handle a single frame.
-    fn handle_frame(&mut self, frame: &Frame<&[u8]>, timestamp: u64) -> Result<T> {
-        if frame.header.show_existing_frame() {
+    fn handle_frame(&mut self, frame: &Frame<&[u8]>, timestamp: u64) -> Result<()> {
+        let mut decoded_handle = if frame.header.show_existing_frame() {
             // Frame to be shown. Unwrapping must produce a Picture, because the
             // spec mandates frame_to_show_map_idx references a valid entry in
             // the DPB
@@ -231,7 +230,7 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
             let ref_frame = self.reference_frames[idx].as_ref().unwrap();
 
             // We are done, no further processing needed.
-            Ok(ref_frame.clone())
+            ref_frame.clone()
         } else {
             // Otherwise, we must actually arrange to decode a frame
             let refresh_frame_flags = frame.header.refresh_frame_flags();
@@ -240,10 +239,8 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
             let size = frame.size();
 
             let block = if matches!(self.blocking_mode, BlockingMode::Blocking)
-                || matches!(
-                    self.negotiation_status,
-                    NegotiationStatus::DrainingQueuedBuffers
-                ) {
+                || matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
+            {
                 BlockingMode::Blocking
             } else {
                 BlockingMode::NonBlocking
@@ -271,8 +268,19 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
                 refresh_frame_flags,
             )?;
 
-            Ok(decoded_handle)
+            decoded_handle
+        };
+
+        let show_existing_frame = frame.header.show_existing_frame();
+        if frame.header.show_frame() || show_existing_frame {
+            let order = self.current_display_order;
+            decoded_handle.set_display_order(order);
+            self.current_display_order += 1;
+
+            self.ready_queue.push(decoded_handle);
         }
+
+        Ok(())
     }
 
     fn negotiation_possible(&self, frame: &Frame<impl AsRef<[u8]>>) -> bool {
@@ -466,7 +474,7 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> VideoDecoder for Decoder<T> 
                 }
             }
 
-            let queued_key_frame = match &mut self.negotiation_status {
+            match &mut self.negotiation_status {
                 NegotiationStatus::NonNegotiated => {
                     if matches!(frame.header.frame_type(), FrameType::KeyFrame) {
                         self.backend.poll(BlockingMode::Blocking)?;
@@ -494,50 +502,24 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> VideoDecoder for Decoder<T> 
                 }
 
                 NegotiationStatus::Possible { key_frame } => {
-                    let key_frame = key_frame.clone();
-                    self.negotiation_status = NegotiationStatus::DrainingQueuedBuffers;
-                    Some(key_frame)
+                    let (timestamp, header, bitstream) = key_frame.clone();
+                    let key_frame = Frame::new(bitstream.as_ref(), *header, 0, bitstream.len());
+
+                    self.handle_frame(&key_frame, timestamp)?;
+
+                    self.negotiation_status = NegotiationStatus::Negotiated;
                 }
 
-                NegotiationStatus::DrainingQueuedBuffers | NegotiationStatus::Negotiated => None,
-            };
-
-            if let Some(queued_key_frame) = queued_key_frame {
-                let (timestamp, header, bitstream) = queued_key_frame;
-                let sz = bitstream.len();
-
-                let key_frame = Frame::new(bitstream.as_ref(), *header, 0, sz);
-
-                let show_existing_frame = frame.header.show_existing_frame();
-                let mut handle = self.handle_frame(&key_frame, timestamp)?;
-
-                if key_frame.header.show_frame() || show_existing_frame {
-                    let order = self.current_display_order;
-                    handle.set_display_order(order);
-                    self.current_display_order += 1;
-
-                    self.ready_queue.push(handle);
-                }
-
-                self.negotiation_status = NegotiationStatus::Negotiated;
+                NegotiationStatus::Negotiated => (),
             }
 
-            let show_existing_frame = frame.header.show_existing_frame();
-            let mut handle = self.handle_frame(&frame, timestamp)?;
+            self.handle_frame(&frame, timestamp)?;
 
             if self.backend.num_resources_left() == 0 {
                 self.block_on_one()?;
             }
 
             self.backend.poll(self.blocking_mode)?;
-
-            if frame.header.show_frame() || show_existing_frame {
-                let order = self.current_display_order;
-                handle.set_display_order(order);
-                self.current_display_order += 1;
-
-                self.ready_queue.push(handle);
-            }
         }
 
         #[cfg(test)]
