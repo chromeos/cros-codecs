@@ -306,10 +306,7 @@ impl Backend {
 
 impl StatelessDecoderBackend for Backend {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
-        self.backend.metadata_state.open(header, None)?;
-        self.backend.negotiation_status = NegotiationStatus::Possible(Box::new(header.clone()));
-
-        Ok(())
+        self.backend.new_sequence(header)
     }
 
     fn submit_picture(

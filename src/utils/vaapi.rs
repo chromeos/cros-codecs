@@ -659,6 +659,7 @@ where
 
 impl<StreamData> VaapiBackend<StreamData>
 where
+    StreamData: Clone,
     for<'a> &'a StreamData: StreamInfo,
 {
     pub(crate) fn new(display: Rc<libva::Display>) -> Self {
@@ -667,6 +668,16 @@ where
             pending_jobs: Default::default(),
             negotiation_status: Default::default(),
         }
+    }
+
+    pub(crate) fn new_sequence(
+        &mut self,
+        stream_params: &StreamData,
+    ) -> StatelessBackendResult<()> {
+        self.metadata_state.open(stream_params, None)?;
+        self.negotiation_status = NegotiationStatus::Possible(Box::new(stream_params.clone()));
+
+        Ok(())
     }
 
     pub(crate) fn process_picture(
@@ -701,6 +712,7 @@ where
 
 impl<StreamData> VideoDecoderBackend for VaapiBackend<StreamData>
 where
+    StreamData: Clone,
     for<'a> &'a StreamData: StreamInfo,
 {
     type Handle = DecodedHandle;

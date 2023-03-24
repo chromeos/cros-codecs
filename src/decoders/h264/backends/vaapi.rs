@@ -549,10 +549,7 @@ impl VideoDecoderBackend for Backend {
 
 impl StatelessDecoderBackend for Backend {
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
-        self.backend.metadata_state.open(sps, None)?;
-        self.backend.negotiation_status = NegotiationStatus::Possible(Box::new(sps.clone()));
-
-        Ok(())
+        self.backend.new_sequence(sps)
     }
 
     fn handle_picture(
