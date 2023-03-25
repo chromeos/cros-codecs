@@ -702,100 +702,37 @@ impl Decoder<VADecodedHandle> {
 mod tests {
     use libva::Display;
 
-    use crate::decoders::h264::decoder::tests::run_decoding_loop;
+    use crate::decoders::h264::decoder::tests::test_decode_stream;
     use crate::decoders::h264::decoder::Decoder;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DynDecodedHandle;
-    use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-
-    fn process_handle(
-        handle: Box<dyn DynDecodedHandle>,
-        dump_yuv: bool,
-        expected_crcs: Option<&mut Vec<&str>>,
-        frame_num: i32,
-    ) {
-        let mut picture = handle.dyn_picture_mut();
-        let mut backend_handle = picture.dyn_mappable_handle_mut();
-
-        let buffer_size = backend_handle.image_size();
-        let mut nv12 = vec![0; buffer_size];
-
-        backend_handle.read(&mut nv12).unwrap();
-
-        if dump_yuv {
-            std::fs::write(format!("/tmp/frame{:03}.yuv", frame_num), &nv12).unwrap();
-        }
-
-        let frame_crc = crc32fast::hash(&nv12);
-
-        if let Some(expected_crcs) = expected_crcs {
-            let frame_crc = format!("{:08x}", frame_crc);
-            let removed = expected_crcs.pop().unwrap();
-            assert_eq!(frame_crc, removed);
-        }
-    }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_16x16_progressive_i() {
-        /// This test is the same as
-        /// h264::decoders::tests::test_16x16_progressive_i, but with an actual
-        /// backend to test whether the backend specific logic works and the
-        /// produced CRCs match their expected values.
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/16x16-I.h264");
+        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I;
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
             let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            // CRC from the GStreamer decoder, should be good enough for us for now.
-            let mut expected_crcs = vec!["2737596b"];
-
-            run_decoding_loop(&mut decoder, TEST_STREAM, |handle| {
-                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-                frame_num += 1;
-            });
-
-            assert!(
-                expected_crcs.is_empty(),
-                "Some CRCs were not produced by the decoder: {:?}",
-                expected_crcs
-            );
+            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I, true, false);
         }
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_and_p() {
-        /// This test is the same as
-        /// h264::decoders::tests::test_16x16_progressive_i_and_p, but with an
-        /// actual backend to test whether the backend specific logic works and
-        /// the produced CRCs match their expected values.
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/16x16-I-P.h264");
+    fn test_16x16_progressive_i_p() {
+        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P;
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
             let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            let mut expected_crcs = vec!["2563d883", "1d0295c6"];
-
-            run_decoding_loop(&mut decoder, TEST_STREAM, |handle| {
-                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                frame_num += 1;
-            });
-
-            assert!(
-                expected_crcs.is_empty(),
-                "Some CRCs were not produced by the decoder: {:?}",
-                expected_crcs
-            );
+            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I_P, true, false);
         }
     }
 
@@ -803,31 +740,14 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_16x16_progressive_i_p_b_p() {
-        /// This test is the same as
-        /// h264::decoders::tests::test_16x16_progressive_i_p_b_p, but with an
-        /// actual backend to test whether the backend specific logic works and
-        /// the produced CRCs match their expected values.
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/16x16-I-P-B-P.h264");
-        const STREAM_CRCS: &str = include_str!("../test_data/16x16-I-P-B-P.h264.crc");
+        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P_B_P;
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut expected_crcs = STREAM_CRCS.lines().rev().collect::<Vec<_>>();
-            let mut frame_num = 0;
             let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |handle| {
-                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                frame_num += 1;
-            });
-
-            assert!(
-                expected_crcs.is_empty(),
-                "Some CRCs were not produced by the decoder: {:?}",
-                expected_crcs
-            );
+            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I_P_B_P, true, false);
         }
     }
 
@@ -835,64 +755,14 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_16x16_progressive_i_p_b_p_high() {
-        /// This test is the same as
-        /// h264::decoders::tests::test_16x16_progressive_i_p_b_p_high, but with
-        /// an actual backend to test whether the backend specific logic works
-        /// and the produced CRCs match their expected values.
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/16x16-I-P-B-P-high.h264");
-        const STREAM_CRCS: &str = include_str!("../test_data/16x16-I-P-B-P-high.h264.crc");
+        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH;
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
-        for blocking_mode in blocking_modes {
-            let mut expected_crcs = STREAM_CRCS.lines().rev().collect::<Vec<_>>();
-            let mut frame_num = 0;
-            let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            run_decoding_loop(&mut decoder, TEST_STREAM, |handle| {
-                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                frame_num += 1;
-            });
-
-            assert!(
-                expected_crcs.is_empty(),
-                "Some CRCs were not produced by the decoder: {:?}",
-                expected_crcs
-            );
-        }
-    }
-
-    fn test_decode_stream(mut decoder: Decoder<VADecodedHandle>, stream: &[u8], crcs: &str) {
-        let mut expected_crcs = crcs.lines().rev().collect::<Vec<_>>();
-        let mut frame_num = 0;
-
-        run_decoding_loop(&mut decoder, stream, |handle| {
-            process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-            frame_num += 1;
-        });
-
-        assert!(
-            expected_crcs.is_empty(),
-            "Some CRCs were not produced by the decoder: {:?}",
-            expected_crcs
-        );
-    }
-
-    #[test]
-    // Ignore this test by default as it requires libva-compatible hardware.
-    #[ignore]
-    fn test_25fps_interlaced_h264() {
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps-interlaced.h264");
-        const STREAM_CRCS: &str = include_str!("../test_data/test-25fps-interlaced.h264.crc");
-
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
         for blocking_mode in blocking_modes {
             let display = Display::open().unwrap();
             let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            test_decode_stream(decoder, TEST_STREAM, STREAM_CRCS);
+            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH, true, false);
         }
     }
 
@@ -900,18 +770,29 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_25fps_h264() {
-        /// This test is the same as h264::decoders::tests::test_25fps_h264, but
-        /// with an actual backend to test whether the backend specific logic
-        /// works and the produced CRCs match their expected values.
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.h264");
-        const STREAM_CRCS: &str = include_str!("../test_data/test-25fps.h264.crc");
-
+        use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS;
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
+
         for blocking_mode in blocking_modes {
             let display = Display::open().unwrap();
             let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            test_decode_stream(decoder, TEST_STREAM, STREAM_CRCS);
+            test_decode_stream(decoder, &DECODE_TEST_25FPS, true, true);
+        }
+    }
+
+    #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
+    fn test_25fps_interlaced_h264() {
+        use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS_INTERLACED;
+        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
+
+        for blocking_mode in blocking_modes {
+            let display = Display::open().unwrap();
+            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+
+            test_decode_stream(decoder, &DECODE_TEST_25FPS_INTERLACED, true, false);
         }
     }
 }

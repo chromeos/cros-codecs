@@ -2570,144 +2570,191 @@ pub mod tests {
         }
     }
 
+    /// Data for a decoding test.
+    pub struct DecodingTest {
+        /// Bytestream to decode.
+        stream: &'static [u8],
+        /// Expected CRC for each frame, one per line.
+        crcs: &'static str,
+    }
+
+    /// Run the decoding loop on a given test.
+    ///
+    /// If `check_crcs` is `true`, then the expected CRCs of the decoded images are compared
+    /// against the existing result. We may want to set this to false when using a decoder backend
+    /// that does not produce actual frames.
+    ///
+    /// `dump_yuv` will dump all the decoded frames into `/tmp/framexxx.yuv`. Set this to true in
+    /// order to debug the output of the test.
+    pub fn test_decode_stream<Handle>(
+        mut decoder: Decoder<Handle>,
+        test: &DecodingTest,
+        check_crcs: bool,
+        dump_yuv: bool,
+    ) where
+        Handle: DecodedHandle + DynDecodedHandle + 'static,
+    {
+        let mut crcs = test.crcs.lines().enumerate();
+
+        run_decoding_loop(&mut decoder, test.stream, |handle| {
+            let (frame_num, next_crc) = crcs.next().expect("decoded more frames than expected");
+            if check_crcs {
+                let mut picture = handle.dyn_picture_mut();
+                let mut backend_handle = picture.dyn_mappable_handle_mut();
+
+                let buffer_size = backend_handle.image_size();
+                let mut nv12 = vec![0; buffer_size];
+
+                backend_handle.read(&mut nv12).unwrap();
+
+                if dump_yuv {
+                    std::fs::write(format!("/tmp/frame{:03}.yuv", frame_num), &nv12).unwrap();
+                }
+
+                let frame_crc = crc32fast::hash(&nv12);
+
+                let frame_crc = format!("{:08x}", frame_crc);
+                assert_eq!(frame_crc, next_crc);
+            }
+        });
+
+        assert_eq!(crcs.next(), None, "decoded less frames than expected");
+    }
+
+    /// A 16x16 progressive byte-stream encoded I-frame to make it easier to
+    /// spot errors on the libva trace.
+    /// Encoded with the following GStreamer pipeline:
+    /// gst-launch-1.0 videotestsrc num-buffers=1 ! video/x-raw,format=I420,width=16,height=16 ! \
+    /// x264enc ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
+    /// filesink location="/tmp/16x16-I.h264"
+    pub const DECODE_16X16_PROGRESSIVE_I: DecodingTest = DecodingTest {
+        stream: include_bytes!("test_data/16x16-I.h264"),
+        crcs: "2737596b",
+    };
+
     #[test]
     fn test_16x16_progressive_i() {
-        /// A 16x16 progressive byte-stream encoded I-frame to make it easier to
-        /// spot errors on the libva trace.
-        /// Encoded with the following GStreamer pipeline:
-        /// gst-launch-1.0 videotestsrc num-buffers=1 ! video/x-raw,format=I420,width=16,height=16 ! \
-        /// x264enc ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
-        /// filesink location="/tmp/16x16-I.h264"
-        const TEST_STREAM: &[u8] = include_bytes!("test_data/16x16-I.h264");
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
-            let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
+            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |_| {
-                frame_num += 1;
-            });
-
-            assert_eq!(frame_num, 1);
+            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I, false, false);
         }
     }
+
+    /// A 16x16 progressive byte-stream encoded I-frame and P-frame to make
+    /// it easier to spot errors on the libva trace.
+    /// Encoded with the following GStreamer pipeline:
+    /// gst-launch-1.0 videotestsrc num-buffers=2 ! video/x-raw,format=I420,width=16,height=16 ! \
+    /// x264enc b-adapt=false ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
+    /// filesink location="/tmp/16x16-I-P.h264"
+    pub const DECODE_16X16_PROGRESSIVE_I_P: DecodingTest = DecodingTest {
+        stream: include_bytes!("test_data/16x16-I-P.h264"),
+        crcs: "1d0295c6\n2563d883",
+    };
 
     #[test]
-    fn test_16x16_progressive_i_and_p() {
-        /// A 16x16 progressive byte-stream encoded I-frame and P-frame to make
-        /// it easier to spot errors on the libva trace.
-        /// Encoded with the following GStreamer pipeline:
-        /// gst-launch-1.0 videotestsrc num-buffers=2 ! video/x-raw,format=I420,width=16,height=16 ! \
-        /// x264enc b-adapt=false ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
-        /// filesink location="/tmp/16x16-I-P.h264"
-        const TEST_STREAM: &[u8] = include_bytes!("test_data/16x16-I-P.h264");
+    fn test_16x16_progressive_i_p() {
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
-            let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
+            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |_| {
-                frame_num += 1;
-            });
-
-            assert_eq!(frame_num, 2);
+            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I_P, false, false);
         }
     }
+
+    /// A 16x16 progressive byte-stream encoded I-P-B-P sequence to make it
+    /// easier to it easier to spot errors on the libva trace.
+    /// Encoded with the following GStreamer pipeline:
+    /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=16,height=16 ! \
+    /// x264enc b-adapt=false bframes=1 ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
+    /// filesink location="/tmp/16x16-I-B-and-P.h264"
+    pub const DECODE_16X16_PROGRESSIVE_I_P_B_P: DecodingTest = DecodingTest {
+        stream: include_bytes!("test_data/16x16-I-P-B-P.h264"),
+        crcs: include_str!("test_data/16x16-I-P-B-P.h264.crc"),
+    };
 
     #[test]
     fn test_16x16_progressive_i_p_b_p() {
-        /// A 16x16 progressive byte-stream encoded I-P-B-P sequence to make it
-        /// easier to it easier to spot errors on the libva trace.
-        /// Encoded with the following GStreamer pipeline:
-        /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=16,height=16 ! \
-        /// x264enc b-adapt=false bframes=1 ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
-        /// filesink location="/tmp/16x16-I-B-and-P.h264"
-        const TEST_STREAM: &[u8] = include_bytes!("test_data/16x16-I-P-B-P.h264");
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
-            let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
+            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |_| {
-                frame_num += 1;
-            });
-
-            assert_eq!(frame_num, 4);
+            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I_P_B_P, false, false);
         }
     }
+
+    /// A 16x16 progressive byte-stream encoded I-P-B-P sequence to make it
+    /// easier to it easier to spot errors on the libva trace.
+    /// Also tests whether the decoder supports the high profile.
+    ///
+    /// Encoded with the following GStreamer pipeline:
+    /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=16,height=16 ! \
+    /// x264enc b-adapt=false bframes=1 ! video/x-h264,profile=high,stream-format=byte-stream ! \
+    /// filesink location="/tmp/16x16-I-B-and-P-high.h264"
+    pub const DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH: DecodingTest = DecodingTest {
+        stream: include_bytes!("test_data/16x16-I-P-B-P-high.h264"),
+        crcs: include_str!("test_data/16x16-I-P-B-P-high.h264.crc"),
+    };
 
     #[test]
     fn test_16x16_progressive_i_p_b_p_high() {
-        /// A 16x16 progressive byte-stream encoded I-P-B-P sequence to make it
-        /// easier to it easier to spot errors on the libva trace.
-        /// Also tests whether the decoder supports the high profile.
-        ///
-        /// Encoded with the following GStreamer pipeline:
-        /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=16,height=16 ! \
-        /// x264enc b-adapt=false bframes=1 ! video/x-h264,profile=high,stream-format=byte-stream ! \
-        /// filesink location="/tmp/16x16-I-B-and-P-high.h264"
-        const TEST_STREAM: &[u8] = include_bytes!("test_data/16x16-I-P-B-P-high.h264");
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
-            let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
+            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |_| {
-                frame_num += 1;
-            });
-
-            assert_eq!(frame_num, 4);
+            test_decode_stream(
+                decoder,
+                &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH,
+                false,
+                false,
+            );
         }
     }
 
-    fn test_decode_stream<Handle>(mut decoder: Decoder<Handle>, stream: &[u8], num_frames: i32)
-    where
-        Handle: DecodedHandle + DynDecodedHandle + 'static,
-    {
-        let mut frame_num = 0;
+    /// Same as Chromium's test-25fps.h264
+    pub const DECODE_TEST_25FPS: DecodingTest = DecodingTest {
+        stream: include_bytes!("test_data/test-25fps.h264"),
+        crcs: include_str!("test_data/test-25fps.h264.crc"),
+    };
 
-        run_decoding_loop(&mut decoder, stream, |_| {
-            frame_num += 1;
-        });
+    #[test]
+    fn test_25fps_h264() {
+        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
-        assert_eq!(frame_num, num_frames);
+        for blocking_mode in blocking_modes {
+            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
+
+            test_decode_stream(decoder, &DECODE_TEST_25FPS, false, false);
+        }
     }
+
+    // Adapted from Chromium's test-25fps.h264. Same file, but encoded as
+    // interlaced instead using the following ffmpeg command:
+    // ffmpeg -i
+    // src/third_party/blink/web_tests/media/content/test-25fps.mp4
+    // -flags +ilme+ildct  -vbsf h264_mp4toannexb -an test-25fps.h264
+    //
+    // This test makes sure that the interlaced logic in the decoder
+    // actually works, specially that "frame splitting" works, as the fields
+    // here were encoded as frames.
+    pub const DECODE_TEST_25FPS_INTERLACED: DecodingTest = DecodingTest {
+        stream: include_bytes!("test_data/test-25fps-interlaced.h264"),
+        crcs: include_str!("test_data/test-25fps-interlaced.h264.crc"),
+    };
 
     #[test]
     fn test_25fps_interlaced_h264() {
-        // Adapted from Chromium's test-25fps.h264. Same file, but encoded as
-        // interlaced instead using the following ffmpeg command:
-        // ffmpeg -i
-        // src/third_party/blink/web_tests/media/content/test-25fps.mp4
-        // -flags +ilme+ildct  -vbsf h264_mp4toannexb -an test-25fps.h264
-        //
-        // This test makes sure that the interlaced logic in the decoder
-        // actually works, specially that "frame splitting" works, as the fields
-        // here were encoded as frames.
-        const TEST_STREAM: &[u8] = include_bytes!("test_data/test-25fps-interlaced.h264");
-
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
+
         for blocking_mode in blocking_modes {
             let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            test_decode_stream(decoder, TEST_STREAM, 250);
-        }
-    }
-
-    #[test]
-    /// Same as Chromium's test-25fps.h264
-    fn test_25fps_h264() {
-        const TEST_STREAM: &[u8] = include_bytes!("test_data/test-25fps.h264");
-
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-        for blocking_mode in blocking_modes {
-            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
-
-            test_decode_stream(decoder, TEST_STREAM, 250);
+            test_decode_stream(decoder, &DECODE_TEST_25FPS_INTERLACED, false, false);
         }
     }
 }
