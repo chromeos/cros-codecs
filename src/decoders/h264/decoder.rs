@@ -2725,6 +2725,19 @@ pub mod tests {
         }
     }
 
+    fn test_decode_stream<Handle>(mut decoder: Decoder<Handle>, stream: &[u8], num_frames: i32)
+    where
+        Handle: DecodedHandle + DynDecodedHandle + 'static,
+    {
+        let mut frame_num = 0;
+
+        run_decoding_loop(&mut decoder, stream, |decoder| {
+            process_ready_frames(decoder, &mut |_, _| frame_num += 1);
+        });
+
+        assert_eq!(frame_num, num_frames);
+    }
+
     #[test]
     fn test_25fps_interlaced_h264() {
         // Adapted from Chromium's test-25fps.h264. Same file, but encoded as
@@ -2737,17 +2750,12 @@ pub mod tests {
         // actually works, specially that "frame splitting" works, as the fields
         // here were encoded as frames.
         const TEST_STREAM: &[u8] = include_bytes!("test_data/test-25fps-interlaced.h264");
+
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
         for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
-            let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
+            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, _| frame_num += 1);
-            });
-
-            assert_eq!(frame_num, 250);
+            test_decode_stream(decoder, TEST_STREAM, 250);
         }
     }
 
@@ -2755,17 +2763,12 @@ pub mod tests {
     /// Same as Chromium's test-25fps.h264
     fn test_25fps_h264() {
         const TEST_STREAM: &[u8] = include_bytes!("test_data/test-25fps.h264");
+
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
         for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
-            let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
+            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, _| frame_num += 1);
-            });
-
-            assert_eq!(frame_num, 250);
+            test_decode_stream(decoder, TEST_STREAM, 250);
         }
     }
 }

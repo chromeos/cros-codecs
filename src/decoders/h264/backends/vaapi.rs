@@ -909,42 +909,43 @@ mod tests {
         }
     }
 
+    fn test_decode_stream(mut decoder: Decoder<VADecodedHandle>, stream: &[u8], crcs: &str) {
+        let mut expected_crcs = crcs.lines().collect::<HashSet<_>>();
+        let mut frame_num = 0;
+
+        run_decoding_loop(&mut decoder, stream, |decoder| {
+            process_ready_frames(decoder, &mut |decoder, handle| {
+                // Contains the VA-API params used to decode the picture.
+                // Useful if we want to write assertions against any
+                // particular value used therein.
+                let _params = get_test_params(decoder.backend());
+
+                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
+
+                frame_num += 1;
+            });
+        });
+
+        assert!(
+            expected_crcs.is_empty(),
+            "Some CRCs were not produced by the decoder: {:?}",
+            expected_crcs
+        );
+    }
+
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_25fps_interlaced_h264() {
-        /// This test is the same as
-        /// h264::decoders::tests::test_25fps_interlaced_h264, but with an
-        /// actual backend to test whether the backend specific logic works and
-        /// the produced CRCs match their expected values.
         const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps-interlaced.h264");
         const STREAM_CRCS: &str = include_str!("../test_data/test-25fps-interlaced.h264.crc");
+
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
         for blocking_mode in blocking_modes {
-            let mut expected_crcs = STREAM_CRCS.lines().collect::<HashSet<_>>();
-            let mut frame_num = 0;
             let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |decoder, handle| {
-                    // Contains the VA-API params used to decode the picture.
-                    // Useful if we want to write assertions against any
-                    // particular value used therein.
-                    let _params = get_test_params(decoder.backend());
-
-                    process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
-            });
-
-            assert!(
-                expected_crcs.is_empty(),
-                "Some CRCs were not produced by the decoder: {:?}",
-                expected_crcs
-            );
+            test_decode_stream(decoder, TEST_STREAM, STREAM_CRCS);
         }
     }
 
@@ -957,32 +958,13 @@ mod tests {
         /// works and the produced CRCs match their expected values.
         const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.h264");
         const STREAM_CRCS: &str = include_str!("../test_data/test-25fps.h264.crc");
+
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
         for blocking_mode in blocking_modes {
-            let mut expected_crcs = STREAM_CRCS.lines().collect::<HashSet<_>>();
-            let mut frame_num = 0;
             let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |decoder, handle| {
-                    // Contains the VA-API params used to decode the picture.
-                    // Useful if we want to write assertions against any
-                    // particular value used therein.
-                    let _params = get_test_params(decoder.backend());
-
-                    process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
-            });
-
-            assert!(
-                expected_crcs.is_empty(),
-                "Some CRCs were not produced by the decoder: {:?}",
-                expected_crcs
-            );
+            test_decode_stream(decoder, TEST_STREAM, STREAM_CRCS);
         }
     }
 }
