@@ -702,32 +702,19 @@ impl Decoder<VADecodedHandle> {
 mod tests {
     use libva::Display;
 
-    use crate::decoders::h264::backends::vaapi::TestParams;
-    use crate::decoders::h264::backends::StatelessDecoderBackend;
-    use crate::decoders::h264::decoder::tests::process_ready_frames;
     use crate::decoders::h264::decoder::tests::run_decoding_loop;
     use crate::decoders::h264::decoder::Decoder;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DecodedHandle;
-    use crate::decoders::DynHandle;
+    use crate::decoders::DynDecodedHandle;
     use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 
-    fn get_test_params(
-        backend: &dyn StatelessDecoderBackend<Handle = VADecodedHandle>,
-    ) -> &TestParams {
-        backend
-            .get_test_params()
-            .downcast_ref::<TestParams>()
-            .unwrap()
-    }
-
     fn process_handle(
-        handle: &VADecodedHandle,
+        handle: Box<dyn DynDecodedHandle>,
         dump_yuv: bool,
         expected_crcs: Option<&mut Vec<&str>>,
         frame_num: i32,
     ) {
-        let mut picture = handle.handle_mut();
+        let mut picture = handle.dyn_picture_mut();
         let mut backend_handle = picture.dyn_mappable_handle_mut();
 
         let buffer_size = backend_handle.image_size();
@@ -767,16 +754,9 @@ mod tests {
             // CRC from the GStreamer decoder, should be good enough for us for now.
             let mut expected_crcs = vec!["2737596b"];
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |decoder, handle| {
-                    // Contains the params used to decode the picture. Useful if we want to
-                    // write assertions against any particular value used therein.
-                    let _params = get_test_params(decoder.backend());
-
-                    process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
+            run_decoding_loop(&mut decoder, TEST_STREAM, |handle| {
+                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
+                frame_num += 1;
             });
 
             assert!(
@@ -805,16 +785,10 @@ mod tests {
 
             let mut expected_crcs = vec!["2563d883", "1d0295c6"];
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                // Contains the VA-API params used to decode the picture. Useful
-                // if we want to write assertions against any particular value
-                // used therein.
-                process_ready_frames(decoder, &mut |decoder, handle| {
-                    let _params = get_test_params(decoder.backend());
-                    process_handle(handle, false, Some(&mut expected_crcs), frame_num);
+            run_decoding_loop(&mut decoder, TEST_STREAM, |handle| {
+                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
 
-                    frame_num += 1;
-                });
+                frame_num += 1;
             });
 
             assert!(
@@ -843,17 +817,10 @@ mod tests {
             let display = Display::open().unwrap();
             let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |decoder, handle| {
-                    // Contains the VA-API params used to decode the picture.
-                    // Useful if we want to write assertions against any
-                    // particular value used therein.
-                    let _params = get_test_params(decoder.backend());
+            run_decoding_loop(&mut decoder, TEST_STREAM, |handle| {
+                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
 
-                    process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
+                frame_num += 1;
             });
 
             assert!(
@@ -882,17 +849,10 @@ mod tests {
             let display = Display::open().unwrap();
             let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |decoder, handle| {
-                    // Contains the VA-API params used to decode the picture.
-                    // Useful if we want to write assertions against any
-                    // particular value used therein.
-                    let _params = get_test_params(decoder.backend());
+            run_decoding_loop(&mut decoder, TEST_STREAM, |handle| {
+                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
 
-                    process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
+                frame_num += 1;
             });
 
             assert!(
@@ -907,17 +867,10 @@ mod tests {
         let mut expected_crcs = crcs.lines().rev().collect::<Vec<_>>();
         let mut frame_num = 0;
 
-        run_decoding_loop(&mut decoder, stream, |decoder| {
-            process_ready_frames(decoder, &mut |decoder, handle| {
-                // Contains the VA-API params used to decode the picture.
-                // Useful if we want to write assertions against any
-                // particular value used therein.
-                let _params = get_test_params(decoder.backend());
+        run_decoding_loop(&mut decoder, stream, |handle| {
+            process_handle(handle, false, Some(&mut expected_crcs), frame_num);
 
-                process_handle(handle, true, Some(&mut expected_crcs), frame_num);
-
-                frame_num += 1;
-            });
+            frame_num += 1;
         });
 
         assert!(

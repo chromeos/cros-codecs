@@ -99,27 +99,6 @@ pub struct CurrentPicInfo {
     max_long_term_frame_idx: i32,
 }
 
-#[cfg(test)]
-struct Params<T> {
-    ready_pics: Vec<T>,
-}
-
-#[cfg(test)]
-impl<T> Params<T> {
-    fn save_ready_pics(&mut self, ready_pics: Vec<T>) {
-        self.ready_pics.extend(ready_pics);
-    }
-}
-
-#[cfg(test)]
-impl<T> Default for Params<T> {
-    fn default() -> Self {
-        Self {
-            ready_pics: Default::default(),
-        }
-    }
-}
-
 /// Represents where we are in the negotiation status. We assume ownership of
 /// the incoming buffers in this special case so that clients do not have to do
 /// the bookkeeping themselves.
@@ -271,9 +250,6 @@ where
     /// Equivalent to RefPicList1 in the specification. Computed for every
     /// slice, points to the pictures in the DPB.
     ref_pic_list1: Vec<DpbEntry<T>>,
-
-    #[cfg(test)]
-    params: Params<T>,
 }
 
 impl<T> Decoder<T>
@@ -311,9 +287,6 @@ where
             ref_frame_list_1_short_term: Default::default(),
             ref_pic_list0: Default::default(),
             ref_pic_list1: Default::default(),
-
-            #[cfg(test)]
-            params: Default::default(),
         })
     }
 
@@ -2282,18 +2255,6 @@ where
         None
     }
 
-    #[cfg(test)]
-    fn steal_pics_for_test(&mut self) {
-        let frames = self.get_ready_frames();
-        self.params.save_ready_pics(frames);
-    }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn backend(&self) -> &dyn StatelessDecoderBackend<Handle = T> {
-        self.backend.as_ref()
-    }
-
     fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> VideoDecoderResult<()> {
         if self.backend.num_resources_left() == 0 {
             return Err(VideoDecoderError::StatelessBackendError(
@@ -2405,9 +2366,6 @@ where
 
         self.backend.poll(self.blocking_mode)?;
 
-        #[cfg(test)]
-        self.steal_pics_for_test();
-
         let ready_frames = self.get_ready_frames();
 
         Ok(ready_frames
@@ -2425,9 +2383,6 @@ where
         }
 
         self.drain()?;
-
-        #[cfg(test)]
-        self.steal_pics_for_test();
 
         let pics = self.get_ready_frames();
 
@@ -2489,26 +2444,13 @@ pub mod tests {
     use crate::decoders::DynDecodedHandle;
     use crate::decoders::VideoDecoder;
 
-    pub fn process_ready_frames<Handle>(
-        decoder: &mut Decoder<Handle>,
-        action: &mut dyn FnMut(&mut Decoder<Handle>, &Handle),
-    ) where
-        Handle: DecodedHandle + DynDecodedHandle,
-    {
-        let ready_pics = decoder.params.ready_pics.drain(..).collect::<Vec<_>>();
-
-        for handle in ready_pics {
-            action(decoder, &handle);
-        }
-    }
-
     pub fn run_decoding_loop<Handle, F>(
         decoder: &mut Decoder<Handle>,
         test_stream: &[u8],
-        mut on_new_iteration: F,
+        mut on_new_frame: F,
     ) where
         Handle: DecodedHandle + DynDecodedHandle + 'static,
-        F: FnMut(&mut Decoder<Handle>),
+        F: FnMut(Box<dyn DynDecodedHandle>),
     {
         let mut cursor = Cursor::new(test_stream);
 
@@ -2525,11 +2467,10 @@ pub mod tests {
 
                 let data = &test_stream[start_offset..end_offset];
 
-                // TODO: check that the frames are returned in the right order.
-                decoder.decode(frame_num, data).unwrap();
-
-                on_new_iteration(decoder);
-                frame_num += 1;
+                for frame in decoder.decode(frame_num, data).unwrap() {
+                    on_new_frame(frame);
+                    frame_num += 1;
+                }
             }
         }
 
@@ -2544,17 +2485,15 @@ pub mod tests {
 
             let data = &test_stream[start_offset..end_offset];
 
-            decoder.decode(frame_num, data).unwrap();
+            for frame in decoder.decode(frame_num, data).unwrap() {
+                on_new_frame(frame)
+            }
 
-            on_new_iteration(decoder);
             frame_num += 1;
         }
 
-        decoder.flush().unwrap();
-        let n_flushed = decoder.params.ready_pics.len();
-
-        for _ in 0..n_flushed {
-            on_new_iteration(decoder);
+        for frame in decoder.flush().unwrap() {
+            on_new_frame(frame)
         }
     }
 
@@ -2646,8 +2585,8 @@ pub mod tests {
             let mut frame_num = 0;
             let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, _| frame_num += 1);
+            run_decoding_loop(&mut decoder, TEST_STREAM, |_| {
+                frame_num += 1;
             });
 
             assert_eq!(frame_num, 1);
@@ -2669,8 +2608,8 @@ pub mod tests {
             let mut frame_num = 0;
             let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, _| frame_num += 1);
+            run_decoding_loop(&mut decoder, TEST_STREAM, |_| {
+                frame_num += 1;
             });
 
             assert_eq!(frame_num, 2);
@@ -2692,8 +2631,8 @@ pub mod tests {
             let mut frame_num = 0;
             let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, _| frame_num += 1);
+            run_decoding_loop(&mut decoder, TEST_STREAM, |_| {
+                frame_num += 1;
             });
 
             assert_eq!(frame_num, 4);
@@ -2717,8 +2656,8 @@ pub mod tests {
             let mut frame_num = 0;
             let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, _| frame_num += 1);
+            run_decoding_loop(&mut decoder, TEST_STREAM, |_| {
+                frame_num += 1;
             });
 
             assert_eq!(frame_num, 4);
@@ -2731,8 +2670,8 @@ pub mod tests {
     {
         let mut frame_num = 0;
 
-        run_decoding_loop(&mut decoder, stream, |decoder| {
-            process_ready_frames(decoder, &mut |_, _| frame_num += 1);
+        run_decoding_loop(&mut decoder, stream, |_| {
+            frame_num += 1;
         });
 
         assert_eq!(frame_num, num_frames);
