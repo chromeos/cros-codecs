@@ -124,19 +124,17 @@ impl<T> Default for Params<T> {
 /// the incoming buffers in this special case so that clients do not have to do
 /// the bookkeeping themselves.
 enum NegotiationStatus {
-    /// Still waiting for a SPS. Any incoming buffers are being queued in order.
-    NonNegotiated { queued_buffers: Vec<(u64, Vec<u8>)> },
+    /// Still waiting for a SPS.
+    NonNegotiated,
     /// Saw an SPS. Negotiation is possible until the next call to decode()
-    Possible { queued_buffers: Vec<(u64, Vec<u8>)> },
+    Possible { sps: (u64, Vec<u8>) },
     /// Negotiated. Locks in the format until a new SPS is seen.
     Negotiated,
 }
 
 impl Default for NegotiationStatus {
     fn default() -> Self {
-        Self::NonNegotiated {
-            queued_buffers: Default::default(),
-        }
+        Self::NonNegotiated
     }
 }
 
@@ -2369,34 +2367,29 @@ where
         if let Some(sps) = &sps {
             if Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)? {
                 if matches!(self.negotiation_status, NegotiationStatus::Negotiated) {
-                    self.negotiation_status = NegotiationStatus::NonNegotiated {
-                        queued_buffers: Default::default(),
-                    }
+                    self.negotiation_status = NegotiationStatus::NonNegotiated
                 }
             }
         }
 
         match &mut self.negotiation_status {
-            NegotiationStatus::NonNegotiated { queued_buffers } => {
-                let buffer = Vec::from(bitstream);
-                queued_buffers.push((timestamp, buffer));
-
+            NegotiationStatus::NonNegotiated => {
                 if let Some(sps) = &sps {
                     self.backend.poll(BlockingMode::Blocking)?;
                     self.backend.new_sequence(sps)?;
 
                     self.negotiation_status = NegotiationStatus::Possible {
-                        queued_buffers: queued_buffers.clone(),
+                        sps: (timestamp, Vec::from(bitstream)),
                     }
                 }
 
                 return Ok(vec![]);
             }
 
-            NegotiationStatus::Possible { queued_buffers } => {
-                for (timestamp, buffer) in queued_buffers.clone() {
-                    self.decode_access_unit(timestamp, &buffer)?;
-                }
+            NegotiationStatus::Possible { sps } => {
+                let (timestamp, buffer) = sps.clone();
+
+                self.decode_access_unit(timestamp, &buffer)?;
 
                 self.negotiation_status = NegotiationStatus::Negotiated;
             }
@@ -2426,14 +2419,9 @@ where
     fn flush(&mut self) -> VideoDecoderResult<Vec<Box<dyn DynDecodedHandle>>> {
         // Decode whatever is pending using the default format. Mainly covers
         // the rare case where only one buffer is sent.
-        match &self.negotiation_status {
-            NegotiationStatus::NonNegotiated { queued_buffers }
-            | NegotiationStatus::Possible { queued_buffers } => {
-                for (timestamp, buffer) in queued_buffers.clone() {
-                    self.decode_access_unit(timestamp, &buffer)?;
-                }
-            }
-            _ => {}
+        if let NegotiationStatus::Possible { sps } = &self.negotiation_status {
+            let (timestamp, buffer) = sps.clone();
+            self.decode_access_unit(timestamp, &buffer)?;
         }
 
         self.drain()?;
@@ -2454,17 +2442,14 @@ where
     }
 
     fn num_resources_left(&self) -> Option<usize> {
-        if matches!(
-            self.negotiation_status,
-            NegotiationStatus::NonNegotiated { .. }
-        ) {
+        if matches!(self.negotiation_status, NegotiationStatus::NonNegotiated) {
             return None;
         }
 
         let left_in_the_backend = self.backend.num_resources_left();
 
-        if let NegotiationStatus::Possible { queued_buffers } = &self.negotiation_status {
-            Some(left_in_the_backend - queued_buffers.len())
+        if let NegotiationStatus::Possible { .. } = &self.negotiation_status {
+            Some(left_in_the_backend - 1)
         } else {
             Some(left_in_the_backend)
         }
