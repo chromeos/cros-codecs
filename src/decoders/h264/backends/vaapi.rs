@@ -700,8 +700,6 @@ impl Decoder<VADecodedHandle> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use libva::Display;
 
     use crate::decoders::h264::backends::vaapi::TestParams;
@@ -726,7 +724,7 @@ mod tests {
     fn process_handle(
         handle: &VADecodedHandle,
         dump_yuv: bool,
-        expected_crcs: Option<&mut HashSet<&str>>,
+        expected_crcs: Option<&mut Vec<&str>>,
         frame_num: i32,
     ) {
         let mut picture = handle.handle_mut();
@@ -738,19 +736,15 @@ mod tests {
         backend_handle.read(&mut nv12).unwrap();
 
         if dump_yuv {
-            std::fs::write(format!("/tmp/frame{}.yuv", frame_num), &nv12).unwrap();
+            std::fs::write(format!("/tmp/frame{:03}.yuv", frame_num), &nv12).unwrap();
         }
 
         let frame_crc = crc32fast::hash(&nv12);
 
         if let Some(expected_crcs) = expected_crcs {
             let frame_crc = format!("{:08x}", frame_crc);
-            let removed = expected_crcs.remove(frame_crc.as_str());
-            assert!(
-                removed,
-                "CRC not found: {:?}, iteration: {:?}",
-                frame_crc, frame_num
-            );
+            let removed = expected_crcs.pop().unwrap();
+            assert_eq!(frame_crc, removed);
         }
     }
 
@@ -771,7 +765,7 @@ mod tests {
             let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
             // CRC from the GStreamer decoder, should be good enough for us for now.
-            let mut expected_crcs = HashSet::from(["2737596b"]);
+            let mut expected_crcs = vec!["2737596b"];
 
             run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
                 process_ready_frames(decoder, &mut |decoder, handle| {
@@ -809,7 +803,7 @@ mod tests {
             let display = Display::open().unwrap();
             let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            let mut expected_crcs = HashSet::from(["1d0295c6", "2563d883"]);
+            let mut expected_crcs = vec!["2563d883", "1d0295c6"];
 
             run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
                 // Contains the VA-API params used to decode the picture. Useful
@@ -844,7 +838,7 @@ mod tests {
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut expected_crcs = STREAM_CRCS.lines().collect::<HashSet<_>>();
+            let mut expected_crcs = STREAM_CRCS.lines().rev().collect::<Vec<_>>();
             let mut frame_num = 0;
             let display = Display::open().unwrap();
             let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
@@ -883,7 +877,7 @@ mod tests {
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
-            let mut expected_crcs = STREAM_CRCS.lines().collect::<HashSet<_>>();
+            let mut expected_crcs = STREAM_CRCS.lines().rev().collect::<Vec<_>>();
             let mut frame_num = 0;
             let display = Display::open().unwrap();
             let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
@@ -910,7 +904,7 @@ mod tests {
     }
 
     fn test_decode_stream(mut decoder: Decoder<VADecodedHandle>, stream: &[u8], crcs: &str) {
-        let mut expected_crcs = crcs.lines().collect::<HashSet<_>>();
+        let mut expected_crcs = crcs.lines().rev().collect::<Vec<_>>();
         let mut frame_num = 0;
 
         run_decoding_loop(&mut decoder, stream, |decoder| {
@@ -920,7 +914,7 @@ mod tests {
                 // particular value used therein.
                 let _params = get_test_params(decoder.backend());
 
-                process_handle(handle, false, Some(&mut expected_crcs), frame_num);
+                process_handle(handle, true, Some(&mut expected_crcs), frame_num);
 
                 frame_num += 1;
             });
