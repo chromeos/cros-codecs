@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use std::collections::VecDeque;
 use std::rc::Rc;
 
 use anyhow::anyhow;
@@ -25,15 +24,12 @@ use crate::decoders::vp9::parser::MAX_SEGMENTS;
 use crate::decoders::vp9::parser::NUM_REF_FRAMES;
 use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
-use crate::decoders::Result as DecoderResult;
 use crate::decoders::StatelessBackendError;
-use crate::decoders::VideoDecoderBackend;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 use crate::utils::vaapi::GenericBackendHandle;
 use crate::utils::vaapi::NegotiationStatus;
 use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
-use crate::Resolution;
 
 /// The number of surfaces to allocate for this codec.
 const NUM_SURFACES: usize = 12;
@@ -49,7 +45,7 @@ impl StreamInfo for &Header {
     }
 
     fn rt_format(&self) -> anyhow::Result<u32> {
-        Backend::get_rt_format(
+        VaapiBackend::<_>::get_rt_format(
             self.profile(),
             self.bit_depth(),
             self.subsampling_x(),
@@ -62,7 +58,7 @@ impl StreamInfo for &Header {
     }
 
     fn coded_size(&self) -> (u32, u32) {
-        (self.width() as u32, self.height() as u32)
+        (self.width(), self.height())
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
@@ -70,18 +66,7 @@ impl StreamInfo for &Header {
     }
 }
 
-struct Backend {
-    backend: VaapiBackend<Header>,
-}
-
-impl Backend {
-    /// Create a new codec backend for VP8.
-    fn new(display: Rc<libva::Display>) -> Result<Self> {
-        Ok(Self {
-            backend: VaapiBackend::new(display),
-        })
-    }
-
+impl VaapiBackend<Header> {
     fn get_rt_format(
         profile: Profile,
         bit_depth: BitDepth,
@@ -255,9 +240,9 @@ impl Backend {
     }
 }
 
-impl StatelessDecoderBackend for Backend {
+impl StatelessDecoderBackend for VaapiBackend<Header> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
-        self.backend.new_sequence(header)
+        self.new_sequence(header)
     }
 
     fn submit_picture(
@@ -269,7 +254,7 @@ impl StatelessDecoderBackend for Backend {
         segmentation: &[Segmentation; MAX_SEGMENTS],
         block: BlockingMode,
     ) -> StatelessBackendResult<Self::Handle> {
-        self.backend.negotiation_status = NegotiationStatus::Negotiated;
+        self.negotiation_status = NegotiationStatus::Negotiated;
 
         let reference_frames: [u32; NUM_REF_FRAMES] = reference_frames
             .iter()
@@ -284,14 +269,13 @@ impl StatelessDecoderBackend for Backend {
             .try_into()
             .unwrap();
 
-        let metadata = self.backend.metadata_state.get_parsed_mut()?;
+        let metadata = self.metadata_state.get_parsed_mut()?;
         let context = &metadata.context;
 
-        let pic_param =
-            context.create_buffer(Backend::build_pic_param(picture, reference_frames)?)?;
+        let pic_param = context.create_buffer(Self::build_pic_param(picture, reference_frames)?)?;
 
         let slice_param =
-            context.create_buffer(Backend::build_slice_param(segmentation, bitstream.len())?)?;
+            context.create_buffer(Self::build_slice_param(segmentation, bitstream.len())?)?;
 
         let slice_data =
             context.create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))?;
@@ -308,54 +292,17 @@ impl StatelessDecoderBackend for Backend {
         va_picture.add_buffer(slice_param);
         va_picture.add_buffer(slice_data);
 
-        self.backend.process_picture(va_picture, block)
-    }
-}
-
-impl VideoDecoderBackend for Backend {
-    type Handle = VADecodedHandle;
-
-    fn coded_resolution(&self) -> Option<Resolution> {
-        self.backend.coded_resolution()
-    }
-
-    fn display_resolution(&self) -> Option<Resolution> {
-        self.backend.display_resolution()
-    }
-
-    fn num_resources_total(&self) -> usize {
-        self.backend.num_resources_total()
-    }
-
-    fn num_resources_left(&self) -> usize {
-        self.backend.num_resources_left()
-    }
-
-    fn format(&self) -> Option<crate::DecodedFormat> {
-        self.backend.format()
-    }
-
-    fn try_format(&mut self, format: crate::DecodedFormat) -> DecoderResult<()> {
-        self.backend.try_format(format)
-    }
-
-    fn poll(&mut self, blocking_mode: BlockingMode) -> DecoderResult<VecDeque<Self::Handle>> {
-        self.backend.poll(blocking_mode)
-    }
-
-    fn handle_is_ready(&self, handle: &Self::Handle) -> bool {
-        self.backend.handle_is_ready(handle)
-    }
-
-    fn block_on_handle(&mut self, handle: &Self::Handle) -> StatelessBackendResult<()> {
-        self.backend.block_on_handle(handle)
+        self.process_picture(va_picture, block)
     }
 }
 
 impl Decoder<VADecodedHandle> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> Result<Self> {
-        Self::new(Box::new(Backend::new(display)?), blocking_mode)
+        Self::new(
+            Box::new(VaapiBackend::<Header>::new(display)),
+            blocking_mode,
+        )
     }
 }
 
@@ -370,7 +317,7 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::decoders::vp9::backends::vaapi::Backend;
+    use crate::decoders::h264::parser::Sps;
     use crate::decoders::vp9::decoder::tests::process_ready_frames;
     use crate::decoders::vp9::decoder::tests::read_ivf_packet;
     use crate::decoders::vp9::decoder::tests::run_decoding_loop;
@@ -384,9 +331,10 @@ mod tests {
     use crate::decoders::DynHandle;
     use crate::decoders::VideoDecoderBackend;
     use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
+    use crate::utils::vaapi::VaapiBackend;
 
     /// Resolves to the type used as Handle by the backend.
-    type AssociatedHandle = <Backend as VideoDecoderBackend>::Handle;
+    type AssociatedHandle = <VaapiBackend<Sps> as VideoDecoderBackend>::Handle;
 
     fn process_handle(
         handle: &AssociatedHandle,
@@ -561,7 +509,7 @@ mod tests {
 
         assert_eq!(frame.size(), 10674);
 
-        let pic_param = Backend::build_pic_param(
+        let pic_param = VaapiBackend::build_pic_param(
             &frame.header,
             [libva::constants::VA_INVALID_SURFACE; NUM_REF_FRAMES],
         )
@@ -572,7 +520,7 @@ mod tests {
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = Backend::build_slice_param(&segmentation, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
@@ -630,14 +578,14 @@ mod tests {
         let frame = frames.remove(0);
         assert_eq!(frame.size(), 2390);
 
-        let pic_param = Backend::build_pic_param(&frame.header, [0; NUM_REF_FRAMES]).unwrap();
+        let pic_param = VaapiBackend::build_pic_param(&frame.header, [0; NUM_REF_FRAMES]).unwrap();
         let pic_param = match pic_param {
             BufferType::PictureParameter(PictureParameter::VP9(pic_param)) => pic_param,
             _ => panic!(),
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = Backend::build_slice_param(&segmentation, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
@@ -691,14 +639,15 @@ mod tests {
         let frame = frames.remove(0);
         assert_eq!(frame.size(), 108);
 
-        let pic_param = Backend::build_pic_param(&frame.header, [0, 0, 1, 0, 0, 0, 0, 0]).unwrap();
+        let pic_param =
+            VaapiBackend::build_pic_param(&frame.header, [0, 0, 1, 0, 0, 0, 0, 0]).unwrap();
         let pic_param = match pic_param {
             BufferType::PictureParameter(PictureParameter::VP9(pic_param)) => pic_param,
             _ => panic!(),
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = Backend::build_slice_param(&segmentation, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),

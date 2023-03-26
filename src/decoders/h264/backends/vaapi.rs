@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use std::collections::VecDeque;
 use std::rc::Rc;
 
 use anyhow::anyhow;
@@ -33,15 +32,12 @@ use crate::decoders::h264::picture::PictureData;
 use crate::decoders::h264::picture::Reference;
 use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
-use crate::decoders::Result as DecoderResult;
 use crate::decoders::StatelessBackendError;
 use crate::decoders::VideoDecoderBackend;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 use crate::utils::vaapi::NegotiationStatus;
 use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
-use crate::DecodedFormat;
-use crate::Resolution;
 
 impl StreamInfo for &Sps {
     fn va_profile(&self) -> anyhow::Result<i32> {
@@ -95,19 +91,7 @@ impl StreamInfo for &Sps {
     }
 }
 
-/// H.264 stateless decoder backend for VA-API.
-struct Backend {
-    backend: VaapiBackend<Sps>,
-}
-
-impl Backend {
-    /// Creates a new codec backend for H.264.
-    fn new(display: Rc<libva::Display>) -> Self {
-        Self {
-            backend: VaapiBackend::new(display),
-        }
-    }
-
+impl VaapiBackend<Sps> {
     /// Gets the VASurfaceID for the given `picture`.
     fn surface_id(handle: &Option<VADecodedHandle>) -> libva::VASurfaceID {
         match handle {
@@ -223,7 +207,7 @@ impl Backend {
         sps: &Sps,
         pps: &Pps,
     ) -> Result<BufferType> {
-        let curr_pic = Backend::fill_va_h264_pic(current_picture, current_surface_id, false);
+        let curr_pic = Self::fill_va_h264_pic(current_picture, current_surface_id, false);
 
         let mut refs = vec![];
         let mut va_refs = vec![];
@@ -236,8 +220,8 @@ impl Backend {
 
         for handle in &refs {
             let ref_pic = handle.0.borrow();
-            let surface_id = Backend::surface_id(&handle.1);
-            let pic = Backend::fill_va_h264_pic(&ref_pic, surface_id, true);
+            let surface_id = Self::surface_id(&handle.1);
+            let pic = Self::fill_va_h264_pic(&ref_pic, surface_id, true);
             va_refs.push(pic);
         }
 
@@ -251,13 +235,13 @@ impl Backend {
 
         for handle in &refs {
             let ref_pic = handle.0.borrow();
-            let surface_id = Backend::surface_id(&handle.1);
-            let pic = Backend::fill_va_h264_pic(&ref_pic, surface_id, true);
+            let surface_id = Self::surface_id(&handle.1);
+            let pic = Self::fill_va_h264_pic(&ref_pic, surface_id, true);
             va_refs.push(pic);
         }
 
         for _ in va_refs.len()..16 {
-            va_refs.push(Backend::build_invalid_va_h264_pic());
+            va_refs.push(Self::build_invalid_va_h264_pic());
         }
 
         refs.clear();
@@ -330,15 +314,15 @@ impl Backend {
 
         for handle in ref_list_x {
             let pic = handle.0.borrow();
-            let surface_id = Backend::surface_id(&handle.1);
+            let surface_id = Self::surface_id(&handle.1);
             let merge = matches!(pic.field, Field::Frame);
-            let va_pic = Backend::fill_va_h264_pic(&pic, surface_id, merge);
+            let va_pic = Self::fill_va_h264_pic(&pic, surface_id, merge);
 
             va_pics.push(va_pic);
         }
 
         for _ in va_pics.len()..32 {
-            va_pics.push(Backend::build_invalid_va_h264_pic());
+            va_pics.push(Self::build_invalid_va_h264_pic());
         }
 
         let va_pics: [libva::PictureH264; 32] = match va_pics.try_into() {
@@ -362,8 +346,8 @@ impl Backend {
         let hdr = slice.header();
         let nalu = slice.nalu();
 
-        let ref_list_0 = Backend::fill_ref_pic_list(ref_list_0);
-        let ref_list_1 = Backend::fill_ref_pic_list(ref_list_1);
+        let ref_list_0 = Self::fill_ref_pic_list(ref_list_0);
+        let ref_list_1 = Self::fill_ref_pic_list(ref_list_1);
         let pwt = hdr.pred_weight_table();
 
         let mut luma_weight_l0_flag = false;
@@ -469,51 +453,11 @@ impl Backend {
     }
 }
 
-impl VideoDecoderBackend for Backend {
-    type Handle = VADecodedHandle;
-
-    fn num_resources_total(&self) -> usize {
-        self.backend.num_resources_total()
-    }
-
-    fn num_resources_left(&self) -> usize {
-        self.backend.num_resources_left()
-    }
-
-    fn format(&self) -> Option<DecodedFormat> {
-        self.backend.format()
-    }
-
-    fn try_format(&mut self, format: DecodedFormat) -> DecoderResult<()> {
-        self.backend.try_format(format)
-    }
-
-    fn coded_resolution(&self) -> Option<Resolution> {
-        self.backend.coded_resolution()
-    }
-
-    fn display_resolution(&self) -> Option<Resolution> {
-        self.backend.display_resolution()
-    }
-
-    fn poll(&mut self, blocking_mode: BlockingMode) -> DecoderResult<VecDeque<Self::Handle>> {
-        self.backend.poll(blocking_mode)
-    }
-
-    fn handle_is_ready(&self, handle: &Self::Handle) -> bool {
-        self.backend.handle_is_ready(handle)
-    }
-
-    fn block_on_handle(&mut self, handle: &Self::Handle) -> StatelessBackendResult<()> {
-        self.backend.block_on_handle(handle)
-    }
-}
-
-impl StatelessDecoderBackend for Backend {
+impl StatelessDecoderBackend for VaapiBackend<Sps> {
     type Picture = VaPicture<PictureNew>;
 
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
-        self.backend.new_sequence(sps)
+        VaapiBackend::new_sequence(self, sps)
     }
 
     fn handle_picture(
@@ -525,17 +469,17 @@ impl StatelessDecoderBackend for Backend {
         dpb: &Dpb<Self::Handle>,
         slice: &Slice<&[u8]>,
     ) -> StatelessBackendResult<()> {
-        self.backend.negotiation_status = NegotiationStatus::Negotiated;
+        self.negotiation_status = NegotiationStatus::Negotiated;
 
-        let metadata = self.backend.metadata_state.get_parsed()?;
+        let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
         let surface_id = picture.surface().id();
 
-        let pic_param = Backend::build_pic_param(slice, picture_data, surface_id, dpb, sps, pps)?;
+        let pic_param = Self::build_pic_param(slice, picture_data, surface_id, dpb, sps, pps)?;
         let pic_param = context.create_buffer(pic_param)?;
 
-        let iq_matrix = Backend::build_iq_matrix(pps);
+        let iq_matrix = Self::build_iq_matrix(pps);
         let iq_matrix = context.create_buffer(iq_matrix)?;
 
         picture.add_buffer(pic_param);
@@ -554,10 +498,10 @@ impl StatelessDecoderBackend for Backend {
         ref_pic_list0: &[DpbEntry<Self::Handle>],
         ref_pic_list1: &[DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {
-        let metadata = self.backend.metadata_state.get_parsed()?;
+        let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
-        let slice_param = context.create_buffer(Backend::build_slice_param(
+        let slice_param = context.create_buffer(Self::build_slice_param(
             slice,
             ref_pic_list0,
             ref_pic_list1,
@@ -580,7 +524,7 @@ impl StatelessDecoderBackend for Backend {
         picture: Self::Picture,
         block: BlockingMode,
     ) -> StatelessBackendResult<Self::Handle> {
-        self.backend.process_picture(picture, block)
+        self.process_picture(picture, block)
     }
 
     fn new_picture(
@@ -588,7 +532,7 @@ impl StatelessDecoderBackend for Backend {
         _: &PictureData,
         timestamp: u64,
     ) -> StatelessBackendResult<Self::Picture> {
-        let metadata = self.backend.metadata_state.get_parsed_mut()?;
+        let metadata = self.metadata_state.get_parsed_mut()?;
         let surface = metadata
             .surface_pool
             .get_surface()
@@ -627,7 +571,7 @@ impl StatelessDecoderBackend for Backend {
 impl Decoder<VADecodedHandle, VaPicture<PictureNew>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> Result<Self> {
-        Self::new(Box::new(Backend::new(display)), blocking_mode)
+        Self::new(Box::new(VaapiBackend::<Sps>::new(display)), blocking_mode)
     }
 }
 

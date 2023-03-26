@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
@@ -22,9 +21,7 @@ use crate::decoders::vp8::parser::MbLfAdjustments;
 use crate::decoders::vp8::parser::Segmentation;
 use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
-use crate::decoders::Result as DecoderResult;
 use crate::decoders::StatelessBackendError;
-use crate::decoders::VideoDecoderBackend;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 use crate::utils::vaapi::GenericBackendHandle;
 use crate::utils::vaapi::NegotiationStatus;
@@ -57,18 +54,7 @@ impl StreamInfo for &Header {
     }
 }
 
-struct Backend {
-    backend: VaapiBackend<Header>,
-}
-
-impl Backend {
-    /// Create a new codec backend for VP8.
-    fn new(display: Rc<libva::Display>) -> Result<Self> {
-        Ok(Self {
-            backend: VaapiBackend::new(display),
-        })
-    }
-
+impl VaapiBackend<Header> {
     /// A clamp such that min <= x <= max
     fn clamp<T: PartialOrd>(x: T, low: T, high: T) -> T {
         if x > high {
@@ -104,17 +90,17 @@ impl Backend {
             }
 
             let mut qi = qi_base;
-            quantization_index[0] = u16::try_from(Backend::clamp(qi, 0, 127))?;
+            quantization_index[0] = u16::try_from(Self::clamp(qi, 0, 127))?;
             qi = qi_base + i16::from(frame_hdr.quant_indices().y_dc_delta);
-            quantization_index[1] = u16::try_from(Backend::clamp(qi, 0, 127))?;
+            quantization_index[1] = u16::try_from(Self::clamp(qi, 0, 127))?;
             qi = qi_base + i16::from(frame_hdr.quant_indices().y2_dc_delta);
-            quantization_index[2] = u16::try_from(Backend::clamp(qi, 0, 127))?;
+            quantization_index[2] = u16::try_from(Self::clamp(qi, 0, 127))?;
             qi = qi_base + i16::from(frame_hdr.quant_indices().y2_ac_delta);
-            quantization_index[3] = u16::try_from(Backend::clamp(qi, 0, 127))?;
+            quantization_index[3] = u16::try_from(Self::clamp(qi, 0, 127))?;
             qi = qi_base + i16::from(frame_hdr.quant_indices().uv_dc_delta);
-            quantization_index[4] = u16::try_from(Backend::clamp(qi, 0, 127))?;
+            quantization_index[4] = u16::try_from(Self::clamp(qi, 0, 127))?;
             qi = qi_base + i16::from(frame_hdr.quant_indices().uv_ac_delta);
-            quantization_index[5] = u16::try_from(Backend::clamp(qi, 0, 127))?;
+            quantization_index[5] = u16::try_from(Self::clamp(qi, 0, 127))?;
         }
 
         Ok(BufferType::IQMatrix(IQMatrix::VP8(IQMatrixBufferVP8::new(
@@ -150,7 +136,7 @@ impl Backend {
                 level = i8::try_from(frame_hdr.loop_filter_level())?;
             }
 
-            loop_filter_level[i] = Backend::clamp(u8::try_from(level)?, 0, 63);
+            loop_filter_level[i] = Self::clamp(u8::try_from(level)?, 0, 63);
             loop_filter_deltas_ref_frame[i] = adj.ref_frame_delta[i];
             loop_filter_deltas_mode[i] = adj.mb_mode_delta[i];
         }
@@ -225,9 +211,9 @@ impl Backend {
     }
 }
 
-impl StatelessDecoderBackend for Backend {
+impl StatelessDecoderBackend for VaapiBackend<Header> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
-        self.backend.new_sequence(header)
+        self.new_sequence(header)
     }
 
     fn submit_picture(
@@ -260,17 +246,17 @@ impl StatelessDecoderBackend for Backend {
             libva::constants::VA_INVALID_SURFACE
         };
 
-        self.backend.negotiation_status = NegotiationStatus::Negotiated;
+        self.negotiation_status = NegotiationStatus::Negotiated;
 
-        let metadata = self.backend.metadata_state.get_parsed_mut()?;
+        let metadata = self.metadata_state.get_parsed_mut()?;
         let context = &metadata.context;
         let coded_resolution = metadata.surface_pool.coded_resolution();
 
-        let iq_buffer = context.create_buffer(Backend::build_iq_matrix(picture, segmentation)?)?;
+        let iq_buffer = context.create_buffer(Self::build_iq_matrix(picture, segmentation)?)?;
 
-        let probs = context.create_buffer(Backend::build_probability_table(picture))?;
+        let probs = context.create_buffer(Self::build_probability_table(picture))?;
 
-        let pic_param = context.create_buffer(Backend::build_pic_param(
+        let pic_param = context.create_buffer(Self::build_pic_param(
             picture,
             &coded_resolution,
             segmentation,
@@ -281,7 +267,7 @@ impl StatelessDecoderBackend for Backend {
         )?)?;
 
         let slice_param =
-            context.create_buffer(Backend::build_slice_param(picture, bitstream.len())?)?;
+            context.create_buffer(Self::build_slice_param(picture, bitstream.len())?)?;
 
         let slice_data =
             context.create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))?;
@@ -300,54 +286,17 @@ impl StatelessDecoderBackend for Backend {
         va_picture.add_buffer(slice_param);
         va_picture.add_buffer(slice_data);
 
-        self.backend.process_picture(va_picture, block)
-    }
-}
-
-impl VideoDecoderBackend for Backend {
-    type Handle = VADecodedHandle;
-
-    fn coded_resolution(&self) -> Option<Resolution> {
-        self.backend.coded_resolution()
-    }
-
-    fn display_resolution(&self) -> Option<Resolution> {
-        self.backend.display_resolution()
-    }
-
-    fn num_resources_total(&self) -> usize {
-        self.backend.num_resources_total()
-    }
-
-    fn num_resources_left(&self) -> usize {
-        self.backend.num_resources_left()
-    }
-
-    fn format(&self) -> Option<crate::DecodedFormat> {
-        self.backend.format()
-    }
-
-    fn try_format(&mut self, format: crate::DecodedFormat) -> DecoderResult<()> {
-        self.backend.try_format(format)
-    }
-
-    fn poll(&mut self, blocking_mode: BlockingMode) -> DecoderResult<VecDeque<Self::Handle>> {
-        self.backend.poll(blocking_mode)
-    }
-
-    fn handle_is_ready(&self, handle: &Self::Handle) -> bool {
-        self.backend.handle_is_ready(handle)
-    }
-
-    fn block_on_handle(&mut self, handle: &Self::Handle) -> StatelessBackendResult<()> {
-        self.backend.block_on_handle(handle)
+        self.process_picture(va_picture, block)
     }
 }
 
 impl Decoder<VADecodedHandle> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> Result<Self> {
-        Self::new(Box::new(Backend::new(display)?), blocking_mode)
+        Self::new(
+            Box::new(VaapiBackend::<Header>::new(display)),
+            blocking_mode,
+        )
     }
 }
 
@@ -363,20 +312,21 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::decoders::vp8::backends::vaapi::Backend;
     use crate::decoders::vp8::decoder::tests::process_ready_frames;
     use crate::decoders::vp8::decoder::tests::run_decoding_loop;
     use crate::decoders::vp8::decoder::Decoder;
+    use crate::decoders::vp8::parser::Header;
     use crate::decoders::vp8::parser::Parser;
     use crate::decoders::vp9::decoder::tests::read_ivf_packet;
     use crate::decoders::BlockingMode;
     use crate::decoders::DecodedHandle;
     use crate::decoders::DynHandle;
     use crate::decoders::VideoDecoderBackend;
+    use crate::utils::vaapi::VaapiBackend;
     use crate::Resolution;
 
     /// Resolves to the type used as Handle by the backend.
-    type AssociatedHandle = <Backend as VideoDecoderBackend>::Handle;
+    type AssociatedHandle = <VaapiBackend<Header> as VideoDecoderBackend>::Handle;
 
     fn process_handle(
         handle: &AssociatedHandle,
@@ -464,7 +414,7 @@ mod tests {
             height: frame.header.height() as u32,
         };
 
-        let pic_param = Backend::build_pic_param(
+        let pic_param = VaapiBackend::build_pic_param(
             &frame.header,
             &resolution,
             parser.segmentation(),
@@ -479,19 +429,20 @@ mod tests {
             _ => panic!(),
         };
 
-        let iq_matrix = Backend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix =
+            VaapiBackend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
         let iq_matrix = match iq_matrix {
             BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
             _ => panic!(),
         };
 
-        let prob_table = Backend::build_probability_table(&frame.header);
+        let prob_table = VaapiBackend::build_probability_table(&frame.header);
         let prob_table = match prob_table {
             BufferType::Probability(prob_table) => prob_table,
             _ => panic!(),
         };
 
-        let slice_param = Backend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&frame.header, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),
@@ -595,7 +546,7 @@ mod tests {
 
         assert_eq!(frame.size(), 257);
 
-        let pic_param = Backend::build_pic_param(
+        let pic_param = VaapiBackend::build_pic_param(
             &frame.header,
             &resolution,
             parser.segmentation(),
@@ -610,19 +561,20 @@ mod tests {
             _ => panic!(),
         };
 
-        let iq_matrix = Backend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix =
+            VaapiBackend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
         let iq_matrix = match iq_matrix {
             BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
             _ => panic!(),
         };
 
-        let prob_table = Backend::build_probability_table(&frame.header);
+        let prob_table = VaapiBackend::build_probability_table(&frame.header);
         let prob_table = match prob_table {
             BufferType::Probability(prob_table) => prob_table,
             _ => panic!(),
         };
 
-        let slice_param = Backend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&frame.header, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),
@@ -709,7 +661,7 @@ mod tests {
 
         assert_eq!(frame.size(), 131);
 
-        let pic_param = Backend::build_pic_param(
+        let pic_param = VaapiBackend::build_pic_param(
             &frame.header,
             &resolution,
             parser.segmentation(),
@@ -724,19 +676,20 @@ mod tests {
             _ => panic!(),
         };
 
-        let iq_matrix = Backend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix =
+            VaapiBackend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
         let iq_matrix = match iq_matrix {
             BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
             _ => panic!(),
         };
 
-        let prob_table = Backend::build_probability_table(&frame.header);
+        let prob_table = VaapiBackend::build_probability_table(&frame.header);
         let prob_table = match prob_table {
             BufferType::Probability(prob_table) => prob_table,
             _ => panic!(),
         };
 
-        let slice_param = Backend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&frame.header, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),
