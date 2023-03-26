@@ -703,22 +703,28 @@ mod tests {
     use libva::Display;
 
     use crate::decoders::h264::decoder::tests::test_decode_stream;
+    use crate::decoders::h264::decoder::tests::DecodingTest;
     use crate::decoders::h264::decoder::Decoder;
     use crate::decoders::BlockingMode;
 
-    #[test]
-    // Ignore this test by default as it requires libva-compatible hardware.
-    #[ignore]
-    fn test_16x16_progressive_i() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I;
+    /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
+    fn test_decoder_vaapi(test: &DecodingTest) {
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
             let display = Display::open().unwrap();
             let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I, true, false);
+            test_decode_stream(decoder, test, true, false);
         }
+    }
+
+    #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
+    fn test_16x16_progressive_i() {
+        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I;
+        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I);
     }
 
     #[test]
@@ -726,14 +732,7 @@ mod tests {
     #[ignore]
     fn test_16x16_progressive_i_p() {
         use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P;
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let display = Display::open().unwrap();
-            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I_P, true, false);
-        }
+        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I_P);
     }
 
     #[test]
@@ -741,14 +740,7 @@ mod tests {
     #[ignore]
     fn test_16x16_progressive_i_p_b_p() {
         use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P_B_P;
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let display = Display::open().unwrap();
-            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I_P_B_P, true, false);
-        }
+        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I_P_B_P);
     }
 
     #[test]
@@ -756,14 +748,7 @@ mod tests {
     #[ignore]
     fn test_16x16_progressive_i_p_b_p_high() {
         use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH;
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let display = Display::open().unwrap();
-            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            test_decode_stream(decoder, &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH, true, false);
-        }
+        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH);
     }
 
     #[test]
@@ -771,14 +756,7 @@ mod tests {
     #[ignore]
     fn test_25fps_h264() {
         use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS;
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let display = Display::open().unwrap();
-            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            test_decode_stream(decoder, &DECODE_TEST_25FPS, true, true);
-        }
+        test_decoder_vaapi(&DECODE_TEST_25FPS);
     }
 
     #[test]
@@ -786,13 +764,6 @@ mod tests {
     #[ignore]
     fn test_25fps_interlaced_h264() {
         use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS_INTERLACED;
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let display = Display::open().unwrap();
-            let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            test_decode_stream(decoder, &DECODE_TEST_25FPS_INTERLACED, true, false);
-        }
+        test_decoder_vaapi(&DECODE_TEST_25FPS_INTERLACED);
     }
 }
