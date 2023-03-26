@@ -2614,7 +2614,7 @@ pub mod tests {
                 let frame_crc = crc32fast::hash(&nv12);
 
                 let frame_crc = format!("{:08x}", frame_crc);
-                assert_eq!(frame_crc, next_crc);
+                assert_eq!(frame_crc, next_crc, "at frame {}", frame_num);
             }
         });
 
@@ -2629,7 +2629,7 @@ pub mod tests {
     /// filesink location="/tmp/16x16-I.h264"
     pub const DECODE_16X16_PROGRESSIVE_I: DecodingTest = DecodingTest {
         stream: include_bytes!("test_data/16x16-I.h264"),
-        crcs: "2737596b",
+        crcs: include_str!("test_data/16x16-I.h264.crc"),
     };
 
     #[test]
@@ -2651,7 +2651,7 @@ pub mod tests {
     /// filesink location="/tmp/16x16-I-P.h264"
     pub const DECODE_16X16_PROGRESSIVE_I_P: DecodingTest = DecodingTest {
         stream: include_bytes!("test_data/16x16-I-P.h264"),
-        crcs: "1d0295c6\n2563d883",
+        crcs: include_str!("test_data/16x16-I-P.h264.crc"),
     };
 
     #[test]
