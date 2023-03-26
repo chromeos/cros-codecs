@@ -98,18 +98,14 @@ impl StreamInfo for &Sps {
 /// H.264 stateless decoder backend for VA-API.
 struct Backend {
     backend: VaapiBackend<Sps>,
-
-    /// The current picture being worked on.
-    current_picture: Option<VaPicture<PictureNew>>,
 }
 
 impl Backend {
     /// Creates a new codec backend for H.264.
-    fn new(display: Rc<libva::Display>) -> Result<Self> {
-        Ok(Self {
+    fn new(display: Rc<libva::Display>) -> Self {
+        Self {
             backend: VaapiBackend::new(display),
-            current_picture: Default::default(),
-        })
+        }
     }
 
     /// Gets the VASurfaceID for the given `picture`.
@@ -200,14 +196,14 @@ impl Backend {
         let mut scaling_list8x8 = [[0; 64]; 2];
 
         (0..6).for_each(|i| {
-            Decoder::<VADecodedHandle>::get_raster_from_zigzag_4x4(
+            Decoder::<VADecodedHandle, VaPicture<PictureNew>>::get_raster_from_zigzag_4x4(
                 pps.scaling_lists_4x4()[i],
                 &mut scaling_list4x4[i],
             );
         });
 
         (0..2).for_each(|i| {
-            Decoder::<VADecodedHandle>::get_raster_from_zigzag_8x8(
+            Decoder::<VADecodedHandle, VaPicture<PictureNew>>::get_raster_from_zigzag_8x8(
                 pps.scaling_lists_8x8()[i],
                 &mut scaling_list8x8[i],
             );
@@ -514,13 +510,16 @@ impl VideoDecoderBackend for Backend {
 }
 
 impl StatelessDecoderBackend for Backend {
+    type Picture = VaPicture<PictureNew>;
+
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
         self.backend.new_sequence(sps)
     }
 
     fn handle_picture(
         &mut self,
-        picture: &PictureData,
+        picture: &mut Self::Picture,
+        picture_data: &PictureData,
         sps: &Sps,
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
@@ -531,23 +530,23 @@ impl StatelessDecoderBackend for Backend {
         let metadata = self.backend.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
-        let va_pic = &mut self.current_picture.as_mut().unwrap();
-        let surface_id = va_pic.surface().id();
+        let surface_id = picture.surface().id();
 
-        let pic_param = Backend::build_pic_param(slice, picture, surface_id, dpb, sps, pps)?;
+        let pic_param = Backend::build_pic_param(slice, picture_data, surface_id, dpb, sps, pps)?;
         let pic_param = context.create_buffer(pic_param)?;
 
         let iq_matrix = Backend::build_iq_matrix(pps);
         let iq_matrix = context.create_buffer(iq_matrix)?;
 
-        va_pic.add_buffer(pic_param);
-        va_pic.add_buffer(iq_matrix);
+        picture.add_buffer(pic_param);
+        picture.add_buffer(iq_matrix);
 
         Ok(())
     }
 
     fn decode_slice(
         &mut self,
+        picture: &mut Self::Picture,
         slice: &Slice<&[u8]>,
         sps: &Sps,
         pps: &Pps,
@@ -566,40 +565,40 @@ impl StatelessDecoderBackend for Backend {
             pps,
         )?)?;
 
-        let cur_va_pic = &mut self.current_picture.as_mut().unwrap();
-        cur_va_pic.add_buffer(slice_param);
+        picture.add_buffer(slice_param);
 
         let slice_data =
             context.create_buffer(BufferType::SliceData(Vec::from(slice.nalu().as_ref())))?;
 
-        cur_va_pic.add_buffer(slice_data);
+        picture.add_buffer(slice_data);
 
         Ok(())
     }
 
     fn submit_picture(
         &mut self,
-        _: &PictureData,
+        picture: Self::Picture,
         block: BlockingMode,
     ) -> StatelessBackendResult<Self::Handle> {
-        let current_picture = self.current_picture.take().unwrap();
-
-        self.backend.process_picture(current_picture, block)
+        self.backend.process_picture(picture, block)
     }
 
-    fn new_picture(&mut self, _: &PictureData, timestamp: u64) -> StatelessBackendResult<()> {
+    fn new_picture(
+        &mut self,
+        _: &PictureData,
+        timestamp: u64,
+    ) -> StatelessBackendResult<Self::Picture> {
         let metadata = self.backend.metadata_state.get_parsed_mut()?;
-
         let surface = metadata
             .surface_pool
             .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
 
-        let va_pic = VaPicture::new(timestamp, Rc::clone(&metadata.context), surface);
-
-        self.current_picture = Some(va_pic);
-
-        Ok(())
+        Ok(VaPicture::new(
+            timestamp,
+            Rc::clone(&metadata.context),
+            surface,
+        ))
     }
 
     fn new_field_picture(
@@ -607,7 +606,7 @@ impl StatelessDecoderBackend for Backend {
         _: &PictureData,
         timestamp: u64,
         first_field: &Self::Handle,
-    ) -> StatelessBackendResult<()> {
+    ) -> StatelessBackendResult<Self::Picture> {
         // Block on the first field if it is not ready yet.
         let backend_handle = first_field.handle();
         if !backend_handle.is_ready() {
@@ -620,16 +619,15 @@ impl StatelessDecoderBackend for Backend {
         let va_picture = first_va_handle
             .picture()
             .expect("no valid backend handle after blocking on it");
-        self.current_picture = Some(VaPicture::new_from_same_surface(timestamp, va_picture));
 
-        Ok(())
+        Ok(VaPicture::new_from_same_surface(timestamp, va_picture))
     }
 }
 
-impl Decoder<VADecodedHandle> {
+impl Decoder<VADecodedHandle, VaPicture<PictureNew>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> Result<Self> {
-        Self::new(Box::new(Backend::new(display)?), blocking_mode)
+        Self::new(Box::new(Backend::new(display)), blocking_mode)
     }
 }
 

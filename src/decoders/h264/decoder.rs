@@ -156,7 +156,7 @@ impl<T> Ord for ReadyPicture<T> {
     }
 }
 
-pub struct Decoder<T>
+pub struct Decoder<T, P>
 where
     T: DecodedHandle,
 {
@@ -167,7 +167,7 @@ where
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessDecoderBackend<Handle = T>>,
+    backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
 
     /// Keeps track of whether the decoded format has been negotiated with the
     /// backend.
@@ -210,6 +210,8 @@ where
     curr_info: CurrentPicInfo,
     /// The current picture being worked on.
     cur_pic: Option<PictureData>,
+    /// The current picture representation on the backend side.
+    cur_backend_pic: Option<P>,
 
     /// A cached, non-reference first field that did not make it into the DPB
     /// because it was full even after bumping the smaller POC. This field will
@@ -252,14 +254,14 @@ where
     ref_pic_list1: Vec<DpbEntry<T>>,
 }
 
-impl<T> Decoder<T>
+impl<T, P> Decoder<T, P>
 where
     T: DecodedHandle + 'static,
 {
     // Creates a new instance of the decoder.
     #[cfg(any(feature = "vaapi", test))]
     pub(crate) fn new(
-        backend: Box<dyn StatelessDecoderBackend<Handle = T>>,
+        backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
     ) -> Result<Self> {
         Ok(Self {
@@ -277,6 +279,7 @@ where
             prev_pic_info: Default::default(),
             curr_info: Default::default(),
             cur_pic: Default::default(),
+            cur_backend_pic: Default::default(),
             last_field: Default::default(),
             ready_queue: Default::default(),
             ref_pic_list_p0: Default::default(),
@@ -1847,7 +1850,6 @@ where
 
         let first_field = self.find_first_field(slice)?;
         self.init_current_pic(slice, first_field.clone().map(|f| f.0), timestamp)?;
-
         let cur_pic = self.cur_pic.as_ref().unwrap();
 
         if matches!(cur_pic.is_idr, IsIdr::Yes { .. }) {
@@ -1875,16 +1877,16 @@ where
 
         debug!("Decode picture POC {:?}", cur_pic.pic_order_cnt);
 
-        if let Some(first_field) = first_field {
+        let mut current_picture = if let Some(first_field) = first_field {
             self.backend
-                .new_field_picture(cur_pic, timestamp, &first_field.1)?;
+                .new_field_picture(cur_pic, timestamp, &first_field.1)?
         } else {
-            self.backend
-                .new_picture(self.cur_pic.as_ref().unwrap(), timestamp)?;
-        }
+            self.backend.new_picture(cur_pic, timestamp)?
+        };
 
         self.backend.handle_picture(
-            self.cur_pic.as_ref().unwrap(),
+            &mut current_picture,
+            cur_pic,
             self.parser
                 .get_sps(self.cur_sps_id)
                 .context("Invalid SPS in handle_picture")?,
@@ -1894,6 +1896,8 @@ where
             &self.dpb,
             slice,
         )?;
+
+        self.cur_backend_pic = Some(current_picture);
 
         Ok(())
     }
@@ -2198,6 +2202,7 @@ where
             .context("Invalid PPS in handle_slice")?;
 
         self.backend.decode_slice(
+            self.cur_backend_pic.as_mut().unwrap(),
             slice,
             sps,
             pps,
@@ -2223,7 +2228,7 @@ where
 
         let handle = self
             .backend
-            .submit_picture(&picture, block)
+            .submit_picture(self.cur_backend_pic.take().unwrap(), block)
             .map_err(VideoDecoderError::StatelessBackendError)?;
 
         Ok((picture, handle))
@@ -2313,7 +2318,7 @@ where
     }
 }
 
-impl<T> VideoDecoder for Decoder<T>
+impl<T, P> VideoDecoder for Decoder<T, P>
 where
     T: DecodedHandle + 'static,
 {
@@ -2443,12 +2448,12 @@ pub mod tests {
     use crate::decoders::DynDecodedHandle;
     use crate::decoders::VideoDecoder;
 
-    pub fn run_decoding_loop<Handle, F>(
-        decoder: &mut Decoder<Handle>,
+    pub fn run_decoding_loop<H, P, F>(
+        decoder: &mut Decoder<H, P>,
         test_stream: &[u8],
         mut on_new_frame: F,
     ) where
-        Handle: DecodedHandle + 'static,
+        H: DecodedHandle + 'static,
         F: FnMut(Box<dyn DynDecodedHandle>),
     {
         let mut cursor = Cursor::new(test_stream);
@@ -2585,13 +2590,13 @@ pub mod tests {
     ///
     /// `dump_yuv` will dump all the decoded frames into `/tmp/framexxx.yuv`. Set this to true in
     /// order to debug the output of the test.
-    pub fn test_decode_stream<Handle>(
-        mut decoder: Decoder<Handle>,
+    pub fn test_decode_stream<H, P>(
+        mut decoder: Decoder<H, P>,
         test: &DecodingTest,
         check_crcs: bool,
         dump_yuv: bool,
     ) where
-        Handle: DecodedHandle + 'static,
+        H: DecodedHandle + 'static,
     {
         let mut crcs = test.crcs.lines().enumerate();
 

@@ -21,12 +21,15 @@ use crate::decoders::BlockingMode;
 use crate::utils::dummy::*;
 
 impl StatelessDecoderBackend for Backend {
+    type Picture = ();
+
     fn new_sequence(&mut self, _: &Sps) -> StatelessBackendResult<()> {
         Ok(())
     }
 
     fn handle_picture(
         &mut self,
+        _: &mut Self::Picture,
         _: &PictureData,
         _: &Sps,
         _: &Pps,
@@ -47,6 +50,7 @@ impl StatelessDecoderBackend for Backend {
 
     fn decode_slice(
         &mut self,
+        _: &mut Self::Picture,
         _: &Slice<&[u8]>,
         _: &Sps,
         _: &Pps,
@@ -59,7 +63,7 @@ impl StatelessDecoderBackend for Backend {
 
     fn submit_picture(
         &mut self,
-        _: &PictureData,
+        _: Self::Picture,
         _: BlockingMode,
     ) -> StatelessBackendResult<Self::Handle> {
         Ok(Handle {
@@ -72,7 +76,7 @@ impl StatelessDecoderBackend for Backend {
     }
 }
 
-impl Decoder<Handle> {
+impl Decoder<Handle, ()> {
     // Creates a new instance of the decoder using the dummy backend.
     pub fn new_dummy(blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(Backend::new()), blocking_mode)
