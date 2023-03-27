@@ -50,6 +50,7 @@ enum RefPicList {
 }
 
 #[derive(Copy, Clone, Debug)]
+#[allow(clippy::enum_variant_names)]
 enum RefFrameListName {
     RefFrameList0ShortTerm,
     RefFrameList1ShortTerm,
@@ -436,13 +437,13 @@ where
                     pic.frame_num_offset = 0;
                 } else if self.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.prev_pic_info.frame_num_offset + self.curr_info.max_frame_num as i32;
+                        self.prev_pic_info.frame_num_offset + self.curr_info.max_frame_num;
                 } else {
                     pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
 
                 let mut abs_frame_num = if sps.num_ref_frames_in_pic_order_cnt_cycle() != 0 {
-                    pic.frame_num_offset + pic.frame_num as i32
+                    pic.frame_num_offset + pic.frame_num
                 } else {
                     0
                 };
@@ -501,7 +502,7 @@ where
                     pic.frame_num_offset = 0;
                 } else if self.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.prev_pic_info.frame_num_offset + self.curr_info.max_frame_num as i32;
+                        self.prev_pic_info.frame_num_offset + self.curr_info.max_frame_num;
                 } else {
                     pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
@@ -511,9 +512,9 @@ where
                 if matches!(pic.is_idr, IsIdr::Yes { .. }) {
                     temp_pic_order_cnt = 0;
                 } else if pic.nal_ref_idc == 0 {
-                    temp_pic_order_cnt = 2 * (pic.frame_num_offset + pic.frame_num as i32) - 1;
+                    temp_pic_order_cnt = 2 * (pic.frame_num_offset + pic.frame_num) - 1;
                 } else {
-                    temp_pic_order_cnt = 2 * (pic.frame_num_offset + pic.frame_num as i32);
+                    temp_pic_order_cnt = 2 * (pic.frame_num_offset + pic.frame_num);
                 }
 
                 if matches!(pic.field, Field::Frame) {
@@ -2235,13 +2236,13 @@ where
 
     pub fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
         for i in 0..64 {
-            dst[i] = src[ZIGZAG_8X8[i] as usize];
+            dst[i] = src[ZIGZAG_8X8[i]];
         }
     }
 
     pub fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
         for i in 0..16 {
-            dst[i] = src[ZIGZAG_4X4[i] as usize];
+            dst[i] = src[ZIGZAG_4X4[i]];
         }
     }
 
@@ -2329,10 +2330,10 @@ where
         let sps = Self::peek_sps(&mut self.parser, bitstream);
 
         if let Some(sps) = &sps {
-            if Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)? {
-                if matches!(self.negotiation_status, NegotiationStatus::Negotiated) {
-                    self.negotiation_status = NegotiationStatus::NonNegotiated
-                }
+            if Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)?
+                && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
+            {
+                self.negotiation_status = NegotiationStatus::NonNegotiated
             }
         }
 
@@ -2479,7 +2480,7 @@ pub mod tests {
 
         // Process any left over NALUs, even if we could not fit them into an AU using the heuristic.
         #[allow(unused_assignments)]
-        if aud_parser.nalus.len() > 0 {
+        if !aud_parser.nalus.is_empty() {
             let start_nalu = aud_parser.nalus.first().unwrap();
             let end_nalu = aud_parser.nalus.last().unwrap();
 
