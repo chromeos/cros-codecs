@@ -16,27 +16,6 @@ use crate::decoders::Result as VideoDecoderResult;
 use crate::decoders::VideoDecoder;
 use crate::Resolution;
 
-#[cfg(test)]
-struct TestParams<T> {
-    ready_pics: Vec<T>,
-}
-
-#[cfg(test)]
-impl<T> TestParams<T> {
-    fn save_ready_pics(&mut self, ready_pics: Vec<T>) {
-        self.ready_pics.extend(ready_pics);
-    }
-}
-
-#[cfg(test)]
-impl<T> Default for TestParams<T> {
-    fn default() -> Self {
-        Self {
-            ready_pics: Default::default(),
-        }
-    }
-}
-
 /// Represents where we are in the negotiation status. We assume ownership of
 /// the incoming buffers in this special case so that clients do not have to do
 /// the bookkeeping themselves.
@@ -90,9 +69,6 @@ pub struct Decoder<T: DecodedHandle> {
     golden_ref_picture: Option<T>,
     /// The picture used as the alternate reference picture.
     alt_ref_picture: Option<T>,
-
-    #[cfg(test)]
-    test_params: TestParams<T>,
 }
 
 impl<T: DecodedHandle + 'static> Decoder<T> {
@@ -114,9 +90,6 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
             coded_resolution: Default::default(),
             ready_queue: Default::default(),
             current_display_order: Default::default(),
-
-            #[cfg(test)]
-            test_params: Default::default(),
         })
     }
 
@@ -199,12 +172,6 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
         Ok(())
     }
 
-    #[cfg(test)]
-    fn steal_pics_for_test(&mut self) {
-        let frames = self.get_ready_frames();
-        self.test_params.save_ready_pics(frames);
-    }
-
     /// Returns the ready handles.
     fn get_ready_frames(&mut self) -> Vec<T> {
         let ready = self
@@ -285,12 +252,6 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
 
         width != coded_resolution.width || height != coded_resolution.height
     }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn backend(&self) -> &dyn StatelessDecoderBackend<Handle = T> {
-        self.backend.as_ref()
-    }
 }
 
 impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
@@ -357,9 +318,6 @@ impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
 
         self.backend.poll(self.blocking_mode)?;
 
-        #[cfg(test)]
-        self.steal_pics_for_test();
-
         let ready_frames = self.get_ready_frames();
 
         Ok(ready_frames
@@ -388,9 +346,6 @@ impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
         }
 
         self.backend.poll(BlockingMode::Blocking)?;
-
-        #[cfg(test)]
-        self.steal_pics_for_test();
 
         let pics = self.get_ready_frames();
 
@@ -446,9 +401,10 @@ pub mod tests {
 
     use bytes::Buf;
 
+    use crate::decoders::tests::test_decode_stream;
+    use crate::decoders::tests::TestStream;
     use crate::decoders::vp8::decoder::Decoder;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DecodedHandle;
     use crate::decoders::DynDecodedHandle;
     use crate::decoders::VideoDecoder;
 
@@ -469,11 +425,13 @@ pub mod tests {
         Some(buf.into_boxed_slice())
     }
 
-    pub fn run_decoding_loop<Handle: DecodedHandle + 'static, F: FnMut(&mut Decoder<Handle>)>(
-        decoder: &mut Decoder<Handle>,
+    pub fn vp8_decoding_loop<D>(
+        decoder: &mut D,
         test_stream: &[u8],
-        mut on_new_iteration: F,
-    ) {
+        on_new_frame: &mut dyn FnMut(Box<dyn DynDecodedHandle>),
+    ) where
+        D: VideoDecoder,
+    {
         let mut cursor = Cursor::new(test_stream);
         let mut frame_num = 0;
 
@@ -481,47 +439,38 @@ pub mod tests {
         cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
 
         while let Some(packet) = read_ivf_packet(&mut cursor) {
-            decoder.decode(frame_num, packet.as_ref()).unwrap();
-
-            on_new_iteration(decoder);
-            frame_num += 1;
+            for frame in decoder.decode(frame_num, packet.as_ref()).unwrap() {
+                on_new_frame(frame);
+                frame_num += 1;
+            }
         }
 
-        decoder.flush().unwrap();
-
-        let n_flushed = decoder.test_params.ready_pics.len();
-
-        for _ in 0..n_flushed {
-            on_new_iteration(decoder);
+        for frame in decoder.flush().unwrap() {
+            on_new_frame(frame);
             frame_num += 1;
         }
     }
 
-    pub fn process_ready_frames<Handle: DecodedHandle + DynDecodedHandle>(
-        decoder: &mut Decoder<Handle>,
-        action: &mut dyn FnMut(&mut Decoder<Handle>, &Handle),
-    ) {
-        let ready_pics = decoder.test_params.ready_pics.drain(..).collect::<Vec<_>>();
+    /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
+    fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
+        let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-        for handle in ready_pics {
-            action(decoder, &handle);
-        }
+        test_decode_stream(vp8_decoding_loop, decoder, test, false, false);
+    }
+
+    /// Same as Chromium's test-25fps.vp8
+    pub const DECODE_TEST_25FPS: TestStream = TestStream {
+        stream: include_bytes!("test_data/test-25fps.vp8"),
+        crcs: include_str!("test_data/test-25fps.vp8.crc"),
+    };
+
+    #[test]
+    fn test_25fps_block() {
+        test_decoder_dummy(&DECODE_TEST_25FPS, BlockingMode::Blocking);
     }
 
     #[test]
-    fn test_25fps_vp8() {
-        const TEST_STREAM: &[u8] = include_bytes!("test_data/test-25fps.vp8");
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let mut frame_num = 0;
-            let mut decoder = Decoder::new_dummy(blocking_mode).unwrap();
-
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, _| frame_num += 1);
-            });
-
-            assert_eq!(frame_num, 250);
-        }
+    fn test_25fps_nonblock() {
+        test_decoder_dummy(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
     }
 }

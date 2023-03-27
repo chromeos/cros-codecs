@@ -302,7 +302,6 @@ impl Decoder<VADecodedHandle> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
     use std::io::Cursor;
     use std::io::Seek;
 
@@ -312,78 +311,38 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::decoders::vp8::decoder::tests::process_ready_frames;
-    use crate::decoders::vp8::decoder::tests::run_decoding_loop;
+    use crate::decoders::tests::test_decode_stream;
+    use crate::decoders::tests::TestStream;
+    use crate::decoders::vp8::decoder::tests::vp8_decoding_loop;
     use crate::decoders::vp8::decoder::Decoder;
-    use crate::decoders::vp8::parser::Header;
     use crate::decoders::vp8::parser::Parser;
     use crate::decoders::vp9::decoder::tests::read_ivf_packet;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DecodedHandle;
-    use crate::decoders::DynHandle;
-    use crate::decoders::VideoDecoderBackend;
     use crate::utils::vaapi::VaapiBackend;
     use crate::Resolution;
 
-    /// Resolves to the type used as Handle by the backend.
-    type AssociatedHandle = <VaapiBackend<Header> as VideoDecoderBackend>::Handle;
+    /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
+    fn test_decoder_vaapi(test: &TestStream, blocking_mode: BlockingMode) {
+        let display = Display::open().unwrap();
+        let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-    fn process_handle(
-        handle: &AssociatedHandle,
-        dump_yuv: bool,
-        expected_crcs: Option<&mut HashSet<&str>>,
-        frame_num: i32,
-    ) {
-        let mut picture = handle.handle_mut();
-        let mut backend_handle = picture.dyn_mappable_handle_mut();
-
-        let buffer_size = backend_handle.image_size();
-        let mut nv12 = vec![0; buffer_size];
-
-        backend_handle.read(&mut nv12).unwrap();
-
-        if dump_yuv {
-            std::fs::write(format!("/tmp/frame{}.yuv", frame_num), &nv12).unwrap();
-        }
-
-        let frame_crc = crc32fast::hash(&nv12);
-
-        if let Some(expected_crcs) = expected_crcs {
-            let frame_crc = format!("{:08x}", frame_crc);
-            let removed = expected_crcs.remove(frame_crc.as_str());
-            assert!(
-                removed,
-                "CRC not found: {:?}, iteration: {:?}",
-                frame_crc, frame_num
-            );
-        }
+        test_decode_stream(vp8_decoding_loop, decoder, test, true, false);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_25fps_vp8() {
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.vp8");
-        const STREAM_CRCS: &str = include_str!("../test_data/test-25fps.vp8.crc");
+    fn test_25fps_block() {
+        use crate::decoders::vp8::decoder::tests::DECODE_TEST_25FPS;
+        test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::Blocking);
+    }
 
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let mut expected_crcs = STREAM_CRCS.lines().collect::<HashSet<_>>();
-
-            let mut frame_num = 0;
-            let display = Display::open().unwrap();
-
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_decoder, handle| {
-                    process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
-            });
-        }
+    #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
+    fn test_25fps_nonblock() {
+        use crate::decoders::vp8::decoder::tests::DECODE_TEST_25FPS;
+        test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
     }
 
     #[test]
