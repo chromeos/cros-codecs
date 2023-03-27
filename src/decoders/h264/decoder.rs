@@ -1885,7 +1885,6 @@ where
 
         self.backend.handle_picture(
             self.cur_pic.as_ref().unwrap(),
-            timestamp,
             self.parser
                 .get_sps(self.cur_sps_id)
                 .context("Invalid SPS in handle_picture")?,

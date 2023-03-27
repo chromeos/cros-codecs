@@ -28,7 +28,6 @@ impl StatelessDecoderBackend for Backend {
     fn handle_picture(
         &mut self,
         _: &PictureData,
-        _: u64,
         _: &Sps,
         _: &Pps,
         _: &Dpb<Self::Handle>,

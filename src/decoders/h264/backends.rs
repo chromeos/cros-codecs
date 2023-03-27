@@ -45,7 +45,6 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
     fn handle_picture(
         &mut self,
         picture: &PictureData,
-        timestamp: u64,
         sps: &Sps,
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,

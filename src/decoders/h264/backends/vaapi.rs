@@ -17,7 +17,6 @@ use libva::PictureNew;
 use libva::PictureParameter;
 use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
-use log::debug;
 
 use crate::decoders::h264::backends::Result as StatelessBackendResult;
 use crate::decoders::h264::backends::StatelessDecoderBackend;
@@ -522,17 +521,11 @@ impl StatelessDecoderBackend for Backend {
     fn handle_picture(
         &mut self,
         picture: &PictureData,
-        timestamp: u64,
         sps: &Sps,
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
         slice: &Slice<&[u8]>,
     ) -> StatelessBackendResult<()> {
-        debug!(
-            "Va-API backend: handle_picture for timestamp {:?}",
-            timestamp
-        );
-
         self.backend.negotiation_status = NegotiationStatus::Negotiated;
 
         let metadata = self.backend.metadata_state.get_parsed()?;
