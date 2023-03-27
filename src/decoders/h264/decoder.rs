@@ -550,13 +550,7 @@ where
         Ok(())
     }
 
-    fn update_pic_nums(&mut self, frame_num: i32, gap_picture: Option<&PictureData>) -> Result<()> {
-        let current_pic = if let Some(gap_picture) = gap_picture {
-            gap_picture
-        } else {
-            self.cur_pic.as_ref().unwrap()
-        };
-
+    fn update_pic_nums(&mut self, frame_num: i32, current_pic: &PictureData) -> Result<()> {
         for mut pic in self.dpb.pictures_mut() {
             if !pic.is_ref() {
                 continue;
@@ -1617,7 +1611,7 @@ where
             let mut pic = PictureData::new_non_existing(frame_num, timestamp);
             self.compute_pic_order_count(&mut pic)?;
 
-            self.update_pic_nums(unused_short_term_frame_num, Some(&pic))?;
+            self.update_pic_nums(unused_short_term_frame_num, &pic)?;
 
             self.sliding_window_marking(&mut pic)?;
 
@@ -1666,7 +1660,30 @@ where
         }
 
         self.compute_pic_order_count(&mut pic)?;
+
+        if matches!(pic.is_idr, IsIdr::Yes { .. }) {
+            // C.4.5.3 "Bumping process"
+            // The bumping process is invoked in the following cases:
+            // Clause 2:
+            // The current picture is an IDR picture and
+            // no_output_of_prior_pics_flag is not equal to 1 and is not
+            // inferred to be equal to 1, as specified in clause C.4.4.
+            if !pic.ref_pic_marking.no_output_of_prior_pics_flag() {
+                self.drain()?;
+            } else {
+                // C.4.4 When no_output_of_prior_pics_flag is equal to 1 or is
+                // inferred to be equal to 1, all frame buffers in the DPB are
+                // emptied without output of the pictures they contain, and DPB
+                // fullness is set to 0.
+                self.dpb.clear();
+            }
+        }
+
+        self.update_pic_nums(i32::from(slice.header().frame_num()), &pic)?;
+
         self.cur_pic = Some(pic);
+
+        self.init_ref_pic_lists();
 
         Ok(())
     }
@@ -1849,29 +1866,11 @@ where
         }
 
         let first_field = self.find_first_field(slice)?;
-        self.init_current_pic(slice, first_field.clone().map(|f| f.0), timestamp)?;
-        let cur_pic = self.cur_pic.as_ref().unwrap();
-
-        if matches!(cur_pic.is_idr, IsIdr::Yes { .. }) {
-            // C.4.5.3 "Bumping process"
-            // The bumping process is invoked in the following cases:
-            // Clause 2:
-            // The current picture is an IDR picture and
-            // no_output_of_prior_pics_flag is not equal to 1 and is not
-            // inferred to be equal to 1, as specified in clause C.4.4.
-            if !cur_pic.ref_pic_marking.no_output_of_prior_pics_flag() {
-                self.drain()?;
-            } else {
-                // C.4.4 When no_output_of_prior_pics_flag is equal to 1 or is
-                // inferred to be equal to 1, all frame buffers in the DPB are
-                // emptied without output of the pictures they contain, and DPB
-                // fullness is set to 0.
-                self.dpb.clear();
-            }
-        }
-
-        self.update_pic_nums(i32::from(slice.header().frame_num()), None)?;
-        self.init_ref_pic_lists();
+        self.init_current_pic(
+            slice,
+            first_field.as_ref().map(|f| Rc::clone(&f.0)),
+            timestamp,
+        )?;
 
         let cur_pic = self.cur_pic.as_ref().unwrap();
 
