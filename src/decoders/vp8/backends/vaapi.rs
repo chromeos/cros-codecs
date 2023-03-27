@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#[cfg(test)]
-use std::any::Any;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -34,20 +32,8 @@ use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
 use crate::Resolution;
 
-/// Resolves to the type used as Handle by the backend.
-type AssociatedHandle = <Backend as VideoDecoderBackend>::Handle;
-
 /// The number of surfaces to allocate for this codec. Same as GStreamer's vavp8dec.
 const NUM_SURFACES: usize = 7;
-
-#[cfg(test)]
-struct TestParams {
-    pic_param: BufferType,
-    slice_param: BufferType,
-    slice_data: BufferType,
-    iq_matrix: BufferType,
-    probability_table: BufferType,
-}
 
 impl StreamInfo for &Header {
     fn va_profile(&self) -> anyhow::Result<i32> {
@@ -73,11 +59,6 @@ impl StreamInfo for &Header {
 
 struct Backend {
     backend: VaapiBackend<Header>,
-
-    #[cfg(test)]
-    /// Test params. Saves the metadata sent to VA-API for the purposes of
-    /// testing.
-    test_params: Vec<TestParams>,
 }
 
 impl Backend {
@@ -85,8 +66,6 @@ impl Backend {
     fn new(display: Rc<libva::Display>) -> Result<Self> {
         Ok(Self {
             backend: VaapiBackend::new(display),
-            #[cfg(test)]
-            test_params: Default::default(),
         })
     }
 
@@ -152,9 +131,9 @@ impl Backend {
         resolution: &Resolution,
         seg: &Segmentation,
         adj: &MbLfAdjustments,
-        last: Option<&AssociatedHandle>,
-        golden: Option<&AssociatedHandle>,
-        alt: Option<&AssociatedHandle>,
+        last: u32,
+        golden: u32,
+        alt: u32,
     ) -> Result<libva::BufferType> {
         let mut loop_filter_level: [u8; 4] = Default::default();
         let mut loop_filter_deltas_ref_frame: [i8; 4] = Default::default();
@@ -175,24 +154,6 @@ impl Backend {
             loop_filter_deltas_ref_frame[i] = adj.ref_frame_delta[i];
             loop_filter_deltas_mode[i] = adj.mb_mode_delta[i];
         }
-
-        let last_surface = if let Some(last_ref) = last {
-            Self::surface_id(&last_ref.handle())
-        } else {
-            libva::constants::VA_INVALID_SURFACE
-        };
-
-        let golden_surface = if let Some(golden_ref) = golden {
-            Self::surface_id(&golden_ref.handle())
-        } else {
-            libva::constants::VA_INVALID_SURFACE
-        };
-
-        let alt_surface = if let Some(alt_ref) = alt {
-            Self::surface_id(&alt_ref.handle())
-        } else {
-            libva::constants::VA_INVALID_SURFACE
-        };
 
         let pic_fields = libva::VP8PicFields::new(
             u32::from(!frame_hdr.key_frame()),
@@ -219,9 +180,9 @@ impl Backend {
         let pic_param = libva::PictureParameterBufferVP8::new(
             resolution.width,
             resolution.height,
-            last_surface,
-            golden_surface,
-            alt_surface,
+            last,
+            golden,
+            alt,
             &pic_fields,
             seg.segment_prob,
             loop_filter_level,
@@ -262,26 +223,6 @@ impl Backend {
             )),
         ))
     }
-
-    #[cfg(test)]
-    fn save_params(
-        &mut self,
-        pic_param: BufferType,
-        slice_param: BufferType,
-        slice_data: BufferType,
-        iq_matrix: BufferType,
-        probability_table: BufferType,
-    ) {
-        let test_params = TestParams {
-            pic_param,
-            slice_param,
-            slice_data,
-            iq_matrix,
-            probability_table,
-        };
-
-        self.test_params.push(test_params);
-    }
 }
 
 impl StatelessDecoderBackend for Backend {
@@ -301,6 +242,24 @@ impl StatelessDecoderBackend for Backend {
         timestamp: u64,
         block: BlockingMode,
     ) -> StatelessBackendResult<Self::Handle> {
+        let last_ref = if let Some(last_ref) = last_ref {
+            Self::surface_id(&last_ref.handle())
+        } else {
+            libva::constants::VA_INVALID_SURFACE
+        };
+
+        let golden_ref = if let Some(golden_ref) = golden_ref {
+            Self::surface_id(&golden_ref.handle())
+        } else {
+            libva::constants::VA_INVALID_SURFACE
+        };
+
+        let alt_ref = if let Some(alt_ref) = alt_ref {
+            Self::surface_id(&alt_ref.handle())
+        } else {
+            libva::constants::VA_INVALID_SURFACE
+        };
+
         self.backend.negotiation_status = NegotiationStatus::Negotiated;
 
         let metadata = self.backend.metadata_state.get_parsed_mut()?;
@@ -341,29 +300,7 @@ impl StatelessDecoderBackend for Backend {
         va_picture.add_buffer(slice_param);
         va_picture.add_buffer(slice_data);
 
-        #[cfg(test)]
-        self.save_params(
-            Backend::build_pic_param(
-                picture,
-                &coded_resolution,
-                segmentation,
-                mb_lf_adjust,
-                last_ref,
-                golden_ref,
-                alt_ref,
-            )?,
-            Backend::build_slice_param(picture, bitstream.len())?,
-            libva::BufferType::SliceData(Vec::from(bitstream)),
-            Backend::build_iq_matrix(picture, segmentation)?,
-            Backend::build_probability_table(picture),
-        );
-
         self.backend.process_picture(va_picture, block)
-    }
-
-    #[cfg(test)]
-    fn get_test_params(&self) -> &dyn Any {
-        &self.test_params
     }
 }
 
@@ -417,6 +354,8 @@ impl Decoder<VADecodedHandle> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::io::Cursor;
+    use std::io::Seek;
 
     use libva::BufferType;
     use libva::Display;
@@ -424,21 +363,20 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::decoders::vp8::backends::vaapi::AssociatedHandle;
-    use crate::decoders::vp8::backends::vaapi::TestParams;
-    use crate::decoders::vp8::backends::StatelessDecoderBackend;
+    use crate::decoders::vp8::backends::vaapi::Backend;
     use crate::decoders::vp8::decoder::tests::process_ready_frames;
     use crate::decoders::vp8::decoder::tests::run_decoding_loop;
     use crate::decoders::vp8::decoder::Decoder;
+    use crate::decoders::vp8::parser::Parser;
+    use crate::decoders::vp9::decoder::tests::read_ivf_packet;
     use crate::decoders::BlockingMode;
     use crate::decoders::DecodedHandle;
     use crate::decoders::DynHandle;
+    use crate::decoders::VideoDecoderBackend;
+    use crate::Resolution;
 
-    fn get_test_params(
-        backend: &dyn StatelessDecoderBackend<Handle = AssociatedHandle>,
-    ) -> &Vec<TestParams> {
-        backend.get_test_params().downcast_ref::<_>().unwrap()
-    }
+    /// Resolves to the type used as Handle by the backend.
+    type AssociatedHandle = <Backend as VideoDecoderBackend>::Handle;
 
     fn process_handle(
         handle: &AssociatedHandle,
@@ -478,20 +416,6 @@ mod tests {
         const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.vp8");
         const STREAM_CRCS: &str = include_str!("../test_data/test-25fps.vp8.crc");
 
-        const TEST_25_FPS_VP8_STREAM_SLICE_DATA_0: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-slice-data-0.bin");
-        const TEST_25_FPS_VP8_STREAM_SLICE_DATA_1: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-slice-data-1.bin");
-        const TEST_25_FPS_VP8_STREAM_SLICE_DATA_2: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-slice-data-2.bin");
-
-        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_0: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-probability-table-0.bin");
-        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_1: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-probability-table-1.bin");
-        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_2: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-probability-table-2.bin");
-
         let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
 
         for blocking_mode in blocking_modes {
@@ -503,306 +427,393 @@ mod tests {
             let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
             run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |decoder, handle| {
-                    // Contains the params used to decode the picture. Useful if we want to
-                    // write assertions against any particular value used therein.
-                    let params = &get_test_params(decoder.backend())[frame_num as usize];
-
+                process_ready_frames(decoder, &mut |_decoder, handle| {
                     process_handle(handle, false, Some(&mut expected_crcs), frame_num);
-
-                    let pic_param = match params.pic_param {
-                        BufferType::PictureParameter(PictureParameter::VP8(ref pic_param)) => {
-                            pic_param
-                        }
-                        _ => panic!(),
-                    };
-
-                    let slice_param = match params.slice_param {
-                        BufferType::SliceParameter(SliceParameter::VP8(ref slice_param)) => {
-                            slice_param
-                        }
-                        _ => panic!(),
-                    };
-
-                    let slice_data = match params.slice_data {
-                        BufferType::SliceData(ref data) => data,
-                        _ => panic!(),
-                    };
-
-                    let iq_matrix = match params.iq_matrix {
-                        BufferType::IQMatrix(IQMatrix::VP8(ref iq_matrix)) => iq_matrix,
-                        _ => panic!(),
-                    };
-
-                    let probability_table = match params.probability_table {
-                        BufferType::Probability(ref probability_table) => probability_table,
-                        _ => panic!(),
-                    };
-
-                    if frame_num == 0 {
-                        assert_eq!(iq_matrix.inner().quantization_index, [[4; 6]; 4]);
-                        for i in 0..4 {
-                            for j in 0..8 {
-                                for k in 0..3 {
-                                    for l in 0..11 {
-                                        const OFF_I: usize = 8 * 3 * 11;
-                                        const OFF_J: usize = 3 * 11;
-                                        const OFF_K: usize = 11;
-                                        // maybe std::transmute?
-                                        assert_eq!(
-                                            probability_table.inner().dct_coeff_probs[i][j][k][l],
-                                            TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_0
-                                                [(i * OFF_I) + (j * OFF_J) + (k * OFF_K) + l]
-                                        );
-                                    }
-                                }
-                            }
-                        }
-
-                        assert_eq!(pic_param.inner().frame_width, 320);
-                        assert_eq!(pic_param.inner().frame_height, 240);
-                        assert_eq!(
-                            pic_param.inner().last_ref_frame,
-                            libva::constants::VA_INVALID_SURFACE
-                        );
-                        assert_eq!(
-                            pic_param.inner().golden_ref_frame,
-                            libva::constants::VA_INVALID_SURFACE
-                        );
-                        assert_eq!(
-                            pic_param.inner().alt_ref_frame,
-                            libva::constants::VA_INVALID_SURFACE
-                        );
-                        assert_eq!(
-                            pic_param.inner().out_of_loop_frame,
-                            libva::constants::VA_INVALID_SURFACE
-                        );
-
-                        // Safe because this bitfield is initialized by the decoder.
-                        assert_eq!(unsafe { pic_param.inner().pic_fields.value }, unsafe {
-                            libva::VP8PicFields::new(0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1)
-                                .inner()
-                                .value
-                        });
-
-                        assert_eq!(pic_param.inner().mb_segment_tree_probs, [0; 3]);
-                        assert_eq!(pic_param.inner().loop_filter_level, [0; 4]);
-                        assert_eq!(
-                            pic_param.inner().loop_filter_deltas_ref_frame,
-                            [2, 0, -2, -2]
-                        );
-                        assert_eq!(pic_param.inner().loop_filter_deltas_mode, [4, -2, 2, 4]);
-                        assert_eq!(pic_param.inner().prob_skip_false, 0xbe);
-                        assert_eq!(pic_param.inner().prob_intra, 0);
-                        assert_eq!(pic_param.inner().prob_last, 0);
-                        assert_eq!(pic_param.inner().prob_gf, 0);
-
-                        assert_eq!(pic_param.inner().y_mode_probs, [0x91, 0x9c, 0xa3, 0x80]);
-                        assert_eq!(pic_param.inner().uv_mode_probs, [0x8e, 0x72, 0xb7]);
-                        assert_eq!(
-                            pic_param.inner().mv_probs[0],
-                            [
-                                0xa2, 0x80, 0xe1, 0x92, 0xac, 0x93, 0xd6, 0x27, 0x9c, 0x80, 0x81,
-                                0x84, 0x4b, 0x91, 0xb2, 0xce, 0xef, 0xfe, 0xfe
-                            ]
-                        );
-                        assert_eq!(
-                            pic_param.inner().mv_probs[1],
-                            [
-                                0xa4, 0x80, 0xcc, 0xaa, 0x77, 0xeb, 0x8c, 0xe6, 0xe4, 0x80, 0x82,
-                                0x82, 0x4a, 0x94, 0xb4, 0xcb, 0xec, 0xfe, 0xfe,
-                            ]
-                        );
-
-                        assert_eq!(pic_param.inner().bool_coder_ctx.range, 0xfc);
-                        assert_eq!(pic_param.inner().bool_coder_ctx.value, 0x39);
-                        assert_eq!(pic_param.inner().bool_coder_ctx.count, 0x0);
-
-                        assert_eq!(
-                            slice_param.inner(),
-                            libva::SliceParameterBufferVP8::new(
-                                14788,
-                                10,
-                                0,
-                                3040,
-                                2,
-                                [926, 13472, 0, 0, 0, 0, 0, 0, 0],
-                            )
-                            .inner(),
-                        );
-
-                        assert_eq!(&slice_data[..], TEST_25_FPS_VP8_STREAM_SLICE_DATA_0);
-                    } else if frame_num == 1 {
-                        assert_eq!(iq_matrix.inner().quantization_index, [[0x7f; 6]; 4]);
-                        for i in 0..4 {
-                            for j in 0..8 {
-                                for k in 0..3 {
-                                    for l in 0..11 {
-                                        const OFF_I: usize = 8 * 3 * 11;
-                                        const OFF_J: usize = 3 * 11;
-                                        const OFF_K: usize = 11;
-                                        // maybe std::transmute?
-                                        assert_eq!(
-                                            probability_table.inner().dct_coeff_probs[i][j][k][l],
-                                            TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_1
-                                                [(i * OFF_I) + (j * OFF_J) + (k * OFF_K) + l]
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        assert_eq!(pic_param.inner().frame_width, 320);
-                        assert_eq!(pic_param.inner().frame_height, 240);
-                        assert_eq!(pic_param.inner().last_ref_frame, 0);
-                        assert_eq!(pic_param.inner().golden_ref_frame, 0);
-                        assert_eq!(pic_param.inner().alt_ref_frame, 0);
-                        assert_eq!(
-                            pic_param.inner().out_of_loop_frame,
-                            libva::constants::VA_INVALID_SURFACE
-                        );
-
-                        // Safe because this bitfield is initialized by the decoder.
-                        assert_eq!(unsafe { pic_param.inner().pic_fields.value }, unsafe {
-                            libva::VP8PicFields::new(1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0)
-                                .inner()
-                                .value
-                        });
-
-                        assert_eq!(pic_param.inner().mb_segment_tree_probs, [0; 3]);
-                        assert_eq!(pic_param.inner().loop_filter_level, [44; 4]);
-                        assert_eq!(
-                            pic_param.inner().loop_filter_deltas_ref_frame,
-                            [2, 0, -2, -2]
-                        );
-                        assert_eq!(pic_param.inner().loop_filter_deltas_mode, [4, -2, 2, 4]);
-                        assert_eq!(pic_param.inner().prob_skip_false, 0x11);
-                        assert_eq!(pic_param.inner().prob_intra, 0x2a);
-                        assert_eq!(pic_param.inner().prob_last, 0xff);
-                        assert_eq!(pic_param.inner().prob_gf, 0x80);
-
-                        assert_eq!(pic_param.inner().y_mode_probs, [0x70, 0x56, 0x8c, 0x25]);
-                        assert_eq!(pic_param.inner().uv_mode_probs, [0xa2, 0x65, 0xcc]);
-                        assert_eq!(
-                            pic_param.inner().mv_probs[0],
-                            [
-                                0xa2, 0x80, 0xe1, 0x92, 0xac, 0x93, 0xd6, 0x27, 0x9c, 0x80, 0x81,
-                                0x84, 0x4b, 0x91, 0xb2, 0xce, 0xef, 0xfe, 0xfe,
-                            ]
-                        );
-                        assert_eq!(
-                            pic_param.inner().mv_probs[1],
-                            [
-                                0xa4, 0x80, 0xcc, 0xaa, 0x77, 0xeb, 0x8c, 0xe6, 0xe4, 0x80, 0x82,
-                                0x82, 0x4a, 0x94, 0xb4, 0xcb, 0xec, 0xfe, 0xfe,
-                            ]
-                        );
-
-                        assert_eq!(pic_param.inner().bool_coder_ctx.range, 0xde);
-                        assert_eq!(pic_param.inner().bool_coder_ctx.value, 0x39);
-                        assert_eq!(pic_param.inner().bool_coder_ctx.count, 0x7);
-
-                        assert_eq!(
-                            slice_param.inner(),
-                            libva::SliceParameterBufferVP8::new(
-                                257,
-                                3,
-                                0,
-                                129,
-                                2,
-                                [143, 94, 0, 0, 0, 0, 0, 0, 0],
-                            )
-                            .inner()
-                        );
-
-                        assert_eq!(&slice_data[..], TEST_25_FPS_VP8_STREAM_SLICE_DATA_1);
-                    } else if frame_num == 2 {
-                        assert_eq!(iq_matrix.inner().quantization_index, [[0x7f; 6]; 4]);
-                        for i in 0..4 {
-                            for j in 0..8 {
-                                for k in 0..3 {
-                                    for l in 0..11 {
-                                        const OFF_I: usize = 8 * 3 * 11;
-                                        const OFF_J: usize = 3 * 11;
-                                        const OFF_K: usize = 11;
-                                        // maybe std::transmute?
-                                        assert_eq!(
-                                            probability_table.inner().dct_coeff_probs[i][j][k][l],
-                                            TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_2
-                                                [(i * OFF_I) + (j * OFF_J) + (k * OFF_K) + l]
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        assert_eq!(pic_param.inner().frame_width, 320);
-                        assert_eq!(pic_param.inner().frame_height, 240);
-                        assert_eq!(pic_param.inner().last_ref_frame, 1);
-                        assert_eq!(pic_param.inner().golden_ref_frame, 0);
-                        assert_eq!(pic_param.inner().alt_ref_frame, 0);
-                        assert_eq!(
-                            pic_param.inner().out_of_loop_frame,
-                            libva::constants::VA_INVALID_SURFACE
-                        );
-
-                        // Safe because this bitfield is initialized by the decoder.
-                        assert_eq!(unsafe { pic_param.inner().pic_fields.value }, unsafe {
-                            libva::VP8PicFields::new(1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0)
-                                .inner()
-                                .value
-                        });
-
-                        assert_eq!(pic_param.inner().mb_segment_tree_probs, [0; 3]);
-                        assert_eq!(pic_param.inner().loop_filter_level, [28; 4]);
-                        assert_eq!(
-                            pic_param.inner().loop_filter_deltas_ref_frame,
-                            [2, 0, -2, -2]
-                        );
-                        assert_eq!(pic_param.inner().loop_filter_deltas_mode, [4, -2, 2, 4]);
-                        assert_eq!(pic_param.inner().prob_skip_false, 0x6);
-                        assert_eq!(pic_param.inner().prob_intra, 0x1);
-                        assert_eq!(pic_param.inner().prob_last, 0xf8);
-                        assert_eq!(pic_param.inner().prob_gf, 0xff);
-
-                        assert_eq!(pic_param.inner().y_mode_probs, [0x70, 0x56, 0x8c, 0x25]);
-                        assert_eq!(pic_param.inner().uv_mode_probs, [0xa2, 0x65, 0xcc]);
-                        assert_eq!(
-                            pic_param.inner().mv_probs[0],
-                            [
-                                0xa2, 0x80, 0xe1, 0x92, 0xac, 0x93, 0xd6, 0x27, 0x9c, 0x80, 0x81,
-                                0x84, 0x4b, 0x91, 0xb2, 0xce, 0xef, 0xfe, 0xfe,
-                            ]
-                        );
-                        assert_eq!(
-                            pic_param.inner().mv_probs[1],
-                            [
-                                0xa4, 0x80, 0xcc, 0xaa, 0x77, 0xeb, 0x8c, 0xe6, 0xe4, 0x80, 0x82,
-                                0x82, 0x4a, 0x94, 0xb4, 0xcb, 0xec, 0xfe, 0xfe,
-                            ]
-                        );
-
-                        assert_eq!(pic_param.inner().bool_coder_ctx.range, 0xb1);
-                        assert_eq!(pic_param.inner().bool_coder_ctx.value, 0xd);
-                        assert_eq!(pic_param.inner().bool_coder_ctx.count, 0x2);
-
-                        assert_eq!(
-                            slice_param.inner(),
-                            libva::SliceParameterBufferVP8::new(
-                                131,
-                                3,
-                                0,
-                                86,
-                                2,
-                                [66, 51, 0, 0, 0, 0, 0, 0, 0],
-                            )
-                            .inner()
-                        );
-
-                        assert_eq!(&slice_data[..], TEST_25_FPS_VP8_STREAM_SLICE_DATA_2);
-                    }
 
                     frame_num += 1;
                 });
             });
         }
+    }
+
+    #[test]
+    /// Check that we are able to build the VA picture parameters from the stream properly.
+    fn build_pic_params() {
+        const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.vp8");
+        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_0: &[u8] =
+            include_bytes!("../test_data/test-25fps-vp8-probability-table-0.bin");
+        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_1: &[u8] =
+            include_bytes!("../test_data/test-25fps-vp8-probability-table-1.bin");
+        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_2: &[u8] =
+            include_bytes!("../test_data/test-25fps-vp8-probability-table-2.bin");
+
+        let mut parser: Parser = Default::default();
+        let mut cursor = Cursor::new(TEST_STREAM);
+        // Skip the IVH header entirely.
+        cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
+
+        // FRAME 0
+
+        let packet = read_ivf_packet(&mut cursor).unwrap();
+        let frame = parser.parse_frame(packet).unwrap();
+
+        assert_eq!(frame.size(), 14788);
+
+        let resolution = Resolution {
+            width: frame.header.width() as u32,
+            height: frame.header.height() as u32,
+        };
+
+        let pic_param = Backend::build_pic_param(
+            &frame.header,
+            &resolution,
+            parser.segmentation(),
+            parser.mb_lf_adjust(),
+            libva::constants::VA_INVALID_SURFACE,
+            libva::constants::VA_INVALID_SURFACE,
+            libva::constants::VA_INVALID_SURFACE,
+        )
+        .unwrap();
+        let pic_param = match pic_param {
+            BufferType::PictureParameter(PictureParameter::VP8(pic_param)) => pic_param,
+            _ => panic!(),
+        };
+
+        let iq_matrix = Backend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix = match iq_matrix {
+            BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
+            _ => panic!(),
+        };
+
+        let prob_table = Backend::build_probability_table(&frame.header);
+        let prob_table = match prob_table {
+            BufferType::Probability(prob_table) => prob_table,
+            _ => panic!(),
+        };
+
+        let slice_param = Backend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = match slice_param {
+            BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
+            _ => panic!(),
+        };
+
+        assert_eq!(iq_matrix.inner().quantization_index, [[4; 6]; 4]);
+        for i in 0..4 {
+            for j in 0..8 {
+                for k in 0..3 {
+                    for l in 0..11 {
+                        const OFF_I: usize = 8 * 3 * 11;
+                        const OFF_J: usize = 3 * 11;
+                        const OFF_K: usize = 11;
+                        // maybe std::transmute?
+                        assert_eq!(
+                            prob_table.inner().dct_coeff_probs[i][j][k][l],
+                            TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_0
+                                [(i * OFF_I) + (j * OFF_J) + (k * OFF_K) + l]
+                        );
+                    }
+                }
+            }
+        }
+
+        assert_eq!(pic_param.inner().frame_width, 320);
+        assert_eq!(pic_param.inner().frame_height, 240);
+        assert_eq!(
+            pic_param.inner().last_ref_frame,
+            libva::constants::VA_INVALID_SURFACE
+        );
+        assert_eq!(
+            pic_param.inner().golden_ref_frame,
+            libva::constants::VA_INVALID_SURFACE
+        );
+        assert_eq!(
+            pic_param.inner().alt_ref_frame,
+            libva::constants::VA_INVALID_SURFACE
+        );
+        assert_eq!(
+            pic_param.inner().out_of_loop_frame,
+            libva::constants::VA_INVALID_SURFACE
+        );
+
+        // Safe because this bitfield is initialized by the decoder.
+        assert_eq!(unsafe { pic_param.inner().pic_fields.value }, unsafe {
+            libva::VP8PicFields::new(0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1)
+                .inner()
+                .value
+        });
+
+        assert_eq!(pic_param.inner().mb_segment_tree_probs, [0; 3]);
+        assert_eq!(pic_param.inner().loop_filter_level, [0; 4]);
+        assert_eq!(
+            pic_param.inner().loop_filter_deltas_ref_frame,
+            [2, 0, -2, -2]
+        );
+        assert_eq!(pic_param.inner().loop_filter_deltas_mode, [4, -2, 2, 4]);
+        assert_eq!(pic_param.inner().prob_skip_false, 0xbe);
+        assert_eq!(pic_param.inner().prob_intra, 0);
+        assert_eq!(pic_param.inner().prob_last, 0);
+        assert_eq!(pic_param.inner().prob_gf, 0);
+
+        assert_eq!(pic_param.inner().y_mode_probs, [0x91, 0x9c, 0xa3, 0x80]);
+        assert_eq!(pic_param.inner().uv_mode_probs, [0x8e, 0x72, 0xb7]);
+        assert_eq!(
+            pic_param.inner().mv_probs[0],
+            [
+                0xa2, 0x80, 0xe1, 0x92, 0xac, 0x93, 0xd6, 0x27, 0x9c, 0x80, 0x81, 0x84, 0x4b, 0x91,
+                0xb2, 0xce, 0xef, 0xfe, 0xfe
+            ]
+        );
+        assert_eq!(
+            pic_param.inner().mv_probs[1],
+            [
+                0xa4, 0x80, 0xcc, 0xaa, 0x77, 0xeb, 0x8c, 0xe6, 0xe4, 0x80, 0x82, 0x82, 0x4a, 0x94,
+                0xb4, 0xcb, 0xec, 0xfe, 0xfe,
+            ]
+        );
+
+        assert_eq!(pic_param.inner().bool_coder_ctx.range, 0xfc);
+        assert_eq!(pic_param.inner().bool_coder_ctx.value, 0x39);
+        assert_eq!(pic_param.inner().bool_coder_ctx.count, 0x0);
+
+        assert_eq!(
+            slice_param.inner(),
+            libva::SliceParameterBufferVP8::new(
+                14788,
+                10,
+                0,
+                3040,
+                2,
+                [926, 13472, 0, 0, 0, 0, 0, 0, 0],
+            )
+            .inner(),
+        );
+
+        // FRAME 1
+
+        let packet = read_ivf_packet(&mut cursor).unwrap();
+        let frame = parser.parse_frame(packet).unwrap();
+
+        assert_eq!(frame.size(), 257);
+
+        let pic_param = Backend::build_pic_param(
+            &frame.header,
+            &resolution,
+            parser.segmentation(),
+            parser.mb_lf_adjust(),
+            0,
+            0,
+            0,
+        )
+        .unwrap();
+        let pic_param = match pic_param {
+            BufferType::PictureParameter(PictureParameter::VP8(pic_param)) => pic_param,
+            _ => panic!(),
+        };
+
+        let iq_matrix = Backend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix = match iq_matrix {
+            BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
+            _ => panic!(),
+        };
+
+        let prob_table = Backend::build_probability_table(&frame.header);
+        let prob_table = match prob_table {
+            BufferType::Probability(prob_table) => prob_table,
+            _ => panic!(),
+        };
+
+        let slice_param = Backend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = match slice_param {
+            BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
+            _ => panic!(),
+        };
+
+        assert_eq!(iq_matrix.inner().quantization_index, [[0x7f; 6]; 4]);
+        for i in 0..4 {
+            for j in 0..8 {
+                for k in 0..3 {
+                    for l in 0..11 {
+                        const OFF_I: usize = 8 * 3 * 11;
+                        const OFF_J: usize = 3 * 11;
+                        const OFF_K: usize = 11;
+                        // maybe std::transmute?
+                        assert_eq!(
+                            prob_table.inner().dct_coeff_probs[i][j][k][l],
+                            TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_1
+                                [(i * OFF_I) + (j * OFF_J) + (k * OFF_K) + l]
+                        );
+                    }
+                }
+            }
+        }
+        assert_eq!(pic_param.inner().frame_width, 320);
+        assert_eq!(pic_param.inner().frame_height, 240);
+        assert_eq!(pic_param.inner().last_ref_frame, 0);
+        assert_eq!(pic_param.inner().golden_ref_frame, 0);
+        assert_eq!(pic_param.inner().alt_ref_frame, 0);
+        assert_eq!(
+            pic_param.inner().out_of_loop_frame,
+            libva::constants::VA_INVALID_SURFACE
+        );
+
+        // Safe because this bitfield is initialized by the decoder.
+        assert_eq!(unsafe { pic_param.inner().pic_fields.value }, unsafe {
+            libva::VP8PicFields::new(1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0)
+                .inner()
+                .value
+        });
+
+        assert_eq!(pic_param.inner().mb_segment_tree_probs, [0; 3]);
+        assert_eq!(pic_param.inner().loop_filter_level, [44; 4]);
+        assert_eq!(
+            pic_param.inner().loop_filter_deltas_ref_frame,
+            [2, 0, -2, -2]
+        );
+        assert_eq!(pic_param.inner().loop_filter_deltas_mode, [4, -2, 2, 4]);
+        assert_eq!(pic_param.inner().prob_skip_false, 0x11);
+        assert_eq!(pic_param.inner().prob_intra, 0x2a);
+        assert_eq!(pic_param.inner().prob_last, 0xff);
+        assert_eq!(pic_param.inner().prob_gf, 0x80);
+
+        assert_eq!(pic_param.inner().y_mode_probs, [0x70, 0x56, 0x8c, 0x25]);
+        assert_eq!(pic_param.inner().uv_mode_probs, [0xa2, 0x65, 0xcc]);
+        assert_eq!(
+            pic_param.inner().mv_probs[0],
+            [
+                0xa2, 0x80, 0xe1, 0x92, 0xac, 0x93, 0xd6, 0x27, 0x9c, 0x80, 0x81, 0x84, 0x4b, 0x91,
+                0xb2, 0xce, 0xef, 0xfe, 0xfe,
+            ]
+        );
+        assert_eq!(
+            pic_param.inner().mv_probs[1],
+            [
+                0xa4, 0x80, 0xcc, 0xaa, 0x77, 0xeb, 0x8c, 0xe6, 0xe4, 0x80, 0x82, 0x82, 0x4a, 0x94,
+                0xb4, 0xcb, 0xec, 0xfe, 0xfe,
+            ]
+        );
+
+        assert_eq!(pic_param.inner().bool_coder_ctx.range, 0xde);
+        assert_eq!(pic_param.inner().bool_coder_ctx.value, 0x39);
+        assert_eq!(pic_param.inner().bool_coder_ctx.count, 0x7);
+
+        assert_eq!(
+            slice_param.inner(),
+            libva::SliceParameterBufferVP8::new(257, 3, 0, 129, 2, [143, 94, 0, 0, 0, 0, 0, 0, 0],)
+                .inner()
+        );
+
+        // FRAME 2
+
+        let packet = read_ivf_packet(&mut cursor).unwrap();
+        let frame = parser.parse_frame(packet).unwrap();
+
+        assert_eq!(frame.size(), 131);
+
+        let pic_param = Backend::build_pic_param(
+            &frame.header,
+            &resolution,
+            parser.segmentation(),
+            parser.mb_lf_adjust(),
+            1,
+            0,
+            0,
+        )
+        .unwrap();
+        let pic_param = match pic_param {
+            BufferType::PictureParameter(PictureParameter::VP8(pic_param)) => pic_param,
+            _ => panic!(),
+        };
+
+        let iq_matrix = Backend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix = match iq_matrix {
+            BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
+            _ => panic!(),
+        };
+
+        let prob_table = Backend::build_probability_table(&frame.header);
+        let prob_table = match prob_table {
+            BufferType::Probability(prob_table) => prob_table,
+            _ => panic!(),
+        };
+
+        let slice_param = Backend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = match slice_param {
+            BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
+            _ => panic!(),
+        };
+
+        assert_eq!(iq_matrix.inner().quantization_index, [[0x7f; 6]; 4]);
+        for i in 0..4 {
+            for j in 0..8 {
+                for k in 0..3 {
+                    for l in 0..11 {
+                        const OFF_I: usize = 8 * 3 * 11;
+                        const OFF_J: usize = 3 * 11;
+                        const OFF_K: usize = 11;
+                        // maybe std::transmute?
+                        assert_eq!(
+                            prob_table.inner().dct_coeff_probs[i][j][k][l],
+                            TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_2
+                                [(i * OFF_I) + (j * OFF_J) + (k * OFF_K) + l]
+                        );
+                    }
+                }
+            }
+        }
+        assert_eq!(pic_param.inner().frame_width, 320);
+        assert_eq!(pic_param.inner().frame_height, 240);
+        assert_eq!(pic_param.inner().last_ref_frame, 1);
+        assert_eq!(pic_param.inner().golden_ref_frame, 0);
+        assert_eq!(pic_param.inner().alt_ref_frame, 0);
+        assert_eq!(
+            pic_param.inner().out_of_loop_frame,
+            libva::constants::VA_INVALID_SURFACE
+        );
+
+        // Safe because this bitfield is initialized by the decoder.
+        assert_eq!(unsafe { pic_param.inner().pic_fields.value }, unsafe {
+            libva::VP8PicFields::new(1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0)
+                .inner()
+                .value
+        });
+
+        assert_eq!(pic_param.inner().mb_segment_tree_probs, [0; 3]);
+        assert_eq!(pic_param.inner().loop_filter_level, [28; 4]);
+        assert_eq!(
+            pic_param.inner().loop_filter_deltas_ref_frame,
+            [2, 0, -2, -2]
+        );
+        assert_eq!(pic_param.inner().loop_filter_deltas_mode, [4, -2, 2, 4]);
+        assert_eq!(pic_param.inner().prob_skip_false, 0x6);
+        assert_eq!(pic_param.inner().prob_intra, 0x1);
+        assert_eq!(pic_param.inner().prob_last, 0xf8);
+        assert_eq!(pic_param.inner().prob_gf, 0xff);
+
+        assert_eq!(pic_param.inner().y_mode_probs, [0x70, 0x56, 0x8c, 0x25]);
+        assert_eq!(pic_param.inner().uv_mode_probs, [0xa2, 0x65, 0xcc]);
+        assert_eq!(
+            pic_param.inner().mv_probs[0],
+            [
+                0xa2, 0x80, 0xe1, 0x92, 0xac, 0x93, 0xd6, 0x27, 0x9c, 0x80, 0x81, 0x84, 0x4b, 0x91,
+                0xb2, 0xce, 0xef, 0xfe, 0xfe,
+            ]
+        );
+        assert_eq!(
+            pic_param.inner().mv_probs[1],
+            [
+                0xa4, 0x80, 0xcc, 0xaa, 0x77, 0xeb, 0x8c, 0xe6, 0xe4, 0x80, 0x82, 0x82, 0x4a, 0x94,
+                0xb4, 0xcb, 0xec, 0xfe, 0xfe,
+            ]
+        );
+
+        assert_eq!(pic_param.inner().bool_coder_ctx.range, 0xb1);
+        assert_eq!(pic_param.inner().bool_coder_ctx.value, 0xd);
+        assert_eq!(pic_param.inner().bool_coder_ctx.count, 0x2);
+
+        assert_eq!(
+            slice_param.inner(),
+            libva::SliceParameterBufferVP8::new(131, 3, 0, 86, 2, [66, 51, 0, 0, 0, 0, 0, 0, 0],)
+                .inner()
+        );
     }
 }

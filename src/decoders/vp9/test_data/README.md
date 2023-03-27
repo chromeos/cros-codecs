@@ -13,9 +13,6 @@ Same as Chromium's `test-25fps.vp9`.
 
 Test taken from `libvpx` official test suite.
 
-The slice data in vp90_2_10_show_existing_frame2-vp9-ivf-slice-data-\*.bin was manually extracted
-from GStreamer using GDB.
-
 ## vp90_2_10_show_existing_frame_vp9
 
 Test taken from `libvpx` official test suite.
@@ -34,9 +31,6 @@ changing resolutions at random. Those contain 144p, 240p, 360p, 480p, 720p, and
 
 ffprobe -show_frames resolution_change_500frames.vp9
 ```
-
-The slice data in resolution_change_500frames-vp9-ivf-slice-data-\*.bin was manually extracted from
-GStreamer using GDB.
 
 ## vp9-superframe.bin
 

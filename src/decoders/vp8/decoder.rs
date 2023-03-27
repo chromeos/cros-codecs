@@ -125,7 +125,7 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
         *reference = Some(handle.clone());
     }
 
-    fn update_references(
+    pub(crate) fn update_references(
         header: &Header,
         decoded_handle: &T,
         last_picture: &mut Option<T>,

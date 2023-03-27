@@ -41,9 +41,4 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
         segmentation: &[Segmentation; MAX_SEGMENTS],
         block: BlockingMode,
     ) -> Result<Self::Handle>;
-
-    /// Get the test parameters for the backend. The caller is reponsible for
-    /// downcasting them to the correct type, which is backend-dependent.
-    #[cfg(test)]
-    fn get_test_params(&self) -> &dyn std::any::Any;
 }

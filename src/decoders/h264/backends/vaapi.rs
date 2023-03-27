@@ -44,31 +44,6 @@ use crate::utils::vaapi::VaapiBackend;
 use crate::DecodedFormat;
 use crate::Resolution;
 
-#[cfg(test)]
-#[derive(Default)]
-struct TestParams {
-    pic_param: Option<BufferType>,
-    iq_matrix: Option<BufferType>,
-    slice_param: Option<BufferType>,
-    slice_data: Option<BufferType>,
-}
-
-#[cfg(test)]
-impl TestParams {
-    fn save_pic_params(&mut self, pic_param: BufferType, iq_matrix: BufferType) {
-        self.pic_param = Some(pic_param);
-        self.iq_matrix = Some(iq_matrix);
-    }
-
-    fn save_slice_params(&mut self, slice_param: BufferType) {
-        self.slice_param = Some(slice_param);
-    }
-
-    fn save_slice_data(&mut self, slice_data: BufferType) {
-        self.slice_data = Some(slice_data);
-    }
-}
-
 impl StreamInfo for &Sps {
     fn va_profile(&self) -> anyhow::Result<i32> {
         let profile_idc = self.profile_idc();
@@ -127,11 +102,6 @@ struct Backend {
 
     /// The current picture being worked on.
     current_picture: Option<VaPicture<PictureNew>>,
-
-    #[cfg(test)]
-    /// Test params. Saves the metadata sent to VA-API for the purposes of
-    /// testing.
-    test_params: TestParams,
 }
 
 impl Backend {
@@ -140,9 +110,6 @@ impl Backend {
         Ok(Self {
             backend: VaapiBackend::new(display),
             current_picture: Default::default(),
-
-            #[cfg(test)]
-            test_params: Default::default(),
         })
     }
 
@@ -580,12 +547,6 @@ impl StatelessDecoderBackend for Backend {
         let iq_matrix = Backend::build_iq_matrix(pps);
         let iq_matrix = context.create_buffer(iq_matrix)?;
 
-        #[cfg(test)]
-        self.test_params.save_pic_params(
-            Backend::build_pic_param(slice, picture, surface_id, dpb, sps, pps)?,
-            Backend::build_iq_matrix(pps),
-        );
-
         va_pic.add_buffer(pic_param);
         va_pic.add_buffer(iq_matrix);
 
@@ -612,25 +573,11 @@ impl StatelessDecoderBackend for Backend {
             pps,
         )?)?;
 
-        #[cfg(test)]
-        self.test_params
-            .save_slice_params(Backend::build_slice_param(
-                slice,
-                ref_pic_list0,
-                ref_pic_list1,
-                sps,
-                pps,
-            )?);
-
         let cur_va_pic = &mut self.current_picture.as_mut().unwrap();
         cur_va_pic.add_buffer(slice_param);
 
         let slice_data =
             context.create_buffer(BufferType::SliceData(Vec::from(slice.nalu().as_ref())))?;
-
-        #[cfg(test)]
-        self.test_params
-            .save_slice_data(BufferType::SliceData(Vec::from(slice.nalu().as_ref())));
 
         cur_va_pic.add_buffer(slice_data);
 
@@ -683,11 +630,6 @@ impl StatelessDecoderBackend for Backend {
         self.current_picture = Some(VaPicture::new_from_same_surface(timestamp, va_picture));
 
         Ok(())
-    }
-
-    #[cfg(test)]
-    fn get_test_params(&self) -> &dyn std::any::Any {
-        &self.test_params
     }
 }
 

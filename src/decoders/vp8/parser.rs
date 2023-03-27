@@ -395,6 +395,10 @@ impl<T: AsRef<[u8]>> Frame<T> {
             header: Default::default(),
         }
     }
+
+    pub fn size(&self) -> usize {
+        self.bitstream.as_ref().len()
+    }
 }
 
 impl<T: AsRef<[u8]>> AsRef<[u8]> for Frame<T> {

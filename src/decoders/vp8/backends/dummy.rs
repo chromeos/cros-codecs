@@ -37,12 +37,6 @@ impl StatelessDecoderBackend for Backend {
             handle: Rc::new(RefCell::new(BackendHandle)),
         })
     }
-
-    #[cfg(test)]
-    fn get_test_params(&self) -> &dyn std::any::Any {
-        // There are no test parameters for the dummy backend.
-        unimplemented!()
-    }
 }
 
 impl Decoder<Handle> {

@@ -372,7 +372,10 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
     }
 
     /// Update the state of the segmentation parameters after seeing a frame
-    fn update_segmentation(hdr: &Header, segmentation: &mut [Segmentation; 8]) -> Result<()> {
+    pub(crate) fn update_segmentation(
+        hdr: &Header,
+        segmentation: &mut [Segmentation; MAX_SEGMENTS],
+    ) -> Result<()> {
         let lf = hdr.lf();
         let seg = hdr.seg();
 
@@ -618,7 +621,7 @@ pub mod tests {
 
     /// Read and return the data from the next IVF packet. Returns `None` if there is no more data
     /// to read.
-    fn read_ivf_packet(cursor: &mut Cursor<&[u8]>) -> Option<Box<[u8]>> {
+    pub(crate) fn read_ivf_packet(cursor: &mut Cursor<&[u8]>) -> Option<Box<[u8]>> {
         if !cursor.has_remaining() {
             return None;
         }

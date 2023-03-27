@@ -71,12 +71,6 @@ impl StatelessDecoderBackend for Backend {
     fn new_picture(&mut self, _: &PictureData, _: u64) -> StatelessBackendResult<()> {
         Ok(())
     }
-
-    #[cfg(test)]
-    fn get_test_params(&self) -> &dyn std::any::Any {
-        // There are no test parameters for the dummy backend.
-        unimplemented!()
-    }
 }
 
 impl Decoder<Handle> {
