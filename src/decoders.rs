@@ -155,7 +155,6 @@ pub trait DynDecodedHandle {
 impl<T> DynDecodedHandle for T
 where
     T: DecodedHandle,
-    T::BackendHandle: DynHandle,
 {
     fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle> {
         DecodedHandle::handle_mut(self)
@@ -214,9 +213,9 @@ pub trait FrameInfo {
 /// The handle type used by the stateless decoder backend. The only requirement
 /// from implementors is that they give access to the underlying handle and
 /// that they can be (cheaply) cloned.
-pub trait DecodedHandle: Clone {
+pub trait DecodedHandle: Clone + DynDecodedHandle {
     /// The type of the handle used by the backend.
-    type BackendHandle;
+    type BackendHandle: DynHandle;
 
     /// Returns a reference to the container of the backend handle.
     fn handle_rc(&self) -> &Rc<RefCell<Self::BackendHandle>>;

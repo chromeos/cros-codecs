@@ -158,7 +158,7 @@ impl<T> Ord for ReadyPicture<T> {
 
 pub struct Decoder<T>
 where
-    T: DecodedHandle + DynDecodedHandle,
+    T: DecodedHandle,
 {
     /// A parser to extract bitstream metadata
     parser: Parser,
@@ -254,7 +254,7 @@ where
 
 impl<T> Decoder<T>
 where
-    T: DecodedHandle + DynDecodedHandle + 'static,
+    T: DecodedHandle + 'static,
 {
     // Creates a new instance of the decoder.
     #[cfg(any(feature = "vaapi", test))]
@@ -2316,7 +2316,7 @@ where
 
 impl<T> VideoDecoder for Decoder<T>
 where
-    T: DecodedHandle + DynDecodedHandle + 'static,
+    T: DecodedHandle + 'static,
 {
     fn decode(
         &mut self,
@@ -2449,7 +2449,7 @@ pub mod tests {
         test_stream: &[u8],
         mut on_new_frame: F,
     ) where
-        Handle: DecodedHandle + DynDecodedHandle + 'static,
+        Handle: DecodedHandle + 'static,
         F: FnMut(Box<dyn DynDecodedHandle>),
     {
         let mut cursor = Cursor::new(test_stream);
@@ -2592,7 +2592,7 @@ pub mod tests {
         check_crcs: bool,
         dump_yuv: bool,
     ) where
-        Handle: DecodedHandle + DynDecodedHandle + 'static,
+        Handle: DecodedHandle + 'static,
     {
         let mut crcs = test.crcs.lines().enumerate();
 

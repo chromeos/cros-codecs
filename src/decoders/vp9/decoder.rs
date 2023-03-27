@@ -141,7 +141,7 @@ pub struct Decoder<T: DecodedHandle> {
     test_params: TestParams<T>,
 }
 
-impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
+impl<T: DecodedHandle + 'static> Decoder<T> {
     /// Create a new codec backend for VP8.
     #[cfg(any(feature = "vaapi", test))]
     pub(crate) fn new(
@@ -457,7 +457,7 @@ impl<T: DecodedHandle + DynDecodedHandle + 'static> Decoder<T> {
     }
 }
 
-impl<T: DecodedHandle + DynDecodedHandle + 'static> VideoDecoder for Decoder<T> {
+impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
     fn decode(
         &mut self,
         timestamp: u64,
@@ -636,10 +636,7 @@ pub mod tests {
         Some(buf.into_boxed_slice())
     }
 
-    pub fn run_decoding_loop<
-        Handle: DecodedHandle + DynDecodedHandle + 'static,
-        F: FnMut(&mut Decoder<Handle>),
-    >(
+    pub fn run_decoding_loop<Handle: DecodedHandle + 'static, F: FnMut(&mut Decoder<Handle>)>(
         decoder: &mut Decoder<Handle>,
         test_stream: &[u8],
         mut on_new_iteration: F,
