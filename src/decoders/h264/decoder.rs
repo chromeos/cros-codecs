@@ -143,17 +143,13 @@ impl<T> Eq for ReadyPicture<T> {}
 
 impl<T> PartialOrd for ReadyPicture<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        // We reverse the order because we want the picture with the lowest order to be at the top
-        // of the `BinaryHeap`.
-        other.pic_order.partial_cmp(&self.pic_order)
+        self.pic_order.partial_cmp(&other.pic_order)
     }
 }
 
 impl<T> Ord for ReadyPicture<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // We reverse the order because we want the picture with the lowest order to be at the top
-        // of the `BinaryHeap`.
-        other.pic_order.cmp(&self.pic_order)
+        self.pic_order.cmp(&other.pic_order)
     }
 }
 
@@ -1718,7 +1714,6 @@ where
         // Unfortunately `BinaryHeap`'s `iter()` does not guarantee the order, so we
         // need to convert into a vector first.
         let mut ready_queue = std::mem::take(&mut self.ready_queue).into_sorted_vec();
-        ready_queue.reverse();
 
         // Count all ready handles.
         let num_ready = ready_queue
