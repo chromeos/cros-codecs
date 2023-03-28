@@ -2497,7 +2497,8 @@ pub mod tests {
         }
 
         for frame in decoder.flush().unwrap() {
-            on_new_frame(frame)
+            on_new_frame(frame);
+            frame_num += 1;
         }
     }
 

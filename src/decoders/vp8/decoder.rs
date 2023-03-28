@@ -493,6 +493,7 @@ pub mod tests {
 
         for _ in 0..n_flushed {
             on_new_iteration(decoder);
+            frame_num += 1;
         }
     }
 
