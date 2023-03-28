@@ -239,3 +239,64 @@ pub trait DecodedHandle: Clone + DynDecodedHandle {
     /// Returns the display resolution at the time this handle was decoded.
     fn display_resolution(&self) -> Resolution;
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use crate::decoders::DynDecodedHandle;
+    use crate::decoders::VideoDecoder;
+
+    /// Stream that can be used in tests, along with the CRC32 of all of its frames.
+    pub struct TestStream {
+        /// Bytestream to decode.
+        pub stream: &'static [u8],
+        /// Expected CRC for each frame, one per line.
+        pub crcs: &'static str,
+    }
+
+    /// Run the codec-specific `decoding_loop` on a `decoder` with a given `test`, linearly
+    /// decoding the stream until its end.
+    ///
+    /// If `check_crcs` is `true`, then the expected CRCs of the decoded images are compared
+    /// against the existing result. We may want to set this to false when using a decoder backend
+    /// that does not produce actual frames.
+    ///
+    /// `dump_yuv` will dump all the decoded frames into `/tmp/framexxx.yuv`. Set this to true in
+    /// order to debug the output of the test.
+    pub fn test_decode_stream<D, L>(
+        decoding_loop: L,
+        mut decoder: D,
+        test: &TestStream,
+        check_crcs: bool,
+        dump_yuv: bool,
+    ) where
+        D: VideoDecoder,
+        L: Fn(&mut D, &[u8], &mut dyn FnMut(Box<dyn DynDecodedHandle>)),
+    {
+        let mut crcs = test.crcs.lines().enumerate();
+
+        decoding_loop(&mut decoder, test.stream, &mut |handle| {
+            let (frame_num, expected_crc) = crcs.next().expect("decoded more frames than expected");
+
+            if check_crcs || dump_yuv {
+                let mut picture = handle.dyn_picture_mut();
+                let mut backend_handle = picture.dyn_mappable_handle_mut();
+
+                let buffer_size = backend_handle.image_size();
+                let mut nv12 = vec![0; buffer_size];
+
+                backend_handle.read(&mut nv12).unwrap();
+
+                if dump_yuv {
+                    std::fs::write(format!("/tmp/frame{:03}.yuv", frame_num), &nv12).unwrap();
+                }
+
+                if check_crcs {
+                    let frame_crc = format!("{:08x}", crc32fast::hash(&nv12));
+                    assert_eq!(frame_crc, expected_crc, "at frame {}", frame_num);
+                }
+            }
+        });
+
+        assert_eq!(crcs.next(), None, "decoded less frames than expected");
+    }
+}

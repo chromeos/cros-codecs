@@ -579,17 +579,18 @@ impl Decoder<VADecodedHandle, VaPicture<PictureNew>> {
 mod tests {
     use libva::Display;
 
-    use crate::decoders::h264::decoder::tests::test_decode_stream;
-    use crate::decoders::h264::decoder::tests::DecodingTest;
+    use crate::decoders::h264::decoder::tests::h264_decoding_loop;
     use crate::decoders::h264::decoder::Decoder;
+    use crate::decoders::tests::test_decode_stream;
+    use crate::decoders::tests::TestStream;
     use crate::decoders::BlockingMode;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
-    fn test_decoder_vaapi(test: &DecodingTest, blocking_mode: BlockingMode) {
+    fn test_decoder_vaapi(test: &TestStream, blocking_mode: BlockingMode) {
         let display = Display::open().unwrap();
         let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-        test_decode_stream(decoder, test, true, false);
+        test_decode_stream(h264_decoding_loop, decoder, test, true, false);
     }
 
     #[test]

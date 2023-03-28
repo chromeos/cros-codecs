@@ -2443,18 +2443,19 @@ pub mod tests {
     use crate::decoders::h264::nalu_reader::NaluReader;
     use crate::decoders::h264::parser::Nalu;
     use crate::decoders::h264::parser::NaluType;
+    use crate::decoders::tests::test_decode_stream;
+    use crate::decoders::tests::TestStream;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DecodedHandle;
     use crate::decoders::DynDecodedHandle;
     use crate::decoders::VideoDecoder;
 
-    pub fn run_decoding_loop<H, P, F>(
-        decoder: &mut Decoder<H, P>,
+    /// H.264 decoding loop for use with `test_decode_stream`.
+    pub fn h264_decoding_loop<D>(
+        decoder: &mut D,
         test_stream: &[u8],
-        mut on_new_frame: F,
+        on_new_frame: &mut dyn FnMut(Box<dyn DynDecodedHandle>),
     ) where
-        H: DecodedHandle + 'static,
-        F: FnMut(Box<dyn DynDecodedHandle>),
+        D: VideoDecoder,
     {
         let mut cursor = Cursor::new(test_stream);
 
@@ -2575,62 +2576,11 @@ pub mod tests {
         }
     }
 
-    /// Data for a decoding test.
-    pub struct DecodingTest {
-        /// Bytestream to decode.
-        stream: &'static [u8],
-        /// Expected CRC for each frame, one per line.
-        crcs: &'static str,
-    }
-
-    /// Run the decoding loop on a given test.
-    ///
-    /// If `check_crcs` is `true`, then the expected CRCs of the decoded images are compared
-    /// against the existing result. We may want to set this to false when using a decoder backend
-    /// that does not produce actual frames.
-    ///
-    /// `dump_yuv` will dump all the decoded frames into `/tmp/framexxx.yuv`. Set this to true in
-    /// order to debug the output of the test.
-    pub fn test_decode_stream<H, P>(
-        mut decoder: Decoder<H, P>,
-        test: &DecodingTest,
-        check_crcs: bool,
-        dump_yuv: bool,
-    ) where
-        H: DecodedHandle + 'static,
-    {
-        let mut crcs = test.crcs.lines().enumerate();
-
-        run_decoding_loop(&mut decoder, test.stream, |handle| {
-            let (frame_num, next_crc) = crcs.next().expect("decoded more frames than expected");
-            if check_crcs {
-                let mut picture = handle.dyn_picture_mut();
-                let mut backend_handle = picture.dyn_mappable_handle_mut();
-
-                let buffer_size = backend_handle.image_size();
-                let mut nv12 = vec![0; buffer_size];
-
-                backend_handle.read(&mut nv12).unwrap();
-
-                if dump_yuv {
-                    std::fs::write(format!("/tmp/frame{:03}.yuv", frame_num), &nv12).unwrap();
-                }
-
-                let frame_crc = crc32fast::hash(&nv12);
-
-                let frame_crc = format!("{:08x}", frame_crc);
-                assert_eq!(frame_crc, next_crc, "at frame {}", frame_num);
-            }
-        });
-
-        assert_eq!(crcs.next(), None, "decoded less frames than expected");
-    }
-
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
-    fn test_decoder_dummy(test: &DecodingTest, blocking_mode: BlockingMode) {
+    fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-        test_decode_stream(decoder, test, false, false);
+        test_decode_stream(h264_decoding_loop, decoder, test, false, false);
     }
 
     /// A 16x16 progressive byte-stream encoded I-frame to make it easier to
@@ -2639,7 +2589,7 @@ pub mod tests {
     /// gst-launch-1.0 videotestsrc num-buffers=1 ! video/x-raw,format=I420,width=16,height=16 ! \
     /// x264enc ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
     /// filesink location="/tmp/16x16-I.h264"
-    pub const DECODE_16X16_PROGRESSIVE_I: DecodingTest = DecodingTest {
+    pub const DECODE_16X16_PROGRESSIVE_I: TestStream = TestStream {
         stream: include_bytes!("test_data/16x16-I.h264"),
         crcs: include_str!("test_data/16x16-I.h264.crc"),
     };
@@ -2660,7 +2610,7 @@ pub mod tests {
     /// gst-launch-1.0 videotestsrc num-buffers=2 ! video/x-raw,format=I420,width=16,height=16 ! \
     /// x264enc b-adapt=false ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
     /// filesink location="/tmp/16x16-I-P.h264"
-    pub const DECODE_16X16_PROGRESSIVE_I_P: DecodingTest = DecodingTest {
+    pub const DECODE_16X16_PROGRESSIVE_I_P: TestStream = TestStream {
         stream: include_bytes!("test_data/16x16-I-P.h264"),
         crcs: include_str!("test_data/16x16-I-P.h264.crc"),
     };
@@ -2681,7 +2631,7 @@ pub mod tests {
     /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=16,height=16 ! \
     /// x264enc b-adapt=false bframes=1 ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
     /// filesink location="/tmp/16x16-I-B-and-P.h264"
-    pub const DECODE_16X16_PROGRESSIVE_I_P_B_P: DecodingTest = DecodingTest {
+    pub const DECODE_16X16_PROGRESSIVE_I_P_B_P: TestStream = TestStream {
         stream: include_bytes!("test_data/16x16-I-P-B-P.h264"),
         crcs: include_str!("test_data/16x16-I-P-B-P.h264.crc"),
     };
@@ -2704,7 +2654,7 @@ pub mod tests {
     /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=16,height=16 ! \
     /// x264enc b-adapt=false bframes=1 ! video/x-h264,profile=high,stream-format=byte-stream ! \
     /// filesink location="/tmp/16x16-I-B-and-P-high.h264"
-    pub const DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH: DecodingTest = DecodingTest {
+    pub const DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH: TestStream = TestStream {
         stream: include_bytes!("test_data/16x16-I-P-B-P-high.h264"),
         crcs: include_str!("test_data/16x16-I-P-B-P-high.h264.crc"),
     };
@@ -2726,7 +2676,7 @@ pub mod tests {
     }
 
     /// Same as Chromium's test-25fps.h264
-    pub const DECODE_TEST_25FPS: DecodingTest = DecodingTest {
+    pub const DECODE_TEST_25FPS: TestStream = TestStream {
         stream: include_bytes!("test_data/test-25fps.h264"),
         crcs: include_str!("test_data/test-25fps.h264.crc"),
     };
@@ -2750,7 +2700,7 @@ pub mod tests {
     // This test makes sure that the interlaced logic in the decoder
     // actually works, specially that "frame splitting" works, as the fields
     // here were encoded as frames.
-    pub const DECODE_TEST_25FPS_INTERLACED: DecodingTest = DecodingTest {
+    pub const DECODE_TEST_25FPS_INTERLACED: TestStream = TestStream {
         stream: include_bytes!("test_data/test-25fps-interlaced.h264"),
         crcs: include_str!("test_data/test-25fps-interlaced.h264.crc"),
     };
