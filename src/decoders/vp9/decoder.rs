@@ -189,21 +189,21 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
 
     /// Handle a single frame.
     fn handle_frame(&mut self, frame: &Frame<&[u8]>, timestamp: u64) -> Result<()> {
-        let mut decoded_handle = if frame.header.show_existing_frame() {
+        let mut decoded_handle = if frame.header.show_existing_frame {
             // Frame to be shown. Unwrapping must produce a Picture, because the
             // spec mandates frame_to_show_map_idx references a valid entry in
             // the DPB
-            let idx = usize::from(frame.header.frame_to_show_map_idx());
+            let idx = usize::from(frame.header.frame_to_show_map_idx);
             let ref_frame = self.reference_frames[idx].as_ref().unwrap();
 
             // We are done, no further processing needed.
             ref_frame.clone()
         } else {
             // Otherwise, we must actually arrange to decode a frame
-            let refresh_frame_flags = frame.header.refresh_frame_flags();
+            let refresh_frame_flags = frame.header.refresh_frame_flags;
 
-            let offset = frame.offset();
-            let size = frame.size();
+            let offset = frame.offset;
+            let size = frame.size;
 
             let block = if matches!(self.blocking_mode, BlockingMode::Blocking)
                 || matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
@@ -238,8 +238,8 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
             decoded_handle
         };
 
-        let show_existing_frame = frame.header.show_existing_frame();
-        if frame.header.show_frame() || show_existing_frame {
+        let show_existing_frame = frame.header.show_existing_frame;
+        if frame.header.show_frame || show_existing_frame {
             let order = self.current_display_order;
             decoded_handle.set_display_order(order);
             self.current_display_order += 1;
@@ -253,10 +253,10 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
     fn negotiation_possible(&self, frame: &Frame<impl AsRef<[u8]>>) -> bool {
         let coded_resolution = self.coded_resolution;
         let hdr = &frame.header;
-        let width = hdr.width();
-        let height = hdr.height();
-        let bit_depth = hdr.bit_depth();
-        let profile = hdr.profile();
+        let width = hdr.width;
+        let height = hdr.height;
+        let bit_depth = hdr.bit_depth;
+        let profile = hdr.profile;
 
         if width == 0 || height == 0 {
             return false;
@@ -281,21 +281,18 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
 
     /// An implementation of seg_feature_active as per "6.4.9 Segmentation feature active syntax"
     fn seg_feature_active(hdr: &Header, segment_id: u8, feature: u8) -> bool {
-        let seg = hdr.seg();
-        let feature_enabled = seg.feature_enabled();
-        seg.enabled() && feature_enabled[usize::from(segment_id)][usize::from(feature)]
+        let feature_enabled = hdr.seg.feature_enabled;
+        hdr.seg.enabled && feature_enabled[usize::from(segment_id)][usize::from(feature)]
     }
 
     /// An implementation of get_qindex as per "8.6.1 Dequantization functions"
     fn get_qindex(hdr: &Header, segment_id: u8) -> i32 {
-        let q = hdr.quant();
-        let base_q_idx = q.base_q_idx();
-        let seg = hdr.seg();
+        let base_q_idx = hdr.quant.base_q_idx;
 
         if Self::seg_feature_active(hdr, segment_id, 0) {
-            let mut data = seg.feature_data()[usize::from(segment_id)][0] as i32;
+            let mut data = hdr.seg.feature_data[usize::from(segment_id)][0] as i32;
 
-            if !seg.abs_or_delta_update() {
+            if !hdr.seg.abs_or_delta_update {
                 data += i32::from(base_q_idx);
             }
 
@@ -307,16 +304,14 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
 
     /// An implementation of get_dc_quant as per "8.6.1 Dequantization functions"
     fn get_dc_quant(hdr: &Header, segment_id: u8, luma: bool) -> Result<i32> {
-        let quant = hdr.quant();
-
         let delta_q_dc = if luma {
-            quant.delta_q_y_dc()
+            hdr.quant.delta_q_y_dc
         } else {
-            quant.delta_q_uv_dc()
+            hdr.quant.delta_q_uv_dc
         };
         let qindex = Self::get_qindex(hdr, segment_id);
         let q_table_idx = Self::clamp(qindex + i32::from(delta_q_dc), 0, 255) as usize;
-        match hdr.bit_depth() {
+        match hdr.bit_depth {
             BitDepth::Depth8 => Ok(i32::from(DC_QLOOKUP[q_table_idx])),
             BitDepth::Depth10 => Ok(i32::from(DC_QLOOKUP_10[q_table_idx])),
             BitDepth::Depth12 => Ok(i32::from(DC_QLOOKUP_12[q_table_idx])),
@@ -325,13 +320,11 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
 
     /// An implementation of get_ac_quant as per "8.6.1 Dequantization functions"
     fn get_ac_quant(hdr: &Header, segment_id: u8, luma: bool) -> Result<i32> {
-        let quant = hdr.quant();
-
-        let delta_q_ac = if luma { 0 } else { quant.delta_q_uv_ac() };
+        let delta_q_ac = if luma { 0 } else { hdr.quant.delta_q_uv_ac };
         let qindex = Self::get_qindex(hdr, segment_id);
         let q_table_idx = usize::try_from(Self::clamp(qindex + i32::from(delta_q_ac), 0, 255))?;
 
-        match hdr.bit_depth() {
+        match hdr.bit_depth {
             BitDepth::Depth8 => Ok(i32::from(AC_QLOOKUP[q_table_idx])),
             BitDepth::Depth10 => Ok(i32::from(AC_QLOOKUP_10[q_table_idx])),
             BitDepth::Depth12 => Ok(i32::from(AC_QLOOKUP_12[q_table_idx])),
@@ -343,10 +336,10 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
         hdr: &Header,
         segmentation: &mut [Segmentation; MAX_SEGMENTS],
     ) -> Result<()> {
-        let lf = hdr.lf();
-        let seg = hdr.seg();
+        let lf = &hdr.lf;
+        let seg = &hdr.seg;
 
-        let n_shift = lf.level() >> 5;
+        let n_shift = lf.level >> 5;
 
         for segment_id in 0..MAX_SEGMENTS as u8 {
             let luma_dc_quant_scale = i16::try_from(Self::get_dc_quant(hdr, segment_id, true)?)?;
@@ -354,7 +347,7 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
             let chroma_dc_quant_scale = i16::try_from(Self::get_dc_quant(hdr, segment_id, false)?)?;
             let chroma_ac_quant_scale = i16::try_from(Self::get_ac_quant(hdr, segment_id, false)?)?;
 
-            let mut lvl_seg = i32::from(lf.level());
+            let mut lvl_seg = i32::from(lf.level);
             let mut lvl_lookup: [[u8; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES];
 
             if lvl_seg == 0 {
@@ -362,21 +355,21 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
             } else {
                 // 8.8.1 Loop filter frame init process
                 if Self::seg_feature_active(hdr, segment_id, SEG_LVL_ALT_L as u8) {
-                    if seg.abs_or_delta_update() {
+                    if seg.abs_or_delta_update {
                         lvl_seg =
-                            i32::from(seg.feature_data()[usize::from(segment_id)][SEG_LVL_ALT_L]);
+                            i32::from(seg.feature_data[usize::from(segment_id)][SEG_LVL_ALT_L]);
                     } else {
                         lvl_seg +=
-                            i32::from(seg.feature_data()[usize::from(segment_id)][SEG_LVL_ALT_L]);
+                            i32::from(seg.feature_data[usize::from(segment_id)][SEG_LVL_ALT_L]);
                     }
 
                     lvl_seg = Self::clamp(lvl_seg, 0, MAX_LOOP_FILTER as i32);
                 }
 
-                if !lf.delta_enabled() {
+                if !lf.delta_enabled {
                     lvl_lookup = [[u8::try_from(lvl_seg)?; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES]
                 } else {
-                    let intra_delta = i32::from(lf.ref_deltas()[INTRA_FRAME]);
+                    let intra_delta = i32::from(lf.ref_deltas[INTRA_FRAME]);
                     let mut intra_lvl = lvl_seg + (intra_delta << n_shift);
 
                     lvl_lookup = segmentation[usize::from(segment_id)].lvl_lookup;
@@ -388,8 +381,8 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
                     #[allow(clippy::needless_range_loop)]
                     for ref_ in LAST_FRAME..MAX_REF_FRAMES {
                         for mode in 0..MAX_MODE_LF_DELTAS {
-                            let ref_delta = i32::from(lf.ref_deltas()[ref_]);
-                            let mode_delta = i32::from(lf.mode_deltas()[mode]);
+                            let ref_delta = i32::from(lf.ref_deltas[ref_]);
+                            let mode_delta = i32::from(lf.mode_deltas[mode]);
 
                             intra_lvl = lvl_seg + (ref_delta << n_shift) + (mode_delta << n_shift);
 
@@ -406,11 +399,10 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
                 luma_dc_quant_scale,
                 chroma_ac_quant_scale,
                 chroma_dc_quant_scale,
-                reference_frame_enabled: seg.feature_enabled()[usize::from(segment_id)]
+                reference_frame_enabled: seg.feature_enabled[usize::from(segment_id)]
                     [SEG_LVL_REF_FRAME],
-                reference_frame: seg.feature_data()[usize::from(segment_id)][SEG_LVL_REF_FRAME],
-                reference_skip_enabled: seg.feature_enabled()[usize::from(segment_id)]
-                    [SEG_LVL_SKIP],
+                reference_frame: seg.feature_data[usize::from(segment_id)][SEG_LVL_REF_FRAME],
+                reference_skip_enabled: seg.feature_enabled[usize::from(segment_id)][SEG_LVL_SKIP],
             }
         }
 
@@ -436,7 +428,7 @@ impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
             .map_err(|e| anyhow!(e))?;
 
         for frame in frames {
-            if matches!(frame.header.frame_type(), FrameType::KeyFrame) {
+            if matches!(frame.header.frame_type, FrameType::KeyFrame) {
                 if self.negotiation_possible(&frame)
                     && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
                 {
@@ -446,22 +438,22 @@ impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
 
             match &mut self.negotiation_status {
                 NegotiationStatus::NonNegotiated => {
-                    if matches!(frame.header.frame_type(), FrameType::KeyFrame) {
+                    if matches!(frame.header.frame_type, FrameType::KeyFrame) {
                         self.backend.poll(BlockingMode::Blocking)?;
 
                         self.backend.new_sequence(&frame.header)?;
 
-                        let offset = frame.offset();
-                        let size = frame.size();
+                        let offset = frame.offset;
+                        let size = frame.size;
                         let bitstream = frame.bitstream[offset..offset + size].to_vec();
 
                         self.coded_resolution = Resolution {
-                            width: frame.header.width(),
-                            height: frame.header.height(),
+                            width: frame.header.width,
+                            height: frame.header.height,
                         };
 
-                        self.profile = frame.header.profile();
-                        self.bit_depth = frame.header.bit_depth();
+                        self.profile = frame.header.profile;
+                        self.bit_depth = frame.header.bit_depth;
 
                         self.negotiation_status = NegotiationStatus::Possible {
                             key_frame: (timestamp, Box::new(frame.header), bitstream),

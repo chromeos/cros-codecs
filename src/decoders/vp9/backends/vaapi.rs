@@ -36,7 +36,7 @@ const NUM_SURFACES: usize = 12;
 
 impl StreamInfo for &Header {
     fn va_profile(&self) -> anyhow::Result<i32> {
-        Ok(match self.profile() {
+        Ok(match self.profile {
             Profile::Profile0 => libva::VAProfile::VAProfileVP9Profile0,
             Profile::Profile1 => libva::VAProfile::VAProfileVP9Profile1,
             Profile::Profile2 => libva::VAProfile::VAProfileVP9Profile2,
@@ -46,10 +46,10 @@ impl StreamInfo for &Header {
 
     fn rt_format(&self) -> anyhow::Result<u32> {
         VaapiBackend::<_>::get_rt_format(
-            self.profile(),
-            self.bit_depth(),
-            self.subsampling_x(),
-            self.subsampling_y(),
+            self.profile,
+            self.bit_depth,
+            self.subsampling_x,
+            self.subsampling_y,
         )
     }
 
@@ -58,7 +58,7 @@ impl StreamInfo for &Header {
     }
 
     fn coded_size(&self) -> (u32, u32) {
-        (self.width(), self.height())
+        (self.width, self.height)
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
@@ -141,54 +141,54 @@ impl VaapiBackend<Header> {
         reference_frames: [u32; NUM_REF_FRAMES],
     ) -> Result<libva::BufferType> {
         let pic_fields = libva::VP9PicFields::new(
-            hdr.subsampling_x() as u32,
-            hdr.subsampling_y() as u32,
-            hdr.frame_type() as u32,
-            hdr.show_frame() as u32,
-            hdr.error_resilient_mode() as u32,
-            hdr.intra_only() as u32,
-            hdr.allow_high_precision_mv() as u32,
-            hdr.interpolation_filter() as u32,
-            hdr.frame_parallel_decoding_mode() as u32,
-            hdr.reset_frame_context() as u32,
-            hdr.refresh_frame_context() as u32,
-            hdr.frame_context_idx() as u32,
-            hdr.seg().enabled() as u32,
-            hdr.seg().temporal_update() as u32,
-            hdr.seg().update_map() as u32,
-            hdr.ref_frame_idx()[LAST_FRAME - 1] as u32,
-            hdr.ref_frame_sign_bias()[LAST_FRAME] as u32,
-            hdr.ref_frame_idx()[GOLDEN_FRAME - 1] as u32,
-            hdr.ref_frame_sign_bias()[GOLDEN_FRAME] as u32,
-            hdr.ref_frame_idx()[ALTREF_FRAME - 1] as u32,
-            hdr.ref_frame_sign_bias()[ALTREF_FRAME] as u32,
-            hdr.lossless() as u32,
+            hdr.subsampling_x as u32,
+            hdr.subsampling_y as u32,
+            hdr.frame_type as u32,
+            hdr.show_frame as u32,
+            hdr.error_resilient_mode as u32,
+            hdr.intra_only as u32,
+            hdr.allow_high_precision_mv as u32,
+            hdr.interpolation_filter as u32,
+            hdr.frame_parallel_decoding_mode as u32,
+            hdr.reset_frame_context as u32,
+            hdr.refresh_frame_context as u32,
+            hdr.frame_context_idx as u32,
+            hdr.seg.enabled as u32,
+            hdr.seg.temporal_update as u32,
+            hdr.seg.update_map as u32,
+            hdr.ref_frame_idx[LAST_FRAME - 1] as u32,
+            hdr.ref_frame_sign_bias[LAST_FRAME] as u32,
+            hdr.ref_frame_idx[GOLDEN_FRAME - 1] as u32,
+            hdr.ref_frame_sign_bias[GOLDEN_FRAME] as u32,
+            hdr.ref_frame_idx[ALTREF_FRAME - 1] as u32,
+            hdr.ref_frame_sign_bias[ALTREF_FRAME] as u32,
+            hdr.lossless as u32,
         );
 
-        let lf = hdr.lf();
-        let seg = hdr.seg();
+        let lf = &hdr.lf;
+        let seg = &hdr.seg;
 
-        let seg_pred_prob = if seg.temporal_update() {
-            seg.pred_probs()
+        let seg_pred_prob = if seg.temporal_update {
+            seg.pred_probs
         } else {
             [0xff, 0xff, 0xff]
         };
 
         let pic_param = libva::PictureParameterBufferVP9::new(
-            hdr.width().try_into().unwrap(),
-            hdr.height().try_into().unwrap(),
+            hdr.width.try_into().unwrap(),
+            hdr.height.try_into().unwrap(),
             reference_frames,
             &pic_fields,
-            lf.level(),
-            lf.sharpness(),
-            hdr.tile_rows_log2(),
-            hdr.tile_cols_log2(),
-            hdr.uncompressed_header_size_in_bytes().try_into().unwrap(),
-            hdr.header_size_in_bytes(),
-            seg.tree_probs(),
+            lf.level,
+            lf.sharpness,
+            hdr.tile_rows_log2,
+            hdr.tile_cols_log2,
+            hdr.uncompressed_header_size_in_bytes.try_into().unwrap(),
+            hdr.header_size_in_bytes,
+            seg.tree_probs,
             seg_pred_prob,
-            hdr.profile() as u8,
-            hdr.bit_depth() as u8,
+            hdr.profile as u8,
+            hdr.bit_depth as u8,
         );
 
         Ok(libva::BufferType::PictureParameter(
@@ -451,7 +451,7 @@ mod tests {
         assert_eq!(frames.len(), 1);
         let frame = frames.remove(0);
 
-        assert_eq!(frame.size(), 10674);
+        assert_eq!(frame.size, 10674);
 
         let pic_param = VaapiBackend::build_pic_param(
             &frame.header,
@@ -464,7 +464,7 @@ mod tests {
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
@@ -520,7 +520,7 @@ mod tests {
         let mut frames = parser.parse_chunk(|| &packet).unwrap();
         assert_eq!(frames.len(), 2);
         let frame = frames.remove(0);
-        assert_eq!(frame.size(), 2390);
+        assert_eq!(frame.size, 2390);
 
         let pic_param = VaapiBackend::build_pic_param(&frame.header, [0; NUM_REF_FRAMES]).unwrap();
         let pic_param = match pic_param {
@@ -529,7 +529,7 @@ mod tests {
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
@@ -581,7 +581,7 @@ mod tests {
         // FRAME 2
 
         let frame = frames.remove(0);
-        assert_eq!(frame.size(), 108);
+        assert_eq!(frame.size, 108);
 
         let pic_param =
             VaapiBackend::build_pic_param(&frame.header, [0, 0, 1, 0, 0, 0, 0, 0]).unwrap();
@@ -591,7 +591,7 @@ mod tests {
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size()).unwrap();
+        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),

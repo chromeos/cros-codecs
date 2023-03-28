@@ -141,193 +141,82 @@ impl Default for ColorRange {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LoopFilterParams {
     /// Indicates the loop filter strength.
-    level: u8,
+    pub level: u8,
     /// Indicates the sharpness level. The loop filter level and loop
     /// filter_sharpness together determine when a block edge is filtered, and
     /// by how much the filtering can change the sample values.
-    sharpness: u8,
+    pub sharpness: u8,
     /// If set, means that the filter level depends on the mode and reference
     /// frame used to predict a block. If unset, means that the filter level
     /// does not depend on the mode and reference frame.
-    delta_enabled: bool,
+    pub delta_enabled: bool,
     /// If set, means that the bitstream contains additional syntax elements
     /// that specify which mode and reference frame deltas are to be updated. If
     /// unset, means that these syntax elements are not present.
-    delta_update: bool,
+    pub delta_update: bool,
     /// If set, means that the bitstream contains additional syntax elements
     /// that specify which mode and reference frame deltas are to be updated. If
     /// unset, means that these syntax elements are not present.
-    update_ref_delta: [bool; MAX_REF_LF_DELTAS],
+    pub update_ref_delta: [bool; MAX_REF_LF_DELTAS],
     /// Contains the adjustment needed for the filter level based on the chosen
     /// reference frame. If this syntax element is not present in the bitstream,
     /// it maintains its previous value.
-    ref_deltas: [i8; MAX_REF_LF_DELTAS],
+    pub ref_deltas: [i8; MAX_REF_LF_DELTAS],
     ///  If set, means that the bitstream contains the syntax element
     ///  loop_filter_mode_deltas. If unset, means that the bitstream does not
     ///  contain this syntax element.
-    update_mode_delta: [bool; MAX_MODE_LF_DELTAS],
+    pub update_mode_delta: [bool; MAX_MODE_LF_DELTAS],
     /// Contains the adjustment needed for the filter level based on the chosen
     /// mode. If this syntax element is not present in the bitstream, it
     /// maintains its previous value.
-    mode_deltas: [i8; MAX_MODE_LF_DELTAS],
-}
-
-impl LoopFilterParams {
-    /// Get a reference to the loop filter params's level.
-    pub fn level(&self) -> u8 {
-        self.level
-    }
-
-    /// Get a reference to the loop filter params's sharpness.
-    pub fn sharpness(&self) -> u8 {
-        self.sharpness
-    }
-
-    /// Get a reference to the loop filter params's delta enabled.
-    pub fn delta_enabled(&self) -> bool {
-        self.delta_enabled
-    }
-
-    /// Get a reference to the loop filter params's delta update.
-    pub fn delta_update(&self) -> bool {
-        self.delta_update
-    }
-
-    /// Get a reference to the loop filter params's update ref delta.
-    pub fn update_ref_delta(&self) -> [bool; MAX_REF_LF_DELTAS] {
-        self.update_ref_delta
-    }
-
-    /// Get a reference to the loop filter params's ref deltas.
-    pub fn ref_deltas(&self) -> [i8; MAX_REF_LF_DELTAS] {
-        self.ref_deltas
-    }
-
-    /// Get a reference to the loop filter params's update mode delta.
-    pub fn update_mode_delta(&self) -> [bool; MAX_MODE_LF_DELTAS] {
-        self.update_mode_delta
-    }
-
-    /// Get a reference to the loop filter params's mode deltas.
-    pub fn mode_deltas(&self) -> [i8; MAX_MODE_LF_DELTAS] {
-        self.mode_deltas
-    }
+    pub mode_deltas: [i8; MAX_MODE_LF_DELTAS],
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct QuantizationParams {
     /// Indicates the base frame qindex. This is used for Y AC coefficients and
     /// as the base value for the other quantizers.
-    base_q_idx: u8,
+    pub base_q_idx: u8,
     /// Indicates the Y DC quantizer relative to base_q_idx.
-    delta_q_y_dc: i8,
+    pub delta_q_y_dc: i8,
     /// Indicates the UV DC quantizer relative to base_q_idx.
-    delta_q_uv_dc: i8,
+    pub delta_q_uv_dc: i8,
     /// Indicates the UV AC quantizer relative to base_q_idx.
-    delta_q_uv_ac: i8,
-}
-
-impl QuantizationParams {
-    /// Get a reference to the quantization params's base q idx.
-    pub fn base_q_idx(&self) -> u8 {
-        self.base_q_idx
-    }
-
-    /// Get a reference to the quantization params's delta q y dc.
-    pub fn delta_q_y_dc(&self) -> i8 {
-        self.delta_q_y_dc
-    }
-
-    /// Get a reference to the quantization params's delta q uv dc.
-    pub fn delta_q_uv_dc(&self) -> i8 {
-        self.delta_q_uv_dc
-    }
-
-    /// Get a reference to the quantization params's delta q uv ac.
-    pub fn delta_q_uv_ac(&self) -> i8 {
-        self.delta_q_uv_ac
-    }
+    pub delta_q_uv_ac: i8,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SegmentationParams {
     ///  If set, indicates that this frame makes use of the segmentation tool.
     ///  If unset, indicates that the frame does not use segmentation.
-    enabled: bool,
+    pub enabled: bool,
     /// If set, indicates that the segmentation map should be updated during
     /// the decoding of this frame. If unset, means that the segmentation map
     /// from the previous frame is used.
-    update_map: bool,
+    pub update_map: bool,
     /// Specify the probability values to be used when decoding segment_id.
-    tree_probs: [u8; SEG_TREE_PROBS],
+    pub tree_probs: [u8; SEG_TREE_PROBS],
     /// Specify the probability values to be used when decoding seg_id_predicted.
-    pred_probs: [u8; PREDICTION_PROBS],
+    pub pred_probs: [u8; PREDICTION_PROBS],
     /// If set, indicates that the updates to the segmentation map are coded
     /// relative to the existing segmentation map. If unset,
     /// indicates that the new segmentation map is coded without
     /// reference to the existing segmentation map.
-    temporal_update: bool,
+    pub temporal_update: bool,
     /// If set, indicates that new parameters are about to be specified for each
     /// segment. If unset, indicates that the segmentation parameters should
     /// keep their existing values.
-    update_data: bool,
+    pub update_data: bool,
     /// If unset, indicates that the segmentation parameters represent
     /// adjustments relative to the standard values. If set, indicates that the
     /// segmentation parameters represent the actual values to be used.
-    abs_or_delta_update: bool,
+    pub abs_or_delta_update: bool,
     /// If unset, indicates that the corresponding feature is unused and has
     /// value equal to 0. if set, indicates that the feature value is coded in
     /// the bitstream.
-    feature_enabled: [[bool; SEG_LVL_MAX]; MAX_SEGMENTS],
+    pub feature_enabled: [[bool; SEG_LVL_MAX]; MAX_SEGMENTS],
     /// Specifies the magnitude of the feature data for a segment feature.
-    feature_data: [[i16; SEG_LVL_MAX]; MAX_SEGMENTS],
-}
-
-impl SegmentationParams {
-    /// Get a reference to the segmentation params's enabled.
-    pub fn enabled(&self) -> bool {
-        self.enabled
-    }
-
-    /// Get a reference to the segmentation params's update map.
-    pub fn update_map(&self) -> bool {
-        self.update_map
-    }
-
-    /// Get a reference to the segmentation params's tree probs.
-    pub fn tree_probs(&self) -> [u8; SEG_TREE_PROBS] {
-        self.tree_probs
-    }
-
-    /// Get a reference to the segmentation params's pred probs.
-    pub fn pred_probs(&self) -> [u8; PREDICTION_PROBS] {
-        self.pred_probs
-    }
-
-    /// Get a reference to the segmentation params's temporal update.
-    pub fn temporal_update(&self) -> bool {
-        self.temporal_update
-    }
-
-    /// Get a reference to the segmentation params's update data.
-    pub fn update_data(&self) -> bool {
-        self.update_data
-    }
-
-    /// Get a reference to the segmentation params's abs or delta update.
-    pub fn abs_or_delta_update(&self) -> bool {
-        self.abs_or_delta_update
-    }
-
-    /// Get a reference to the segmentation params's feature enabled.
-    pub fn feature_enabled(&self) -> [[bool; SEG_LVL_MAX]; MAX_SEGMENTS] {
-        self.feature_enabled
-    }
-
-    /// Get a reference to the segmentation params's feature data.
-    pub fn feature_data(&self) -> [[i16; SEG_LVL_MAX]; MAX_SEGMENTS] {
-        self.feature_data
-    }
+    pub feature_data: [[i16; SEG_LVL_MAX]; MAX_SEGMENTS],
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -342,9 +231,9 @@ pub struct Frame<T> {
     /// The frame header.
     pub header: Header,
     /// The offset into T
-    offset: usize,
+    pub offset: usize,
     /// The size of the data in T
-    size: usize,
+    pub size: usize,
 }
 impl<T: AsRef<[u8]>> Frame<T> {
     pub fn new(bitstream: T, header: Header, offset: usize, size: usize) -> Self {
@@ -354,16 +243,6 @@ impl<T: AsRef<[u8]>> Frame<T> {
             offset,
             size,
         }
-    }
-
-    /// Get a reference to the frame's offset.
-    pub fn offset(&self) -> usize {
-        self.offset
-    }
-
-    /// Get a reference to the frame's size.
-    pub fn size(&self) -> usize {
-        self.size
     }
 }
 
@@ -378,272 +257,100 @@ impl<T: AsRef<[u8]>> AsRef<[u8]> for Frame<T> {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Header {
     /// A subset of syntax, semantics and algorithms defined in a part.
-    profile: Profile,
+    pub profile: Profile,
     /// The bit depth of the frame.
-    bit_depth: BitDepth,
+    pub bit_depth: BitDepth,
     /// Specifies the chroma subsampling format.
-    subsampling_x: bool,
+    pub subsampling_x: bool,
     /// Specifies the chroma subsampling format.
-    subsampling_y: bool,
+    pub subsampling_y: bool,
     /// Specifies the color space of the stream.
-    color_space: ColorSpace,
+    pub color_space: ColorSpace,
     /// Specifies the black level and range of the luma and chroma signals as
     /// specified in Rec. ITU-R BT.709-6 and Rec. ITU-R BT.2020-2
-    color_range: ColorRange,
+    pub color_range: ColorRange,
     /// Indicates the frame indexed by frame_to_show_map_idx is to be displayed.
     /// If unset, indicates that further processing is required.
-    show_existing_frame: bool,
+    pub show_existing_frame: bool,
     /// Specifies the frame to be displayed. It is only available if
     /// show_existing_frame is set.
-    frame_to_show_map_idx: u8,
+    pub frame_to_show_map_idx: u8,
     /// Indicates whether a frame is a key frame.
-    frame_type: FrameType,
+    pub frame_type: FrameType,
     /// Whether this frame should be displayed.
-    show_frame: bool,
+    pub show_frame: bool,
     /// Whether error resilient mode is enabled.
-    error_resilient_mode: bool,
+    pub error_resilient_mode: bool,
     /// The width of the frame in pixels.
-    width: u32,
+    pub width: u32,
     /// The height of the frame in pixels.
-    height: u32,
+    pub height: u32,
     /// If unset, means that the render width and height are inferred from the
     /// frame width and height. If set, means that the render width and height
     /// are explicitly coded in the bitstream.
-    render_and_frame_size_different: bool,
+    pub render_and_frame_size_different: bool,
     /// The render width of the frame in pixels.
-    render_width: u32,
+    pub render_width: u32,
     /// The render height of the frame in pixels.
-    render_height: u32,
+    pub render_height: u32,
     /// If set, indicates that this frame is an intra-only frame. If unset,
     /// indicates that this frame is a inter frame.
-    intra_only: bool,
+    pub intra_only: bool,
     /// Specifies whether the frame context should be reset to default values.
-    reset_frame_context: u8,
+    pub reset_frame_context: u8,
     /// Contains a bitmask that specifies which reference frame slots will be
     /// updated with the current frame after it is decoded.
-    refresh_frame_flags: u8,
+    pub refresh_frame_flags: u8,
     /// Specifies which reference frames are used by inter frames. It is a
     /// requirement of bitstream conformance that the selected reference frames
     /// match the current frame in bit depth, profile, chroma subsampling, and
     /// color space.
-    ref_frame_idx: [u8; REFS_PER_FRAME],
+    pub ref_frame_idx: [u8; REFS_PER_FRAME],
     /// Specifies the intended direction of the motion vector in time for each
     /// reference frame. A sign bias equal to 0 indicates that the reference
     /// frame is a backwards reference; a sign bias equal to 1 indicates that
     /// the reference frame is a forwards reference
-    ref_frame_sign_bias: [u8; 4],
+    pub ref_frame_sign_bias: [u8; 4],
     /// If unset, specifies that motion vectors are specified to quarter pel
     /// precision. If set, specifies that motion vectors are specified to eighth
     /// pel precision.
-    allow_high_precision_mv: bool,
+    pub allow_high_precision_mv: bool,
     /// The interpolation filter parameters.
-    interpolation_filter: InterpolationFilter,
+    pub interpolation_filter: InterpolationFilter,
     /// If set, indicates that the probabilities computed for this frame (after
     /// adapting to the observed frequencies if adaption is enabled) should be
     /// stored for reference by future frames. If unset, indicates that the
     /// probabilities should be discarded at the end of the frame.
-    refresh_frame_context: bool,
+    pub refresh_frame_context: bool,
     /// Whether parallel decoding mode is enabled.
-    frame_parallel_decoding_mode: bool,
+    pub frame_parallel_decoding_mode: bool,
     /// Indicates the frame context to use.
-    frame_context_idx: u8,
+    pub frame_context_idx: u8,
     /// The loop filter parameters
-    lf: LoopFilterParams,
+    pub lf: LoopFilterParams,
     /// The quantization parameters.
-    quant: QuantizationParams,
+    pub quant: QuantizationParams,
     /// The segmentation parameters
-    seg: SegmentationParams,
+    pub seg: SegmentationParams,
     /// Specifies the base 2 logarithm of the width of each tile (where the
     /// width is measured in units of 8x8 blocks). It is a requirement of
     /// bitstream conformance that tile_cols_log2 is less than or equal to 6.
-    tile_cols_log2: u8,
+    pub tile_cols_log2: u8,
     /// Specifies the base 2 logarithm of the height of each tile (where the
     /// height is measured in units of 8x8 blocks).
-    tile_rows_log2: u8,
+    pub tile_rows_log2: u8,
     /// Computed from the syntax elements. If set, indicates that the frame is
     /// coded using a special 4x4 transform designed for encoding frames that
     /// are bit-identical with the original frames.
-    lossless: bool,
+    pub lossless: bool,
     /// Indicates the size of the compressed header in bytes.
-    header_size_in_bytes: u16,
+    pub header_size_in_bytes: u16,
     /// Indicates the size of the uncompressed header in bytes.
-    uncompressed_header_size_in_bytes: u16,
-}
-
-impl Header {
-    /// Get a reference to the header's profile.
-    pub fn profile(&self) -> Profile {
-        self.profile
-    }
-
-    /// Get a reference to the header's bit depth.
-    pub fn bit_depth(&self) -> BitDepth {
-        self.bit_depth
-    }
-
-    /// Get a reference to the header's subsampling x.
-    pub fn subsampling_x(&self) -> bool {
-        self.subsampling_x
-    }
-
-    /// Get a reference to the header's subsampling y.
-    pub fn subsampling_y(&self) -> bool {
-        self.subsampling_y
-    }
-
-    /// Get a reference to the header's color space.
-    pub fn color_space(&self) -> ColorSpace {
-        self.color_space
-    }
-
-    /// Get a reference to the header's color range.
-    pub fn color_range(&self) -> ColorRange {
-        self.color_range
-    }
-
-    /// Get a reference to the header's show existing frame.
-    pub fn show_existing_frame(&self) -> bool {
-        self.show_existing_frame
-    }
-
-    /// Get a reference to the header's frame to show map idx.
-    pub fn frame_to_show_map_idx(&self) -> u8 {
-        self.frame_to_show_map_idx
-    }
-
-    /// Get a reference to the header's frame type.
-    pub fn frame_type(&self) -> FrameType {
-        self.frame_type
-    }
-
-    /// Get a reference to the header's show frame.
-    pub fn show_frame(&self) -> bool {
-        self.show_frame
-    }
-
-    /// Get a reference to the header's error resilient mode.
-    pub fn error_resilient_mode(&self) -> bool {
-        self.error_resilient_mode
-    }
-
-    /// Get a reference to the header's width.
-    pub fn width(&self) -> u32 {
-        self.width
-    }
-
-    /// Get a reference to the header's height.
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-
-    /// Get a reference to the header's render and frame size different.
-    pub fn render_and_frame_size_different(&self) -> bool {
-        self.render_and_frame_size_different
-    }
-
-    /// Get a reference to the header's render width.
-    pub fn render_width(&self) -> u32 {
-        self.render_width
-    }
-
-    /// Get a reference to the header's render height.
-    pub fn render_height(&self) -> u32 {
-        self.render_height
-    }
-
-    /// Get a reference to the header's intra only.
-    pub fn intra_only(&self) -> bool {
-        self.intra_only
-    }
-
-    /// Get a reference to the header's reset frame context.
-    pub fn reset_frame_context(&self) -> u8 {
-        self.reset_frame_context
-    }
-
-    /// Get a reference to the header's refresh frame flags.
-    pub fn refresh_frame_flags(&self) -> u8 {
-        self.refresh_frame_flags
-    }
-
-    /// Get a reference to the header's ref frame idx.
-    pub fn ref_frame_idx(&self) -> [u8; REFS_PER_FRAME] {
-        self.ref_frame_idx
-    }
-
-    /// Get a reference to the header's ref frame sign bias.
-    pub fn ref_frame_sign_bias(&self) -> [u8; 4] {
-        self.ref_frame_sign_bias
-    }
-
-    /// Get a reference to the header's allow high precision mv.
-    pub fn allow_high_precision_mv(&self) -> bool {
-        self.allow_high_precision_mv
-    }
-
-    /// Get a reference to the header's interpolation filter.
-    pub fn interpolation_filter(&self) -> InterpolationFilter {
-        self.interpolation_filter
-    }
-
-    /// Get a reference to the header's refresh frame context.
-    pub fn refresh_frame_context(&self) -> bool {
-        self.refresh_frame_context
-    }
-
-    /// Get a reference to the header's frame parallel decoding mode.
-    pub fn frame_parallel_decoding_mode(&self) -> bool {
-        self.frame_parallel_decoding_mode
-    }
-
-    /// Get a reference to the header's frame context idx.
-    pub fn frame_context_idx(&self) -> u8 {
-        self.frame_context_idx
-    }
-
-    /// Get a reference to the header's lf.
-    pub fn lf(&self) -> &LoopFilterParams {
-        &self.lf
-    }
-
-    /// Get a reference to the header's quant.
-    pub fn quant(&self) -> &QuantizationParams {
-        &self.quant
-    }
-
-    /// Get a reference to the header's seg.
-    pub fn seg(&self) -> &SegmentationParams {
-        &self.seg
-    }
-
-    /// Get a reference to the header's tile cols log2.
-    pub fn tile_cols_log2(&self) -> u8 {
-        self.tile_cols_log2
-    }
-
-    /// Get a reference to the header's tile rows log2.
-    pub fn tile_rows_log2(&self) -> u8 {
-        self.tile_rows_log2
-    }
-
-    /// Get a reference to the header's lossless.
-    pub fn lossless(&self) -> bool {
-        self.lossless
-    }
-
-    /// Get a reference to the header's header size in bytes.
-    pub fn header_size_in_bytes(&self) -> u16 {
-        self.header_size_in_bytes
-    }
-
-    /// Get a reference to the header's uncompressed header size in bytes.
-    pub fn uncompressed_header_size_in_bytes(&self) -> u16 {
-        self.uncompressed_header_size_in_bytes
-    }
+    pub uncompressed_header_size_in_bytes: u16,
 }
 
 /// The VP9 superframe header as per Annex B, B.2.1, B.2.2
-pub struct SuperframeHeader {
+struct SuperframeHeader {
     /// Indicates the number of frames within this superframe. NOTE - It is
     /// legal for a superframe to contain just a single frame and have NumFrames
     /// equal to 1.
