@@ -2622,14 +2622,10 @@ pub mod tests {
     }
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
-    fn test_decoder_dummy(test: &DecodingTest) {
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
+    fn test_decoder_dummy(test: &DecodingTest, blocking_mode: BlockingMode) {
+        let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-        for blocking_mode in blocking_modes {
-            let decoder = Decoder::new_dummy(blocking_mode).unwrap();
-
-            test_decode_stream(decoder, test, false, false);
-        }
+        test_decode_stream(decoder, test, false, false);
     }
 
     /// A 16x16 progressive byte-stream encoded I-frame to make it easier to
@@ -2644,8 +2640,13 @@ pub mod tests {
     };
 
     #[test]
-    fn test_16x16_progressive_i() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I);
+    fn test_16x16_progressive_i_block() {
+        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_16x16_progressive_i_nonblock() {
+        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I, BlockingMode::NonBlocking);
     }
 
     /// A 16x16 progressive byte-stream encoded I-frame and P-frame to make
@@ -2660,8 +2661,13 @@ pub mod tests {
     };
 
     #[test]
-    fn test_16x16_progressive_i_p() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P);
+    fn test_16x16_progressive_i_p_block() {
+        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_16x16_progressive_i_p_nonblock() {
+        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P, BlockingMode::NonBlocking);
     }
 
     /// A 16x16 progressive byte-stream encoded I-P-B-P sequence to make it
@@ -2676,8 +2682,13 @@ pub mod tests {
     };
 
     #[test]
-    fn test_16x16_progressive_i_p_b_p() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P_B_P);
+    fn test_16x16_progressive_i_p_b_p_block() {
+        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P_B_P, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_16x16_progressive_i_p_b_p_nonblock() {
+        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P_B_P, BlockingMode::NonBlocking);
     }
 
     /// A 16x16 progressive byte-stream encoded I-P-B-P sequence to make it
@@ -2694,8 +2705,19 @@ pub mod tests {
     };
 
     #[test]
-    fn test_16x16_progressive_i_p_b_p_high() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH);
+    fn test_16x16_progressive_i_p_b_p_high_block() {
+        test_decoder_dummy(
+            &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH,
+            BlockingMode::Blocking,
+        );
+    }
+
+    #[test]
+    fn test_16x16_progressive_i_p_b_p_high_nonblock() {
+        test_decoder_dummy(
+            &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH,
+            BlockingMode::NonBlocking,
+        );
     }
 
     /// Same as Chromium's test-25fps.h264
@@ -2705,8 +2727,13 @@ pub mod tests {
     };
 
     #[test]
-    fn test_25fps_h264() {
-        test_decoder_dummy(&DECODE_TEST_25FPS);
+    fn test_25fps_h264_block() {
+        test_decoder_dummy(&DECODE_TEST_25FPS, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_25fps_h264_nonblock() {
+        test_decoder_dummy(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
     }
 
     // Adapted from Chromium's test-25fps.h264. Same file, but encoded as
@@ -2724,7 +2751,12 @@ pub mod tests {
     };
 
     #[test]
-    fn test_25fps_interlaced_h264() {
-        test_decoder_dummy(&DECODE_TEST_25FPS_INTERLACED);
+    fn test_25fps_interlaced_h264_block() {
+        test_decoder_dummy(&DECODE_TEST_25FPS_INTERLACED, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_25fps_interlaced_h264_nonblock() {
+        test_decoder_dummy(&DECODE_TEST_25FPS_INTERLACED, BlockingMode::NonBlocking);
     }
 }
