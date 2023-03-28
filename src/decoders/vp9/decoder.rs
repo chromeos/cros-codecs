@@ -163,10 +163,8 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
     }
 
     fn block_on_one(&mut self) -> Result<()> {
-        for handle in &self.ready_queue {
-            if !self.backend.handle_is_ready(handle) {
-                return self.backend.block_on_handle(handle).map_err(|e| anyhow!(e));
-            }
+        if let Some(handle) = self.ready_queue.first() {
+            return self.backend.block_on_handle(handle).map_err(|e| anyhow!(e));
         }
 
         Ok(())
@@ -174,15 +172,18 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
 
     /// Returns the ready handles.
     fn get_ready_frames(&mut self) -> Vec<T> {
-        let ready = self
+        // Count all ready handles.
+        let num_ready = self
             .ready_queue
             .iter()
-            .filter(|&handle| self.backend.handle_is_ready(handle))
-            .cloned()
-            .collect::<Vec<_>>();
+            .take_while(|&handle| self.backend.handle_is_ready(handle))
+            .count();
 
-        self.ready_queue
-            .retain(|handle| !self.backend.handle_is_ready(handle));
+        let retain = self.ready_queue.split_off(num_ready);
+        // `split_off` works the opposite way of what we would like, leaving [0..num_ready) in
+        // place, so we need to swap `retain` with `ready_queue`.
+        let ready = std::mem::take(&mut self.ready_queue);
+        self.ready_queue = retain;
 
         ready
     }

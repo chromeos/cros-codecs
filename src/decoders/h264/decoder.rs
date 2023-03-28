@@ -1715,27 +1715,33 @@ where
 
     /// Get the DecodedFrameHandles for the pictures in the ready queue, in display order.
     fn get_ready_frames(&mut self) -> Vec<T> {
-        let (ready, retained): (Vec<_>, Vec<_>) = std::mem::take(&mut self.ready_queue)
-            // Unfortunately `BinaryHeap`'s `iter()` does not guarantee the order, so we
-            // need to convert into a vector first.
-            .into_sorted_vec()
+        // Unfortunately `BinaryHeap`'s `iter()` does not guarantee the order, so we
+        // need to convert into a vector first.
+        let mut ready_queue = std::mem::take(&mut self.ready_queue).into_sorted_vec();
+        ready_queue.reverse();
+
+        // Count all ready handles.
+        let num_ready = ready_queue
+            .iter()
+            .take_while(|&picture| self.backend.handle_is_ready(&picture.handle))
+            .count();
+
+        let retain = ready_queue.split_off(num_ready);
+        // `split_off` works the opposite way of what we would like, leaving [0..num_ready) in
+        // place, so we need to swap `retain` with `ready_queue`.
+        let ready = ready_queue
             .into_iter()
-            .rev()
-            // Assign display order to frames that don't have one yet.
             .map(|mut picture| {
                 if DecodedHandle::display_order(&picture.handle).is_none() {
-                    let order = self.current_display_order;
-                    picture.handle.set_display_order(order);
+                    picture.handle.set_display_order(self.current_display_order);
                     self.current_display_order += 1;
                 }
-                picture
+                picture.handle
             })
-            .partition(|picture| self.backend.handle_is_ready(&picture.handle));
+            .collect();
+        self.ready_queue = BinaryHeap::from(retain);
 
-        // Keep non-ready frames in the ready queue.
-        self.ready_queue = BinaryHeap::from(retained);
-
-        ready.into_iter().map(|picture| picture.handle).collect()
+        ready
     }
 
     /// Drain the decoder, processing all pending frames.
@@ -2305,7 +2311,7 @@ where
     }
 
     fn block_on_one(&mut self) -> VideoDecoderResult<()> {
-        for ReadyPicture { handle, .. } in &self.ready_queue {
+        if let Some(ReadyPicture { handle, .. }) = &self.ready_queue.peek() {
             if !self.backend.handle_is_ready(handle) {
                 return self
                     .backend
