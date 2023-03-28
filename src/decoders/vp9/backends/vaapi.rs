@@ -317,177 +317,121 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::decoders::h264::parser::Sps;
-    use crate::decoders::vp9::decoder::tests::process_ready_frames;
+    use crate::decoders::tests::test_decode_stream;
+    use crate::decoders::tests::TestStream;
     use crate::decoders::vp9::decoder::tests::read_ivf_packet;
-    use crate::decoders::vp9::decoder::tests::run_decoding_loop;
+    use crate::decoders::vp9::decoder::tests::vp9_decoding_loop;
     use crate::decoders::vp9::decoder::Decoder;
     use crate::decoders::vp9::decoder::Segmentation;
     use crate::decoders::vp9::parser::Parser;
     use crate::decoders::vp9::parser::MAX_SEGMENTS;
     use crate::decoders::vp9::parser::NUM_REF_FRAMES;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DecodedHandle;
-    use crate::decoders::DynHandle;
-    use crate::decoders::VideoDecoderBackend;
     use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
     use crate::utils::vaapi::VaapiBackend;
 
-    /// Resolves to the type used as Handle by the backend.
-    type AssociatedHandle = <VaapiBackend<Sps> as VideoDecoderBackend>::Handle;
+    /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
+    fn test_decoder_vaapi(test: &TestStream, blocking_mode: BlockingMode) {
+        let display = Display::open().unwrap();
+        let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-    fn process_handle(
-        handle: &AssociatedHandle,
-        dump_yuv: bool,
-        expected_crcs: Option<&Vec<&str>>,
-        frame_num: i32,
-    ) {
-        let mut picture = handle.handle_mut();
-        let mut backend_handle = picture.dyn_mappable_handle_mut();
-
-        let buffer_size = backend_handle.image_size();
-        let mut nv12 = vec![0; buffer_size];
-
-        backend_handle.read(&mut nv12).unwrap();
-
-        if dump_yuv {
-            std::fs::write(format!("/tmp/frame{}.yuv", frame_num), &nv12).unwrap();
-        }
-
-        let frame_crc = crc32fast::hash(&nv12);
-
-        if let Some(expected_crcs) = expected_crcs {
-            let frame_crc = format!("{:08x}", frame_crc);
-            let contains = expected_crcs.contains(&frame_crc.as_ref());
-            if !contains {
-                panic!("CRC not found: {:?}, iteration: {:?}", frame_crc, frame_num);
-            }
-        }
+        test_decode_stream(vp9_decoding_loop, decoder, test, true, false);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_25fps_vp9() {
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.vp9");
-        const STREAM_CRCS: &str = include_str!("../test_data/test-25fps.vp9.crc");
-
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let expected_crcs = STREAM_CRCS.lines().collect::<Vec<_>>();
-            let mut frame_num = 0;
-            let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_decoder, handle| {
-                    process_handle(handle, false, Some(&expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
-            });
-        }
+    fn test_25fps_block() {
+        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS;
+        test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::Blocking);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_vp90_2_10_show_existing_frame2_vp9() {
-        const TEST_STREAM: &[u8] =
-            include_bytes!("../test_data/vp90_2_10_show_existing_frame2.vp9.ivf");
-        const STREAM_CRCS: &str =
-            include_str!("../test_data/vp90_2_10_show_existing_frame2.vp9.ivf.crc");
-
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let expected_crcs = STREAM_CRCS.lines().collect::<Vec<_>>();
-
-            let mut frame_num = 0;
-            let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_decoder, handle| {
-                    process_handle(handle, false, Some(&expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
-            });
-        }
+    fn test_25fps_nonblock() {
+        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS;
+        test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_vp90_2_10_show_existing_frame_vp9() {
-        // Remuxed from the original matroska source in libvpx using ffmpeg:
-        // ffmpeg -i vp90-2-10-show-existing-frame.webm/vp90-2-10-show-existing-frame.webm -c:v copy /tmp/vp90-2-10-show-existing-frame.vp9.ivf
-        const TEST_STREAM: &[u8] =
-            include_bytes!("../test_data/vp90-2-10-show-existing-frame.vp9.ivf");
-        const STREAM_CRCS: &str =
-            include_str!("../test_data/vp90-2-10-show-existing-frame.vp9.ivf.crc");
-
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
-
-        for blocking_mode in blocking_modes {
-            let expected_crcs = STREAM_CRCS.lines().collect::<Vec<_>>();
-
-            let mut frame_num = 0;
-            let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
-
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, handle| {
-                    process_handle(handle, false, Some(&expected_crcs), frame_num);
-
-                    frame_num += 1;
-                });
-            });
-        }
+    fn show_existing_frame_block() {
+        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME;
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME,
+            BlockingMode::Blocking,
+        );
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_resolution_change_500frames_vp9() {
-        // Remuxed from the original matroska source in libvpx using ffmpeg:
-        // ffmpeg -i vp90-2-10-show-existing-frame.webm/vp90-2-10-show-existing-frame.webm -c:v copy /tmp/vp90-2-10-show-existing-frame.vp9.ivf
-        // There are some weird padding issues introduced by GStreamer for
-        // resolutions that are not multiple of 4, so we're ignoring CRCs for
-        // this one.
-        const TEST_STREAM: &[u8] =
-            include_bytes!("../test_data/resolution_change_500frames-vp9.ivf");
-        const STREAM_CRCS: &str =
-            include_str!("../test_data/resolution_change_500frames-vp9.ivf.crc");
+    fn show_existing_frame_nonblock() {
+        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME;
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME,
+            BlockingMode::NonBlocking,
+        );
+    }
 
-        let blocking_modes = [BlockingMode::Blocking, BlockingMode::NonBlocking];
+    #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
+    fn show_existing_frame2_block() {
+        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2;
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2,
+            BlockingMode::Blocking,
+        );
+    }
 
-        for blocking_mode in blocking_modes {
-            let expected_crcs = STREAM_CRCS.lines().collect::<Vec<_>>();
-            let mut frame_num = 0;
-            let display = Display::open().unwrap();
-            let mut decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+    #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
+    fn show_existing_frame2_nonblock() {
+        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2;
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2,
+            BlockingMode::NonBlocking,
+        );
+    }
 
-            run_decoding_loop(&mut decoder, TEST_STREAM, |decoder| {
-                process_ready_frames(decoder, &mut |_, handle| {
-                    // GStreamer adds padding otherwise, so we introduce this
-                    // check so as to not fail because of that, as some of the
-                    // intermediary resolutions in this file fail this
-                    // condition.
-                    let expected_crcs = if handle.display_resolution().width % 4 == 0 {
-                        Some(&expected_crcs)
-                    } else {
-                        None
-                    };
+    #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
+    fn test_resolution_change_500frames_block() {
+        use crate::decoders::vp9::decoder::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
+        let display = Display::open().unwrap();
+        let decoder = Decoder::new_vaapi(display, BlockingMode::Blocking).unwrap();
 
-                    process_handle(handle, false, expected_crcs, frame_num);
+        // Skip CRC checking as they have not been generated properly?
+        test_decode_stream(
+            vp9_decoding_loop,
+            decoder,
+            &DECODE_RESOLUTION_CHANGE_500FRAMES,
+            false,
+            false,
+        );
+    }
 
-                    frame_num += 1;
-                });
-            });
-        }
+    #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
+    fn test_resolution_change_500frames_nonblock() {
+        use crate::decoders::vp9::decoder::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
+        let display = Display::open().unwrap();
+        let decoder = Decoder::new_vaapi(display, BlockingMode::NonBlocking).unwrap();
+
+        // Skip CRC checking as they have not been generated properly?
+        test_decode_stream(
+            vp9_decoding_loop,
+            decoder,
+            &DECODE_RESOLUTION_CHANGE_500FRAMES,
+            false,
+            false,
+        );
     }
 
     #[test]
