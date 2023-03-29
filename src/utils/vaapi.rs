@@ -418,7 +418,7 @@ impl Drop for GenericBackendHandle {
 
 impl GenericBackendHandle {
     /// Creates a new pending handle on `surface_id`.
-    pub(crate) fn new_pending(
+    fn new(
         picture: libva::Picture<PictureNew>,
         surface_pool: SurfacePoolHandle,
     ) -> Result<Self> {
@@ -692,7 +692,7 @@ where
     ) -> StatelessBackendResult<<Self as VideoDecoderBackend>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
-        let handle = Rc::new(RefCell::new(GenericBackendHandle::new_pending(
+        let handle = Rc::new(RefCell::new(GenericBackendHandle::new(
             picture,
             metadata.surface_pool.clone(),
         )?));
