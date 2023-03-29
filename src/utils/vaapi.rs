@@ -400,6 +400,10 @@ pub struct GenericBackendHandle {
     /// The decoder resolution when this frame was processed. Not all codecs
     /// send resolution data in every frame header.
     resolution: Resolution,
+    /// Actual resolution of the visible rectangle in the decoded buffer.
+    display_resolution: Resolution,
+    /// Image format for this surface, taken from the pool it originates from.
+    map_format: Rc<libva::VAImageFormat>,
     /// A handle to the surface pool from which the backing surface originates.
     surface_pool: SurfacePoolHandle,
 }
@@ -418,10 +422,7 @@ impl Drop for GenericBackendHandle {
 
 impl GenericBackendHandle {
     /// Creates a new pending handle on `surface_id`.
-    fn new(
-        picture: libva::Picture<PictureNew>,
-        surface_pool: SurfacePoolHandle,
-    ) -> Result<Self> {
+    fn new(picture: libva::Picture<PictureNew>, metadata: &ParsedStreamMetadata) -> Result<Self> {
         let surface_id = picture.surface().id();
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
@@ -429,21 +430,19 @@ impl GenericBackendHandle {
                 picture,
                 surface_id,
             },
-            resolution: surface_pool.coded_resolution(),
-            surface_pool,
+            resolution: metadata.surface_pool.coded_resolution(),
+            display_resolution: metadata.display_resolution,
+            map_format: Rc::clone(&metadata.map_format),
+            surface_pool: metadata.surface_pool.clone(),
         })
     }
 
-    pub(crate) fn sync(&mut self, metadata: &ParsedStreamMetadata) -> Result<()> {
+    pub(crate) fn sync(&mut self) -> Result<()> {
         match std::mem::replace(&mut self.state, PictureState::Invalid) {
             state @ PictureState::Ready { .. } => self.state = state,
             PictureState::Pending { picture, .. } => {
                 let picture = picture.sync()?;
-                self.state = PictureState::Ready {
-                    map_format: Rc::clone(&metadata.map_format),
-                    picture,
-                    display_resolution: metadata.display_resolution,
-                };
+                self.state = PictureState::Ready { picture };
             }
             PictureState::Invalid => unreachable!(),
         }
@@ -458,19 +457,14 @@ impl GenericBackendHandle {
     /// Note that DynMappableHandle is downcastable.
     pub fn image(&mut self) -> Result<Image> {
         match &mut self.state {
-            PictureState::Ready {
-                map_format,
-                picture,
-                display_resolution,
-                ..
-            } => {
+            PictureState::Ready { picture, .. } => {
                 // Get the associated VAImage, which will map the
                 // VASurface onto our address space.
                 let image = libva::Image::new(
                     picture,
-                    *map_format.clone(),
-                    display_resolution.width,
-                    display_resolution.height,
+                    *self.map_format,
+                    self.display_resolution.width,
+                    self.display_resolution.height,
                     false,
                 )?;
 
@@ -527,9 +521,7 @@ impl GenericBackendHandle {
 /// Rendering state of a VA picture.
 enum PictureState {
     Ready {
-        map_format: Rc<libva::VAImageFormat>,
         picture: libva::Picture<PictureSync>,
-        display_resolution: Resolution,
     },
     Pending {
         /// Submitted VA picture pending completion.
@@ -692,13 +684,10 @@ where
     ) -> StatelessBackendResult<<Self as VideoDecoderBackend>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
-        let handle = Rc::new(RefCell::new(GenericBackendHandle::new(
-            picture,
-            metadata.surface_pool.clone(),
-        )?));
+        let handle = Rc::new(RefCell::new(GenericBackendHandle::new(picture, metadata)?));
 
         match block {
-            BlockingMode::Blocking => handle.borrow_mut().sync(metadata)?,
+            BlockingMode::Blocking => handle.borrow_mut().sync()?,
             BlockingMode::NonBlocking => self.pending_jobs.push_back(Rc::clone(&handle)),
         }
 
@@ -797,9 +786,7 @@ where
                 }
             }
 
-            let metadata = self.metadata_state.get_parsed()?;
-
-            job.borrow_mut().sync(metadata)?;
+            job.borrow_mut().sync()?;
             completed.push_back(job);
         }
 
@@ -821,9 +808,8 @@ where
 
             if Rc::ptr_eq(job, handle.handle_rc()) {
                 let job = self.pending_jobs.remove(i).unwrap();
-                let metadata = self.metadata_state.get_parsed()?;
 
-                job.borrow_mut().sync(metadata)?;
+                job.borrow_mut().sync()?;
                 return Ok(());
             }
         }
