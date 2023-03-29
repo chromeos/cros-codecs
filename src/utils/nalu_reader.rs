@@ -159,6 +159,20 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         }
     }
 
+    pub fn read_ue_bounded<U: TryFrom<u32>>(&mut self, min: u32, max: u32) -> Result<U> {
+        let ue = self.read_ue()?;
+        if ue > max || ue < min {
+            Err(anyhow!(
+                "Value out of bounds: expected {} - {}, got {}",
+                min,
+                max,
+                ue
+            ))
+        } else {
+            Ok(U::try_from(ue).map_err(|_| anyhow!("Conversion error"))?)
+        }
+    }
+
     pub fn read_se<U: TryFrom<i32>>(&mut self) -> Result<U> {
         let ue = self.read_ue::<u32>()? as i32;
 
