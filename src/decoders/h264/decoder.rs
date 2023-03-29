@@ -2443,6 +2443,7 @@ pub mod tests {
     use crate::decoders::BlockingMode;
     use crate::decoders::DecodedHandle;
     use crate::decoders::VideoDecoder;
+    use crate::utils::nalu::Header;
     use crate::utils::nalu_reader::NaluReader;
 
     /// H.264 decoding loop for use with `test_decode_stream`.
@@ -2555,7 +2556,7 @@ pub mod tests {
                 NaluType::Slice | NaluType::SliceDpa | NaluType::SliceIdr
             ) {
                 let data = self.nalus.last().unwrap().data().as_ref();
-                let header_bytes = self.nalus.last().unwrap().header().header_bytes();
+                let header_bytes = self.nalus.last().unwrap().header().len();
                 let mut r = NaluReader::new(&data[header_bytes..]);
 
                 let first_mb_in_slice = r.read_ue::<u32>();

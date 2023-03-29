@@ -14,7 +14,11 @@ use anyhow::Result;
 use bytes::Buf;
 use enumn::N;
 
+use crate::utils::nalu;
+use crate::utils::nalu::Header;
 use crate::utils::nalu_reader::NaluReader;
+
+pub type Nalu<T> = nalu::Nalu<T, NaluHeader>;
 
 const DEFAULT_4X4_INTRA: [u8; 16] = [
     6, 13, 13, 20, 20, 20, 28, 28, 28, 28, 32, 32, 32, 37, 37, 42,
@@ -2022,7 +2026,7 @@ impl Parser {
     pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Sps> {
         let data = nalu.as_ref();
         // Skip the header
-        let mut r = NaluReader::new(&data[nalu.header.header_bytes..]);
+        let mut r = NaluReader::new(&data[nalu.header().len()..]);
         let mut sps = Sps {
             profile_idc: r.read_bits(8)?,
             constraint_set0_flag: r.read_bit()?,
@@ -2175,7 +2179,7 @@ impl Parser {
     pub fn parse_pps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Pps> {
         let data = nalu.as_ref();
         // Skip the header
-        let mut r = NaluReader::new(&data[nalu.header.header_bytes..]);
+        let mut r = NaluReader::new(&data[nalu.header().len()..]);
         let mut pps = Pps {
             pic_parameter_set_id: r.read_ue_max(u32::try_from(MAX_PPS_COUNT)? - 1)?,
             seq_parameter_set_id: r.read_ue_max(u32::try_from(MAX_SPS_COUNT)? - 1)?,
@@ -2411,7 +2415,7 @@ impl Parser {
     ) -> Result<()> {
         let rpm = &mut header.dec_ref_pic_marking;
 
-        if nalu.header.idr_pic_flag {
+        if nalu.header().idr_pic_flag {
             rpm.no_output_of_prior_pics_flag = r.read_bit()?;
             rpm.long_term_reference_flag = r.read_bit()?;
         } else {
@@ -2455,7 +2459,7 @@ impl Parser {
     pub fn parse_slice_header<T: AsRef<[u8]>>(&mut self, nalu: Nalu<T>) -> Result<Slice<T>> {
         let data = nalu.as_ref();
         // Skip the header
-        let mut r = NaluReader::new(&data[nalu.header.header_bytes..]);
+        let mut r = NaluReader::new(&data[nalu.header().len()..]);
 
         let mut header = SliceHeader {
             first_mb_in_slice: r.read_ue()?,
@@ -2495,7 +2499,7 @@ impl Parser {
             header.max_pic_num = sps.max_frame_num;
         }
 
-        if nalu.header.idr_pic_flag {
+        if nalu.header().idr_pic_flag {
             header.idr_pic_id = r.read_ue_max(0xffff)?;
         }
 
@@ -2549,7 +2553,7 @@ impl Parser {
             return Err(anyhow!("Broken Data"));
         }
 
-        if let NaluType::SliceExt = nalu.header.type_ {
+        if let NaluType::SliceExt = nalu.header().type_ {
             return Err(anyhow!("Stream contain unsupported/unimplemented NALs"));
         }
 
@@ -2561,7 +2565,7 @@ impl Parser {
             Parser::parse_pred_weight_table(&mut r, sps, &mut header)?;
         }
 
-        if nalu.header.ref_idc != 0 {
+        if nalu.header().ref_idc != 0 {
             Parser::parse_dec_ref_pic_marking(&mut r, &nalu, &mut header)?;
         }
 
@@ -2593,7 +2597,7 @@ impl Parser {
         }
 
         let epb = r.num_epb();
-        header.header_bit_size = (nalu.size - epb) * 8 - r.num_bits_left();
+        header.header_bit_size = (nalu.size() - epb) * 8 - r.num_bits_left();
 
         header.n_emulation_prevention_bytes = epb;
 
@@ -2615,7 +2619,6 @@ pub struct NaluHeader {
     ref_idc: u8,
     type_: NaluType,
     idr_pic_flag: bool,
-    header_bytes: usize,
 }
 
 impl NaluHeader {
@@ -2633,39 +2636,15 @@ impl NaluHeader {
     pub fn idr_pic_flag(&self) -> bool {
         self.idr_pic_flag
     }
-
-    /// Get a reference to the nalu header's header bytes.
-    pub fn header_bytes(&self) -> usize {
-        self.header_bytes
-    }
 }
 
-#[derive(Debug)]
-pub struct Nalu<T> {
-    header: NaluHeader,
-    /// The mapping that backs this NALU. Possibly shared with the other NALUs
-    /// in the Access Unit.
-    data: T,
-
-    size: usize,
-    offset: usize,
-    sc_offset: usize,
-}
-
-impl<T: AsRef<[u8]>> Nalu<T> {
-    fn find_start_code(data: &mut Cursor<T>, offset: usize) -> Option<usize> {
-        // discard all zeroes until the start code pattern is found
-        data.get_ref().as_ref()[offset..]
-            .windows(3)
-            .position(|window| window == [0x00, 0x00, 0x01])
-    }
-
-    fn parse_header(data: &mut Cursor<T>) -> Result<NaluHeader> {
-        if !data.has_remaining() {
+impl Header for NaluHeader {
+    fn parse<T: AsRef<[u8]>>(cursor: &Cursor<T>) -> Result<Self> {
+        if !cursor.has_remaining() {
             return Err(anyhow!("Broken Data"));
         }
 
-        let byte = data.chunk()[0];
+        let byte = cursor.chunk()[0];
 
         let type_ = NaluType::n(byte & 0x1f).ok_or(anyhow!("Broken Data"))?;
 
@@ -2680,93 +2659,15 @@ impl<T: AsRef<[u8]>> Nalu<T> {
             ref_idc,
             type_,
             idr_pic_flag,
-            header_bytes: 1,
         })
     }
 
-    /// Find the next Annex B encoded NAL unit.
-    pub fn next(cursor: &mut Cursor<T>, bitstream: T) -> Result<Option<Nalu<T>>> {
-        let pos = usize::try_from(cursor.position())?;
-
-        // Find the start code for this NALU
-        let current_nalu_offset = match Nalu::find_start_code(cursor, pos) {
-            Some(offset) => offset,
-            None => return Err(anyhow!("No NAL found")),
-        };
-
-        let mut start_code_offset = pos + current_nalu_offset;
-
-        // If the preceding byte is 00, then we actually have a four byte SC,
-        // i.e. 00 00 00 01 Where the first 00 is the "zero_byte()"
-        if start_code_offset > 0 && cursor.get_ref().as_ref()[start_code_offset - 1] == 00 {
-            start_code_offset -= 1;
-        }
-
-        // The NALU offset is its offset + 3 bytes to skip the start code.
-        let nalu_offset = pos + current_nalu_offset + 3;
-
-        // Set the bitstream position to the start of the current NALU
-        cursor.set_position(u64::try_from(nalu_offset)?);
-
-        let hdr = Nalu::parse_header(cursor)?;
-
-        // Find the start of the subsequent NALU.
-        let mut next_nalu_offset = match Nalu::find_start_code(cursor, nalu_offset) {
-            Some(offset) => offset,
-            None => cursor.chunk().len(), // Whatever data is left must be part of the current NALU
-        };
-
-        while next_nalu_offset > 0
-            && cursor.get_ref().as_ref()[nalu_offset + next_nalu_offset - 1] == 00
-        {
-            // Discard trailing_zero_8bits
-            next_nalu_offset -= 1;
-        }
-
-        let nal_size = match hdr.type_ {
-            NaluType::SeqEnd | NaluType::StreamEnd => 1,
-            _ => next_nalu_offset,
-        };
-
-        Ok(Some(Nalu {
-            header: hdr,
-            data: bitstream,
-            size: nal_size,
-            offset: nalu_offset,
-            sc_offset: start_code_offset,
-        }))
+    fn is_end(&self) -> bool {
+        matches!(self.type_, NaluType::SeqEnd | NaluType::StreamEnd)
     }
 
-    /// Get a reference to the nalu's header.
-    pub fn header(&self) -> &NaluHeader {
-        &self.header
-    }
-
-    /// Get a reference to the nalu's data.
-    pub fn data(&self) -> &T {
-        &self.data
-    }
-
-    /// Get a reference to the nalu's size.
-    pub fn size(&self) -> usize {
-        self.size
-    }
-
-    /// Get a reference to the nalu's offset.
-    pub fn offset(&self) -> usize {
-        self.offset
-    }
-
-    /// Get a reference to the nalu's sc offset.
-    pub fn sc_offset(&self) -> usize {
-        self.sc_offset
-    }
-}
-
-impl<T: AsRef<[u8]>> AsRef<[u8]> for Nalu<T> {
-    fn as_ref(&self) -> &[u8] {
-        let data = self.data.as_ref();
-        &data[self.offset..self.offset + self.size]
+    fn len(&self) -> usize {
+        1
     }
 }
 
@@ -2815,7 +2716,7 @@ mod tests {
         let mut parser = Parser::default();
 
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor, STREAM_TEST_25_FPS) {
-            match nalu.header.type_ {
+            match nalu.header().type_ {
                 NaluType::Slice
                 | NaluType::SliceDpa
                 | NaluType::SliceDpb
