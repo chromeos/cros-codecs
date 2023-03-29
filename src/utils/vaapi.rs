@@ -122,8 +122,6 @@ impl TryInto<Option<Surface>> for PictureState {
 pub struct DecodedHandle {
     /// The actual object backing the handle.
     inner: Rc<RefCell<GenericBackendHandle>>,
-    /// The timestamp of the input buffer that produced this frame.
-    timestamp: u64,
     /// A monotonically increasing counter that denotes the display order of
     /// this handle in comparison with other handles.
     pub display_order: Option<u64>,
@@ -136,7 +134,6 @@ impl Clone for DecodedHandle {
     fn clone(&self) -> Self {
         DecodedHandle {
             inner: self.inner.clone(),
-            timestamp: self.timestamp,
             display_order: self.display_order,
         }
     }
@@ -144,10 +141,9 @@ impl Clone for DecodedHandle {
 
 impl DecodedHandle {
     /// Creates a new handle
-    pub fn new(inner: Rc<RefCell<GenericBackendHandle>>, timestamp: u64) -> Self {
+    pub fn new(inner: Rc<RefCell<GenericBackendHandle>>) -> Self {
         Self {
             inner,
-            timestamp,
             display_order: None,
         }
     }
@@ -173,7 +169,7 @@ impl DecodedHandleTrait for DecodedHandle {
     }
 
     fn timestamp(&self) -> u64 {
-        self.timestamp
+        self.handle().timestamp()
     }
 }
 
@@ -494,6 +490,15 @@ impl GenericBackendHandle {
         }
     }
 
+    /// Returns the timestamp of this handle.
+    pub fn timestamp(&self) -> u64 {
+        match &self.state {
+            PictureState::Ready { picture, .. } => picture.timestamp(),
+            PictureState::Pending { picture, .. } => picture.timestamp(),
+            PictureState::Invalid => unreachable!(),
+        }
+    }
+
     /// Returns the id of the VA surface backing this handle.
     pub fn surface_id(&self) -> libva::VASurfaceID {
         match &self.state {
@@ -686,7 +691,6 @@ where
         block: BlockingMode,
     ) -> StatelessBackendResult<<Self as VideoDecoderBackend>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
-        let timestamp = picture.timestamp();
 
         let handle = Rc::new(RefCell::new(GenericBackendHandle::new_pending(
             picture,
@@ -698,15 +702,7 @@ where
             BlockingMode::NonBlocking => self.pending_jobs.push_back(Rc::clone(&handle)),
         }
 
-        Ok(self.build_va_decoded_handle(handle, timestamp))
-    }
-
-    fn build_va_decoded_handle(
-        &self,
-        picture: Rc<RefCell<GenericBackendHandle>>,
-        timestamp: u64,
-    ) -> <Self as VideoDecoderBackend>::Handle {
-        DecodedHandle::new(picture, timestamp)
+        Ok(DecodedHandle::new(handle))
     }
 }
 
@@ -807,11 +803,9 @@ where
             completed.push_back(job);
         }
 
-        let completed = completed.into_iter().map(|picture| {
-            // Safe because the backend handle has been turned into a ready one.
-            let timestamp = picture.borrow().picture().unwrap().timestamp();
-            Ok(self.build_va_decoded_handle(picture, timestamp))
-        });
+        let completed = completed
+            .into_iter()
+            .map(|handle| Ok(DecodedHandle::new(handle)));
 
         completed.collect::<Result<VecDeque<_>, _>>()
     }
