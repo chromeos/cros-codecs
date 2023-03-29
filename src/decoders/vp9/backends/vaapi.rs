@@ -26,7 +26,6 @@ use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
 use crate::decoders::StatelessBackendError;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-use crate::utils::vaapi::GenericBackendHandle;
 use crate::utils::vaapi::NegotiationStatus;
 use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
@@ -129,11 +128,6 @@ impl VaapiBackend<Header> {
                 }
             }
         }
-    }
-
-    /// Gets the VASurfaceID for the given `picture`.
-    fn surface_id(picture: &GenericBackendHandle) -> libva::VASurfaceID {
-        picture.surface_id()
     }
 
     fn build_pic_param(
@@ -260,7 +254,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
             .iter()
             .map(|h| {
                 if let Some(h) = h {
-                    Self::surface_id(&h.handle())
+                    h.handle().surface_id()
                 } else {
                     libva::constants::VA_INVALID_SURFACE
                 }
