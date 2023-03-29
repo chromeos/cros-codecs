@@ -67,9 +67,14 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         U::try_from(out).map_err(|_| anyhow!("Conversion failed"))
     }
 
-    /// Skip up to 31 bits from the stream.
-    pub fn skip_bits(&mut self, num_bits: usize) -> Result<()> {
-        self.read_bits::<u32>(num_bits)?;
+    /// Skip `num_bits` bits from the stream.
+    pub fn skip_bits(&mut self, mut num_bits: usize) -> Result<()> {
+        while num_bits > 0 {
+            let n = std::cmp::min(num_bits, 31);
+            self.read_bits::<u32>(n)?;
+            num_bits -= n;
+        }
+
         Ok(())
     }
 
