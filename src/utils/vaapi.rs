@@ -108,10 +108,10 @@ impl TryInto<Option<Surface>> for PictureState {
 
     fn try_into(self) -> Result<Option<Surface>, Self::Error> {
         match self {
-            PictureState::Ready { picture, .. } => picture.take_surface().map(Some),
-            PictureState::Pending { surface_id, .. } => Err(anyhow!(
+            PictureState::Ready(picture) => picture.take_surface().map(Some),
+            PictureState::Pending(picture) => Err(anyhow!(
                 "Attempting to retrieve a surface (id: {:?}) that might have operations pending.",
-                surface_id
+                picture.surface_id()
             )),
             PictureState::Invalid => unreachable!(),
         }
@@ -423,13 +423,9 @@ impl Drop for GenericBackendHandle {
 impl GenericBackendHandle {
     /// Creates a new pending handle on `surface_id`.
     fn new(picture: libva::Picture<PictureNew>, metadata: &ParsedStreamMetadata) -> Result<Self> {
-        let surface_id = picture.surface().id();
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
-            state: PictureState::Pending {
-                picture,
-                surface_id,
-            },
+            state: PictureState::Pending(picture),
             resolution: metadata.surface_pool.coded_resolution(),
             display_resolution: metadata.display_resolution,
             map_format: Rc::clone(&metadata.map_format),
@@ -439,10 +435,9 @@ impl GenericBackendHandle {
 
     pub(crate) fn sync(&mut self) -> Result<()> {
         match std::mem::replace(&mut self.state, PictureState::Invalid) {
-            state @ PictureState::Ready { .. } => self.state = state,
-            PictureState::Pending { picture, .. } => {
-                let picture = picture.sync()?;
-                self.state = PictureState::Ready { picture };
+            state @ PictureState::Ready(_) => self.state = state,
+            PictureState::Pending(picture) => {
+                self.state = PictureState::Ready(picture.sync()?);
             }
             PictureState::Invalid => unreachable!(),
         }
@@ -457,7 +452,7 @@ impl GenericBackendHandle {
     /// Note that DynMappableHandle is downcastable.
     pub fn image(&mut self) -> Result<Image> {
         match &mut self.state {
-            PictureState::Ready { picture, .. } => {
+            PictureState::Ready(picture) => {
                 // Get the associated VAImage, which will map the
                 // VASurface onto our address space.
                 let image = libva::Image::new(
@@ -478,8 +473,8 @@ impl GenericBackendHandle {
     /// Returns the picture of this handle.
     pub fn picture(&self) -> Option<&libva::Picture<PictureSync>> {
         match &self.state {
-            PictureState::Ready { picture, .. } => Some(picture),
-            PictureState::Pending { .. } => None,
+            PictureState::Ready(picture) => Some(picture),
+            PictureState::Pending(_) => None,
             PictureState::Invalid => unreachable!(),
         }
     }
@@ -487,8 +482,8 @@ impl GenericBackendHandle {
     /// Returns the timestamp of this handle.
     pub fn timestamp(&self) -> u64 {
         match &self.state {
-            PictureState::Ready { picture, .. } => picture.timestamp(),
-            PictureState::Pending { picture, .. } => picture.timestamp(),
+            PictureState::Ready(picture) => picture.timestamp(),
+            PictureState::Pending(picture) => picture.timestamp(),
             PictureState::Invalid => unreachable!(),
         }
     }
@@ -496,8 +491,8 @@ impl GenericBackendHandle {
     /// Returns the id of the VA surface backing this handle.
     pub fn surface_id(&self) -> libva::VASurfaceID {
         match &self.state {
-            PictureState::Ready { picture, .. } => picture.surface().id(),
-            PictureState::Pending { surface_id, .. } => *surface_id,
+            PictureState::Ready(picture) => picture.surface_id(),
+            PictureState::Pending(picture) => picture.surface_id(),
             PictureState::Invalid => unreachable!(),
         }
     }
@@ -509,8 +504,8 @@ impl GenericBackendHandle {
 
     pub fn is_va_ready(&self) -> Result<bool> {
         match &self.state {
-            PictureState::Ready { .. } => Ok(true),
-            PictureState::Pending { picture, .. } => picture
+            PictureState::Ready(_) => Ok(true),
+            PictureState::Pending(picture) => picture
                 .query_status()
                 .map(|s| s == libva::VASurfaceStatus::VASurfaceReady),
             PictureState::Invalid => unreachable!(),
@@ -520,15 +515,8 @@ impl GenericBackendHandle {
 
 /// Rendering state of a VA picture.
 enum PictureState {
-    Ready {
-        picture: libva::Picture<PictureSync>,
-    },
-    Pending {
-        /// Submitted VA picture pending completion.
-        picture: libva::Picture<PictureEnd>,
-        /// VA surface ID for `picture`.
-        surface_id: u32,
-    },
+    Ready(libva::Picture<PictureSync>),
+    Pending(libva::Picture<PictureEnd>),
     // Only set in the destructor when we take ownership of the VA picture.
     Invalid,
 }
