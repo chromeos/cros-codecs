@@ -8,7 +8,6 @@ use crate::decoders::h264::parser::Pps;
 use crate::decoders::h264::parser::Slice;
 use crate::decoders::h264::parser::Sps;
 use crate::decoders::h264::picture::PictureData;
-use crate::decoders::BlockingMode;
 use crate::decoders::VideoDecoderBackend;
 
 pub type Result<T> = crate::decoders::StatelessBackendResult<T>;
@@ -69,15 +68,9 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
 
     /// Called when the decoder wants the backend to finish the decoding
     /// operations for `picture`. At this point, `decode_slice` has been called
-    /// for all slices. The argument `block` dictates whether this call should
-    /// wait until the current decode finishes, or whether it should return
-    /// immediately.
+    /// for all slices.
     ///
     /// This call will assign the ownership of the BackendHandle to the Picture
     /// and then assign the ownership of the Picture to the Handle.
-    fn submit_picture(
-        &mut self,
-        picture: Self::Picture,
-        block: BlockingMode,
-    ) -> Result<Self::Handle>;
+    fn submit_picture(&mut self, picture: Self::Picture) -> Result<Self::Handle>;
 }

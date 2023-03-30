@@ -518,12 +518,8 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         Ok(())
     }
 
-    fn submit_picture(
-        &mut self,
-        picture: Self::Picture,
-        block: BlockingMode,
-    ) -> StatelessBackendResult<Self::Handle> {
-        self.process_picture(picture, block)
+    fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle> {
+        self.process_picture(picture)
     }
 
     fn new_picture(

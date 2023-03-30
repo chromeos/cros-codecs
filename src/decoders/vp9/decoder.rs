@@ -205,13 +205,8 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
             let offset = frame.offset;
             let size = frame.size;
 
-            let block = if matches!(self.blocking_mode, BlockingMode::Blocking)
-                || matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
-            {
-                BlockingMode::Blocking
-            } else {
-                BlockingMode::NonBlocking
-            };
+            let block = matches!(self.blocking_mode, BlockingMode::Blocking)
+                || matches!(self.negotiation_status, NegotiationStatus::Possible { .. });
 
             let bitstream = &frame.bitstream[offset..offset + size];
 
@@ -224,9 +219,12 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
                     bitstream,
                     timestamp,
                     &self.segmentation,
-                    block,
                 )
                 .map_err(|e| anyhow!(e))?;
+
+            if block {
+                decoded_handle.sync()?;
+            }
 
             // Do DPB management
             Self::update_references(

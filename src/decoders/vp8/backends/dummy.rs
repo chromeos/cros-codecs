@@ -31,7 +31,6 @@ impl StatelessDecoderBackend for Backend {
         _: &Segmentation,
         _: &MbLfAdjustments,
         _: u64,
-        _: BlockingMode,
     ) -> super::Result<Self::Handle> {
         Ok(Handle {
             handle: Rc::new(RefCell::new(BackendHandle)),

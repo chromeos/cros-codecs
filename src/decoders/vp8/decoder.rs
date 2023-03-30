@@ -199,13 +199,8 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
             None => &self.parser,
         };
 
-        let block = if matches!(self.blocking_mode, BlockingMode::Blocking)
-            || matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
-        {
-            BlockingMode::Blocking
-        } else {
-            BlockingMode::NonBlocking
-        };
+        let block = matches!(self.blocking_mode, BlockingMode::Blocking)
+            || matches!(self.negotiation_status, NegotiationStatus::Possible { .. });
 
         let show_frame = frame.header.show_frame();
 
@@ -220,9 +215,12 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
                 parser.segmentation(),
                 parser.mb_lf_adjust(),
                 timestamp,
-                block,
             )
             .map_err(|e| anyhow!(e))?;
+
+        if block {
+            decoded_handle.sync()?;
+        }
 
         // Do DPB management
         Self::update_references(

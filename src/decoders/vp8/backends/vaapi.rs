@@ -219,7 +219,6 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
         timestamp: u64,
-        block: BlockingMode,
     ) -> StatelessBackendResult<Self::Handle> {
         let last_ref = if let Some(last_ref) = last_ref {
             last_ref.inner.borrow().surface_id()
@@ -279,7 +278,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         va_picture.add_buffer(slice_param);
         va_picture.add_buffer(slice_data);
 
-        self.process_picture(va_picture, block)
+        self.process_picture(va_picture)
     }
 }
 

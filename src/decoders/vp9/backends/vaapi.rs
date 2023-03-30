@@ -245,7 +245,6 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         bitstream: &[u8],
         timestamp: u64,
         segmentation: &[Segmentation; MAX_SEGMENTS],
-        block: BlockingMode,
     ) -> StatelessBackendResult<Self::Handle> {
         self.negotiation_status = NegotiationStatus::Negotiated;
 
@@ -285,7 +284,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         va_picture.add_buffer(slice_param);
         va_picture.add_buffer(slice_data);
 
-        self.process_picture(va_picture, block)
+        self.process_picture(va_picture)
     }
 }
 

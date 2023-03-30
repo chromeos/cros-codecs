@@ -61,11 +61,7 @@ impl StatelessDecoderBackend for Backend {
         Ok(())
     }
 
-    fn submit_picture(
-        &mut self,
-        _: Self::Picture,
-        _: BlockingMode,
-    ) -> StatelessBackendResult<Self::Handle> {
+    fn submit_picture(&mut self, _: Self::Picture) -> StatelessBackendResult<Self::Handle> {
         Ok(Handle {
             handle: Rc::new(RefCell::new(BackendHandle)),
         })

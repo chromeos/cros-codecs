@@ -669,16 +669,12 @@ where
     pub(crate) fn process_picture(
         &mut self,
         picture: libva::Picture<PictureNew>,
-        block: BlockingMode,
     ) -> StatelessBackendResult<<Self as VideoDecoderBackend>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
         let handle = Rc::new(RefCell::new(GenericBackendHandle::new(picture, metadata)?));
 
-        match block {
-            BlockingMode::Blocking => handle.borrow_mut().sync()?,
-            BlockingMode::NonBlocking => self.pending_jobs.push_back(Rc::clone(&handle)),
-        }
+        self.pending_jobs.push_back(Rc::clone(&handle));
 
         Ok(DecodedHandle::new(handle))
     }

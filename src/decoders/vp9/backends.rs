@@ -6,7 +6,6 @@ use crate::decoders::vp9::decoder::Segmentation;
 use crate::decoders::vp9::parser::Header;
 use crate::decoders::vp9::parser::MAX_SEGMENTS;
 use crate::decoders::vp9::parser::NUM_REF_FRAMES;
-use crate::decoders::BlockingMode;
 use crate::decoders::VideoDecoderBackend;
 
 #[cfg(test)]
@@ -26,9 +25,7 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
     fn new_sequence(&mut self, header: &Header) -> Result<()>;
 
     /// Called when the decoder wants the backend to finish the decoding
-    /// operations for `picture`. The argument `block` dictates whether this
-    /// call should wait until the current decode finishes, or whether it should
-    /// return immediately.
+    /// operations for `picture`.
     ///
     /// This call will assign the ownership of the BackendHandle to the Picture
     /// and then assign the ownership of the Picture to the Handle.
@@ -39,6 +36,5 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
         bitstream: &[u8],
         timestamp: u64,
         segmentation: &[Segmentation; MAX_SEGMENTS],
-        block: BlockingMode,
     ) -> Result<Self::Handle>;
 }

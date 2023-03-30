@@ -2218,18 +2218,17 @@ where
     fn submit_picture(&mut self) -> VideoDecoderResult<(PictureData, T)> {
         let picture = self.cur_pic.take().unwrap();
 
-        let block = if matches!(self.blocking_mode, BlockingMode::Blocking)
-            || matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
-        {
-            BlockingMode::Blocking
-        } else {
-            BlockingMode::NonBlocking
-        };
+        let block = matches!(self.blocking_mode, BlockingMode::Blocking)
+            || matches!(self.negotiation_status, NegotiationStatus::Possible { .. });
 
         let handle = self
             .backend
-            .submit_picture(self.cur_backend_pic.take().unwrap(), block)
+            .submit_picture(self.cur_backend_pic.take().unwrap())
             .map_err(VideoDecoderError::StatelessBackendError)?;
+
+        if block {
+            handle.sync()?;
+        }
 
         Ok((picture, handle))
     }
