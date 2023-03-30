@@ -2,11 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use std::cell::Ref;
-use std::cell::RefCell;
 use std::cell::RefMut;
 use std::collections::VecDeque;
-use std::rc::Rc;
 
 use thiserror::Error;
 
@@ -48,7 +45,7 @@ pub(crate) trait VideoDecoderBackend {
     /// This will usually be some backend-specific type with a resource and a
     /// resource pool so that said buffer can be reused for another decode
     /// operation when it goes out of scope.
-    type Handle: DecodedHandle;
+    type Handle: DecodedHandle + Clone;
 
     /// Returns the current coded resolution of the bitstream being processed.
     /// This may be None if we have not read the stream parameters yet.
@@ -87,15 +84,11 @@ pub(crate) trait VideoDecoderBackend {
 pub trait VideoDecoder {
     /// Decode the `bitstream` represented by `timestamp`. Returns zero or more
     /// decoded handles representing the decoded data.
-    fn decode(
-        &mut self,
-        timestamp: u64,
-        bitstream: &[u8],
-    ) -> Result<Vec<Box<dyn DynDecodedHandle>>>;
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<Vec<Box<dyn DecodedHandle>>>;
 
     /// Flush the decoder i.e. finish processing all queued decode requests and
     /// emit frames for them.
-    fn flush(&mut self) -> Result<Vec<Box<dyn DynDecodedHandle>>>;
+    fn flush(&mut self) -> Result<Vec<Box<dyn DecodedHandle>>>;
 
     /// Whether negotiation of the decoded format is possible. In particular, a
     /// decoder will indicate that negotiation is possible after enough metadata
@@ -142,35 +135,7 @@ pub trait VideoDecoder {
     /// Polls the decoder, emitting frames for all queued decode requests. This
     /// is similar to flush, but it does not change the state of the decoded
     /// picture buffer nor does it reset any internal state.
-    fn poll(&mut self, blocking_mode: BlockingMode) -> Result<Vec<Box<dyn DynDecodedHandle>>>;
-}
-
-pub trait DynDecodedHandle {
-    fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle>;
-    fn timestamp(&self) -> u64;
-    fn display_resolution(&self) -> Resolution;
-    fn display_order(&self) -> Option<u64>;
-}
-
-impl<T> DynDecodedHandle for T
-where
-    T: DecodedHandle,
-{
-    fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle> {
-        DecodedHandle::handle_mut(self)
-    }
-
-    fn timestamp(&self) -> u64 {
-        DecodedHandle::timestamp(self)
-    }
-
-    fn display_resolution(&self) -> Resolution {
-        DecodedHandle::display_resolution(self)
-    }
-
-    fn display_order(&self) -> Option<u64> {
-        DecodedHandle::display_order(self)
-    }
+    fn poll(&mut self, blocking_mode: BlockingMode) -> Result<Vec<Box<dyn DecodedHandle>>>;
 }
 
 pub trait DynHandle {
@@ -213,20 +178,8 @@ pub trait FrameInfo {
 /// The handle type used by the stateless decoder backend. The only requirement
 /// from implementors is that they give access to the underlying handle and
 /// that they can be (cheaply) cloned.
-pub trait DecodedHandle: Clone + DynDecodedHandle {
-    /// The type of the handle used by the backend.
-    type BackendHandle: DynHandle;
-
-    /// Returns a reference to the container of the backend handle.
-    fn handle_rc(&self) -> &Rc<RefCell<Self::BackendHandle>>;
-    /// Returns a shared reference to the backend handle.
-    fn handle(&self) -> Ref<Self::BackendHandle> {
-        self.handle_rc().borrow()
-    }
-    /// Returns a mutable reference to the backend handle.
-    fn handle_mut(&self) -> RefMut<Self::BackendHandle> {
-        self.handle_rc().borrow_mut()
-    }
+pub trait DecodedHandle {
+    fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle>;
 
     /// Returns the display order for the picture backed by this handle, if set by the decoder.
     fn display_order(&self) -> Option<u64>;
@@ -242,7 +195,7 @@ pub trait DecodedHandle: Clone + DynDecodedHandle {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::decoders::DynDecodedHandle;
+    use crate::decoders::DecodedHandle;
     use crate::decoders::VideoDecoder;
 
     /// Stream that can be used in tests, along with the CRC32 of all of its frames.
@@ -270,7 +223,7 @@ pub(crate) mod tests {
         dump_yuv: bool,
     ) where
         D: VideoDecoder,
-        L: Fn(&mut D, &[u8], &mut dyn FnMut(Box<dyn DynDecodedHandle>)),
+        L: Fn(&mut D, &[u8], &mut dyn FnMut(Box<dyn DecodedHandle>)),
     {
         let mut crcs = test.crcs.lines().enumerate();
 

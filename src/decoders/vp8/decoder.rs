@@ -11,7 +11,6 @@ use crate::decoders::vp8::parser::Header;
 use crate::decoders::vp8::parser::Parser;
 use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
-use crate::decoders::DynDecodedHandle;
 use crate::decoders::Result as VideoDecoderResult;
 use crate::decoders::VideoDecoder;
 use crate::Resolution;
@@ -71,7 +70,7 @@ pub struct Decoder<T: DecodedHandle> {
     alt_ref_picture: Option<T>,
 }
 
-impl<T: DecodedHandle + 'static> Decoder<T> {
+impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     /// Create a new codec backend for VP8.
     #[cfg(any(feature = "vaapi", test))]
     pub(crate) fn new(
@@ -255,12 +254,12 @@ impl<T: DecodedHandle + 'static> Decoder<T> {
     }
 }
 
-impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
+impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
     fn decode(
         &mut self,
         timestamp: u64,
         bitstream: &[u8],
-    ) -> VideoDecoderResult<Vec<Box<dyn DynDecodedHandle>>> {
+    ) -> VideoDecoderResult<Vec<Box<dyn DecodedHandle>>> {
         let frame = self.parser.parse_frame(bitstream).map_err(|e| anyhow!(e))?;
 
         if frame.header.key_frame() {
@@ -323,11 +322,11 @@ impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
 
         Ok(ready_frames
             .into_iter()
-            .map(|h| Box::new(h) as Box<dyn DynDecodedHandle>)
+            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
             .collect())
     }
 
-    fn flush(&mut self) -> crate::decoders::Result<Vec<Box<dyn DynDecodedHandle>>> {
+    fn flush(&mut self) -> crate::decoders::Result<Vec<Box<dyn DecodedHandle>>> {
         // Decode whatever is pending using the default format. Mainly covers
         // the rare case where only one buffer is sent.
         if let NegotiationStatus::Possible { key_frame } = &self.negotiation_status {
@@ -352,7 +351,7 @@ impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
 
         Ok(pics
             .into_iter()
-            .map(|h| Box::new(h) as Box<dyn DynDecodedHandle>)
+            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
             .collect())
     }
 
@@ -385,12 +384,12 @@ impl<T: DecodedHandle + 'static> VideoDecoder for Decoder<T> {
     fn poll(
         &mut self,
         blocking_mode: BlockingMode,
-    ) -> VideoDecoderResult<Vec<Box<dyn DynDecodedHandle>>> {
+    ) -> VideoDecoderResult<Vec<Box<dyn DecodedHandle>>> {
         let handles = self.backend.poll(blocking_mode)?;
 
         Ok(handles
             .into_iter()
-            .map(|h| Box::new(h) as Box<dyn DynDecodedHandle>)
+            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
             .collect())
     }
 }
@@ -406,7 +405,7 @@ pub mod tests {
     use crate::decoders::tests::TestStream;
     use crate::decoders::vp8::decoder::Decoder;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DynDecodedHandle;
+    use crate::decoders::DecodedHandle;
     use crate::decoders::VideoDecoder;
 
     /// Read and return the data from the next IVF packet. Returns `None` if there is no more data
@@ -429,7 +428,7 @@ pub mod tests {
     pub fn vp8_decoding_loop<D>(
         decoder: &mut D,
         test_stream: &[u8],
-        on_new_frame: &mut dyn FnMut(Box<dyn DynDecodedHandle>),
+        on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
     ) where
         D: VideoDecoder,
     {

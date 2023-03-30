@@ -31,7 +31,6 @@ use crate::decoders::h264::picture::Field;
 use crate::decoders::h264::picture::PictureData;
 use crate::decoders::h264::picture::Reference;
 use crate::decoders::BlockingMode;
-use crate::decoders::DecodedHandle;
 use crate::decoders::StatelessBackendError;
 use crate::decoders::VideoDecoderBackend;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
@@ -96,7 +95,7 @@ impl VaapiBackend<Sps> {
     fn surface_id(handle: &Option<VADecodedHandle>) -> libva::VASurfaceID {
         match handle {
             None => libva::constants::VA_INVALID_SURFACE,
-            Some(handle) => handle.handle().surface_id(),
+            Some(handle) => handle.inner.borrow().surface_id(),
         }
     }
 
@@ -552,14 +551,12 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         first_field: &Self::Handle,
     ) -> StatelessBackendResult<Self::Picture> {
         // Block on the first field if it is not ready yet.
-        let backend_handle = first_field.handle();
-        if !backend_handle.is_ready() {
-            drop(backend_handle);
+        if !first_field.inner.borrow().is_ready() {
             self.block_on_handle(first_field)?;
         }
 
         // Decode to the same surface as the first field picture.
-        let first_va_handle = first_field.handle();
+        let first_va_handle = first_field.inner.borrow();
         let va_picture = first_va_handle
             .picture()
             .expect("no valid backend handle after blocking on it");

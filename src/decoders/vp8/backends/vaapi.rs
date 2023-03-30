@@ -20,7 +20,6 @@ use crate::decoders::vp8::parser::Header;
 use crate::decoders::vp8::parser::MbLfAdjustments;
 use crate::decoders::vp8::parser::Segmentation;
 use crate::decoders::BlockingMode;
-use crate::decoders::DecodedHandle;
 use crate::decoders::StatelessBackendError;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 use crate::utils::vaapi::NegotiationStatus;
@@ -223,19 +222,19 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         block: BlockingMode,
     ) -> StatelessBackendResult<Self::Handle> {
         let last_ref = if let Some(last_ref) = last_ref {
-            last_ref.handle().surface_id()
+            last_ref.inner.borrow().surface_id()
         } else {
             libva::constants::VA_INVALID_SURFACE
         };
 
         let golden_ref = if let Some(golden_ref) = golden_ref {
-            golden_ref.handle().surface_id()
+            golden_ref.inner.borrow().surface_id()
         } else {
             libva::constants::VA_INVALID_SURFACE
         };
 
         let alt_ref = if let Some(alt_ref) = alt_ref {
-            alt_ref.handle().surface_id()
+            alt_ref.inner.borrow().surface_id()
         } else {
             libva::constants::VA_INVALID_SURFACE
         };

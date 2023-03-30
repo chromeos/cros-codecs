@@ -23,7 +23,6 @@ use crate::decoders::vp9::parser::LAST_FRAME;
 use crate::decoders::vp9::parser::MAX_SEGMENTS;
 use crate::decoders::vp9::parser::NUM_REF_FRAMES;
 use crate::decoders::BlockingMode;
-use crate::decoders::DecodedHandle;
 use crate::decoders::StatelessBackendError;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 use crate::utils::vaapi::NegotiationStatus;
@@ -254,7 +253,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
             .iter()
             .map(|h| {
                 if let Some(h) = h {
-                    h.handle().surface_id()
+                    h.inner.borrow().surface_id()
                 } else {
                     libva::constants::VA_INVALID_SURFACE
                 }

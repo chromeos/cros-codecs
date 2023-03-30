@@ -50,12 +50,6 @@ impl Clone for Handle {
 }
 
 impl DecodedHandle for Handle {
-    type BackendHandle = BackendHandle;
-
-    fn handle_rc(&self) -> &Rc<RefCell<Self::BackendHandle>> {
-        &self.handle
-    }
-
     fn display_resolution(&self) -> Resolution {
         Default::default()
     }
@@ -68,6 +62,10 @@ impl DecodedHandle for Handle {
 
     fn timestamp(&self) -> u64 {
         0
+    }
+
+    fn dyn_picture_mut(&self) -> std::cell::RefMut<dyn DynHandle> {
+        self.handle.borrow_mut()
     }
 }
 

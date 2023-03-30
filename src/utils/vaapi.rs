@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
+use std::cell::RefMut;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt::Debug;
@@ -119,12 +120,12 @@ impl TryInto<Option<Surface>> for PictureState {
 }
 
 /// A decoded frame handle.
-pub struct DecodedHandle {
+pub(crate) struct DecodedHandle {
     /// The actual object backing the handle.
-    inner: Rc<RefCell<GenericBackendHandle>>,
+    pub(crate) inner: Rc<RefCell<GenericBackendHandle>>,
     /// A monotonically increasing counter that denotes the display order of
     /// this handle in comparison with other handles.
-    pub display_order: Option<u64>,
+    display_order: Option<u64>,
 }
 
 impl Clone for DecodedHandle {
@@ -150,12 +151,6 @@ impl DecodedHandle {
 }
 
 impl DecodedHandleTrait for DecodedHandle {
-    type BackendHandle = GenericBackendHandle;
-
-    fn handle_rc(&self) -> &Rc<RefCell<Self::BackendHandle>> {
-        &self.inner
-    }
-
     fn display_order(&self) -> Option<u64> {
         self.display_order
     }
@@ -165,11 +160,15 @@ impl DecodedHandleTrait for DecodedHandle {
     }
 
     fn display_resolution(&self) -> Resolution {
-        self.handle().resolution
+        self.inner.borrow().resolution
     }
 
     fn timestamp(&self) -> u64 {
-        self.handle().timestamp()
+        self.inner.borrow().timestamp()
+    }
+
+    fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle> {
+        self.inner.borrow_mut()
     }
 }
 
@@ -784,7 +783,7 @@ where
     }
 
     fn handle_is_ready(&self, handle: &Self::Handle) -> bool {
-        handle.handle().is_ready()
+        handle.inner.borrow().is_ready()
     }
 
     fn block_on_handle(&mut self, handle: &Self::Handle) -> StatelessBackendResult<()> {
@@ -792,7 +791,7 @@ where
             // Remove from the queue in order.
             let job = &self.pending_jobs[i];
 
-            if Rc::ptr_eq(job, handle.handle_rc()) {
+            if Rc::ptr_eq(job, &handle.inner) {
                 let job = self.pending_jobs.remove(i).unwrap();
 
                 job.borrow_mut().sync()?;
