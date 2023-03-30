@@ -160,7 +160,7 @@ impl DecodedHandleTrait for DecodedHandle {
     }
 
     fn display_resolution(&self) -> Resolution {
-        self.inner.borrow().resolution
+        self.inner.borrow().display_resolution
     }
 
     fn timestamp(&self) -> u64 {
@@ -398,7 +398,7 @@ pub struct GenericBackendHandle {
     state: PictureState,
     /// The decoder resolution when this frame was processed. Not all codecs
     /// send resolution data in every frame header.
-    resolution: Resolution,
+    coded_resolution: Resolution,
     /// Actual resolution of the visible rectangle in the decoded buffer.
     display_resolution: Resolution,
     /// Image format for this surface, taken from the pool it originates from.
@@ -411,7 +411,7 @@ impl Drop for GenericBackendHandle {
     fn drop(&mut self) {
         // Take ownership of the internal state.
         let state = std::mem::replace(&mut self.state, PictureState::Invalid);
-        if self.surface_pool.coded_resolution() == self.resolution {
+        if self.surface_pool.coded_resolution() == self.coded_resolution {
             if let Ok(Some(surface)) = state.try_into() {
                 self.surface_pool.add_surface(surface);
             }
@@ -425,7 +425,7 @@ impl GenericBackendHandle {
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
             state: PictureState::Pending(picture),
-            resolution: metadata.surface_pool.coded_resolution(),
+            coded_resolution: metadata.surface_pool.coded_resolution(),
             display_resolution: metadata.display_resolution,
             map_format: Rc::clone(&metadata.map_format),
             surface_pool: metadata.surface_pool.clone(),
