@@ -27,18 +27,12 @@ pub struct Nalu<T, U> {
 
 impl<T, U> Nalu<T, U>
 where
-    T: AsRef<[u8]>,
+    T: AsRef<[u8]> + Clone,
     U: Debug + Header,
 {
-    fn find_start_code(data: &mut Cursor<T>, offset: usize) -> Option<usize> {
-        // discard all zeroes until the start code pattern is found
-        data.get_ref().as_ref()[offset..]
-            .windows(3)
-            .position(|window| window == [0x00, 0x00, 0x01])
-    }
-
     /// Find the next Annex B encoded NAL unit.
-    pub fn next(cursor: &mut Cursor<T>, bitstream: T) -> Result<Option<Nalu<T, U>>> {
+    pub fn next(cursor: &mut Cursor<T>) -> Result<Option<Nalu<T, U>>> {
+        let bitstream = cursor.clone().into_inner();
         let pos = usize::try_from(cursor.position())?;
 
         // Find the start code for this NALU
@@ -85,6 +79,19 @@ where
             offset: nalu_offset,
             sc_offset: start_code_offset,
         }))
+    }
+}
+
+impl<T, U> Nalu<T, U>
+where
+    T: AsRef<[u8]>,
+    U: Debug,
+{
+    fn find_start_code(data: &mut Cursor<T>, offset: usize) -> Option<usize> {
+        // discard all zeroes until the start code pattern is found
+        data.get_ref().as_ref()[offset..]
+            .windows(3)
+            .position(|window| window == [0x00, 0x00, 0x01])
     }
 
     /// Get a reference to the nalu's header.

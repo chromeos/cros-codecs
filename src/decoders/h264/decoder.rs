@@ -2248,7 +2248,7 @@ where
     fn peek_sps(parser: &mut Parser, bitstream: &[u8]) -> Option<Sps> {
         let mut cursor = Cursor::new(bitstream);
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor, bitstream) {
+        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             if matches!(nalu.header().nalu_type(), NaluType::Sps) {
                 let sps = parser.parse_sps(&nalu).ok()?;
                 return Some(sps.clone());
@@ -2267,7 +2267,7 @@ where
 
         let mut cursor = Cursor::new(bitstream);
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor, bitstream) {
+        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().nalu_type() {
                 NaluType::Sps => {
                     self.process_sps(&nalu)?;
@@ -2459,7 +2459,7 @@ pub mod tests {
         let mut aud_parser = AccessUnitParser::default();
         let mut frame_num = 0;
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor, test_stream) {
+        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             if let Some(access_unit) = aud_parser.accumulate(nalu) {
                 let start_nalu = access_unit.nalus.first().unwrap();
                 let end_nalu = access_unit.nalus.last().unwrap();
