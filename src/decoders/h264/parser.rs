@@ -2024,6 +2024,14 @@ impl Parser {
     }
 
     pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Sps> {
+        if !matches!(nalu.header().type_, NaluType::Sps) {
+            return Err(anyhow!(
+                "Invalid NALU type, expected {:?}, got {:?}",
+                NaluType::Sps,
+                nalu.header().type_
+            ));
+        }
+
         let data = nalu.as_ref();
         // Skip the header
         let mut r = NaluReader::new(&data[nalu.header().len()..]);
@@ -2177,6 +2185,14 @@ impl Parser {
     }
 
     pub fn parse_pps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Pps> {
+        if !matches!(nalu.header().type_, NaluType::Pps) {
+            return Err(anyhow!(
+                "Invalid NALU type, expected {:?}, got {:?}",
+                NaluType::Pps,
+                nalu.header().type_
+            ));
+        }
+
         let data = nalu.as_ref();
         // Skip the header
         let mut r = NaluReader::new(&data[nalu.header().len()..]);
@@ -2457,6 +2473,21 @@ impl Parser {
     }
 
     pub fn parse_slice_header<T: AsRef<[u8]>>(&mut self, nalu: Nalu<T>) -> Result<Slice<T>> {
+        if !matches!(
+            nalu.header().type_,
+            NaluType::Slice
+                | NaluType::SliceDpa
+                | NaluType::SliceDpb
+                | NaluType::SliceDpc
+                | NaluType::SliceIdr
+                | NaluType::SliceExt
+        ) {
+            return Err(anyhow!(
+                "Invalid NALU type: {:?} is not a slice NALU",
+                nalu.header().type_
+            ));
+        }
+
         let data = nalu.as_ref();
         // Skip the header
         let mut r = NaluReader::new(&data[nalu.header().len()..]);
