@@ -511,6 +511,12 @@ impl GenericBackendHandle {
     }
 }
 
+impl DynHandle for GenericBackendHandle {
+    fn dyn_mappable_handle_mut<'a>(&'a mut self) -> Box<dyn MappableHandle + 'a> {
+        Box::new(self.image().unwrap())
+    }
+}
+
 /// Rendering state of a VA picture.
 enum PictureState {
     Ready(libva::Picture<PictureSync>),
@@ -576,12 +582,6 @@ impl<'a> MappableHandle for Image<'a> {
             image.width,
             image.height,
         )
-    }
-}
-
-impl DynHandle for GenericBackendHandle {
-    fn dyn_mappable_handle_mut<'a>(&'a mut self) -> Box<dyn MappableHandle + 'a> {
-        Box::new(self.image().unwrap())
     }
 }
 
