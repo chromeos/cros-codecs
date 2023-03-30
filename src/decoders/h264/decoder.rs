@@ -2307,10 +2307,7 @@ where
     fn block_on_one(&mut self) -> VideoDecoderResult<()> {
         if let Some(ReadyPicture { handle, .. }) = &self.ready_queue.peek() {
             if !self.backend.handle_is_ready(handle) {
-                return self
-                    .backend
-                    .block_on_handle(handle)
-                    .map_err(VideoDecoderError::StatelessBackendError);
+                return handle.sync().map_err(|e| e.into());
             }
         }
 

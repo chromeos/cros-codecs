@@ -163,7 +163,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
 
     fn block_on_one(&mut self) -> Result<()> {
         if let Some(handle) = self.ready_queue.first() {
-            return self.backend.block_on_handle(handle).map_err(|e| anyhow!(e));
+            return handle.sync().map_err(|e| e.into());
         }
 
         Ok(())

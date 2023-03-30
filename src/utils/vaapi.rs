@@ -170,6 +170,10 @@ impl DecodedHandleTrait for DecodedHandle {
     fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle> {
         self.inner.borrow_mut()
     }
+
+    fn sync(&self) -> StatelessBackendResult<()> {
+        self.inner.borrow_mut().sync().map_err(|e| e.into())
+    }
 }
 
 /// A surface pool handle to reduce the number of costly Surface allocations.
@@ -784,23 +788,5 @@ where
 
     fn handle_is_ready(&self, handle: &Self::Handle) -> bool {
         handle.inner.borrow().is_ready()
-    }
-
-    fn block_on_handle(&mut self, handle: &Self::Handle) -> StatelessBackendResult<()> {
-        for i in 0..self.pending_jobs.len() {
-            // Remove from the queue in order.
-            let job = &self.pending_jobs[i];
-
-            if Rc::ptr_eq(job, &handle.inner) {
-                let job = self.pending_jobs.remove(i).unwrap();
-
-                job.borrow_mut().sync()?;
-                return Ok(());
-            }
-        }
-
-        Err(StatelessBackendError::Other(anyhow!(
-            "Asked to block on a pending job that doesn't exist"
-        )))
     }
 }

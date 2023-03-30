@@ -76,9 +76,6 @@ pub(crate) trait VideoDecoderBackend {
     /// Whether the handle is ready for presentation. The decoder will check
     /// this before returning the handle to clients.
     fn handle_is_ready(&self, handle: &Self::Handle) -> bool;
-
-    /// Block on handle `handle`.
-    fn block_on_handle(&mut self, handle: &Self::Handle) -> StatelessBackendResult<()>;
 }
 
 pub trait VideoDecoder {
@@ -191,6 +188,9 @@ pub trait DecodedHandle {
 
     /// Returns the display resolution at the time this handle was decoded.
     fn display_resolution(&self) -> Resolution;
+
+    /// Wait until this handle has been completely rendered.
+    fn sync(&self) -> StatelessBackendResult<()>;
 }
 
 #[cfg(test)]

@@ -31,8 +31,8 @@ use crate::decoders::h264::picture::Field;
 use crate::decoders::h264::picture::PictureData;
 use crate::decoders::h264::picture::Reference;
 use crate::decoders::BlockingMode;
+use crate::decoders::DecodedHandle;
 use crate::decoders::StatelessBackendError;
-use crate::decoders::VideoDecoderBackend;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 use crate::utils::vaapi::NegotiationStatus;
 use crate::utils::vaapi::StreamInfo;
@@ -551,9 +551,7 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         first_field: &Self::Handle,
     ) -> StatelessBackendResult<Self::Picture> {
         // Block on the first field if it is not ready yet.
-        if !first_field.inner.borrow().is_ready() {
-            self.block_on_handle(first_field)?;
-        }
+        first_field.sync()?;
 
         // Decode to the same surface as the first field picture.
         let first_va_handle = first_field.inner.borrow();

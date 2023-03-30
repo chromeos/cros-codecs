@@ -67,6 +67,10 @@ impl DecodedHandle for Handle {
     fn dyn_picture_mut(&self) -> std::cell::RefMut<dyn DynHandle> {
         self.handle.borrow_mut()
     }
+
+    fn sync(&self) -> StatelessBackendResult<()> {
+        Ok(())
+    }
 }
 
 /// Dummy backend that can be used for any codec.
@@ -114,9 +118,5 @@ where
 
     fn handle_is_ready(&self, _: &Self::Handle) -> bool {
         true
-    }
-
-    fn block_on_handle(&mut self, _: &Self::Handle) -> StatelessBackendResult<()> {
-        Ok(())
     }
 }
