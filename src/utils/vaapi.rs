@@ -433,14 +433,12 @@ impl GenericBackendHandle {
         })
     }
 
-    pub(crate) fn sync(&mut self) -> Result<()> {
-        match std::mem::replace(&mut self.state, PictureState::Invalid) {
-            state @ PictureState::Ready(_) => self.state = state,
-            PictureState::Pending(picture) => {
-                self.state = PictureState::Ready(picture.sync()?);
-            }
+    pub fn sync(&mut self) -> Result<()> {
+        self.state = match std::mem::replace(&mut self.state, PictureState::Invalid) {
+            state @ PictureState::Ready(_) => state,
+            PictureState::Pending(picture) => PictureState::Ready(picture.sync()?),
             PictureState::Invalid => unreachable!(),
-        }
+        };
 
         Ok(())
     }
