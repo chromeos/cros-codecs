@@ -2695,7 +2695,7 @@ mod tests {
     fn parse_nalus_from_stream_file() {
         let mut cursor = Cursor::new(STREAM_TEST_25_FPS);
         let mut num_nalus = 0;
-        while let Ok(Some(_)) = Nalu::next(&mut cursor, STREAM_TEST_25_FPS) {
+        while let Ok(Some(_)) = Nalu::next(&mut cursor) {
             num_nalus += 1;
         }
 
@@ -2715,7 +2715,7 @@ mod tests {
 
         let mut parser = Parser::default();
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor, STREAM_TEST_25_FPS) {
+        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().type_ {
                 NaluType::Slice
                 | NaluType::SliceDpa
