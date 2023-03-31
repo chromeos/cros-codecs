@@ -109,11 +109,8 @@ impl TryInto<Surface> for PictureState {
 
     fn try_into(self) -> Result<Surface, Self::Error> {
         match self {
-            PictureState::Pending(picture) => Err(anyhow!(
-                "Attempting to retrieve a surface (id: {:?}) that might have operations pending.",
-                picture.surface_id()
-            )),
             PictureState::Ready(picture) => picture.take_surface(),
+            PictureState::Pending(picture) => picture.sync()?.take_surface(),
             PictureState::Invalid => unreachable!(),
         }
     }
