@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
-use std::collections::BinaryHeap;
 use std::io::Cursor;
 use std::rc::Rc;
 
@@ -117,41 +116,6 @@ impl Default for NegotiationStatus {
     }
 }
 
-/// A picture ready to be sent to the DecoderSession, with an ordering on its picture order so it
-/// can be placed into a `BinaryHeap`.
-struct ReadyPicture<T> {
-    /// Handle to the picture.
-    handle: T,
-    /// pic_order_cnt of the picture as per the H.264 spec.
-    pic_order: i32,
-}
-
-impl<T> ReadyPicture<T> {
-    fn new(handle: T, pic_order: i32) -> Self {
-        Self { handle, pic_order }
-    }
-}
-
-impl<T> PartialEq for ReadyPicture<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.pic_order.eq(&other.pic_order)
-    }
-}
-
-impl<T> Eq for ReadyPicture<T> {}
-
-impl<T> PartialOrd for ReadyPicture<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.pic_order.partial_cmp(&other.pic_order)
-    }
-}
-
-impl<T> Ord for ReadyPicture<T> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.pic_order.cmp(&other.pic_order)
-    }
-}
-
 pub struct Decoder<T, P>
 where
     T: DecodedHandle + Clone,
@@ -172,9 +136,8 @@ where
     /// The current coded resolution
     coded_resolution: Resolution,
 
-    /// A queue with the handles of pictures that are ready to be sent to the
-    /// DecoderSession, with the lowest order at the top.
-    ready_queue: BinaryHeap<ReadyPicture<T>>,
+    /// A queue with the pictures that are ready to be sent to the client.
+    ready_queue: Vec<T>,
 
     /// A monotonically increasing counter used to tag pictures in display
     /// order
@@ -1479,8 +1442,7 @@ where
         if matches!(pic.field, Field::Frame) {
             assert!(self.last_field.is_none());
 
-            self.ready_queue
-                .push(ReadyPicture::new(handle, pic.pic_order_cnt));
+            self.ready_queue.push(handle);
         } else if self.last_field.is_none() {
             assert!(!pic.is_second_field());
             drop(pic);
@@ -1501,10 +1463,7 @@ where
 
             field_pic.borrow_mut().set_second_field_to(&pic_rc);
 
-            self.ready_queue.push(ReadyPicture::new(
-                field_handle,
-                field_pic.borrow().pic_order_cnt,
-            ));
+            self.ready_queue.push(field_handle);
         }
     }
 
@@ -1536,7 +1495,7 @@ where
             .into_iter()
             .filter_map(|p| {
                 if let Some(handle) = p.1 {
-                    Some(ReadyPicture::new(handle, p.0.borrow().pic_order_cnt))
+                    Some(handle)
                 } else {
                     None
                 }
@@ -1708,34 +1667,30 @@ where
         self.ref_pic_list1.clear();
     }
 
-    /// Get the DecodedFrameHandles for the pictures in the ready queue, in display order.
+    /// Returns the ready handles.
     fn get_ready_frames(&mut self) -> Vec<T> {
-        // Unfortunately `BinaryHeap`'s `iter()` does not guarantee the order, so we
-        // need to convert into a vector first.
-        let mut ready_queue = std::mem::take(&mut self.ready_queue).into_sorted_vec();
-
         // Count all ready handles.
-        let num_ready = ready_queue
+        let num_ready = self
+            .ready_queue
             .iter()
-            .take_while(|&picture| self.backend.handle_is_ready(&picture.handle))
+            .take_while(|&handle| self.backend.handle_is_ready(handle))
             .count();
 
-        let retain = ready_queue.split_off(num_ready);
+        let retain = self.ready_queue.split_off(num_ready);
         // `split_off` works the opposite way of what we would like, leaving [0..num_ready) in
         // place, so we need to swap `retain` with `ready_queue`.
-        let ready = ready_queue
-            .into_iter()
-            .map(|mut picture| {
-                if DecodedHandle::display_order(&picture.handle).is_none() {
-                    picture.handle.set_display_order(self.current_display_order);
-                    self.current_display_order += 1;
-                }
-                picture.handle
-            })
-            .collect();
-        self.ready_queue = BinaryHeap::from(retain);
+        let ready = std::mem::take(&mut self.ready_queue);
+        self.ready_queue = retain;
 
         ready
+            .into_iter()
+            .map(|mut handle| {
+                handle.set_display_order(self.current_display_order);
+                self.current_display_order += 1;
+
+                handle
+            })
+            .collect()
     }
 
     /// Drain the decoder, processing all pending frames.
@@ -1744,13 +1699,7 @@ where
         self.backend.poll(BlockingMode::Blocking)?;
 
         let pics = self.dpb.drain();
-        let pics = pics
-            .into_iter()
-            .filter_map(|h| match h.1 {
-                None => None,
-                Some(handle) => Some(ReadyPicture::new(handle, h.0.borrow().pic_order_cnt)),
-            })
-            .collect::<Vec<_>>();
+        let pics = pics.into_iter().filter_map(|h| h.1).collect::<Vec<_>>();
 
         // At this point all pictures will have been decoded, as we don't buffer
         // decode requests, but instead process them immediately, so refs will
@@ -2304,7 +2253,7 @@ where
     }
 
     fn block_on_one(&mut self) -> VideoDecoderResult<()> {
-        if let Some(ReadyPicture { handle, .. }) = &self.ready_queue.peek() {
+        if let Some(handle) = &self.ready_queue.first() {
             if !self.backend.handle_is_ready(handle) {
                 return handle.sync().map_err(|e| e.into());
             }
