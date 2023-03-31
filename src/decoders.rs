@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use std::cell::RefMut;
-use std::collections::VecDeque;
 
 use thiserror::Error;
 
@@ -69,10 +68,6 @@ pub(crate) trait VideoDecoderBackend {
 
     /// Try altering the decoded format.
     fn try_format(&mut self, format: DecodedFormat) -> Result<()>;
-
-    /// Poll for any ready pictures. `block` dictates whether this call should
-    /// block on the operation or return immediately.
-    fn poll(&mut self, blocking_mode: BlockingMode) -> Result<VecDeque<Self::Handle>>;
 }
 
 pub trait VideoDecoder {
@@ -125,11 +120,6 @@ pub trait VideoDecoder {
     /// Returns the current coded resolution of the bitstream being processed.
     /// This may be None if we have not read the stream parameters yet.
     fn coded_resolution(&self) -> Option<Resolution>;
-
-    /// Polls the decoder, emitting frames for all queued decode requests. This
-    /// is similar to flush, but it does not change the state of the decoded
-    /// picture buffer nor does it reset any internal state.
-    fn poll(&mut self, blocking_mode: BlockingMode) -> Result<Vec<Box<dyn DecodedHandle>>>;
 }
 
 pub trait DynHandle {

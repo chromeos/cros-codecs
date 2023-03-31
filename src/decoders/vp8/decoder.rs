@@ -12,6 +12,7 @@ use crate::decoders::vp8::parser::Parser;
 use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
 use crate::decoders::Result as VideoDecoderResult;
+use crate::decoders::StatelessBackendResult;
 use crate::decoders::VideoDecoder;
 use crate::Resolution;
 
@@ -170,7 +171,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 
     /// Returns the ready handles.
-    fn get_ready_frames(&mut self) -> Vec<T> {
+    fn get_ready_frames(&mut self) -> StatelessBackendResult<Vec<T>> {
         // Count all ready handles.
         let num_ready = self
             .ready_queue
@@ -185,6 +186,15 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         self.ready_queue = retain;
 
         ready
+            .into_iter()
+            .map(|mut handle| {
+                handle.sync()?;
+                handle.set_display_order(self.current_display_order);
+                self.current_display_order += 1;
+
+                Ok(handle)
+            })
+            .collect()
     }
 
     /// Handle a single frame.
@@ -204,7 +214,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
 
         let show_frame = frame.header.show_frame();
 
-        let mut decoded_handle = self
+        let decoded_handle = self
             .backend
             .submit_picture(
                 &frame.header,
@@ -232,10 +242,6 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         )?;
 
         if show_frame {
-            let order = self.current_display_order;
-
-            decoded_handle.set_display_order(order);
-            self.current_display_order += 1;
             self.ready_queue.push(decoded_handle);
         }
 
@@ -270,8 +276,6 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
         match &mut self.negotiation_status {
             NegotiationStatus::NonNegotiated => {
                 if frame.header.key_frame() {
-                    self.backend.poll(BlockingMode::Blocking)?;
-
                     self.backend.new_sequence(&frame.header)?;
 
                     self.coded_resolution = Resolution {
@@ -313,11 +317,8 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
             self.block_on_one()?;
         }
 
-        self.backend.poll(self.blocking_mode)?;
-
-        let ready_frames = self.get_ready_frames();
-
-        Ok(ready_frames
+        Ok(self
+            .get_ready_frames()?
             .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
             .collect())
@@ -342,11 +343,13 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
             self.handle_frame(key_frame, timestamp, Some(parser))?;
         }
 
-        self.backend.poll(BlockingMode::Blocking)?;
+        // Make sure all frames will be output.
+        for handle in &mut self.ready_queue {
+            handle.sync()?;
+        }
 
-        let pics = self.get_ready_frames();
-
-        Ok(pics
+        Ok(self
+            .get_ready_frames()?
             .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
             .collect())
@@ -377,19 +380,8 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
     fn coded_resolution(&self) -> Option<Resolution> {
         self.backend.coded_resolution()
     }
-
-    fn poll(
-        &mut self,
-        blocking_mode: BlockingMode,
-    ) -> VideoDecoderResult<Vec<Box<dyn DecodedHandle>>> {
-        let handles = self.backend.poll(blocking_mode)?;
-
-        Ok(handles
-            .into_iter()
-            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
-            .collect())
-    }
 }
+
 #[cfg(test)]
 pub mod tests {
     use std::io::Cursor;

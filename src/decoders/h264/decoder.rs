@@ -30,6 +30,7 @@ use crate::decoders::DecodedHandle;
 use crate::decoders::Error as VideoDecoderError;
 use crate::decoders::Result as VideoDecoderResult;
 use crate::decoders::StatelessBackendError;
+use crate::decoders::StatelessBackendResult;
 use crate::decoders::VideoDecoder;
 use crate::Resolution;
 
@@ -1662,7 +1663,7 @@ where
     }
 
     /// Returns the ready handles.
-    fn get_ready_frames(&mut self) -> Vec<T> {
+    fn get_ready_frames(&mut self) -> StatelessBackendResult<Vec<T>> {
         // Count all ready handles.
         let num_ready = self
             .ready_queue
@@ -1679,21 +1680,18 @@ where
         ready
             .into_iter()
             .map(|mut handle| {
+                handle.sync()?;
                 handle.set_display_order(self.current_display_order);
                 self.current_display_order += 1;
 
-                handle
+                Ok(handle)
             })
             .collect()
     }
 
     /// Drain the decoder, processing all pending frames.
     fn drain(&mut self) -> Result<()> {
-        debug!("Draining the decoder.");
-        self.backend.poll(BlockingMode::Blocking)?;
-
         let pics = self.dpb.drain();
-        let pics = pics.into_iter().filter_map(|h| h.1).collect::<Vec<_>>();
 
         // At this point all pictures will have been decoded, as we don't buffer
         // decode requests, but instead process them immediately, so refs will
@@ -1702,7 +1700,8 @@ where
 
         // Pics in the DPB have undergone `finish_picture` already or are
         // nonexisting frames, we can just mark them as ready.
-        self.ready_queue.extend(pics);
+        self.ready_queue
+            .extend(pics.into_iter().filter_map(|h| h.1));
 
         self.dpb.clear();
 
@@ -2246,11 +2245,10 @@ where
         Ok(())
     }
 
+    /// Make sure that the next frame is ready to be sent to the client.
     fn block_on_one(&mut self) -> VideoDecoderResult<()> {
         if let Some(handle) = &self.ready_queue.first() {
-            if !handle.is_ready() {
-                return handle.sync().map_err(|e| e.into());
-            }
+            return handle.sync().map_err(|e| e.into());
         }
 
         Ok(())
@@ -2279,7 +2277,6 @@ where
         match &mut self.negotiation_status {
             NegotiationStatus::NonNegotiated => {
                 if let Some(sps) = &sps {
-                    self.backend.poll(BlockingMode::Blocking)?;
                     self.backend.new_sequence(sps)?;
 
                     self.negotiation_status = NegotiationStatus::Possible {
@@ -2307,11 +2304,8 @@ where
             self.block_on_one()?;
         }
 
-        self.backend.poll(self.blocking_mode)?;
-
-        let ready_frames = self.get_ready_frames();
-
-        Ok(ready_frames
+        Ok(self
+            .get_ready_frames()?
             .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
             .collect())
@@ -2327,9 +2321,13 @@ where
 
         self.drain()?;
 
-        let pics = self.get_ready_frames();
+        // Make sure all frames will be output.
+        for handle in &mut self.ready_queue {
+            handle.sync()?;
+        }
 
-        Ok(pics
+        Ok(self
+            .get_ready_frames()?
             .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
             .collect())
@@ -2359,18 +2357,6 @@ where
 
     fn coded_resolution(&self) -> Option<Resolution> {
         self.backend.coded_resolution()
-    }
-
-    fn poll(
-        &mut self,
-        blocking_mode: BlockingMode,
-    ) -> VideoDecoderResult<Vec<Box<dyn DecodedHandle>>> {
-        let handles = self.backend.poll(blocking_mode)?;
-
-        Ok(handles
-            .into_iter()
-            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
-            .collect())
     }
 }
 

@@ -6,10 +6,8 @@
 //! run so we can test it in isolation.
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
 use std::rc::Rc;
 
-use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
 use crate::decoders::DynHandle;
 use crate::decoders::MappableHandle;
@@ -114,9 +112,5 @@ where
 
     fn display_resolution(&self) -> Option<Resolution> {
         None
-    }
-
-    fn poll(&mut self, _: BlockingMode) -> crate::decoders::Result<VecDeque<Self::Handle>> {
-        Ok(VecDeque::new())
     }
 }

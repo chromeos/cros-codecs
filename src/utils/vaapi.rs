@@ -22,7 +22,6 @@ use libva::Surface;
 use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
 
-use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle as DecodedHandleTrait;
 use crate::decoders::DynHandle;
 use crate::decoders::Error as VideoDecoderError;
@@ -499,11 +498,6 @@ impl GenericBackendHandle {
         }
     }
 
-    /// Returns `true` if this handle is ready.
-    pub fn is_ready(&self) -> bool {
-        matches!(self.state, PictureState::Ready { .. })
-    }
-
     pub fn is_va_ready(&self) -> Result<bool> {
         match &self.state {
             PictureState::Ready(_) => Ok(true),
@@ -640,8 +634,6 @@ where
     pub(crate) metadata_state: StreamMetadataState,
     /// The negotiation status
     pub(crate) negotiation_status: NegotiationStatus<Box<StreamData>>,
-    /// The FIFO for all pending pictures, in the order they were submitted.
-    pub(crate) pending_jobs: VecDeque<Rc<RefCell<GenericBackendHandle>>>,
 }
 
 impl<StreamData> VaapiBackend<StreamData>
@@ -652,7 +644,6 @@ where
     pub(crate) fn new(display: Rc<libva::Display>) -> Self {
         Self {
             metadata_state: StreamMetadataState::Unparsed { display },
-            pending_jobs: Default::default(),
             negotiation_status: Default::default(),
         }
     }
@@ -674,8 +665,6 @@ where
         let metadata = self.metadata_state.get_parsed()?;
 
         let handle = Rc::new(RefCell::new(GenericBackendHandle::new(picture, metadata)?));
-
-        self.pending_jobs.push_back(Rc::clone(&handle));
 
         Ok(DecodedHandle::new(handle))
     }
@@ -758,28 +747,5 @@ where
                 )),
             ))
         }
-    }
-
-    fn poll(&mut self, blocking_mode: BlockingMode) -> VideoDecoderResult<VecDeque<Self::Handle>> {
-        let mut completed = VecDeque::new();
-        let candidates = self.pending_jobs.drain(..).collect::<VecDeque<_>>();
-
-        for job in candidates {
-            if matches!(blocking_mode, BlockingMode::NonBlocking) {
-                if !job.borrow().is_va_ready()? {
-                    self.pending_jobs.push_back(job);
-                    continue;
-                }
-            }
-
-            job.borrow_mut().sync()?;
-            completed.push_back(job);
-        }
-
-        let completed = completed
-            .into_iter()
-            .map(|handle| Ok(DecodedHandle::new(handle)));
-
-        completed.collect::<Result<VecDeque<_>, _>>()
     }
 }
