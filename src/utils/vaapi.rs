@@ -104,16 +104,16 @@ fn supported_formats_for_rt_format(
     Ok(supported_formats)
 }
 
-impl TryInto<Option<Surface>> for PictureState {
+impl TryInto<Surface> for PictureState {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<Option<Surface>, Self::Error> {
+    fn try_into(self) -> Result<Surface, Self::Error> {
         match self {
-            PictureState::Ready(picture) => picture.take_surface().map(Some),
             PictureState::Pending(picture) => Err(anyhow!(
                 "Attempting to retrieve a surface (id: {:?}) that might have operations pending.",
                 picture.surface_id()
             )),
+            PictureState::Ready(picture) => picture.take_surface(),
             PictureState::Invalid => unreachable!(),
         }
     }
@@ -416,7 +416,7 @@ impl Drop for GenericBackendHandle {
         // Take ownership of the internal state.
         let state = std::mem::replace(&mut self.state, PictureState::Invalid);
         if self.surface_pool.coded_resolution() == self.coded_resolution {
-            if let Ok(Some(surface)) = state.try_into() {
+            if let Ok(surface) = state.try_into() {
                 self.surface_pool.add_surface(surface);
             }
         }
