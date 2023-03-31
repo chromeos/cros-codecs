@@ -2528,94 +2528,87 @@ pub mod tests {
         test_decode_stream(h264_decoding_loop, decoder, test, false, false);
     }
 
-    /// A 16x16 progressive byte-stream encoded I-frame to make it easier to
+    /// A 64x64 progressive byte-stream encoded I-frame to make it easier to
     /// spot errors on the libva trace.
     /// Encoded with the following GStreamer pipeline:
-    /// gst-launch-1.0 videotestsrc num-buffers=1 ! video/x-raw,format=I420,width=16,height=16 ! \
-    /// x264enc ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
-    /// filesink location="/tmp/16x16-I.h264"
-    pub const DECODE_16X16_PROGRESSIVE_I: TestStream = TestStream {
-        stream: include_bytes!("test_data/16x16-I.h264"),
-        crcs: include_str!("test_data/16x16-I.h264.crc"),
+    ///
+    /// gst-launch-1.0 videotestsrc num-buffers=1 ! video/x-raw,format=I420,width=64,height=64 ! x264enc ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! filesink location="64x64-I.h264"
+    pub const DECODE_64X64_PROGRESSIVE_I: TestStream = TestStream {
+        stream: include_bytes!("test_data/64x64-I.h264"),
+        crcs: include_str!("test_data/64x64-I.h264.crc"),
     };
 
     #[test]
-    fn test_16x16_progressive_i_block() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I, BlockingMode::Blocking);
+    fn test_64x64_progressive_i_block() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I, BlockingMode::Blocking);
     }
 
     #[test]
-    fn test_16x16_progressive_i_nonblock() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I, BlockingMode::NonBlocking);
+    fn test_64x64_progressive_i_nonblock() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I, BlockingMode::NonBlocking);
     }
 
-    /// A 16x16 progressive byte-stream encoded I-frame and P-frame to make
+    /// A 64x64 progressive byte-stream encoded I-frame and P-frame to make
     /// it easier to spot errors on the libva trace.
     /// Encoded with the following GStreamer pipeline:
-    /// gst-launch-1.0 videotestsrc num-buffers=2 ! video/x-raw,format=I420,width=16,height=16 ! \
-    /// x264enc b-adapt=false ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
-    /// filesink location="/tmp/16x16-I-P.h264"
-    pub const DECODE_16X16_PROGRESSIVE_I_P: TestStream = TestStream {
-        stream: include_bytes!("test_data/16x16-I-P.h264"),
-        crcs: include_str!("test_data/16x16-I-P.h264.crc"),
+    /// gst-launch-1.0 videotestsrc num-buffers=2 ! video/x-raw,format=I420,width=64,height=64 ! x264enc b-adapt=false ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! filesink location="64x64-I-P.h264"
+    pub const DECODE_64X64_PROGRESSIVE_I_P: TestStream = TestStream {
+        stream: include_bytes!("test_data/64x64-I-P.h264"),
+        crcs: include_str!("test_data/64x64-I-P.h264.crc"),
     };
 
     #[test]
-    fn test_16x16_progressive_i_p_block() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P, BlockingMode::Blocking);
+    fn test_64x64_progressive_i_p_block() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P, BlockingMode::Blocking);
     }
 
     #[test]
-    fn test_16x16_progressive_i_p_nonblock() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P, BlockingMode::NonBlocking);
+    fn test_64x64_progressive_i_p_nonblock() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P, BlockingMode::NonBlocking);
     }
 
-    /// A 16x16 progressive byte-stream encoded I-P-B-P sequence to make it
+    /// A 64x64 progressive byte-stream encoded I-P-B-P sequence to make it
     /// easier to it easier to spot errors on the libva trace.
     /// Encoded with the following GStreamer pipeline:
-    /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=16,height=16 ! \
-    /// x264enc b-adapt=false bframes=1 ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! \
-    /// filesink location="/tmp/16x16-I-B-and-P.h264"
-    pub const DECODE_16X16_PROGRESSIVE_I_P_B_P: TestStream = TestStream {
-        stream: include_bytes!("test_data/16x16-I-P-B-P.h264"),
-        crcs: include_str!("test_data/16x16-I-P-B-P.h264.crc"),
+    /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=64,height=64 ! x264enc b-adapt=false bframes=1 ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! filesink location="64x64-I-P-B-P.h264"
+    pub const DECODE_64X64_PROGRESSIVE_I_P_B_P: TestStream = TestStream {
+        stream: include_bytes!("test_data/64x64-I-P-B-P.h264"),
+        crcs: include_str!("test_data/64x64-I-P-B-P.h264.crc"),
     };
 
     #[test]
-    fn test_16x16_progressive_i_p_b_p_block() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P_B_P, BlockingMode::Blocking);
+    fn test_64x64_progressive_i_p_b_p_block() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P_B_P, BlockingMode::Blocking);
     }
 
     #[test]
-    fn test_16x16_progressive_i_p_b_p_nonblock() {
-        test_decoder_dummy(&DECODE_16X16_PROGRESSIVE_I_P_B_P, BlockingMode::NonBlocking);
+    fn test_64x64_progressive_i_p_b_p_nonblock() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P_B_P, BlockingMode::NonBlocking);
     }
 
-    /// A 16x16 progressive byte-stream encoded I-P-B-P sequence to make it
+    /// A 64x64 progressive byte-stream encoded I-P-B-P sequence to make it
     /// easier to it easier to spot errors on the libva trace.
     /// Also tests whether the decoder supports the high profile.
     ///
     /// Encoded with the following GStreamer pipeline:
-    /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=16,height=16 ! \
-    /// x264enc b-adapt=false bframes=1 ! video/x-h264,profile=high,stream-format=byte-stream ! \
-    /// filesink location="/tmp/16x16-I-B-and-P-high.h264"
-    pub const DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH: TestStream = TestStream {
-        stream: include_bytes!("test_data/16x16-I-P-B-P-high.h264"),
-        crcs: include_str!("test_data/16x16-I-P-B-P-high.h264.crc"),
+    /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=64,height=64 ! x264enc b-adapt=false bframes=1 ! video/x-h264,profile=high,stream-format=byte-stream ! filesink location="64x64-I-P-B-P-high.h264"
+    pub const DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH: TestStream = TestStream {
+        stream: include_bytes!("test_data/64x64-I-P-B-P-high.h264"),
+        crcs: include_str!("test_data/64x64-I-P-B-P-high.h264.crc"),
     };
 
     #[test]
-    fn test_16x16_progressive_i_p_b_p_high_block() {
+    fn test_64x64_progressive_i_p_b_p_high_block() {
         test_decoder_dummy(
-            &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH,
+            &DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH,
             BlockingMode::Blocking,
         );
     }
 
     #[test]
-    fn test_16x16_progressive_i_p_b_p_high_nonblock() {
+    fn test_64x64_progressive_i_p_b_p_high_nonblock() {
         test_decoder_dummy(
-            &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH,
+            &DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH,
             BlockingMode::NonBlocking,
         );
     }

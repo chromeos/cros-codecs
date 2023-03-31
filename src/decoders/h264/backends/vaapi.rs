@@ -587,58 +587,58 @@ mod tests {
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_block() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I;
-        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I, BlockingMode::Blocking);
+    fn test_64x64_progressive_i_block() {
+        use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I;
+        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I, BlockingMode::Blocking);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_nonblock() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I;
-        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I, BlockingMode::NonBlocking);
+    fn test_64x64_progressive_i_nonblock() {
+        use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I;
+        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I, BlockingMode::NonBlocking);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_p_block() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P;
-        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I_P, BlockingMode::Blocking);
+    fn test_64x64_progressive_i_p_block() {
+        use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P;
+        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I_P, BlockingMode::Blocking);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_p_nonblock() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P;
-        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I_P, BlockingMode::NonBlocking);
+    fn test_64x64_progressive_i_p_nonblock() {
+        use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P;
+        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I_P, BlockingMode::NonBlocking);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_p_b_p_block() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P_B_P;
-        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I_P_B_P, BlockingMode::Blocking);
+    fn test_64x64_progressive_i_p_b_p_block() {
+        use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P_B_P;
+        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I_P_B_P, BlockingMode::Blocking);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_p_b_p_nonblock() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P_B_P;
-        test_decoder_vaapi(&DECODE_16X16_PROGRESSIVE_I_P_B_P, BlockingMode::NonBlocking);
+    fn test_64x64_progressive_i_p_b_p_nonblock() {
+        use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P_B_P;
+        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I_P_B_P, BlockingMode::NonBlocking);
     }
 
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_p_b_p_high_block() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH;
+    fn test_64x64_progressive_i_p_b_p_high_block() {
+        use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH;
         test_decoder_vaapi(
-            &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH,
+            &DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH,
             BlockingMode::Blocking,
         );
     }
@@ -646,10 +646,10 @@ mod tests {
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_16x16_progressive_i_p_b_p_high_nonblock() {
-        use crate::decoders::h264::decoder::tests::DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH;
+    fn test_64x64_progressive_i_p_b_p_high_nonblock() {
+        use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH;
         test_decoder_vaapi(
-            &DECODE_16X16_PROGRESSIVE_I_P_B_P_HIGH,
+            &DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH,
             BlockingMode::NonBlocking,
         );
     }
