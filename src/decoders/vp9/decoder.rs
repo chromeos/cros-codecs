@@ -426,12 +426,11 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
             .map_err(|e| anyhow!(e))?;
 
         for frame in frames {
-            if matches!(frame.header.frame_type, FrameType::KeyFrame) {
-                if self.negotiation_possible(&frame)
-                    && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
-                {
-                    self.negotiation_status = NegotiationStatus::NonNegotiated;
-                }
+            if matches!(frame.header.frame_type, FrameType::KeyFrame)
+                && self.negotiation_possible(&frame)
+                && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
+            {
+                self.negotiation_status = NegotiationStatus::NonNegotiated;
             }
 
             match &mut self.negotiation_status {

@@ -1493,13 +1493,7 @@ where
         let bumped = self
             .bump_as_needed(&pic)
             .into_iter()
-            .filter_map(|p| {
-                if let Some(handle) = p.1 {
-                    Some(handle)
-                } else {
-                    None
-                }
-            })
+            .filter_map(|p| p.1)
             .collect::<Vec<_>>();
         self.ready_queue.extend(bumped);
 

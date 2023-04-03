@@ -260,12 +260,11 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
     ) -> VideoDecoderResult<Vec<Box<dyn DecodedHandle>>> {
         let frame = self.parser.parse_frame(bitstream).map_err(|e| anyhow!(e))?;
 
-        if frame.header.key_frame() {
-            if self.negotiation_possible(&frame)
-                && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
-            {
-                self.negotiation_status = NegotiationStatus::NonNegotiated;
-            }
+        if frame.header.key_frame()
+            && self.negotiation_possible(&frame)
+            && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
+        {
+            self.negotiation_status = NegotiationStatus::NonNegotiated;
         }
 
         match &mut self.negotiation_status {
