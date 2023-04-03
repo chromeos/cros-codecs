@@ -657,7 +657,7 @@ mod tests {
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_25fps_h264_block() {
+    fn test_25fps_block() {
         use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS;
         test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::Blocking);
     }
@@ -665,7 +665,7 @@ mod tests {
     #[test]
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
-    fn test_25fps_h264_nonblock() {
+    fn test_25fps_nonblock() {
         use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS;
         test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
     }

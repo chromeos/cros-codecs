@@ -845,7 +845,7 @@ mod tests {
     const VP8_TEST_0_INTER: &[u8] = include_bytes!("test_data/vp8-parser-test-0-inter.bin");
 
     #[test]
-    fn gst_vp8parser_test_intra() {
+    fn gst_intra() {
         let mut parser = Parser::default();
         let frame = parser
             .parse_frame(VP8_TEST_0_INTRA)
@@ -879,7 +879,7 @@ mod tests {
     }
 
     #[test]
-    fn gst_vp8parser_test_inter() {
+    fn gst_inter() {
         let mut parser = Parser::default();
         let frame = parser
             .parse_frame(VP8_TEST_0_INTER)

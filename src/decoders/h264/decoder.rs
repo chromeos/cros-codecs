@@ -2620,12 +2620,12 @@ pub mod tests {
     };
 
     #[test]
-    fn test_25fps_h264_block() {
+    fn test_25fps_block() {
         test_decoder_dummy(&DECODE_TEST_25FPS, BlockingMode::Blocking);
     }
 
     #[test]
-    fn test_25fps_h264_nonblock() {
+    fn test_25fps_nonblock() {
         test_decoder_dummy(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
     }
 
@@ -2644,12 +2644,12 @@ pub mod tests {
     };
 
     #[test]
-    fn test_25fps_interlaced_h264_block() {
+    fn test_25fps_interlaced_block() {
         test_decoder_dummy(&DECODE_TEST_25FPS_INTERLACED, BlockingMode::Blocking);
     }
 
     #[test]
-    fn test_25fps_interlaced_h264_nonblock() {
+    fn test_25fps_interlaced_nonblock() {
         test_decoder_dummy(&DECODE_TEST_25FPS_INTERLACED, BlockingMode::NonBlocking);
     }
 }

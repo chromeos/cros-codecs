@@ -1005,7 +1005,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_vp9_superframe() {
+    fn test_parse_superframe() {
         // Demuxed, raw vp9 superframe
         const VP9_TEST_SUPERFRAME: &[u8] = include_bytes!("test_data/vp9-superframe.bin");
 
@@ -1022,7 +1022,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_test25fps_vp9() {
+    fn test_parse_test25fps() {
         // Muxed as IVF
         const TEST_STREAM: &[u8] = include_bytes!("test_data/test-25fps.vp9");
 
