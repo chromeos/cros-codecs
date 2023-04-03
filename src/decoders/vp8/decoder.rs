@@ -175,7 +175,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         let num_ready = self
             .ready_queue
             .iter()
-            .take_while(|&handle| self.backend.handle_is_ready(handle))
+            .take_while(|&handle| handle.is_ready())
             .count();
 
         let retain = self.ready_queue.split_off(num_ready);

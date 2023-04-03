@@ -71,6 +71,10 @@ impl DecodedHandle for Handle {
     fn sync(&self) -> StatelessBackendResult<()> {
         Ok(())
     }
+
+    fn is_ready(&self) -> bool {
+        true
+    }
 }
 
 /// Dummy backend that can be used for any codec.
@@ -114,9 +118,5 @@ where
 
     fn poll(&mut self, _: BlockingMode) -> crate::decoders::Result<VecDeque<Self::Handle>> {
         Ok(VecDeque::new())
-    }
-
-    fn handle_is_ready(&self, _: &Self::Handle) -> bool {
-        true
     }
 }

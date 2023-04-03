@@ -1667,7 +1667,7 @@ where
         let num_ready = self
             .ready_queue
             .iter()
-            .take_while(|&handle| self.backend.handle_is_ready(handle))
+            .take_while(|&handle| handle.is_ready())
             .count();
 
         let retain = self.ready_queue.split_off(num_ready);
@@ -2248,7 +2248,7 @@ where
 
     fn block_on_one(&mut self) -> VideoDecoderResult<()> {
         if let Some(handle) = &self.ready_queue.first() {
-            if !self.backend.handle_is_ready(handle) {
+            if !handle.is_ready() {
                 return handle.sync().map_err(|e| e.into());
             }
         }

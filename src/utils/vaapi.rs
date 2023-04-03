@@ -168,6 +168,10 @@ impl DecodedHandleTrait for DecodedHandle {
         self.inner.borrow_mut()
     }
 
+    fn is_ready(&self) -> bool {
+        self.inner.borrow().is_va_ready().unwrap_or(true)
+    }
+
     fn sync(&self) -> StatelessBackendResult<()> {
         self.inner.borrow_mut().sync().map_err(|e| e.into())
     }
@@ -777,9 +781,5 @@ where
             .map(|handle| Ok(DecodedHandle::new(handle)));
 
         completed.collect::<Result<VecDeque<_>, _>>()
-    }
-
-    fn handle_is_ready(&self, handle: &Self::Handle) -> bool {
-        handle.inner.borrow().is_ready()
     }
 }
