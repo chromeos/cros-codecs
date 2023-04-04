@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use std::cell::RefMut;
+use std::collections::VecDeque;
 
 use thiserror::Error;
 
@@ -181,7 +182,7 @@ pub trait DecodedHandle {
 /// retrieved.
 pub struct ReadyFramesQueue<T: DecodedHandle> {
     /// Queue of all the frames waiting to be sent to the client.
-    queue: Vec<T>,
+    queue: VecDeque<T>,
     /// A monotonically increasing counter used to tag frames in display
     /// order
     display_order: u64,
@@ -199,12 +200,12 @@ impl<T: DecodedHandle> Default for ReadyFramesQueue<T> {
 impl<T: DecodedHandle> ReadyFramesQueue<T> {
     /// Return a reference to the next frame, of `None` if there aren't any.
     pub fn peek(&self) -> Option<&T> {
-        self.queue.first()
+        self.queue.front()
     }
 
     /// Push `handle` to the back of the queue.
     pub fn push(&mut self, handle: T) {
-        self.queue.push(handle)
+        self.queue.push_back(handle)
     }
 
     /// Returns all the frames that are decoded.
@@ -241,21 +242,14 @@ impl<T: DecodedHandle> Extend<T> for ReadyFramesQueue<T> {
     }
 }
 
-impl<'a, T: DecodedHandle> IntoIterator for &'a ReadyFramesQueue<T> {
-    type Item = <&'a Vec<T> as IntoIterator>::Item;
-    type IntoIter = <&'a Vec<T> as IntoIterator>::IntoIter;
+/// Allows us to manipulate the frames list like an iterator without consuming it and resetting its
+/// display order counter.
+impl<'a, T: DecodedHandle> Iterator for &'a mut ReadyFramesQueue<T> {
+    type Item = T;
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.queue.iter()
-    }
-}
-
-impl<'a, T: DecodedHandle> IntoIterator for &'a mut ReadyFramesQueue<T> {
-    type Item = <&'a mut Vec<T> as IntoIterator>::Item;
-    type IntoIter = <&'a mut Vec<T> as IntoIterator>::IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.queue.iter_mut()
+    /// Returns the next frame (if any) waiting to be dequeued.
+    fn next(&mut self) -> Option<T> {
+        self.queue.pop_front()
     }
 }
 

@@ -2283,15 +2283,8 @@ where
 
         self.drain();
 
-        // Make sure all frames will be output.
-        for handle in &mut self.ready_queue {
-            handle.sync()?;
-        }
-
         Ok(self
             .ready_queue
-            .get_ready_frames()?
-            .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
             .collect())
     }
