@@ -10,8 +10,8 @@ use crate::decoders::vp8::parser::Header;
 use crate::decoders::vp8::parser::Parser;
 use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
+use crate::decoders::ReadyFramesQueue;
 use crate::decoders::Result as VideoDecoderResult;
-use crate::decoders::StatelessBackendResult;
 use crate::decoders::VideoDecoder;
 use crate::Resolution;
 
@@ -55,12 +55,7 @@ pub struct Decoder<T: DecodedHandle> {
     /// The current resolution
     coded_resolution: Resolution,
 
-    /// A queue with the pictures that are ready to be sent to the client.
-    ready_queue: Vec<T>,
-
-    /// A monotonically increasing counter used to tag pictures in display
-    /// order
-    current_display_order: u64,
+    ready_queue: ReadyFramesQueue<T>,
 
     /// The picture used as the last reference picture.
     last_picture: Option<T>,
@@ -88,7 +83,6 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
             alt_ref_picture: Default::default(),
             coded_resolution: Default::default(),
             ready_queue: Default::default(),
-            current_display_order: Default::default(),
         })
     }
 
@@ -162,38 +156,11 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 
     fn block_on_one(&mut self) -> anyhow::Result<()> {
-        if let Some(handle) = self.ready_queue.first() {
+        if let Some(handle) = self.ready_queue.peek() {
             return handle.sync().map_err(|e| e.into());
         }
 
         Ok(())
-    }
-
-    /// Returns the ready handles.
-    fn get_ready_frames(&mut self) -> StatelessBackendResult<Vec<T>> {
-        // Count all ready handles.
-        let num_ready = self
-            .ready_queue
-            .iter()
-            .take_while(|&handle| handle.is_ready())
-            .count();
-
-        let retain = self.ready_queue.split_off(num_ready);
-        // `split_off` works the opposite way of what we would like, leaving [0..num_ready) in
-        // place, so we need to swap `retain` with `ready_queue`.
-        let ready = std::mem::take(&mut self.ready_queue);
-        self.ready_queue = retain;
-
-        ready
-            .into_iter()
-            .map(|mut handle| {
-                handle.sync()?;
-                handle.set_display_order(self.current_display_order);
-                self.current_display_order += 1;
-
-                Ok(handle)
-            })
-            .collect()
     }
 
     /// Handle a single frame.
@@ -317,6 +284,7 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
         }
 
         Ok(self
+            .ready_queue
             .get_ready_frames()?
             .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
@@ -348,6 +316,7 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
         }
 
         Ok(self
+            .ready_queue
             .get_ready_frames()?
             .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)

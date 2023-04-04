@@ -177,6 +177,88 @@ pub trait DecodedHandle {
     fn sync(&self) -> StatelessBackendResult<()>;
 }
 
+/// A queue where decoding jobs wait until they are completed, at which point they can be
+/// retrieved.
+pub struct ReadyFramesQueue<T: DecodedHandle> {
+    /// Queue of all the frames waiting to be sent to the client.
+    queue: Vec<T>,
+    /// A monotonically increasing counter used to tag frames in display
+    /// order
+    display_order: u64,
+}
+
+impl<T: DecodedHandle> Default for ReadyFramesQueue<T> {
+    fn default() -> Self {
+        Self {
+            queue: Default::default(),
+            display_order: 0,
+        }
+    }
+}
+
+impl<T: DecodedHandle> ReadyFramesQueue<T> {
+    /// Return a reference to the next frame, of `None` if there aren't any.
+    pub fn peek(&self) -> Option<&T> {
+        self.queue.first()
+    }
+
+    /// Push `handle` to the back of the queue.
+    pub fn push(&mut self, handle: T) {
+        self.queue.push(handle)
+    }
+
+    /// Returns all the frames that are decoded.
+    pub fn get_ready_frames(&mut self) -> StatelessBackendResult<Vec<T>> {
+        // Count all ready handles.
+        let num_ready = self
+            .queue
+            .iter()
+            .take_while(|&handle| handle.is_ready())
+            .count();
+
+        let retain = self.queue.split_off(num_ready);
+        // `split_off` works the opposite way of what we would like, leaving [0..num_ready) in
+        // place, so we need to swap `retain` with `ready_queue`.
+        let ready = std::mem::take(&mut self.queue);
+        self.queue = retain;
+
+        ready
+            .into_iter()
+            .map(|mut handle| {
+                handle.sync()?;
+                handle.set_display_order(self.display_order);
+                self.display_order += 1;
+
+                Ok(handle)
+            })
+            .collect()
+    }
+}
+
+impl<T: DecodedHandle> Extend<T> for ReadyFramesQueue<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        self.queue.extend(iter)
+    }
+}
+
+impl<'a, T: DecodedHandle> IntoIterator for &'a ReadyFramesQueue<T> {
+    type Item = <&'a Vec<T> as IntoIterator>::Item;
+    type IntoIter = <&'a Vec<T> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.queue.iter()
+    }
+}
+
+impl<'a, T: DecodedHandle> IntoIterator for &'a mut ReadyFramesQueue<T> {
+    type Item = <&'a mut Vec<T> as IntoIterator>::Item;
+    type IntoIter = <&'a mut Vec<T> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.queue.iter_mut()
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::decoders::DecodedHandle;

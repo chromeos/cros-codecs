@@ -27,9 +27,9 @@ use crate::decoders::h264::picture::Reference;
 use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
 use crate::decoders::Error as VideoDecoderError;
+use crate::decoders::ReadyFramesQueue;
 use crate::decoders::Result as VideoDecoderResult;
 use crate::decoders::StatelessBackendError;
-use crate::decoders::StatelessBackendResult;
 use crate::decoders::VideoDecoder;
 use crate::Resolution;
 
@@ -136,12 +136,7 @@ where
     /// The current coded resolution
     coded_resolution: Resolution,
 
-    /// A queue with the pictures that are ready to be sent to the client.
-    ready_queue: Vec<T>,
-
-    /// A monotonically increasing counter used to tag pictures in display
-    /// order
-    current_display_order: u64,
+    ready_queue: ReadyFramesQueue<T>,
 
     /// The decoded picture buffer
     dpb: Dpb<T>,
@@ -231,7 +226,6 @@ where
             negotiation_status: Default::default(),
             dpb: Default::default(),
             max_num_reorder_frames: Default::default(),
-            current_display_order: Default::default(),
             cur_sps_id: Default::default(),
             cur_pps_id: Default::default(),
             prev_ref_pic_info: Default::default(),
@@ -1665,33 +1659,6 @@ where
         self.ref_pic_list1.clear();
     }
 
-    /// Returns the ready handles.
-    fn get_ready_frames(&mut self) -> StatelessBackendResult<Vec<T>> {
-        // Count all ready handles.
-        let num_ready = self
-            .ready_queue
-            .iter()
-            .take_while(|&handle| handle.is_ready())
-            .count();
-
-        let retain = self.ready_queue.split_off(num_ready);
-        // `split_off` works the opposite way of what we would like, leaving [0..num_ready) in
-        // place, so we need to swap `retain` with `ready_queue`.
-        let ready = std::mem::take(&mut self.ready_queue);
-        self.ready_queue = retain;
-
-        ready
-            .into_iter()
-            .map(|mut handle| {
-                handle.sync()?;
-                handle.set_display_order(self.current_display_order);
-                self.current_display_order += 1;
-
-                Ok(handle)
-            })
-            .collect()
-    }
-
     /// Drain the decoder, processing all pending frames.
     fn drain(&mut self) -> anyhow::Result<()> {
         let pics = self.dpb.drain();
@@ -2253,7 +2220,7 @@ where
 
     /// Make sure that the next frame is ready to be sent to the client.
     fn block_on_one(&mut self) -> anyhow::Result<()> {
-        if let Some(handle) = &self.ready_queue.first() {
+        if let Some(handle) = &self.ready_queue.peek() {
             return handle.sync().map_err(|e| e.into());
         }
 
@@ -2311,6 +2278,7 @@ where
         }
 
         Ok(self
+            .ready_queue
             .get_ready_frames()?
             .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
@@ -2333,6 +2301,7 @@ where
         }
 
         Ok(self
+            .ready_queue
             .get_ready_frames()?
             .into_iter()
             .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
