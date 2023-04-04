@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use anyhow::anyhow;
-use anyhow::Result;
 
 use crate::decoders::vp8::backends::StatelessDecoderBackend;
 use crate::decoders::vp8::parser::Frame;
@@ -77,7 +76,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     pub(crate) fn new(
         backend: Box<dyn StatelessDecoderBackend<Handle = T>>,
         blocking_mode: BlockingMode,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             backend,
             blocking_mode,
@@ -104,7 +103,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         last_picture: &mut Option<T>,
         golden_ref_picture: &mut Option<T>,
         alt_ref_picture: &mut Option<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if header.key_frame() {
             Decoder::replace_reference(last_picture, decoded_handle);
             Decoder::replace_reference(golden_ref_picture, decoded_handle);
@@ -162,7 +161,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         Ok(())
     }
 
-    fn block_on_one(&mut self) -> Result<()> {
+    fn block_on_one(&mut self) -> anyhow::Result<()> {
         if let Some(handle) = self.ready_queue.first() {
             return handle.sync().map_err(|e| e.into());
         }
@@ -203,7 +202,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         frame: Frame<&[u8]>,
         timestamp: u64,
         queued_parser_state: Option<Parser>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let parser = match &queued_parser_state {
             Some(parser) => parser,
             None => &self.parser,

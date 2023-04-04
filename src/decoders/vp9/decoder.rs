@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use anyhow::anyhow;
-use anyhow::Result;
 use log::debug;
 
 use crate::decoders::vp9::backends::StatelessDecoderBackend;
@@ -123,7 +122,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     pub(crate) fn new(
         backend: Box<dyn StatelessDecoderBackend<Handle = T>>,
         blocking_mode: BlockingMode,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             backend,
             blocking_mode,
@@ -148,7 +147,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         reference_frames: &mut [Option<T>; NUM_REF_FRAMES],
         picture: &T,
         mut refresh_frame_flags: u8,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         #[allow(clippy::needless_range_loop)]
         for i in 0..NUM_REF_FRAMES {
             if (refresh_frame_flags & 1) == 1 {
@@ -162,7 +161,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         Ok(())
     }
 
-    fn block_on_one(&mut self) -> Result<()> {
+    fn block_on_one(&mut self) -> anyhow::Result<()> {
         if let Some(handle) = self.ready_queue.first() {
             return handle.sync().map_err(|e| e.into());
         }
@@ -198,7 +197,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 
     /// Handle a single frame.
-    fn handle_frame(&mut self, frame: &Frame<&[u8]>, timestamp: u64) -> Result<()> {
+    fn handle_frame(&mut self, frame: &Frame<&[u8]>, timestamp: u64) -> anyhow::Result<()> {
         let mut decoded_handle = if frame.header.show_existing_frame {
             // Frame to be shown. Unwrapping must produce a Picture, because the
             // spec mandates frame_to_show_map_idx references a valid entry in
@@ -311,7 +310,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 
     /// An implementation of get_dc_quant as per "8.6.1 Dequantization functions"
-    fn get_dc_quant(hdr: &Header, segment_id: u8, luma: bool) -> Result<i32> {
+    fn get_dc_quant(hdr: &Header, segment_id: u8, luma: bool) -> anyhow::Result<i32> {
         let delta_q_dc = if luma {
             hdr.quant.delta_q_y_dc
         } else {
@@ -327,7 +326,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 
     /// An implementation of get_ac_quant as per "8.6.1 Dequantization functions"
-    fn get_ac_quant(hdr: &Header, segment_id: u8, luma: bool) -> Result<i32> {
+    fn get_ac_quant(hdr: &Header, segment_id: u8, luma: bool) -> anyhow::Result<i32> {
         let delta_q_ac = if luma { 0 } else { hdr.quant.delta_q_uv_ac };
         let qindex = Self::get_qindex(hdr, segment_id);
         let q_table_idx = usize::try_from(Self::clamp(qindex + i32::from(delta_q_ac), 0, 255))?;
@@ -343,7 +342,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     pub(crate) fn update_segmentation(
         hdr: &Header,
         segmentation: &mut [Segmentation; MAX_SEGMENTS],
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let lf = &hdr.lf;
         let seg = &hdr.seg;
 

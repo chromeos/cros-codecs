@@ -8,7 +8,6 @@ use std::rc::Rc;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use anyhow::Result;
 use log::debug;
 
 use crate::decoders::h264::backends::StatelessDecoderBackend;
@@ -223,7 +222,7 @@ where
     pub(crate) fn new(
         backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             backend,
             blocking_mode,
@@ -257,7 +256,7 @@ where
         sps: &Sps,
         dpb: &Dpb<T>,
         current_resolution: Resolution,
-    ) -> Result<bool> {
+    ) -> anyhow::Result<bool> {
         let max_dpb_frames = sps.max_dpb_frames()?;
 
         let prev_max_dpb_frames = dpb.max_num_pics();
@@ -299,7 +298,7 @@ where
         }
     }
 
-    fn process_sps(&mut self, nalu: &Nalu<impl AsRef<[u8]>>) -> Result<()> {
+    fn process_sps(&mut self, nalu: &Nalu<impl AsRef<[u8]>>) -> anyhow::Result<()> {
         let sps = self.parser.parse_sps(nalu)?;
         let negotiation_possible =
             Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)?;
@@ -331,7 +330,7 @@ where
         Ok(())
     }
 
-    fn compute_pic_order_count(&mut self, pic: &mut PictureData) -> Result<()> {
+    fn compute_pic_order_count(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         let sps = self
             .parser
             .get_sps(self.cur_sps_id)
@@ -510,7 +509,7 @@ where
         Ok(())
     }
 
-    fn update_pic_nums(&mut self, frame_num: i32, current_pic: &PictureData) -> Result<()> {
+    fn update_pic_nums(&mut self, frame_num: i32, current_pic: &PictureData) -> anyhow::Result<()> {
         for mut pic in self.dpb.pictures_mut() {
             if !pic.is_ref() {
                 continue;
@@ -1027,7 +1026,7 @@ where
         }
     }
 
-    fn sliding_window_marking(&mut self, pic: &mut PictureData) -> Result<()> {
+    fn sliding_window_marking(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         // If the current picture is a coded field that is the second field in
         // decoding order of a complementary reference field pair, and the first
         // field has been marked as "used for short-term reference", the current
@@ -1070,7 +1069,7 @@ where
         Ok(())
     }
 
-    fn mmco_op_1(&self, pic: &PictureData, marking: usize) -> Result<()> {
+    fn mmco_op_1(&self, pic: &PictureData, marking: usize) -> anyhow::Result<()> {
         let marking = &pic.ref_pic_marking.inner()[marking];
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1()).unwrap() + 1);
@@ -1091,7 +1090,7 @@ where
         Ok(())
     }
 
-    fn mmco_op_2(&self, pic: &PictureData, marking: usize) -> Result<()> {
+    fn mmco_op_2(&self, pic: &PictureData, marking: usize) -> anyhow::Result<()> {
         let marking = &pic.ref_pic_marking.inner()[marking];
 
         log::debug!(
@@ -1116,7 +1115,7 @@ where
         Ok(())
     }
 
-    fn mmco_op_3(&self, pic: &PictureData, marking: usize) -> Result<()> {
+    fn mmco_op_3(&self, pic: &PictureData, marking: usize) -> anyhow::Result<()> {
         let marking = &pic.ref_pic_marking.inner()[marking];
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1()).unwrap() + 1);
@@ -1221,7 +1220,7 @@ where
         Ok(())
     }
 
-    fn mmco_op_4(&mut self, pic: &PictureData, marking: usize) -> Result<()> {
+    fn mmco_op_4(&mut self, pic: &PictureData, marking: usize) -> anyhow::Result<()> {
         let marking = &pic.ref_pic_marking.inner()[marking];
 
         self.curr_info.max_long_term_frame_idx = marking.max_long_term_frame_idx_plus1() - 1;
@@ -1244,7 +1243,7 @@ where
         Ok(())
     }
 
-    fn mmco_op_5(&mut self, pic: &mut PictureData) -> Result<()> {
+    fn mmco_op_5(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         log::debug!("MMCO op 5, marking all pictures in the DPB as unused for reference");
         log::trace!("Dpb state before MMCO=5: {:#?}", self.dpb);
 
@@ -1289,7 +1288,7 @@ where
         Ok(())
     }
 
-    fn mmco_op_6(&mut self, pic: &mut PictureData, marking: usize) -> Result<()> {
+    fn mmco_op_6(&mut self, pic: &mut PictureData, marking: usize) -> anyhow::Result<()> {
         let marking = &pic.ref_pic_marking.inner()[marking];
         let long_term_frame_idx = i32::try_from(marking.long_term_frame_idx()).unwrap();
 
@@ -1342,7 +1341,7 @@ where
         Ok(())
     }
 
-    fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> Result<()> {
+    fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         let markings = pic.ref_pic_marking.clone();
 
         for (i, marking) in markings.inner().iter().enumerate() {
@@ -1384,7 +1383,7 @@ where
         prev.frame_num_offset = pic.frame_num_offset;
     }
 
-    fn reference_pic_marking(&mut self, pic: &mut PictureData) -> Result<()> {
+    fn reference_pic_marking(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         /* 8.2.5.1 */
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             self.dpb.mark_all_as_unused_for_ref();
@@ -1410,7 +1409,11 @@ where
         Ok(())
     }
 
-    fn add_to_dpb(&mut self, pic: Rc<RefCell<PictureData>>, handle: Option<T>) -> Result<()> {
+    fn add_to_dpb(
+        &mut self,
+        pic: Rc<RefCell<PictureData>>,
+        handle: Option<T>,
+    ) -> anyhow::Result<()> {
         if !self.dpb.interlaced() {
             assert!(self.last_field.is_none());
 
@@ -1468,7 +1471,7 @@ where
         }
     }
 
-    fn finish_picture(&mut self, mut pic: PictureData, handle: T) -> Result<()> {
+    fn finish_picture(&mut self, mut pic: PictureData, handle: T) -> anyhow::Result<()> {
         debug!("Finishing picture POC {:?}", pic.pic_order_cnt);
 
         if matches!(pic.reference(), Reference::ShortTerm | Reference::LongTerm) {
@@ -1539,7 +1542,7 @@ where
         Ok(())
     }
 
-    fn handle_frame_num_gap(&mut self, frame_num: i32, timestamp: u64) -> Result<()> {
+    fn handle_frame_num_gap(&mut self, frame_num: i32, timestamp: u64) -> anyhow::Result<()> {
         if self.dpb.len() == 0 {
             return Ok(());
         }
@@ -1592,7 +1595,7 @@ where
         slice: &Slice<&[u8]>,
         first_field: Option<Rc<RefCell<PictureData>>>,
         timestamp: u64,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let pps = self
             .parser
             .get_pps(slice.header().pic_parameter_set_id())
@@ -1690,7 +1693,7 @@ where
     }
 
     /// Drain the decoder, processing all pending frames.
-    fn drain(&mut self) -> Result<()> {
+    fn drain(&mut self) -> anyhow::Result<()> {
         let pics = self.dpb.drain();
 
         // At this point all pictures will have been decoded, as we don't buffer
@@ -1713,7 +1716,7 @@ where
     fn find_first_field(
         &mut self,
         slice: &Slice<impl AsRef<[u8]>>,
-    ) -> Result<Option<(Rc<RefCell<PictureData>>, T)>> {
+    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, T)>> {
         let mut prev_field = None;
 
         if self.dpb.interlaced() {
@@ -1776,7 +1779,7 @@ where
 
     /// Handle a picture. Called only once. Uses an heuristic to determine when
     /// a new picture starts in the slice NALUs.
-    fn handle_picture(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> Result<()> {
+    fn handle_picture(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
         let nalu_hdr = slice.nalu().header();
 
         if nalu_hdr.idr_pic_flag() {
@@ -1890,7 +1893,7 @@ where
         rplm: &RefPicListModification,
         pic_num_lx_pred: &mut i32,
         ref_idx_lx: &mut usize,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let pic_num_lx_no_wrap;
         let abs_diff_pic_num = rplm.abs_diff_pic_num_minus1() as i32 + 1;
         let modification_of_pic_nums_idc = rplm.modification_of_pic_nums_idc();
@@ -1972,7 +1975,7 @@ where
         ref_pic_list: RefPicList,
         rplm: &RefPicListModification,
         ref_idx_lx: &mut usize,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let long_term_pic_num = rplm.long_term_pic_num();
 
         let handle = self
@@ -2027,7 +2030,7 @@ where
         &mut self,
         current_slice: &Slice<impl AsRef<[u8]>>,
         ref_pic_list: RefPicList,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let hdr = current_slice.header();
 
         let ref_pic_list_modification_flag_lx = match ref_pic_list {
@@ -2086,7 +2089,10 @@ where
         Ok(())
     }
 
-    fn modify_ref_pic_lists(&mut self, current_slice: &Slice<impl AsRef<[u8]>>) -> Result<()> {
+    fn modify_ref_pic_lists(
+        &mut self,
+        current_slice: &Slice<impl AsRef<[u8]>>,
+    ) -> anyhow::Result<()> {
         self.ref_pic_list0.clear();
         self.ref_pic_list1.clear();
 
@@ -2104,7 +2110,7 @@ where
     }
 
     /// Handle a slice. Called once per slice NALU.
-    fn handle_slice(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> Result<()> {
+    fn handle_slice(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
         let cur_pic = self.cur_pic.as_ref().unwrap();
         if self.dpb.interlaced()
             && matches!(cur_pic.field, Field::Frame)
@@ -2246,7 +2252,7 @@ where
     }
 
     /// Make sure that the next frame is ready to be sent to the client.
-    fn block_on_one(&mut self) -> VideoDecoderResult<()> {
+    fn block_on_one(&mut self) -> anyhow::Result<()> {
         if let Some(handle) = &self.ready_queue.first() {
             return handle.sync().map_err(|e| e.into());
         }

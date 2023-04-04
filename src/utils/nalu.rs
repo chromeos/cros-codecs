@@ -1,12 +1,11 @@
 use anyhow::anyhow;
-use anyhow::Result;
 use bytes::Buf;
 use std::fmt::Debug;
 use std::io::Cursor;
 
 pub trait Header: Sized {
     /// Parse the NALU header, returning it.
-    fn parse<T: AsRef<[u8]>>(cursor: &Cursor<T>) -> Result<Self>;
+    fn parse<T: AsRef<[u8]>>(cursor: &Cursor<T>) -> anyhow::Result<Self>;
     /// Whether this header type indicates EOS.
     fn is_end(&self) -> bool;
     /// The length of the header.
@@ -31,7 +30,7 @@ where
     U: Debug + Header,
 {
     /// Find the next Annex B encoded NAL unit.
-    pub fn next(cursor: &mut Cursor<T>) -> Result<Option<Nalu<T, U>>> {
+    pub fn next(cursor: &mut Cursor<T>) -> anyhow::Result<Option<Nalu<T, U>>> {
         let bitstream = cursor.clone().into_inner();
         let pos = usize::try_from(cursor.position())?;
 

@@ -10,7 +10,6 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use anyhow::anyhow;
-use anyhow::Result;
 use libva::Config;
 use libva::Context;
 use libva::Display;
@@ -64,7 +63,7 @@ fn supported_formats_for_rt_format(
     profile: i32,
     entrypoint: u32,
     image_formats: &[libva::VAImageFormat],
-) -> Result<HashSet<FormatMap>> {
+) -> anyhow::Result<HashSet<FormatMap>> {
     let mut attrs = vec![VAConfigAttrib {
         type_: VAConfigAttribType::VAConfigAttribRTFormat,
         value: 0,
@@ -272,7 +271,7 @@ impl StreamMetadataState {
 
     /// Returns a reference to the parsed metadata state or an error if we haven't reached that
     /// state yet.
-    pub(crate) fn get_parsed(&self) -> Result<&ParsedStreamMetadata> {
+    pub(crate) fn get_parsed(&self) -> anyhow::Result<&ParsedStreamMetadata> {
         match self {
             StreamMetadataState::Unparsed { .. } => Err(anyhow!("Stream metadata not parsed yet")),
             StreamMetadataState::Parsed(parsed_metadata) => Ok(parsed_metadata),
@@ -281,7 +280,7 @@ impl StreamMetadataState {
 
     /// Returns a mutable reference to the parsed metadata state or an error if we haven't reached
     /// that state yet.
-    pub(crate) fn get_parsed_mut(&mut self) -> Result<&mut ParsedStreamMetadata> {
+    pub(crate) fn get_parsed_mut(&mut self) -> anyhow::Result<&mut ParsedStreamMetadata> {
         match self {
             StreamMetadataState::Unparsed { .. } => Err(anyhow!("Stream metadata not parsed yet")),
             StreamMetadataState::Parsed(parsed_metadata) => Ok(parsed_metadata),
@@ -293,7 +292,7 @@ impl StreamMetadataState {
     /// is made. Only formats that are compatible with the current color space,
     /// bit depth, and chroma format are returned such that no conversion is
     /// needed.
-    pub(crate) fn supported_formats_for_stream(&self) -> Result<HashSet<DecodedFormat>> {
+    pub(crate) fn supported_formats_for_stream(&self) -> anyhow::Result<HashSet<DecodedFormat>> {
         let metadata = self.get_parsed()?;
         let display = self.display();
 
@@ -315,7 +314,7 @@ impl StreamMetadataState {
         &mut self,
         hdr: S,
         format_map: Option<&FormatMap>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let display = self.display();
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
@@ -425,7 +424,10 @@ impl Drop for GenericBackendHandle {
 
 impl GenericBackendHandle {
     /// Creates a new pending handle on `surface_id`.
-    fn new(picture: libva::Picture<PictureNew>, metadata: &ParsedStreamMetadata) -> Result<Self> {
+    fn new(
+        picture: libva::Picture<PictureNew>,
+        metadata: &ParsedStreamMetadata,
+    ) -> anyhow::Result<Self> {
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
             state: PictureState::Pending(picture),
@@ -436,7 +438,7 @@ impl GenericBackendHandle {
         })
     }
 
-    pub fn sync(&mut self) -> Result<()> {
+    pub fn sync(&mut self) -> anyhow::Result<()> {
         self.state = match std::mem::replace(&mut self.state, PictureState::Invalid) {
             state @ PictureState::Ready(_) => state,
             PictureState::Pending(picture) => PictureState::Ready(picture.sync()?),
@@ -451,7 +453,7 @@ impl GenericBackendHandle {
     /// wants to access the backend mapping directly for any reason.
     ///
     /// Note that DynMappableHandle is downcastable.
-    pub fn image(&mut self) -> Result<Image> {
+    pub fn image(&mut self) -> anyhow::Result<Image> {
         match &mut self.state {
             PictureState::Ready(picture) => {
                 // Get the associated VAImage, which will map the
@@ -498,7 +500,7 @@ impl GenericBackendHandle {
         }
     }
 
-    pub fn is_va_ready(&self) -> Result<bool> {
+    pub fn is_va_ready(&self) -> anyhow::Result<bool> {
         match &self.state {
             PictureState::Ready(_) => Ok(true),
             PictureState::Pending(picture) => picture

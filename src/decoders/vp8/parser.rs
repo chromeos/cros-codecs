@@ -6,7 +6,6 @@ use std::convert::TryFrom;
 use std::io::Cursor;
 
 use anyhow::anyhow;
-use anyhow::Result;
 use bytes::Buf;
 use log::debug;
 
@@ -449,7 +448,7 @@ impl Parser {
         &mut self,
         reader: &mut Cursor<T>,
         frame: &mut Header,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         debug!("Parsing VP8 uncompressed data chunk.");
 
         let frame_tag = reader.get_uint_le(3) as u32;
@@ -485,7 +484,7 @@ impl Parser {
     fn update_segmentation<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         seg: &mut Segmentation,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         seg.update_mb_segmentation_map = false;
         seg.update_segment_feature_data = false;
 
@@ -542,7 +541,7 @@ impl Parser {
     fn parse_mb_lf_adjustments<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         adj: &mut MbLfAdjustments,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         adj.mode_ref_lf_delta_update = false;
 
         adj.loop_filter_adj_enable = bd.read_bool()?;
@@ -575,7 +574,7 @@ impl Parser {
     fn parse_quant_indices<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         q: &mut QuantIndices,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         q.y_ac_qi = bd.read_uint(7)?;
 
         let y_dc_delta_present = bd.read_bool()?;
@@ -620,7 +619,7 @@ impl Parser {
     fn parse_token_prob_update<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         coeff_probs: &mut [[[[u8; 11]; 3]; 8]; 4],
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         for (i, vi) in coeff_probs.iter_mut().enumerate() {
             for (j, vj) in vi.iter_mut().enumerate() {
                 for (k, vk) in vj.iter_mut().enumerate() {
@@ -640,7 +639,7 @@ impl Parser {
     fn parse_mv_prob_update<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         mv_probs: &mut [[u8; 19]; 2],
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         for (i, vi) in mv_probs.iter_mut().enumerate() {
             for (j, prob) in vi.iter_mut().enumerate() {
                 let update = bd.read_bool_with_prob(MV_UPDATE_PROBS[i][j])?;
@@ -659,7 +658,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_frame_header(&mut self, data: &[u8], frame: &mut Header) -> Result<()> {
+    fn parse_frame_header(&mut self, data: &[u8], frame: &mut Header) -> anyhow::Result<()> {
         debug!("Parsing VP8 frame header.");
         let mut bd = BoolDecoder::new(data);
 
@@ -758,7 +757,7 @@ impl Parser {
         Ok(())
     }
 
-    fn compute_partition_sizes(frame: &mut Header, data: &[u8]) -> Result<()> {
+    fn compute_partition_sizes(frame: &mut Header, data: &[u8]) -> anyhow::Result<()> {
         let num_partitions = usize::try_from(1 << frame.log2_nbr_of_dct_partitions)?;
         let mut part_size_ofs = usize::try_from(frame.first_part_size)?;
         let mut ofs = part_size_ofs + 3 * (num_partitions - 1);
@@ -796,7 +795,7 @@ impl Parser {
     }
 
     /// Parse a single frame from the chunk in `data`.
-    pub fn parse_frame<T: AsRef<[u8]>>(&mut self, resource: T) -> Result<Frame<T>> {
+    pub fn parse_frame<T: AsRef<[u8]>>(&mut self, resource: T) -> anyhow::Result<Frame<T>> {
         let mut frame = Frame::new(resource);
         let mut reader = Cursor::new(frame.bitstream.as_ref());
 

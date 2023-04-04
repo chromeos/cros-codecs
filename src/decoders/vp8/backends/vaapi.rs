@@ -5,7 +5,6 @@
 use std::convert::TryFrom;
 use std::rc::Rc;
 
-use anyhow::Result;
 use libva::BufferType;
 use libva::Display;
 use libva::IQMatrix;
@@ -67,7 +66,7 @@ impl VaapiBackend<Header> {
     fn build_iq_matrix(
         frame_hdr: &Header,
         segmentation: &Segmentation,
-    ) -> Result<libva::BufferType> {
+    ) -> anyhow::Result<libva::BufferType> {
         let mut quantization_index: [[u16; 6]; 4] = Default::default();
 
         for (i, quantization_index) in quantization_index.iter_mut().enumerate() {
@@ -113,7 +112,7 @@ impl VaapiBackend<Header> {
         last: u32,
         golden: u32,
         alt: u32,
-    ) -> Result<libva::BufferType> {
+    ) -> anyhow::Result<libva::BufferType> {
         let mut loop_filter_level: [u8; 4] = Default::default();
         let mut loop_filter_deltas_ref_frame: [i8; 4] = Default::default();
         let mut loop_filter_deltas_mode: [i8; 4] = Default::default();
@@ -182,7 +181,10 @@ impl VaapiBackend<Header> {
         ))
     }
 
-    fn build_slice_param(frame_hdr: &Header, slice_size: usize) -> Result<libva::BufferType> {
+    fn build_slice_param(
+        frame_hdr: &Header,
+        slice_size: usize,
+    ) -> anyhow::Result<libva::BufferType> {
         let mut partition_size: [u32; 9] = Default::default();
         let num_of_partitions = (1 << frame_hdr.log2_nbr_of_dct_partitions()) + 1;
 
@@ -284,7 +286,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
 
 impl Decoder<VADecodedHandle> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> Result<Self> {
+    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(
             Box::new(VaapiBackend::<Header>::new(display)),
             blocking_mode,

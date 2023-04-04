@@ -8,7 +8,6 @@ use std::cell::RefMut;
 use std::rc::Rc;
 
 use anyhow::anyhow;
-use anyhow::Result;
 use log::debug;
 
 use crate::decoders::h264::picture::Field;
@@ -171,7 +170,7 @@ impl<T: DecodedHandle + Clone> Dpb<T> {
         &mut self,
         picture: Rc<RefCell<PictureData>>,
         handle: Option<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let max_pics = if self.interlaced {
             self.max_num_pics * 2
         } else {

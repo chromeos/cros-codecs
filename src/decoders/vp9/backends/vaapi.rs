@@ -5,7 +5,6 @@
 use std::rc::Rc;
 
 use anyhow::anyhow;
-use anyhow::Result;
 use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
@@ -70,7 +69,7 @@ impl VaapiBackend<Header> {
         bit_depth: BitDepth,
         subsampling_x: bool,
         subsampling_y: bool,
-    ) -> Result<u32> {
+    ) -> anyhow::Result<u32> {
         match profile {
             Profile::Profile0 => Ok(libva::constants::VA_RT_FORMAT_YUV420),
             Profile::Profile1 => {
@@ -132,7 +131,7 @@ impl VaapiBackend<Header> {
     fn build_pic_param(
         hdr: &Header,
         reference_frames: [u32; NUM_REF_FRAMES],
-    ) -> Result<libva::BufferType> {
+    ) -> anyhow::Result<libva::BufferType> {
         let pic_fields = libva::VP9PicFields::new(
             hdr.subsampling_x as u32,
             hdr.subsampling_y as u32,
@@ -192,7 +191,7 @@ impl VaapiBackend<Header> {
     fn build_slice_param(
         seg: &[Segmentation; MAX_SEGMENTS],
         slice_size: usize,
-    ) -> Result<libva::BufferType> {
+    ) -> anyhow::Result<libva::BufferType> {
         let seg_params: std::result::Result<[SegmentParameterVP9; MAX_SEGMENTS], _> = seg
             .iter()
             .map(|s| {
@@ -290,7 +289,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
 
 impl Decoder<VADecodedHandle> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> Result<Self> {
+    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(
             Box::new(VaapiBackend::<Header>::new(display)),
             blocking_mode,

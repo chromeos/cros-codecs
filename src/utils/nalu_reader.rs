@@ -5,7 +5,6 @@
 use std::io::Cursor;
 
 use anyhow::anyhow;
-use anyhow::Result;
 use bytes::Buf;
 
 /// A bit reader for h264 bitstreams. It properly handles emulation-prevention
@@ -36,7 +35,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
     }
 
     /// Read a single bit from the stream.
-    pub fn read_bit(&mut self) -> Result<bool> {
+    pub fn read_bit(&mut self) -> anyhow::Result<bool> {
         let bit = self.read_bits(1)?;
         match bit {
             1 => Ok(true),
@@ -46,7 +45,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
     }
 
     /// Read up to 31 bits from the stream.
-    pub fn read_bits<U: TryFrom<u32>>(&mut self, num_bits: usize) -> Result<U> {
+    pub fn read_bits<U: TryFrom<u32>>(&mut self, num_bits: usize) -> anyhow::Result<U> {
         if num_bits > 31 {
             return Err(anyhow!("Overflow: more than 31 bits requested at once"));
         }
@@ -68,7 +67,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
     }
 
     /// Skip `num_bits` bits from the stream.
-    pub fn skip_bits(&mut self, mut num_bits: usize) -> Result<()> {
+    pub fn skip_bits(&mut self, mut num_bits: usize) -> anyhow::Result<()> {
         while num_bits > 0 {
             let n = std::cmp::min(num_bits, 31);
             self.read_bits::<u32>(n)?;
@@ -113,7 +112,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         false
     }
 
-    pub fn read_ue<U: TryFrom<u32>>(&mut self) -> Result<U> {
+    pub fn read_ue<U: TryFrom<u32>>(&mut self) -> anyhow::Result<U> {
         let mut num_bits = 0;
         let mut bit = self.read_bits::<u32>(1)?;
 
@@ -146,7 +145,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         U::try_from(value).map_err(|_| anyhow!("Conversion error"))
     }
 
-    pub fn read_ue_max<U: TryFrom<u32>>(&mut self, max: u32) -> Result<U> {
+    pub fn read_ue_max<U: TryFrom<u32>>(&mut self, max: u32) -> anyhow::Result<U> {
         let ue = self.read_ue()?;
         if ue > max {
             Err(anyhow!(
@@ -159,7 +158,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         }
     }
 
-    pub fn read_ue_bounded<U: TryFrom<u32>>(&mut self, min: u32, max: u32) -> Result<U> {
+    pub fn read_ue_bounded<U: TryFrom<u32>>(&mut self, min: u32, max: u32) -> anyhow::Result<U> {
         let ue = self.read_ue()?;
         if ue > max || ue < min {
             Err(anyhow!(
@@ -173,7 +172,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         }
     }
 
-    pub fn read_se<U: TryFrom<i32>>(&mut self) -> Result<U> {
+    pub fn read_se<U: TryFrom<i32>>(&mut self) -> anyhow::Result<U> {
         let ue = self.read_ue::<u32>()? as i32;
 
         if ue % 2 == 0 {
@@ -183,7 +182,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         }
     }
 
-    pub fn read_se_bounded<U: TryFrom<i32>>(&mut self, min: i32, max: i32) -> Result<U> {
+    pub fn read_se_bounded<U: TryFrom<i32>>(&mut self, min: i32, max: i32) -> anyhow::Result<U> {
         let se = self.read_se()?;
         if se < min || se > max {
             Err(anyhow!(
@@ -197,7 +196,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         }
     }
 
-    fn get_byte(&mut self) -> Result<u8> {
+    fn get_byte(&mut self) -> anyhow::Result<u8> {
         if self.data.remaining() == 0 {
             return Err(anyhow!("Reader ran out of bits"));
         }
@@ -205,7 +204,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
         Ok(self.data.get_u8())
     }
 
-    fn update_curr_byte(&mut self) -> Result<()> {
+    fn update_curr_byte(&mut self) -> anyhow::Result<()> {
         let mut byte = self.get_byte()?;
 
         if (self.prev_two_bytes & 0xffff) == 0 && byte == 0x03 {

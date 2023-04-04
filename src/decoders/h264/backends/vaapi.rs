@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use anyhow::anyhow;
 use anyhow::Context as AnyhowContext;
-use anyhow::Result;
 use libva::BufferType;
 use libva::Display;
 use libva::IQMatrix;
@@ -205,7 +204,7 @@ impl VaapiBackend<Sps> {
         dpb: &Dpb<VADecodedHandle>,
         sps: &Sps,
         pps: &Pps,
-    ) -> Result<BufferType> {
+    ) -> anyhow::Result<BufferType> {
         let curr_pic = Self::fill_va_h264_pic(current_picture, current_surface_id, false);
 
         let mut refs = vec![];
@@ -341,7 +340,7 @@ impl VaapiBackend<Sps> {
         ref_list_1: &[DpbEntry<VADecodedHandle>],
         sps: &Sps,
         pps: &Pps,
-    ) -> Result<BufferType> {
+    ) -> anyhow::Result<BufferType> {
         let hdr = slice.header();
         let nalu = slice.nalu();
 
@@ -561,7 +560,7 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
 
 impl Decoder<VADecodedHandle, VaPicture<PictureNew>> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> Result<Self> {
+    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(VaapiBackend::<Sps>::new(display)), blocking_mode)
     }
 }

@@ -10,7 +10,6 @@ use std::io::Cursor;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use anyhow::Result;
 use bytes::Buf;
 use enumn::N;
 
@@ -972,7 +971,7 @@ impl Sps {
         }
     }
 
-    pub fn max_dpb_frames(&self) -> Result<usize> {
+    pub fn max_dpb_frames(&self) -> anyhow::Result<usize> {
         let profile = Profile::n(self.profile_idc())
             .with_context(|| format!("Unsupported profile {}", self.profile_idc()))?;
         let mut level = self.level_idc();
@@ -1773,7 +1772,7 @@ impl Parser {
         r: &mut NaluReader<T>,
         scaling_list: &mut U,
         use_default: &mut bool,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         // 7.3.2.1.1.1
         let mut last_scale = 8;
         let mut next_scale = 8;
@@ -1800,7 +1799,10 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_sps_scaling_lists<T: AsRef<[u8]>>(r: &mut NaluReader<T>, sps: &mut Sps) -> Result<()> {
+    fn parse_sps_scaling_lists<T: AsRef<[u8]>>(
+        r: &mut NaluReader<T>,
+        sps: &mut Sps,
+    ) -> anyhow::Result<()> {
         let scaling_lists4x4 = &mut sps.scaling_lists_4x4;
         let scaling_lisst8x8 = &mut sps.scaling_lists_8x8;
 
@@ -1852,7 +1854,7 @@ impl Parser {
         r: &mut NaluReader<T>,
         pps: &mut Pps,
         sps: &Sps,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let scaling_lists4x4 = &mut pps.scaling_lists_4x4;
         let scaling_lists8x8 = &mut pps.scaling_lists_8x8;
 
@@ -1921,7 +1923,10 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_hrd<T: AsRef<[u8]>>(r: &mut NaluReader<T>, hrd: &mut HrdParams) -> Result<()> {
+    pub fn parse_hrd<T: AsRef<[u8]>>(
+        r: &mut NaluReader<T>,
+        hrd: &mut HrdParams,
+    ) -> anyhow::Result<()> {
         hrd.cpb_cnt_minus1 = r.read_ue_max(31)?;
         hrd.bit_rate_scale = r.read_bits(4)?;
         hrd.cpb_size_scale = r.read_bits(4)?;
@@ -1939,7 +1944,7 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_vui<T: AsRef<[u8]>>(r: &mut NaluReader<T>, sps: &mut Sps) -> Result<()> {
+    pub fn parse_vui<T: AsRef<[u8]>>(r: &mut NaluReader<T>, sps: &mut Sps) -> anyhow::Result<()> {
         let vui = &mut sps.vui_parameters;
 
         vui.aspect_ratio_info_present_flag = r.read_bit()?;
@@ -2023,7 +2028,7 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Sps> {
+    pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Sps> {
         if !matches!(nalu.header().type_, NaluType::Sps) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -2184,7 +2189,7 @@ impl Parser {
         Ok(self.get_sps(key).unwrap())
     }
 
-    pub fn parse_pps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Pps> {
+    pub fn parse_pps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Pps> {
         if !matches!(nalu.header().type_, NaluType::Pps) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -2270,7 +2275,7 @@ impl Parser {
         r: &mut NaluReader<T>,
         num_ref_idx_active_minus1: u8,
         ref_list_mods: &mut Vec<RefPicListModification>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if num_ref_idx_active_minus1 >= 32 {
             return Err(anyhow!("Broken Data: num_ref_idx_active_minus1 >= 32"));
         }
@@ -2307,7 +2312,7 @@ impl Parser {
     fn parse_ref_pic_list_modifications<T: AsRef<[u8]>>(
         r: &mut NaluReader<T>,
         header: &mut SliceHeader,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if !header.slice_type.is_i() && !header.slice_type.is_si() {
             header.ref_pic_list_modification_flag_l0 = r.read_bit()?;
             if header.ref_pic_list_modification_flag_l0 {
@@ -2337,7 +2342,7 @@ impl Parser {
         r: &mut NaluReader<T>,
         sps: &Sps,
         header: &mut SliceHeader,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let pt = &mut header.pred_weight_table;
         pt.luma_log2_weight_denom = r.read_ue_max(7)?;
 
@@ -2428,7 +2433,7 @@ impl Parser {
         r: &mut NaluReader<T>,
         nalu: &Nalu<U>,
         header: &mut SliceHeader,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let rpm = &mut header.dec_ref_pic_marking;
 
         if nalu.header().idr_pic_flag {
@@ -2472,7 +2477,10 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_slice_header<T: AsRef<[u8]>>(&mut self, nalu: Nalu<T>) -> Result<Slice<T>> {
+    pub fn parse_slice_header<T: AsRef<[u8]>>(
+        &mut self,
+        nalu: Nalu<T>,
+    ) -> anyhow::Result<Slice<T>> {
         if !matches!(
             nalu.header().type_,
             NaluType::Slice
@@ -2670,7 +2678,7 @@ impl NaluHeader {
 }
 
 impl Header for NaluHeader {
-    fn parse<T: AsRef<[u8]>>(cursor: &Cursor<T>) -> Result<Self> {
+    fn parse<T: AsRef<[u8]>>(cursor: &Cursor<T>) -> anyhow::Result<Self> {
         if !cursor.has_remaining() {
             return Err(anyhow!("Broken Data"));
         }

@@ -10,7 +10,6 @@ use std::collections::BTreeMap;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use anyhow::Result;
 use bitreader::BitReader;
 use bytes::Buf;
 use enumn::N;
@@ -177,7 +176,7 @@ impl NaluHeader {
 }
 
 impl Header for NaluHeader {
-    fn parse<T: AsRef<[u8]>>(cursor: &std::io::Cursor<T>) -> Result<Self> {
+    fn parse<T: AsRef<[u8]>>(cursor: &std::io::Cursor<T>) -> anyhow::Result<Self> {
         let data = &cursor.chunk()[0..2];
         let mut r = BitReader::new(data);
 
@@ -3487,7 +3486,7 @@ pub struct Parser {
 
 impl Parser {
     /// Parse a VPS NALU.
-    pub fn parse_vps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Vps> {
+    pub fn parse_vps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Vps> {
         if !matches!(nalu.header().type_, NaluType::VpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -3634,7 +3633,7 @@ impl Parser {
         r: &mut NaluReader<T>,
         profile_present_flag: bool,
         sps_max_sub_layers_minus_1: u8,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if profile_present_flag {
             ptl.general_profile_space = r.read_bits(2)?;
             ptl.general_tier_flag = r.read_bit()?;
@@ -3835,7 +3834,7 @@ impl Parser {
         sl: &mut ScalingLists,
         size_id: i32,
         matrix_id: i32,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if size_id == 0 {
             sl.scaling_list_4x4[matrix_id as usize] = DEFAULT_SCALING_LIST_0;
             return Ok(());
@@ -3879,7 +3878,7 @@ impl Parser {
     fn parse_scaling_list_data<T: AsRef<[u8]>>(
         sl: &mut ScalingLists,
         r: &mut NaluReader<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         // 7.4.5
         for size_id in 0..4 {
             let step = if size_id == 3 { 3 } else { 1 };
@@ -3966,7 +3965,7 @@ impl Parser {
         st: &mut ShortTermRefPicSet,
         r: &mut NaluReader<T>,
         st_rps_idx: u8,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if st_rps_idx != 0 {
             st.inter_ref_pic_set_prediction_flag = r.read_bit()?;
         }
@@ -4089,7 +4088,7 @@ impl Parser {
         cpb_cnt: u32,
         sub_pic_hrd_params_present_flag: bool,
         r: &mut NaluReader<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         for i in 0..cpb_cnt as usize {
             h.bit_rate_value_minus1[i] = r.read_ue_max(2u32.pow(32) - 2)?;
             h.cpb_size_value_minus1[i] = r.read_ue_max(2u32.pow(32) - 2)?;
@@ -4109,7 +4108,7 @@ impl Parser {
         max_num_sublayers_minus1: u8,
         hrd: &mut HrdParams,
         r: &mut NaluReader<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if common_inf_present_flag {
             hrd.nal_hrd_parameters_present_flag = r.read_bit()?;
             hrd.vcl_hrd_parameters_present_flag = r.read_bit()?;
@@ -4169,7 +4168,10 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_vui_parameters<T: AsRef<[u8]>>(sps: &mut Sps, r: &mut NaluReader<T>) -> Result<()> {
+    fn parse_vui_parameters<T: AsRef<[u8]>>(
+        sps: &mut Sps,
+        r: &mut NaluReader<T>,
+    ) -> anyhow::Result<()> {
         let vui = &mut sps.vui_parameters;
 
         vui.aspect_ratio_info_present_flag = r.read_bit()?;
@@ -4253,7 +4255,10 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_sps_scc_extension<T: AsRef<[u8]>>(sps: &mut Sps, r: &mut NaluReader<T>) -> Result<()> {
+    fn parse_sps_scc_extension<T: AsRef<[u8]>>(
+        sps: &mut Sps,
+        r: &mut NaluReader<T>,
+    ) -> anyhow::Result<()> {
         let scc = &mut sps.scc_extension;
 
         scc.curr_pic_ref_enabled_flag = r.read_bit()?;
@@ -4292,7 +4297,7 @@ impl Parser {
     fn parse_sps_range_extension<T: AsRef<[u8]>>(
         sps: &mut Sps,
         r: &mut NaluReader<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let ext = &mut sps.range_extension;
 
         ext.transform_skip_rotation_enabled_flag = r.read_bit()?;
@@ -4309,7 +4314,7 @@ impl Parser {
     }
 
     /// Parse a SPS NALU.
-    pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Sps> {
+    pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Sps> {
         if !matches!(nalu.header().type_, NaluType::SpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -4520,7 +4525,7 @@ impl Parser {
         pps: &mut Pps,
         sps: &Sps,
         r: &mut NaluReader<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let scc = &mut pps.scc_extension;
         scc.curr_pic_ref_enabled_flag = r.read_bit()?;
         scc.residual_adaptive_colour_transform_enabled_flag = r.read_bit()?;
@@ -4570,7 +4575,7 @@ impl Parser {
         pps: &mut Pps,
         sps: &Sps,
         r: &mut NaluReader<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let rext = &mut pps.range_extension;
 
         if pps.transform_skip_enabled_flag {
@@ -4599,7 +4604,7 @@ impl Parser {
     }
 
     /// Parse a PPS NALU.
-    pub fn parse_pps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> Result<&Pps> {
+    pub fn parse_pps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Pps> {
         if !matches!(nalu.header().type_, NaluType::PpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -4769,7 +4774,7 @@ impl Parser {
         hdr: &mut SliceHeader,
         r: &mut NaluReader<T>,
         sps: &Sps,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let pwt = &mut hdr.pred_weight_table;
 
         pwt.luma_log2_weight_denom = r.read_ue_max(7)?;
@@ -4842,7 +4847,7 @@ impl Parser {
     fn parse_ref_pic_lists_modification<T: AsRef<[u8]>>(
         hdr: &mut SliceHeader,
         r: &mut NaluReader<T>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let rplm = &mut hdr.ref_pic_list_modification;
 
         rplm.ref_pic_list_modification_flag_l0 = r.read_bit()?;
@@ -4900,7 +4905,10 @@ impl Parser {
     }
 
     /// Parses a slice header from a slice NALU.
-    pub fn parse_slice_header<T: AsRef<[u8]>>(&mut self, nalu: Nalu<T>) -> Result<Slice<T>> {
+    pub fn parse_slice_header<T: AsRef<[u8]>>(
+        &mut self,
+        nalu: Nalu<T>,
+    ) -> anyhow::Result<Slice<T>> {
         if !matches!(
             nalu.header().type_,
             NaluType::TrailN
@@ -5314,8 +5322,6 @@ mod tests {
     use crate::decoders::h265::parser::SliceType;
     use crate::utils::nalu::Nalu;
 
-    use anyhow::Result;
-
     const STREAM_BEAR: &[u8] = include_bytes!("test_data/bear.hevc");
     const STREAM_BEAR_NUM_NALUS: usize = 35;
 
@@ -5330,7 +5336,10 @@ mod tests {
     const STREAM_TEST_25_FPS_SLICE_1: &[u8] =
         include_bytes!("test_data/test-25fps-h265-slice-data-1.bin");
 
-    fn dispatch_parse_call(parser: &mut Parser, nalu: Nalu<&[u8], NaluHeader>) -> Result<()> {
+    fn dispatch_parse_call(
+        parser: &mut Parser,
+        nalu: Nalu<&[u8], NaluHeader>,
+    ) -> anyhow::Result<()> {
         match nalu.header().type_ {
             NaluType::TrailN
             | NaluType::TrailR
