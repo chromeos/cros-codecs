@@ -12,7 +12,6 @@ use crate::decoders::h264::parser::RefPicMarking;
 use crate::decoders::h264::parser::Slice;
 use crate::decoders::h264::parser::SliceType;
 use crate::decoders::h264::parser::Sps;
-use crate::decoders::FrameInfo;
 use crate::Resolution;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -336,12 +335,6 @@ impl PictureData {
         );
 
         Rc::new(RefCell::new(other_field))
-    }
-}
-
-impl FrameInfo for PictureData {
-    fn display_resolution(&self) -> Resolution {
-        self.display_resolution
     }
 }
 

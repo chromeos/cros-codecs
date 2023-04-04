@@ -153,12 +153,6 @@ impl Default for BlockingMode {
     }
 }
 
-/// Codec-specific information for a single frame.
-pub trait FrameInfo {
-    /// Returns the display resolution of this frame.
-    fn display_resolution(&self) -> Resolution;
-}
-
 /// The handle type used by the stateless decoder backend. The only requirement
 /// from implementors is that they give access to the underlying handle and
 /// that they can be (cheaply) cloned.
