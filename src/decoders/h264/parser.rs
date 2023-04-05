@@ -2015,6 +2015,9 @@ impl Parser {
         Ok(())
     }
 
+    /// Parse a SPS and add it to the list of active SPSes.
+    ///
+    /// Returns a reference to the new SPS.
     pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Sps> {
         if !matches!(nalu.header().type_, NaluType::Sps) {
             return Err(anyhow!(

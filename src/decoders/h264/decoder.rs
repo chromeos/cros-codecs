@@ -286,8 +286,8 @@ where
         }
     }
 
-    fn process_sps(&mut self, nalu: &Nalu<impl AsRef<[u8]>>) -> anyhow::Result<()> {
-        let sps = self.parser.parse_sps(nalu)?;
+    // Apply the parameters of `sps` to the decoder.
+    fn apply_sps(&mut self, sps: &Sps) {
         let negotiation_possible =
             Self::negotiation_possible(sps, &self.dpb, self.coded_resolution);
 
@@ -314,8 +314,6 @@ where
             self.dpb.set_max_num_pics(max_dpb_frames);
             self.dpb.set_interlaced(interlaced);
         }
-
-        Ok(())
     }
 
     fn compute_pic_order_count(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
@@ -2178,7 +2176,9 @@ where
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().nalu_type() {
                 NaluType::Sps => {
-                    self.process_sps(&nalu)?;
+                    // Clone to avoid double-borrow on `self`.
+                    let sps = self.parser.parse_sps(&nalu)?.clone();
+                    self.apply_sps(&sps);
                 }
 
                 NaluType::Pps => {
