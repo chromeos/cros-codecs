@@ -560,8 +560,9 @@ pub enum Profile {
     High = 100,
 }
 
-#[derive(N, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
+    #[default]
     L1 = 10,
     L1B = 9,
     L1_1 = 11,
@@ -582,12 +583,6 @@ pub enum Level {
     L6 = 60,
     L6_1 = 61,
     L6_2 = 62,
-}
-
-impl Default for Level {
-    fn default() -> Self {
-        Level::L1
-    }
 }
 
 /// A H264 Sequence Parameter Set. A syntax structure containing syntax elements
@@ -2779,19 +2774,19 @@ mod tests {
 
             assert_eq!(sps.seq_parameter_set_id, 0);
             assert_eq!(sps.profile_idc, 77);
-            assert_eq!(sps.constraint_set0_flag, false);
-            assert_eq!(sps.constraint_set1_flag, true);
-            assert_eq!(sps.constraint_set2_flag, false);
-            assert_eq!(sps.constraint_set3_flag, false);
-            assert_eq!(sps.constraint_set4_flag, false);
-            assert_eq!(sps.constraint_set5_flag, false);
+            assert!(!sps.constraint_set0_flag);
+            assert!(sps.constraint_set1_flag);
+            assert!(!sps.constraint_set2_flag);
+            assert!(!sps.constraint_set3_flag);
+            assert!(!sps.constraint_set4_flag);
+            assert!(!sps.constraint_set5_flag);
             assert_eq!(sps.level_idc, Level::L1_3);
             assert_eq!(sps.chroma_format_idc, 1);
-            assert_eq!(sps.separate_colour_plane_flag, false);
+            assert!(!sps.separate_colour_plane_flag);
             assert_eq!(sps.bit_depth_luma_minus8, 0);
             assert_eq!(sps.bit_depth_chroma_minus8, 0);
-            assert_eq!(sps.qpprime_y_zero_transform_bypass_flag, false);
-            assert_eq!(sps.seq_scaling_matrix_present_flag, false);
+            assert!(!sps.qpprime_y_zero_transform_bypass_flag);
+            assert!(!sps.seq_scaling_matrix_present_flag);
 
             for outer in &sps.scaling_lists_4x4 {
                 for inner in outer {
@@ -2808,7 +2803,7 @@ mod tests {
             assert_eq!(sps.log2_max_frame_num_minus4, 1);
             assert_eq!(sps.pic_order_cnt_type, 0);
             assert_eq!(sps.log2_max_pic_order_cnt_lsb_minus4, 3);
-            assert_eq!(sps.delta_pic_order_always_zero_flag, false);
+            assert!(!sps.delta_pic_order_always_zero_flag);
             assert_eq!(sps.offset_for_non_ref_pic, 0);
             assert_eq!(sps.offset_for_top_to_bottom_field, 0);
             assert_eq!(sps.num_ref_frames_in_pic_order_cnt_cycle, 0);
@@ -2818,13 +2813,13 @@ mod tests {
             }
 
             assert_eq!(sps.max_num_ref_frames, 2);
-            assert_eq!(sps.gaps_in_frame_num_value_allowed_flag, false);
+            assert!(!sps.gaps_in_frame_num_value_allowed_flag);
             assert_eq!(sps.pic_width_in_mbs_minus1, 19);
             assert_eq!(sps.pic_height_in_map_units_minus1, 14);
-            assert_eq!(sps.frame_mbs_only_flag, true);
-            assert_eq!(sps.mb_adaptive_frame_field_flag, false);
-            assert_eq!(sps.direct_8x8_inference_flag, false);
-            assert_eq!(sps.frame_cropping_flag, false);
+            assert!(sps.frame_mbs_only_flag);
+            assert!(!sps.mb_adaptive_frame_field_flag);
+            assert!(!sps.direct_8x8_inference_flag);
+            assert!(!sps.frame_cropping_flag);
             assert_eq!(sps.frame_crop_left_offset, 0);
             assert_eq!(sps.frame_crop_right_offset, 0);
             assert_eq!(sps.frame_crop_top_offset, 0);
@@ -2844,19 +2839,19 @@ mod tests {
             let pps = parser.get_pps(*pps_id).unwrap();
             assert_eq!(pps.pic_parameter_set_id, 0);
             assert_eq!(pps.seq_parameter_set_id, 0);
-            assert_eq!(pps.bottom_field_pic_order_in_frame_present_flag, true);
+            assert!(pps.bottom_field_pic_order_in_frame_present_flag);
             assert_eq!(pps.num_slice_groups_minus1, 0);
             assert_eq!(pps.num_ref_idx_l0_default_active_minus1, 0);
             assert_eq!(pps.num_ref_idx_l1_default_active_minus1, 0);
-            assert_eq!(pps.weighted_pred_flag, false);
+            assert!(!pps.weighted_pred_flag);
             assert_eq!(pps.weighted_bipred_idc, 0);
             assert_eq!(pps.pic_init_qp_minus26, 2);
             assert_eq!(pps.pic_init_qs_minus26, 0);
             assert_eq!(pps.chroma_qp_index_offset, 0);
-            assert_eq!(pps.deblocking_filter_control_present_flag, false);
-            assert_eq!(pps.constrained_intra_pred_flag, false);
-            assert_eq!(pps.redundant_pic_cnt_present_flag, false);
-            assert_eq!(pps.transform_8x8_mode_flag, false);
+            assert!(!pps.deblocking_filter_control_present_flag);
+            assert!(!pps.constrained_intra_pred_flag);
+            assert!(!pps.redundant_pic_cnt_present_flag);
+            assert!(!pps.transform_8x8_mode_flag);
 
             for outer in &pps.scaling_lists_4x4 {
                 for inner in outer {
@@ -2871,7 +2866,7 @@ mod tests {
             }
 
             assert_eq!(pps.second_chroma_qp_index_offset, 0);
-            assert_eq!(pps.pic_scaling_matrix_present_flag, false);
+            assert!(!pps.pic_scaling_matrix_present_flag);
         }
 
         // test an I slice
@@ -2880,21 +2875,21 @@ mod tests {
         assert_eq!(nalu.as_ref(), STREAM_TEST_25_FPS_SLICE_0);
 
         assert_eq!(hdr.first_mb_in_slice, 0);
-        assert_eq!(hdr.slice_type.is_i(), true);
+        assert!(hdr.slice_type.is_i());
         assert_eq!(hdr.colour_plane_id, 0);
         assert_eq!(hdr.frame_num, 0);
-        assert_eq!(hdr.field_pic_flag, false);
-        assert_eq!(hdr.bottom_field_flag, false);
+        assert!(!hdr.field_pic_flag);
+        assert!(!hdr.bottom_field_flag);
         assert_eq!(hdr.idr_pic_id, 0);
         assert_eq!(hdr.pic_order_cnt_lsb, 0);
         assert_eq!(hdr.delta_pic_order_cnt_bottom, 0);
         assert_eq!(hdr.delta_pic_order_cnt[0], 0);
         assert_eq!(hdr.delta_pic_order_cnt[1], 0);
         assert_eq!(hdr.redundant_pic_cnt, 0);
-        assert_eq!(hdr.direct_spatial_mv_pred_flag, false);
+        assert!(!hdr.direct_spatial_mv_pred_flag);
         assert_eq!(hdr.num_ref_idx_l0_active_minus1, 0);
         assert_eq!(hdr.num_ref_idx_l1_active_minus1, 0);
-        assert_eq!(hdr.ref_pic_list_modification_flag_l0, false);
+        assert!(!hdr.ref_pic_list_modification_flag_l0);
 
         assert_eq!(hdr.ref_pic_list_modification_l0.len(), 0);
 
@@ -2905,7 +2900,7 @@ mod tests {
             assert_eq!(rplm.abs_diff_view_idx_minus1, 0);
         }
 
-        assert_eq!(hdr.ref_pic_list_modification_flag_l1, false);
+        assert!(!hdr.ref_pic_list_modification_flag_l1);
         assert_eq!(hdr.ref_pic_list_modification_l1.len(), 0);
 
         for rplm in &hdr.ref_pic_list_modification_l1 {
@@ -2928,7 +2923,7 @@ mod tests {
         assert_eq!(hdr.slice_beta_offset_div2, 0);
         assert_eq!(hdr.max_pic_num, 32);
         assert_eq!(hdr.header_bit_size, 38);
-        assert_eq!(hdr.num_ref_idx_active_override_flag, false);
+        assert!(!hdr.num_ref_idx_active_override_flag);
 
         // test a P slice
         let hdr = &slices[2].header;
@@ -2936,21 +2931,21 @@ mod tests {
         assert_eq!(nalu.as_ref(), STREAM_TEST_25_FPS_SLICE_2);
 
         assert_eq!(hdr.first_mb_in_slice, 0);
-        assert_eq!(hdr.slice_type.is_p(), true);
+        assert!(hdr.slice_type.is_p());
         assert_eq!(hdr.colour_plane_id, 0);
         assert_eq!(hdr.frame_num, 1);
-        assert_eq!(hdr.field_pic_flag, false);
-        assert_eq!(hdr.bottom_field_flag, false);
+        assert!(!hdr.field_pic_flag);
+        assert!(!hdr.bottom_field_flag);
         assert_eq!(hdr.idr_pic_id, 0);
         assert_eq!(hdr.pic_order_cnt_lsb, 4);
         assert_eq!(hdr.delta_pic_order_cnt_bottom, 0);
         assert_eq!(hdr.delta_pic_order_cnt[0], 0);
         assert_eq!(hdr.delta_pic_order_cnt[1], 0);
         assert_eq!(hdr.redundant_pic_cnt, 0);
-        assert_eq!(hdr.direct_spatial_mv_pred_flag, false);
+        assert!(!hdr.direct_spatial_mv_pred_flag);
         assert_eq!(hdr.num_ref_idx_l0_active_minus1, 0);
         assert_eq!(hdr.num_ref_idx_l1_active_minus1, 0);
-        assert_eq!(hdr.ref_pic_list_modification_flag_l0, false);
+        assert!(!hdr.ref_pic_list_modification_flag_l0);
 
         assert_eq!(hdr.ref_pic_list_modification_l0.len(), 0);
 
@@ -2961,7 +2956,7 @@ mod tests {
             assert_eq!(rplm.abs_diff_view_idx_minus1, 0);
         }
 
-        assert_eq!(hdr.ref_pic_list_modification_flag_l1, false);
+        assert!(!hdr.ref_pic_list_modification_flag_l1);
         assert_eq!(hdr.ref_pic_list_modification_l1.len(), 0);
 
         for rplm in &hdr.ref_pic_list_modification_l1 {
@@ -2984,7 +2979,7 @@ mod tests {
         assert_eq!(hdr.slice_beta_offset_div2, 0);
         assert_eq!(hdr.max_pic_num, 32);
         assert_eq!(hdr.header_bit_size, 28);
-        assert_eq!(hdr.num_ref_idx_active_override_flag, false);
+        assert!(!hdr.num_ref_idx_active_override_flag);
 
         // test a B slice
         let hdr = &slices[4].header;
@@ -2992,21 +2987,21 @@ mod tests {
         assert_eq!(nalu.as_ref(), STREAM_TEST_25_FPS_SLICE_4);
 
         assert_eq!(hdr.first_mb_in_slice, 0);
-        assert_eq!(hdr.slice_type.is_b(), true);
+        assert!(hdr.slice_type.is_b());
         assert_eq!(hdr.colour_plane_id, 0);
         assert_eq!(hdr.frame_num, 2);
-        assert_eq!(hdr.field_pic_flag, false);
-        assert_eq!(hdr.bottom_field_flag, false);
+        assert!(!hdr.field_pic_flag);
+        assert!(!hdr.bottom_field_flag);
         assert_eq!(hdr.idr_pic_id, 0);
         assert_eq!(hdr.pic_order_cnt_lsb, 2);
         assert_eq!(hdr.delta_pic_order_cnt_bottom, 0);
         assert_eq!(hdr.delta_pic_order_cnt[0], 0);
         assert_eq!(hdr.delta_pic_order_cnt[1], 0);
         assert_eq!(hdr.redundant_pic_cnt, 0);
-        assert_eq!(hdr.direct_spatial_mv_pred_flag, true);
+        assert!(hdr.direct_spatial_mv_pred_flag);
         assert_eq!(hdr.num_ref_idx_l0_active_minus1, 0);
         assert_eq!(hdr.num_ref_idx_l1_active_minus1, 0);
-        assert_eq!(hdr.ref_pic_list_modification_flag_l0, false);
+        assert!(!hdr.ref_pic_list_modification_flag_l0);
 
         assert_eq!(hdr.ref_pic_list_modification_l0.len(), 0);
 
@@ -3017,7 +3012,7 @@ mod tests {
             assert_eq!(rplm.abs_diff_view_idx_minus1, 0);
         }
 
-        assert_eq!(hdr.ref_pic_list_modification_flag_l1, false);
+        assert!(!hdr.ref_pic_list_modification_flag_l1);
         assert_eq!(hdr.ref_pic_list_modification_l1.len(), 0);
 
         for rplm in &hdr.ref_pic_list_modification_l1 {
@@ -3040,6 +3035,6 @@ mod tests {
         assert_eq!(hdr.slice_beta_offset_div2, 0);
         assert_eq!(hdr.max_pic_num, 32);
         assert_eq!(hdr.header_bit_size, 41);
-        assert_eq!(hdr.num_ref_idx_active_override_flag, false);
+        assert!(!hdr.num_ref_idx_active_override_flag);
     }
 }
