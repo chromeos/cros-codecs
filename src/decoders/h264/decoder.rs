@@ -246,11 +246,7 @@ where
         })
     }
 
-    fn negotiation_possible(
-        sps: &Sps,
-        dpb: &Dpb<T>,
-        current_resolution: Resolution,
-    ) -> anyhow::Result<bool> {
+    fn negotiation_possible(sps: &Sps, dpb: &Dpb<T>, current_resolution: Resolution) -> bool {
         let max_dpb_frames = sps.max_dpb_frames();
 
         let prev_max_dpb_frames = dpb.max_num_pics();
@@ -262,11 +258,9 @@ where
             height: sps.height(),
         };
 
-        let needs_negotiation = current_resolution != resolution
+        current_resolution != resolution
             || prev_max_dpb_frames != max_dpb_frames
-            || prev_interlaced != interlaced;
-
-        Ok(needs_negotiation)
+            || prev_interlaced != interlaced
     }
 
     fn get_max_num_order_frames(sps: &Sps, max_dpb_frames: usize) -> u32 {
@@ -295,7 +289,7 @@ where
     fn process_sps(&mut self, nalu: &Nalu<impl AsRef<[u8]>>) -> anyhow::Result<()> {
         let sps = self.parser.parse_sps(nalu)?;
         let negotiation_possible =
-            Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)?;
+            Self::negotiation_possible(sps, &self.dpb, self.coded_resolution);
 
         if negotiation_possible {
             let max_dpb_frames = sps.max_dpb_frames();
@@ -313,7 +307,7 @@ where
                 self.max_num_reorder_frames = max_num_reorder_frames;
             }
 
-            self.drain()?;
+            self.drain();
 
             self.coded_resolution = resolution;
 
@@ -1484,7 +1478,7 @@ where
             // Clause 3:
             // The current picture has memory_management_control_operation equal
             // to 5, as specified in clause C.4.4.
-            self.drain()?;
+            self.drain();
         }
 
         // Bump the DPB as per C.4.5.3 to cover clauses 1, 4, 5 and 6.
@@ -1616,7 +1610,7 @@ where
             // no_output_of_prior_pics_flag is not equal to 1 and is not
             // inferred to be equal to 1, as specified in clause C.4.4.
             if !pic.ref_pic_marking.no_output_of_prior_pics_flag() {
-                self.drain()?;
+                self.drain();
             } else {
                 // C.4.4 When no_output_of_prior_pics_flag is equal to 1 or is
                 // inferred to be equal to 1, all frame buffers in the DPB are
@@ -1660,7 +1654,7 @@ where
     }
 
     /// Drain the decoder, processing all pending frames.
-    fn drain(&mut self) -> anyhow::Result<()> {
+    fn drain(&mut self) {
         let pics = self.dpb.drain();
 
         // At this point all pictures will have been decoded, as we don't buffer
@@ -1676,7 +1670,6 @@ where
         self.dpb.clear();
 
         self.last_field = None;
-        Ok(())
     }
 
     /// Find the first field for the picture started by `slice`, if any.
@@ -2240,7 +2233,7 @@ where
         let sps = Self::peek_sps(&mut self.parser, bitstream);
 
         if let Some(sps) = &sps {
-            if Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)?
+            if Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)
                 && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
             {
                 self.negotiation_status = NegotiationStatus::NonNegotiated
@@ -2293,7 +2286,7 @@ where
             self.decode_access_unit(timestamp, &buffer)?;
         }
 
-        self.drain()?;
+        self.drain();
 
         // Make sure all frames will be output.
         for handle in &mut self.ready_queue {
