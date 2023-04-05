@@ -251,7 +251,7 @@ where
         dpb: &Dpb<T>,
         current_resolution: Resolution,
     ) -> anyhow::Result<bool> {
-        let max_dpb_frames = sps.max_dpb_frames()?;
+        let max_dpb_frames = sps.max_dpb_frames();
 
         let prev_max_dpb_frames = dpb.max_num_pics();
         let prev_interlaced = dpb.interlaced();
@@ -298,7 +298,7 @@ where
             Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)?;
 
         if negotiation_possible {
-            let max_dpb_frames = sps.max_dpb_frames()?;
+            let max_dpb_frames = sps.max_dpb_frames();
             let interlaced = !sps.frame_mbs_only_flag();
             let resolution = Resolution {
                 width: sps.width(),

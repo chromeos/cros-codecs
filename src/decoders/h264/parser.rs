@@ -554,6 +554,7 @@ impl Default for SliceType {
 }
 
 #[derive(N)]
+#[repr(u8)]
 pub enum Profile {
     Baseline = 66,
     Main = 77,
@@ -966,15 +967,14 @@ impl Sps {
         }
     }
 
-    pub fn max_dpb_frames(&self) -> anyhow::Result<usize> {
-        let profile = Profile::n(self.profile_idc())
-            .with_context(|| format!("Unsupported profile {}", self.profile_idc()))?;
+    pub fn max_dpb_frames(&self) -> usize {
+        let profile = self.profile_idc();
         let mut level = self.level_idc();
 
         // A.3.1 and A.3.2: Level 1b for Baseline, Constrained Baseline and Main
         // profile if level_idc == 11 and constraint_set3_flag == 1
         if matches!(level, Level::L1_1)
-            && (matches!(profile, Profile::Baseline) || matches!(profile, Profile::Main))
+            && (profile == Profile::Baseline as u8 || profile == Profile::Main as u8)
             && self.constraint_set3_flag()
         {
             level = Level::L1B;
@@ -1014,16 +1014,11 @@ impl Sps {
 
         if self.vui_parameters_present_flag() && self.vui_parameters().bitstream_restriction_flag()
         {
-            max_dpb_frames = std::cmp::max(
-                1,
-                self.vui_parameters()
-                    .max_dec_frame_buffering()
-                    .try_into()
-                    .unwrap(),
-            );
+            max_dpb_frames =
+                std::cmp::max(1, self.vui_parameters().max_dec_frame_buffering() as usize);
         }
 
-        Ok(max_dpb_frames)
+        max_dpb_frames
     }
 }
 

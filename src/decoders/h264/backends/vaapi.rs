@@ -75,7 +75,7 @@ impl StreamInfo for &Sps {
     }
 
     fn min_num_surfaces(&self) -> usize {
-        self.max_dpb_frames().unwrap() + 4
+        self.max_dpb_frames() + 4
     }
 
     fn coded_size(&self) -> (u32, u32) {
