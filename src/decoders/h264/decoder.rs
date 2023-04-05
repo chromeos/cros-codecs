@@ -288,32 +288,27 @@ where
 
     // Apply the parameters of `sps` to the decoder.
     fn apply_sps(&mut self, sps: &Sps) {
-        let negotiation_possible =
-            Self::negotiation_possible(sps, &self.dpb, self.coded_resolution);
+        let max_dpb_frames = sps.max_dpb_frames();
+        let interlaced = !sps.frame_mbs_only_flag();
+        let resolution = Resolution {
+            width: sps.width(),
+            height: sps.height(),
+        };
 
-        if negotiation_possible {
-            let max_dpb_frames = sps.max_dpb_frames();
-            let interlaced = !sps.frame_mbs_only_flag();
-            let resolution = Resolution {
-                width: sps.width(),
-                height: sps.height(),
-            };
+        let max_num_reorder_frames = Self::get_max_num_order_frames(sps, max_dpb_frames);
 
-            let max_num_reorder_frames = Self::get_max_num_order_frames(sps, max_dpb_frames);
-
-            if max_num_reorder_frames > max_dpb_frames as u32 {
-                self.max_num_reorder_frames = 0;
-            } else {
-                self.max_num_reorder_frames = max_num_reorder_frames;
-            }
-
-            self.drain();
-
-            self.coded_resolution = resolution;
-
-            self.dpb.set_max_num_pics(max_dpb_frames);
-            self.dpb.set_interlaced(interlaced);
+        if max_num_reorder_frames > max_dpb_frames as u32 {
+            self.max_num_reorder_frames = 0;
+        } else {
+            self.max_num_reorder_frames = max_num_reorder_frames;
         }
+
+        self.drain();
+
+        self.coded_resolution = resolution;
+
+        self.dpb.set_max_num_pics(max_dpb_frames);
+        self.dpb.set_interlaced(interlaced);
     }
 
     fn compute_pic_order_count(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
