@@ -1764,13 +1764,13 @@ impl Parser {
         use_default: &mut bool,
     ) -> anyhow::Result<()> {
         // 7.3.2.1.1.1
-        let mut last_scale = 8;
-        let mut next_scale = 8;
+        let mut last_scale = 8u8;
+        let mut next_scale = 8u8;
 
         for j in 0..scaling_list.as_mut().len() {
             if next_scale != 0 {
                 let delta_scale = r.read_se::<i32>()?;
-                next_scale = (last_scale + delta_scale + 256) % 256;
+                next_scale = ((last_scale as i32 + delta_scale + 256) % 256) as u8;
                 *use_default = j == 0 && next_scale == 0;
                 if *use_default {
                     return Ok(());
@@ -1778,12 +1778,12 @@ impl Parser {
             }
 
             scaling_list.as_mut()[j] = if next_scale == 0 {
-                u8::try_from(last_scale)?
+                last_scale
             } else {
-                u8::try_from(next_scale)?
+                next_scale
             };
 
-            last_scale = i32::from(scaling_list.as_mut()[j]);
+            last_scale = scaling_list.as_mut()[j];
         }
 
         Ok(())
