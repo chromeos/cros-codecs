@@ -1923,10 +1923,7 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_hrd<T: AsRef<[u8]>>(
-        r: &mut NaluReader<T>,
-        hrd: &mut HrdParams,
-    ) -> anyhow::Result<()> {
+    fn parse_hrd<T: AsRef<[u8]>>(r: &mut NaluReader<T>, hrd: &mut HrdParams) -> anyhow::Result<()> {
         hrd.cpb_cnt_minus1 = r.read_ue_max(31)?;
         hrd.bit_rate_scale = r.read_bits(4)?;
         hrd.cpb_size_scale = r.read_bits(4)?;
@@ -1944,7 +1941,7 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_vui<T: AsRef<[u8]>>(r: &mut NaluReader<T>, sps: &mut Sps) -> anyhow::Result<()> {
+    fn parse_vui<T: AsRef<[u8]>>(r: &mut NaluReader<T>, sps: &mut Sps) -> anyhow::Result<()> {
         let vui = &mut sps.vui_parameters;
 
         vui.aspect_ratio_info_present_flag = r.read_bit()?;
@@ -2477,10 +2474,7 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_slice_header<T: AsRef<[u8]>>(
-        &mut self,
-        nalu: Nalu<T>,
-    ) -> anyhow::Result<Slice<T>> {
+    pub fn parse_slice_header<T: AsRef<[u8]>>(&self, nalu: Nalu<T>) -> anyhow::Result<Slice<T>> {
         if !matches!(
             nalu.header().type_,
             NaluType::Slice
