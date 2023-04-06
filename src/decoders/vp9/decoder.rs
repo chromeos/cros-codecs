@@ -183,9 +183,8 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         Ok(())
     }
 
-    fn negotiation_possible(&self, frame: &Frame<impl AsRef<[u8]>>) -> bool {
+    fn negotiation_possible(&self, hdr: &Header) -> bool {
         let coded_resolution = self.coded_resolution;
-        let hdr = &frame.header;
         let width = hdr.width;
         let height = hdr.height;
         let bit_depth = hdr.bit_depth;
@@ -360,7 +359,9 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
         }
 
         for frame in frames {
-            if frame.header.frame_type == FrameType::KeyFrame && self.negotiation_possible(&frame) {
+            if frame.header.frame_type == FrameType::KeyFrame
+                && self.negotiation_possible(&frame.header)
+            {
                 self.backend.new_sequence(&frame.header)?;
                 self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
             }
