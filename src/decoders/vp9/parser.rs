@@ -383,7 +383,9 @@ impl Parser {
         let data = resource.as_ref();
         let index_offset = data.len() - sz_index as usize;
         let first_byte = data[index_offset];
-        let last_byte = *data.last().unwrap();
+        let last_byte = *data
+            .last()
+            .ok_or_else(|| anyhow!("superframe header is empty"))?;
 
         if first_byte != last_byte {
             // Also not a superframe, we must pass both tests as per the specification.
@@ -742,7 +744,7 @@ impl Parser {
         Ok(())
     }
 
-    fn calc_min_log2_tile_cols(sb64_cols: u32) -> i32 {
+    fn calc_min_log2_tile_cols(sb64_cols: u32) -> u8 {
         let mut min_log2 = 0;
 
         while (MAX_TILE_WIDTH_B64 << min_log2) < sb64_cols {
@@ -752,7 +754,7 @@ impl Parser {
         min_log2
     }
 
-    fn calc_max_log2_tile_cols(sb64_cols: u32) -> i32 {
+    fn calc_max_log2_tile_cols(sb64_cols: u32) -> u8 {
         let mut max_log2 = 1;
 
         while (sb64_cols >> max_log2) >= MIN_TILE_WIDTH_B64 {
@@ -763,12 +765,11 @@ impl Parser {
     }
 
     fn parse_tile_info(&self, r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
-        let min_log2_tile_cols = Self::calc_min_log2_tile_cols(self.sb64_cols);
         let max_log2_tile_cols = Self::calc_max_log2_tile_cols(self.sb64_cols);
 
-        hdr.tile_cols_log2 = min_log2_tile_cols.try_into().unwrap();
+        hdr.tile_cols_log2 = Self::calc_min_log2_tile_cols(self.sb64_cols);
 
-        while hdr.tile_cols_log2 < max_log2_tile_cols.try_into().unwrap() {
+        while hdr.tile_cols_log2 < max_log2_tile_cols {
             let increment_tile_cols_log2 = r.read_bool()?;
 
             if increment_tile_cols_log2 {
