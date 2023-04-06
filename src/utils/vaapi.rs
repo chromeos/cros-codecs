@@ -108,7 +108,7 @@ impl TryInto<Surface> for PictureState {
     fn try_into(self) -> Result<Surface, Self::Error> {
         match self {
             PictureState::Ready(picture) => picture.take_surface(),
-            PictureState::Pending(picture) => picture.sync()?.take_surface(),
+            PictureState::Pending(picture) => picture.sync().map_err(|(e, _)| e)?.take_surface(),
             PictureState::Invalid => unreachable!(),
         }
     }
@@ -439,13 +439,18 @@ impl GenericBackendHandle {
     }
 
     pub fn sync(&mut self) -> anyhow::Result<()> {
-        self.state = match std::mem::replace(&mut self.state, PictureState::Invalid) {
-            state @ PictureState::Ready(_) => state,
-            PictureState::Pending(picture) => PictureState::Ready(picture.sync()?),
+        let res;
+
+        (self.state, res) = match std::mem::replace(&mut self.state, PictureState::Invalid) {
+            state @ PictureState::Ready(_) => (state, Ok(())),
+            PictureState::Pending(picture) => match picture.sync() {
+                Ok(picture) => (PictureState::Ready(picture), Ok(())),
+                Err((e, picture)) => (PictureState::Pending(picture), Err(e)),
+            },
             PictureState::Invalid => unreachable!(),
         };
 
-        Ok(())
+        res
     }
 
     /// Returns a mapped VAImage. this maps the VASurface onto our address space.
