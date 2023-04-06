@@ -57,8 +57,9 @@ const DEFAULT_SCALING_LIST_2: [u8; 64] = [
 ];
 
 /// Table 7-1 – NAL unit type codes and NAL unit type classes
-#[derive(N, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NaluType {
+    #[default]
     TrailN = 0,
     TrailR = 1,
     TsaN = 2,
@@ -143,12 +144,6 @@ impl NaluType {
     }
 }
 
-impl Default for NaluType {
-    fn default() -> Self {
-        NaluType::TrailN
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NaluHeader {
     /// The NALU type.
@@ -205,8 +200,9 @@ type Nalu<T> = nalu::Nalu<T, NaluHeader>;
 /// H265 levels as defined by table A.8.
 /// general_level_idc and sub_layer_level_idc[ OpTid ] shall be set equal to a
 /// value of 30 times the level number specified in Table A.8
-#[derive(N, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
+    #[default]
     L1 = 30,
     L2 = 60,
     L2_1 = 63,
@@ -220,12 +216,6 @@ pub enum Level {
     L6 = 180,
     L6_1 = 183,
     L6_2 = 186,
-}
-
-impl Default for Level {
-    fn default() -> Self {
-        Level::L1
-    }
 }
 
 /// A H.265 Video Parameter Set.
@@ -5212,7 +5202,7 @@ impl Parser {
                 hdr.cb_qp_offset = r.read_se_bounded(-12, 12)?;
 
                 let qp_offset = pps.cb_qp_offset + hdr.cb_qp_offset;
-                if qp_offset < -12 || qp_offset > 12 {
+                if !(-12..=12).contains(&qp_offset) {
                     return Err(anyhow!(
                         "Invalid value for slice_cb_qp_offset: {}",
                         hdr.cb_qp_offset
@@ -5222,7 +5212,7 @@ impl Parser {
                 hdr.cr_qp_offset = r.read_se_bounded(-12, 12)?;
 
                 let qp_offset = pps.cr_qp_offset + hdr.cr_qp_offset;
-                if qp_offset < -12 || qp_offset > 12 {
+                if !(-12..=12).contains(&qp_offset) {
                     return Err(anyhow!(
                         "Invalid value for slice_cr_qp_offset: {}",
                         hdr.cr_qp_offset
@@ -5455,11 +5445,11 @@ mod tests {
         let vps_nalu = Nalu::<_, NaluHeader>::next(&mut cursor).unwrap().unwrap();
         let vps = parser.parse_vps(&vps_nalu).unwrap();
 
-        assert_eq!(vps.base_layer_internal_flag, true);
-        assert_eq!(vps.base_layer_available_flag, true);
+        assert!(vps.base_layer_internal_flag);
+        assert!(vps.base_layer_available_flag);
         assert_eq!(vps.max_layers_minus1, 0);
         assert_eq!(vps.max_sub_layers_minus1, 0);
-        assert_eq!(vps.temporal_id_nesting_flag, true);
+        assert!(vps.temporal_id_nesting_flag);
         assert_eq!(vps.profile_tier_level.general_profile_idc, 1);
         assert_eq!(vps.profile_tier_level.general_level_idc, 60);
         assert_eq!(vps.max_dec_pic_buffering_minus1[0], 4);
@@ -5472,7 +5462,7 @@ mod tests {
         }
         assert_eq!(vps.max_layer_id, 0);
         assert_eq!(vps.num_layer_sets_minus1, 0);
-        assert_eq!(vps.timing_info_present_flag, false);
+        assert!(!vps.timing_info_present_flag);
     }
 
     /// Adapted from Chromium (media/video/h265_parser_unittest.cc::SpsParsing())
@@ -5487,7 +5477,7 @@ mod tests {
         assert_eq!(sps.profile_tier_level.general_level_idc, 60);
         assert_eq!(sps.seq_parameter_set_id, 0);
         assert_eq!(sps.chroma_format_idc, 1);
-        assert_eq!(sps.separate_colour_plane_flag, false);
+        assert!(!sps.separate_colour_plane_flag);
         assert_eq!(sps.pic_width_in_luma_samples, 320);
         assert_eq!(sps.pic_height_in_luma_samples, 184);
         assert_eq!(sps.conf_win_left_offset, 0);
@@ -5511,24 +5501,24 @@ mod tests {
         assert_eq!(sps.log2_diff_max_min_luma_transform_block_size, 3);
         assert_eq!(sps.max_transform_hierarchy_depth_inter, 0);
         assert_eq!(sps.max_transform_hierarchy_depth_intra, 0);
-        assert_eq!(sps.scaling_list_enabled_flag, false);
-        assert_eq!(sps.scaling_list_data_present_flag, false);
-        assert_eq!(sps.amp_enabled_flag, false);
-        assert_eq!(sps.sample_adaptive_offset_enabled_flag, true);
-        assert_eq!(sps.pcm_enabled_flag, false);
+        assert!(!sps.scaling_list_enabled_flag);
+        assert!(!sps.scaling_list_data_present_flag);
+        assert!(!sps.amp_enabled_flag);
+        assert!(sps.sample_adaptive_offset_enabled_flag);
+        assert!(!sps.pcm_enabled_flag);
         assert_eq!(sps.pcm_sample_bit_depth_luma_minus1, 0);
         assert_eq!(sps.pcm_sample_bit_depth_chroma_minus1, 0);
         assert_eq!(sps.log2_min_pcm_luma_coding_block_size_minus3, 0);
         assert_eq!(sps.log2_diff_max_min_pcm_luma_coding_block_size, 0);
-        assert_eq!(sps.pcm_loop_filter_disabled_flag, false);
+        assert!(!sps.pcm_loop_filter_disabled_flag);
         assert_eq!(sps.num_short_term_ref_pic_sets, 0);
         assert_eq!(sps.num_long_term_ref_pics_sps, 0);
-        assert_eq!(sps.temporal_mvp_enabled_flag, true);
-        assert_eq!(sps.strong_intra_smoothing_enabled_flag, true);
+        assert!(sps.temporal_mvp_enabled_flag);
+        assert!(sps.strong_intra_smoothing_enabled_flag);
         assert_eq!(sps.vui_parameters.sar_width, 0);
         assert_eq!(sps.vui_parameters.sar_height, 0);
-        assert_eq!(sps.vui_parameters.video_full_range_flag, false);
-        assert_eq!(sps.vui_parameters.colour_description_present_flag, false);
+        assert!(!sps.vui_parameters.video_full_range_flag);
+        assert!(!sps.vui_parameters.colour_description_present_flag);
 
         // Note: the original test has 0 for the three variables below, but they
         // have valid defaults in the spec (i.e.: 2).
@@ -5556,31 +5546,31 @@ mod tests {
 
         assert_eq!(pps.pic_parameter_set_id, 0);
         assert_eq!(pps.seq_parameter_set_id, 0);
-        assert_eq!(pps.dependent_slice_segments_enabled_flag, false);
-        assert_eq!(pps.output_flag_present_flag, false);
+        assert!(!pps.dependent_slice_segments_enabled_flag);
+        assert!(!pps.output_flag_present_flag);
         assert_eq!(pps.num_extra_slice_header_bits, 0);
-        assert_eq!(pps.sign_data_hiding_enabled_flag, true);
-        assert_eq!(pps.cabac_init_present_flag, false);
+        assert!(pps.sign_data_hiding_enabled_flag);
+        assert!(!pps.cabac_init_present_flag);
         assert_eq!(pps.num_ref_idx_l0_default_active_minus1, 0);
         assert_eq!(pps.num_ref_idx_l1_default_active_minus1, 0);
         assert_eq!(pps.init_qp_minus26, 0);
-        assert_eq!(pps.constrained_intra_pred_flag, false);
-        assert_eq!(pps.transform_skip_enabled_flag, false);
-        assert_eq!(pps.cu_qp_delta_enabled_flag, true);
+        assert!(!pps.constrained_intra_pred_flag);
+        assert!(!pps.transform_skip_enabled_flag);
+        assert!(pps.cu_qp_delta_enabled_flag);
         assert_eq!(pps.diff_cu_qp_delta_depth, 0);
         assert_eq!(pps.cb_qp_offset, 0);
         assert_eq!(pps.cr_qp_offset, 0);
-        assert_eq!(pps.slice_chroma_qp_offsets_present_flag, false);
-        assert_eq!(pps.weighted_pred_flag, true);
-        assert_eq!(pps.weighted_bipred_flag, false);
-        assert_eq!(pps.transquant_bypass_enabled_flag, false);
-        assert_eq!(pps.tiles_enabled_flag, false);
-        assert_eq!(pps.entropy_coding_sync_enabled_flag, true);
-        assert_eq!(pps.loop_filter_across_tiles_enabled_flag, true);
-        assert_eq!(pps.scaling_list_data_present_flag, false);
-        assert_eq!(pps.lists_modification_present_flag, false);
+        assert!(!pps.slice_chroma_qp_offsets_present_flag);
+        assert!(pps.weighted_pred_flag);
+        assert!(!pps.weighted_bipred_flag);
+        assert!(!pps.transquant_bypass_enabled_flag);
+        assert!(!pps.tiles_enabled_flag);
+        assert!(pps.entropy_coding_sync_enabled_flag);
+        assert!(pps.loop_filter_across_tiles_enabled_flag);
+        assert!(!pps.scaling_list_data_present_flag);
+        assert!(!pps.lists_modification_present_flag);
         assert_eq!(pps.log2_parallel_merge_level_minus2, 0);
-        assert_eq!(pps.slice_segment_header_extension_present_flag, false);
+        assert!(!pps.slice_segment_header_extension_present_flag);
     }
 
     /// Adapted from Chromium (media/video/h265_parser_unittest.cc::SliceHeaderParsing())
@@ -5602,33 +5592,33 @@ mod tests {
         let slice_nalu = find_nalu_by_type(STREAM_BEAR, NaluType::IdrWRadl, 0).unwrap();
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
         let hdr = slice.header();
-        assert_eq!(hdr.first_slice_segment_in_pic_flag, true);
-        assert_eq!(hdr.no_output_of_prior_pics_flag, false);
+        assert!(hdr.first_slice_segment_in_pic_flag);
+        assert!(!hdr.no_output_of_prior_pics_flag);
         assert_eq!(hdr.pic_parameter_set_id, 0);
-        assert_eq!(hdr.dependent_slice_segment_flag, false);
+        assert!(!hdr.dependent_slice_segment_flag);
         assert_eq!(hdr.type_, SliceType::I);
-        assert_eq!(hdr.sao_luma_flag, true);
-        assert_eq!(hdr.sao_chroma_flag, true);
+        assert!(hdr.sao_luma_flag);
+        assert!(hdr.sao_chroma_flag);
         assert_eq!(hdr.qp_delta, 8);
-        assert_eq!(hdr.loop_filter_across_slices_enabled_flag, true);
+        assert!(hdr.loop_filter_across_slices_enabled_flag);
 
         let slice_nalu = find_nalu_by_type(STREAM_BEAR, NaluType::TrailR, 0).unwrap();
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
         let hdr = slice.header();
-        assert_eq!(hdr.first_slice_segment_in_pic_flag, true);
+        assert!(hdr.first_slice_segment_in_pic_flag);
         assert_eq!(hdr.pic_parameter_set_id, 0);
-        assert_eq!(hdr.dependent_slice_segment_flag, false);
+        assert!(!hdr.dependent_slice_segment_flag);
         assert_eq!(hdr.type_, SliceType::P);
         assert_eq!(hdr.pic_order_cnt_lsb, 4);
-        assert_eq!(hdr.short_term_ref_pic_set_sps_flag, false);
+        assert!(!hdr.short_term_ref_pic_set_sps_flag);
         assert_eq!(hdr.short_term_ref_pic_set.num_negative_pics, 1);
         assert_eq!(hdr.short_term_ref_pic_set.num_positive_pics, 0);
         assert_eq!(hdr.short_term_ref_pic_set.delta_poc_s0[0], -4);
-        assert_eq!(hdr.short_term_ref_pic_set.used_by_curr_pic_s0[0], true);
-        assert_eq!(hdr.temporal_mvp_enabled_flag, true);
-        assert_eq!(hdr.sao_luma_flag, true);
-        assert_eq!(hdr.sao_chroma_flag, true);
-        assert_eq!(hdr.num_ref_idx_active_override_flag, false);
+        assert!(hdr.short_term_ref_pic_set.used_by_curr_pic_s0[0]);
+        assert!(hdr.temporal_mvp_enabled_flag);
+        assert!(hdr.sao_luma_flag);
+        assert!(hdr.sao_chroma_flag);
+        assert!(!hdr.num_ref_idx_active_override_flag);
         assert_eq!(hdr.pred_weight_table.luma_log2_weight_denom, 0);
         assert_eq!(hdr.pred_weight_table.delta_chroma_log2_weight_denom, 7);
         assert_eq!(hdr.pred_weight_table.delta_luma_weight_l0[0], 0);
@@ -5639,7 +5629,7 @@ mod tests {
         assert_eq!(hdr.pred_weight_table.delta_chroma_offset_l0[0][1], 0);
         assert_eq!(hdr.five_minus_max_num_merge_cand, 3);
         assert_eq!(hdr.qp_delta, 8);
-        assert_eq!(hdr.loop_filter_across_slices_enabled_flag, true);
+        assert!(hdr.loop_filter_across_slices_enabled_flag);
     }
 
     /// A custom test for VPS parsing with data manually extracted from
@@ -5651,74 +5641,47 @@ mod tests {
 
         let vps_nalu = Nalu::<_, NaluHeader>::next(&mut cursor).unwrap().unwrap();
         let vps = parser.parse_vps(&vps_nalu).unwrap();
-        assert_eq!(vps.base_layer_internal_flag, true);
-        assert_eq!(vps.base_layer_available_flag, true);
+        assert!(vps.base_layer_internal_flag);
+        assert!(vps.base_layer_available_flag);
         assert_eq!(vps.max_layers_minus1, 0);
         assert_eq!(vps.max_sub_layers_minus1, 0);
-        assert_eq!(vps.temporal_id_nesting_flag, true);
+        assert!(vps.temporal_id_nesting_flag);
         assert_eq!(vps.profile_tier_level.general_profile_space, 0);
-        assert_eq!(vps.profile_tier_level.general_tier_flag, false);
+        assert!(!vps.profile_tier_level.general_tier_flag);
         assert_eq!(vps.profile_tier_level.general_profile_idc, 1);
         for i in 0..32 {
-            let val = if i == 1 || i == 2 { true } else { false };
+            let val = i == 1 || i == 2;
             assert_eq!(
                 vps.profile_tier_level.general_profile_compatibility_flag[i],
                 val
             );
         }
-        assert_eq!(vps.profile_tier_level.general_progressive_source_flag, true);
-        assert_eq!(vps.profile_tier_level.general_interlaced_source_flag, false);
-        assert_eq!(
-            vps.profile_tier_level.general_non_packed_constraint_flag,
-            false
-        );
-        assert_eq!(
-            vps.profile_tier_level.general_frame_only_constraint_flag,
-            true
-        );
-        assert_eq!(
-            vps.profile_tier_level.general_max_12bit_constraint_flag,
-            false
-        );
-        assert_eq!(
-            vps.profile_tier_level.general_max_10bit_constraint_flag,
-            false
-        );
-        assert_eq!(
-            vps.profile_tier_level.general_max_8bit_constraint_flag,
-            false
-        );
-        assert_eq!(
-            vps.profile_tier_level.general_max_422chroma_constraint_flag,
-            false
-        );
-        assert_eq!(
-            vps.profile_tier_level.general_max_420chroma_constraint_flag,
-            false
-        );
-        assert_eq!(
-            vps.profile_tier_level
+        assert!(vps.profile_tier_level.general_progressive_source_flag);
+        assert!(!vps.profile_tier_level.general_interlaced_source_flag);
+        assert!(!vps.profile_tier_level.general_non_packed_constraint_flag,);
+        assert!(vps.profile_tier_level.general_frame_only_constraint_flag,);
+        assert!(!vps.profile_tier_level.general_max_12bit_constraint_flag,);
+        assert!(!vps.profile_tier_level.general_max_10bit_constraint_flag,);
+        assert!(!vps.profile_tier_level.general_max_8bit_constraint_flag,);
+        assert!(!vps.profile_tier_level.general_max_422chroma_constraint_flag,);
+        assert!(!vps.profile_tier_level.general_max_420chroma_constraint_flag,);
+        assert!(
+            !vps.profile_tier_level
                 .general_max_monochrome_constraint_flag,
-            false
         );
-        assert_eq!(vps.profile_tier_level.general_intra_constraint_flag, false);
-        assert_eq!(
-            vps.profile_tier_level
+        assert!(!vps.profile_tier_level.general_intra_constraint_flag);
+        assert!(
+            !vps.profile_tier_level
                 .general_one_picture_only_constraint_flag,
-            false
         );
-        assert_eq!(
-            vps.profile_tier_level
+        assert!(
+            !vps.profile_tier_level
                 .general_lower_bit_rate_constraint_flag,
-            false
         );
-        assert_eq!(
-            vps.profile_tier_level.general_max_14bit_constraint_flag,
-            false
-        );
+        assert!(!vps.profile_tier_level.general_max_14bit_constraint_flag,);
         assert_eq!(vps.profile_tier_level.general_level_idc, 60);
 
-        assert_eq!(vps.sub_layer_ordering_info_present_flag, true);
+        assert!(vps.sub_layer_ordering_info_present_flag);
         assert_eq!(vps.max_dec_pic_buffering_minus1[0], 4);
         assert_eq!(vps.max_num_reorder_pics[0], 2);
         assert_eq!(vps.max_latency_increase_plus1[0], 5);
@@ -5730,10 +5693,10 @@ mod tests {
 
         assert_eq!(vps.max_layer_id, 0);
         assert_eq!(vps.num_layer_sets_minus1, 0);
-        assert_eq!(vps.timing_info_present_flag, false);
+        assert!(!vps.timing_info_present_flag);
         assert_eq!(vps.num_units_in_tick, 0);
         assert_eq!(vps.time_scale, 0);
-        assert_eq!(vps.poc_proportional_to_timing_flag, false);
+        assert!(!vps.poc_proportional_to_timing_flag);
         assert_eq!(vps.num_ticks_poc_diff_one_minus1, 0);
         assert_eq!(vps.num_hrd_parameters, 0);
     }
@@ -5750,70 +5713,43 @@ mod tests {
         assert_eq!(sps.max_sub_layers_minus1, 0);
 
         assert_eq!(sps.profile_tier_level.general_profile_space, 0);
-        assert_eq!(sps.profile_tier_level.general_tier_flag, false);
+        assert!(!sps.profile_tier_level.general_tier_flag);
         assert_eq!(sps.profile_tier_level.general_profile_idc, 1);
         for i in 0..32 {
-            let val = if i == 1 || i == 2 { true } else { false };
+            let val = i == 1 || i == 2;
             assert_eq!(
                 sps.profile_tier_level.general_profile_compatibility_flag[i],
                 val
             );
         }
-        assert_eq!(sps.profile_tier_level.general_progressive_source_flag, true);
-        assert_eq!(sps.profile_tier_level.general_interlaced_source_flag, false);
-        assert_eq!(
-            sps.profile_tier_level.general_non_packed_constraint_flag,
-            false
-        );
-        assert_eq!(
-            sps.profile_tier_level.general_frame_only_constraint_flag,
-            true
-        );
-        assert_eq!(
-            sps.profile_tier_level.general_max_12bit_constraint_flag,
-            false
-        );
-        assert_eq!(
-            sps.profile_tier_level.general_max_10bit_constraint_flag,
-            false
-        );
-        assert_eq!(
-            sps.profile_tier_level.general_max_8bit_constraint_flag,
-            false
-        );
-        assert_eq!(
-            sps.profile_tier_level.general_max_422chroma_constraint_flag,
-            false
-        );
-        assert_eq!(
-            sps.profile_tier_level.general_max_420chroma_constraint_flag,
-            false
-        );
-        assert_eq!(
-            sps.profile_tier_level
+        assert!(sps.profile_tier_level.general_progressive_source_flag);
+        assert!(!sps.profile_tier_level.general_interlaced_source_flag);
+        assert!(!sps.profile_tier_level.general_non_packed_constraint_flag,);
+        assert!(sps.profile_tier_level.general_frame_only_constraint_flag,);
+        assert!(!sps.profile_tier_level.general_max_12bit_constraint_flag,);
+        assert!(!sps.profile_tier_level.general_max_10bit_constraint_flag,);
+        assert!(!sps.profile_tier_level.general_max_8bit_constraint_flag,);
+        assert!(!sps.profile_tier_level.general_max_422chroma_constraint_flag,);
+        assert!(!sps.profile_tier_level.general_max_420chroma_constraint_flag,);
+        assert!(
+            !sps.profile_tier_level
                 .general_max_monochrome_constraint_flag,
-            false
         );
-        assert_eq!(sps.profile_tier_level.general_intra_constraint_flag, false);
-        assert_eq!(
-            sps.profile_tier_level
+        assert!(!sps.profile_tier_level.general_intra_constraint_flag);
+        assert!(
+            !sps.profile_tier_level
                 .general_one_picture_only_constraint_flag,
-            false
         );
-        assert_eq!(
-            sps.profile_tier_level
+        assert!(
+            !sps.profile_tier_level
                 .general_lower_bit_rate_constraint_flag,
-            false
         );
-        assert_eq!(
-            sps.profile_tier_level.general_max_14bit_constraint_flag,
-            false
-        );
+        assert!(!sps.profile_tier_level.general_max_14bit_constraint_flag,);
         assert_eq!(sps.profile_tier_level.general_level_idc, 60);
 
         assert_eq!(sps.seq_parameter_set_id, 0);
         assert_eq!(sps.chroma_format_idc, 1);
-        assert_eq!(sps.separate_colour_plane_flag, false);
+        assert!(!sps.separate_colour_plane_flag);
         assert_eq!(sps.pic_width_in_luma_samples, 320);
         assert_eq!(sps.pic_height_in_luma_samples, 240);
         assert_eq!(sps.conf_win_left_offset, 0);
@@ -5823,7 +5759,7 @@ mod tests {
         assert_eq!(sps.bit_depth_luma_minus8, 0);
         assert_eq!(sps.bit_depth_chroma_minus8, 0);
         assert_eq!(sps.log2_max_pic_order_cnt_lsb_minus4, 4);
-        assert_eq!(sps.sub_layer_ordering_info_present_flag, true);
+        assert!(sps.sub_layer_ordering_info_present_flag);
         assert_eq!(sps.max_dec_pic_buffering_minus1[0], 4);
         assert_eq!(sps.max_num_reorder_pics[0], 2);
         assert_eq!(sps.max_latency_increase_plus1[0], 5);
@@ -5838,31 +5774,31 @@ mod tests {
         assert_eq!(sps.log2_diff_max_min_luma_transform_block_size, 3);
         assert_eq!(sps.max_transform_hierarchy_depth_inter, 0);
         assert_eq!(sps.max_transform_hierarchy_depth_intra, 0);
-        assert_eq!(sps.scaling_list_enabled_flag, false);
-        assert_eq!(sps.scaling_list_data_present_flag, false);
-        assert_eq!(sps.amp_enabled_flag, false);
-        assert_eq!(sps.sample_adaptive_offset_enabled_flag, true);
-        assert_eq!(sps.pcm_enabled_flag, false);
+        assert!(!sps.scaling_list_enabled_flag);
+        assert!(!sps.scaling_list_data_present_flag);
+        assert!(!sps.amp_enabled_flag);
+        assert!(sps.sample_adaptive_offset_enabled_flag);
+        assert!(!sps.pcm_enabled_flag);
         assert_eq!(sps.pcm_sample_bit_depth_luma_minus1, 0);
         assert_eq!(sps.pcm_sample_bit_depth_chroma_minus1, 0);
         assert_eq!(sps.log2_min_pcm_luma_coding_block_size_minus3, 0);
         assert_eq!(sps.log2_diff_max_min_pcm_luma_coding_block_size, 0);
-        assert_eq!(sps.pcm_loop_filter_disabled_flag, false);
+        assert!(!sps.pcm_loop_filter_disabled_flag);
         assert_eq!(sps.num_short_term_ref_pic_sets, 0);
         assert_eq!(sps.num_long_term_ref_pics_sps, 0);
-        assert_eq!(sps.temporal_mvp_enabled_flag, true);
-        assert_eq!(sps.strong_intra_smoothing_enabled_flag, true);
+        assert!(sps.temporal_mvp_enabled_flag);
+        assert!(sps.strong_intra_smoothing_enabled_flag);
         assert_eq!(sps.vui_parameters.sar_width, 0);
         assert_eq!(sps.vui_parameters.sar_height, 0);
-        assert_eq!(sps.vui_parameters.video_full_range_flag, false);
-        assert_eq!(sps.vui_parameters.colour_description_present_flag, false);
-        assert_eq!(sps.vui_parameters.video_signal_type_present_flag, true);
-        assert_eq!(sps.vui_parameters.timing_info_present_flag, true);
+        assert!(!sps.vui_parameters.video_full_range_flag);
+        assert!(!sps.vui_parameters.colour_description_present_flag);
+        assert!(sps.vui_parameters.video_signal_type_present_flag);
+        assert!(sps.vui_parameters.timing_info_present_flag);
         assert_eq!(sps.vui_parameters.num_units_in_tick, 1);
         assert_eq!(sps.vui_parameters.time_scale, 25);
-        assert_eq!(sps.vui_parameters.poc_proportional_to_timing_flag, false);
+        assert!(!sps.vui_parameters.poc_proportional_to_timing_flag);
         assert_eq!(sps.vui_parameters.num_ticks_poc_diff_one_minus1, 0);
-        assert_eq!(sps.vui_parameters.hrd_parameters_present_flag, false);
+        assert!(!sps.vui_parameters.hrd_parameters_present_flag);
         assert_eq!(sps.vui_parameters.colour_primaries, 2);
         assert_eq!(sps.vui_parameters.transfer_characteristics, 2);
         assert_eq!(sps.vui_parameters.matrix_coeffs, 2);
@@ -5884,42 +5820,42 @@ mod tests {
         let pps_nalu = find_nalu_by_type(STREAM_TEST25FPS, NaluType::PpsNut, 0).unwrap();
         let pps = parser.parse_pps(&pps_nalu).unwrap();
 
-        assert_eq!(pps.dependent_slice_segments_enabled_flag, false);
-        assert_eq!(pps.output_flag_present_flag, false);
+        assert!(!pps.dependent_slice_segments_enabled_flag);
+        assert!(!pps.output_flag_present_flag);
         assert_eq!(pps.num_extra_slice_header_bits, 0);
-        assert_eq!(pps.sign_data_hiding_enabled_flag, true);
-        assert_eq!(pps.cabac_init_present_flag, false);
+        assert!(pps.sign_data_hiding_enabled_flag);
+        assert!(!pps.cabac_init_present_flag);
         assert_eq!(pps.num_ref_idx_l0_default_active_minus1, 0);
         assert_eq!(pps.num_ref_idx_l1_default_active_minus1, 0);
         assert_eq!(pps.init_qp_minus26, 0);
-        assert_eq!(pps.constrained_intra_pred_flag, false);
-        assert_eq!(pps.transform_skip_enabled_flag, false);
-        assert_eq!(pps.cu_qp_delta_enabled_flag, true);
+        assert!(!pps.constrained_intra_pred_flag);
+        assert!(!pps.transform_skip_enabled_flag);
+        assert!(pps.cu_qp_delta_enabled_flag);
         assert_eq!(pps.diff_cu_qp_delta_depth, 1);
         assert_eq!(pps.cb_qp_offset, 0);
         assert_eq!(pps.cr_qp_offset, 0);
-        assert_eq!(pps.slice_chroma_qp_offsets_present_flag, false);
-        assert_eq!(pps.weighted_pred_flag, true);
-        assert_eq!(pps.weighted_bipred_flag, false);
-        assert_eq!(pps.transquant_bypass_enabled_flag, false);
-        assert_eq!(pps.tiles_enabled_flag, false);
-        assert_eq!(pps.entropy_coding_sync_enabled_flag, true);
+        assert!(!pps.slice_chroma_qp_offsets_present_flag);
+        assert!(pps.weighted_pred_flag);
+        assert!(!pps.weighted_bipred_flag);
+        assert!(!pps.transquant_bypass_enabled_flag);
+        assert!(!pps.tiles_enabled_flag);
+        assert!(pps.entropy_coding_sync_enabled_flag);
         assert_eq!(pps.num_tile_rows_minus1, 0);
         assert_eq!(pps.num_tile_columns_minus1, 0);
-        assert_eq!(pps.uniform_spacing_flag, true);
+        assert!(pps.uniform_spacing_flag);
         assert_eq!(pps.column_width_minus1, [0; 19]);
         assert_eq!(pps.row_height_minus1, [0; 21]);
-        assert_eq!(pps.loop_filter_across_slices_enabled_flag, true);
-        assert_eq!(pps.loop_filter_across_tiles_enabled_flag, true);
-        assert_eq!(pps.deblocking_filter_control_present_flag, false);
-        assert_eq!(pps.deblocking_filter_override_enabled_flag, false);
-        assert_eq!(pps.deblocking_filter_disabled_flag, false);
+        assert!(pps.loop_filter_across_slices_enabled_flag);
+        assert!(pps.loop_filter_across_tiles_enabled_flag);
+        assert!(!pps.deblocking_filter_control_present_flag);
+        assert!(!pps.deblocking_filter_override_enabled_flag);
+        assert!(!pps.deblocking_filter_disabled_flag);
         assert_eq!(pps.beta_offset_div2, 0);
         assert_eq!(pps.tc_offset_div2, 0);
-        assert_eq!(pps.lists_modification_present_flag, false);
+        assert!(!pps.lists_modification_present_flag);
         assert_eq!(pps.log2_parallel_merge_level_minus2, 0);
-        assert_eq!(pps.slice_segment_header_extension_present_flag, false);
-        assert_eq!(pps.extension_present_flag, false);
+        assert!(!pps.slice_segment_header_extension_present_flag);
+        assert!(!pps.extension_present_flag);
     }
 
     /// A custom test for slice header parsing with data manually extracted from
@@ -5942,38 +5878,38 @@ mod tests {
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
         let hdr = slice.header();
 
-        assert_eq!(hdr.first_slice_segment_in_pic_flag, true);
-        assert_eq!(hdr.no_output_of_prior_pics_flag, false);
-        assert_eq!(hdr.dependent_slice_segment_flag, false);
+        assert!(hdr.first_slice_segment_in_pic_flag);
+        assert!(!hdr.no_output_of_prior_pics_flag);
+        assert!(!hdr.dependent_slice_segment_flag);
         assert_eq!(hdr.type_, SliceType::I);
-        assert_eq!(hdr.pic_output_flag, true);
+        assert!(hdr.pic_output_flag);
         assert_eq!(hdr.colour_plane_id, 0);
         assert_eq!(hdr.pic_order_cnt_lsb, 0);
-        assert_eq!(hdr.short_term_ref_pic_set_sps_flag, false);
+        assert!(!hdr.short_term_ref_pic_set_sps_flag);
         assert_eq!(hdr.lt_idx_sps, [0; 16]);
         assert_eq!(hdr.poc_lsb_lt, [0; 16]);
         assert_eq!(hdr.used_by_curr_pic_lt, [false; 16]);
         assert_eq!(hdr.delta_poc_msb_cycle_lt, [0; 16]);
         assert_eq!(hdr.delta_poc_msb_present_flag, [false; 16]);
-        assert_eq!(hdr.temporal_mvp_enabled_flag, false);
-        assert_eq!(hdr.sao_luma_flag, true);
-        assert_eq!(hdr.sao_chroma_flag, true);
-        assert_eq!(hdr.num_ref_idx_active_override_flag, false);
+        assert!(!hdr.temporal_mvp_enabled_flag);
+        assert!(hdr.sao_luma_flag);
+        assert!(hdr.sao_chroma_flag);
+        assert!(!hdr.num_ref_idx_active_override_flag);
         assert_eq!(hdr.num_ref_idx_l0_active_minus1, 0);
         assert_eq!(hdr.num_ref_idx_l1_active_minus1, 0);
-        assert_eq!(hdr.cabac_init_flag, false);
-        assert_eq!(hdr.collocated_from_l0_flag, true);
+        assert!(!hdr.cabac_init_flag);
+        assert!(hdr.collocated_from_l0_flag);
         assert_eq!(hdr.five_minus_max_num_merge_cand, 0);
-        assert_eq!(hdr.use_integer_mv_flag, false);
+        assert!(!hdr.use_integer_mv_flag);
         assert_eq!(hdr.qp_delta, 7);
         assert_eq!(hdr.cb_qp_offset, 0);
         assert_eq!(hdr.cr_qp_offset, 0);
-        assert_eq!(hdr.cu_chroma_qp_offset_enabled_flag, false);
-        assert_eq!(hdr.deblocking_filter_override_flag, false);
-        assert_eq!(hdr.deblocking_filter_override_flag, false);
+        assert!(!hdr.cu_chroma_qp_offset_enabled_flag);
+        assert!(!hdr.deblocking_filter_override_flag);
+        assert!(!hdr.deblocking_filter_override_flag);
         assert_eq!(hdr.beta_offset_div2, 0);
         assert_eq!(hdr.tc_offset_div2, 0);
-        assert_eq!(hdr.loop_filter_across_slices_enabled_flag, true);
+        assert!(hdr.loop_filter_across_slices_enabled_flag);
         assert_eq!(hdr.num_entry_point_offsets, 3);
         assert_eq!(hdr.offset_len_minus1, 11);
         assert_eq!(hdr.num_pic_total_curr, 0);
@@ -5990,45 +5926,45 @@ mod tests {
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
         let hdr = slice.header();
 
-        assert_eq!(hdr.first_slice_segment_in_pic_flag, true);
-        assert_eq!(hdr.no_output_of_prior_pics_flag, false);
-        assert_eq!(hdr.dependent_slice_segment_flag, false);
+        assert!(hdr.first_slice_segment_in_pic_flag);
+        assert!(!hdr.no_output_of_prior_pics_flag);
+        assert!(!hdr.dependent_slice_segment_flag);
         assert_eq!(hdr.type_, SliceType::P);
-        assert_eq!(hdr.pic_output_flag, true);
+        assert!(hdr.pic_output_flag);
         assert_eq!(hdr.colour_plane_id, 0);
         assert_eq!(hdr.pic_order_cnt_lsb, 3);
-        assert_eq!(hdr.short_term_ref_pic_set_sps_flag, false);
+        assert!(!hdr.short_term_ref_pic_set_sps_flag);
         assert_eq!(hdr.short_term_ref_pic_set.num_delta_pocs, 1);
         assert_eq!(hdr.short_term_ref_pic_set.num_negative_pics, 1);
         assert_eq!(hdr.short_term_ref_pic_set.num_positive_pics, 0);
-        assert_eq!(hdr.short_term_ref_pic_set.used_by_curr_pic_s0[0], true);
+        assert!(hdr.short_term_ref_pic_set.used_by_curr_pic_s0[0]);
         assert_eq!(hdr.short_term_ref_pic_set.delta_poc_s0[0], -3);
         assert_eq!(hdr.lt_idx_sps, [0; 16]);
         assert_eq!(hdr.poc_lsb_lt, [0; 16]);
         assert_eq!(hdr.used_by_curr_pic_lt, [false; 16]);
         assert_eq!(hdr.delta_poc_msb_cycle_lt, [0; 16]);
         assert_eq!(hdr.delta_poc_msb_present_flag, [false; 16]);
-        assert_eq!(hdr.temporal_mvp_enabled_flag, true);
-        assert_eq!(hdr.sao_luma_flag, true);
-        assert_eq!(hdr.sao_chroma_flag, true);
-        assert_eq!(hdr.num_ref_idx_active_override_flag, false);
+        assert!(hdr.temporal_mvp_enabled_flag);
+        assert!(hdr.sao_luma_flag);
+        assert!(hdr.sao_chroma_flag);
+        assert!(!hdr.num_ref_idx_active_override_flag);
         assert_eq!(hdr.num_ref_idx_l0_active_minus1, 0);
         assert_eq!(hdr.num_ref_idx_l1_active_minus1, 0);
-        assert_eq!(hdr.cabac_init_flag, false);
-        assert_eq!(hdr.collocated_from_l0_flag, true);
+        assert!(!hdr.cabac_init_flag);
+        assert!(hdr.collocated_from_l0_flag);
         assert_eq!(hdr.pred_weight_table.luma_log2_weight_denom, 7);
         assert_eq!(hdr.five_minus_max_num_merge_cand, 2);
-        assert_eq!(hdr.use_integer_mv_flag, false);
+        assert!(!hdr.use_integer_mv_flag);
         assert_eq!(hdr.num_entry_point_offsets, 3);
         assert_eq!(hdr.qp_delta, 7);
         assert_eq!(hdr.cb_qp_offset, 0);
         assert_eq!(hdr.cr_qp_offset, 0);
-        assert_eq!(hdr.cu_chroma_qp_offset_enabled_flag, false);
-        assert_eq!(hdr.deblocking_filter_override_flag, false);
-        assert_eq!(hdr.deblocking_filter_override_flag, false);
+        assert!(!hdr.cu_chroma_qp_offset_enabled_flag);
+        assert!(!hdr.deblocking_filter_override_flag);
+        assert!(!hdr.deblocking_filter_override_flag);
         assert_eq!(hdr.beta_offset_div2, 0);
         assert_eq!(hdr.tc_offset_div2, 0);
-        assert_eq!(hdr.loop_filter_across_slices_enabled_flag, false);
+        assert!(!hdr.loop_filter_across_slices_enabled_flag);
         assert_eq!(hdr.num_entry_point_offsets, 3);
         assert_eq!(hdr.offset_len_minus1, 10);
         assert_eq!(hdr.num_pic_total_curr, 1);
