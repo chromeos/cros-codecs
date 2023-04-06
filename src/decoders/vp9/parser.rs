@@ -988,10 +988,7 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
-    use std::io::Read;
     use std::io::Seek;
-
-    use bytes::Buf;
 
     use crate::decoders::vp9::parser::BitDepth;
     use crate::decoders::vp9::parser::ColorSpace;
@@ -1001,24 +998,7 @@ mod tests {
     use crate::decoders::vp9::parser::Profile;
     use crate::decoders::vp9::parser::MAX_SEGMENTS;
     use crate::decoders::vp9::parser::SEG_LVL_MAX;
-
-    /// Read and return the data from the next IVF packet. Returns `None` if there is no more data
-    /// to read.
-    /// TODO: reuse the vp8 implementation for this function.
-    fn read_ivf_packet(cursor: &mut Cursor<&[u8]>) -> Option<Box<[u8]>> {
-        if !cursor.has_remaining() {
-            return None;
-        }
-
-        let len = cursor.get_u32_le();
-        // Skip PTS.
-        let _ = cursor.get_u64_le();
-
-        let mut buf = vec![0u8; len as usize];
-        cursor.read_exact(&mut buf).unwrap();
-
-        Some(buf.into_boxed_slice())
-    }
+    use crate::utils::read_ivf_packet;
 
     #[test]
     fn test_parse_superframe() {

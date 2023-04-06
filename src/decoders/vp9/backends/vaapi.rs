@@ -310,7 +310,6 @@ mod tests {
 
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
-    use crate::decoders::vp9::decoder::tests::read_ivf_packet;
     use crate::decoders::vp9::decoder::tests::vp9_decoding_loop;
     use crate::decoders::vp9::decoder::Decoder;
     use crate::decoders::vp9::decoder::Segmentation;
@@ -318,6 +317,7 @@ mod tests {
     use crate::decoders::vp9::parser::MAX_SEGMENTS;
     use crate::decoders::vp9::parser::NUM_REF_FRAMES;
     use crate::decoders::BlockingMode;
+    use crate::utils::read_ivf_packet;
     use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
     use crate::utils::vaapi::VaapiBackend;
 

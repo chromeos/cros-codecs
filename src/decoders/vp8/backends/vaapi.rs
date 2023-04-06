@@ -310,8 +310,8 @@ mod tests {
     use crate::decoders::vp8::decoder::tests::vp8_decoding_loop;
     use crate::decoders::vp8::decoder::Decoder;
     use crate::decoders::vp8::parser::Parser;
-    use crate::decoders::vp9::decoder::tests::read_ivf_packet;
     use crate::decoders::BlockingMode;
+    use crate::utils::read_ivf_packet;
     use crate::utils::vaapi::VaapiBackend;
     use crate::Resolution;
 

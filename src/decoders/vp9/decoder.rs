@@ -517,10 +517,7 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
 #[cfg(test)]
 pub mod tests {
     use std::io::Cursor;
-    use std::io::Read;
     use std::io::Seek;
-
-    use bytes::Buf;
 
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
@@ -528,23 +525,7 @@ pub mod tests {
     use crate::decoders::BlockingMode;
     use crate::decoders::DecodedHandle;
     use crate::decoders::VideoDecoder;
-
-    /// Read and return the data from the next IVF packet. Returns `None` if there is no more data
-    /// to read.
-    pub(crate) fn read_ivf_packet(cursor: &mut Cursor<&[u8]>) -> Option<Box<[u8]>> {
-        if !cursor.has_remaining() {
-            return None;
-        }
-
-        let len = cursor.get_u32_le();
-        // Skip PTS.
-        let _ = cursor.get_u64_le();
-
-        let mut buf = vec![0u8; len as usize];
-        cursor.read_exact(&mut buf).unwrap();
-
-        Some(buf.into_boxed_slice())
-    }
+    use crate::utils::read_ivf_packet;
 
     pub fn vp9_decoding_loop<D>(
         decoder: &mut D,
