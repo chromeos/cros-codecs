@@ -234,6 +234,7 @@ pub struct Frame<T> {
     /// The size of the data in T
     pub size: usize,
 }
+
 impl<T: AsRef<[u8]>> Frame<T> {
     pub fn new(bitstream: T, header: Header, offset: usize, size: usize) -> Self {
         Self {
@@ -379,10 +380,7 @@ pub struct Parser {
 }
 
 impl Parser {
-    fn parse_superframe_hdr(
-        &mut self,
-        resource: impl AsRef<[u8]>,
-    ) -> anyhow::Result<SuperframeHeader> {
+    fn parse_superframe_hdr(resource: impl AsRef<[u8]>) -> anyhow::Result<SuperframeHeader> {
         let bitstream = resource.as_ref();
 
         // Skip to the end of the chunk.
@@ -570,7 +568,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_render_size(&mut self, r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn parse_render_size(r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
         hdr.render_and_frame_size_different = r.read_bool()?;
         if hdr.render_and_frame_size_different {
             hdr.render_width = r.read_u32(16)? + 1;
@@ -607,7 +605,7 @@ impl Parser {
             self.compute_image_size(hdr.width, hdr.height)
         }
 
-        self.parse_render_size(r, hdr)
+        Self::parse_render_size(r, hdr)
     }
 
     fn read_interpolation_filter(r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
@@ -794,7 +792,7 @@ impl Parser {
         max_log2 - 1
     }
 
-    fn parse_tile_info(&mut self, r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn parse_tile_info(&self, r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
         let min_log2_tile_cols = Self::calc_min_log2_tile_cols(self.sb64_cols);
         let max_log2_tile_cols = Self::calc_max_log2_tile_cols(self.sb64_cols);
 
@@ -851,7 +849,7 @@ impl Parser {
             Self::parse_frame_sync_code(&mut r)?;
             self.parse_color_config(&mut r, &mut hdr)?;
             self.parse_frame_size(&mut r, &mut hdr)?;
-            self.parse_render_size(&mut r, &mut hdr)?;
+            Self::parse_render_size(&mut r, &mut hdr)?;
             hdr.refresh_frame_flags = 0xff;
             frame_is_intra = true;
         } else {
@@ -886,7 +884,7 @@ impl Parser {
 
                 hdr.refresh_frame_flags = r.read_u8(8)?;
                 self.parse_frame_size(&mut r, &mut hdr)?;
-                self.parse_render_size(&mut r, &mut hdr)?;
+                Self::parse_render_size(&mut r, &mut hdr)?;
             } else {
                 // Copy from our cached version
                 hdr.color_space = self.color_space;
@@ -969,7 +967,7 @@ impl Parser {
         &mut self,
         resource: impl Fn() -> T,
     ) -> anyhow::Result<Vec<Frame<T>>> {
-        let superframe_hdr = self.parse_superframe_hdr(resource())?;
+        let superframe_hdr = Parser::parse_superframe_hdr(resource())?;
         let mut offset = 0;
 
         let mut frames = vec![];
