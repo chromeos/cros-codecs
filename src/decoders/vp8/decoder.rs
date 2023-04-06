@@ -132,20 +132,10 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 
     /// Handle a single frame.
-    fn handle_frame(
-        &mut self,
-        frame: Frame<&[u8]>,
-        timestamp: u64,
-        queued_parser_state: Option<Parser>,
-    ) -> Result<(), DecodeError> {
+    fn handle_frame(&mut self, frame: Frame<&[u8]>, timestamp: u64) -> Result<(), DecodeError> {
         if self.backend.num_resources_left() == 0 {
             return Err(DecodeError::CheckEvents);
         }
-
-        let parser = match &queued_parser_state {
-            Some(parser) => parser,
-            None => &self.parser,
-        };
 
         let show_frame = frame.header.show_frame();
 
@@ -155,8 +145,8 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
             self.golden_ref_picture.as_ref(),
             self.alt_ref_picture.as_ref(),
             frame.bitstream,
-            parser.segmentation(),
-            parser.mb_lf_adjust(),
+            self.parser.segmentation(),
+            self.parser.mb_lf_adjust(),
             timestamp,
         )?;
 
@@ -204,7 +194,7 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
             DecodingState::AwaitingStreamInfo => Ok(()),
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
-            DecodingState::Decoding => self.handle_frame(frame, timestamp, None),
+            DecodingState::Decoding => self.handle_frame(frame, timestamp),
         }
     }
 
