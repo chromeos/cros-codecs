@@ -91,11 +91,11 @@ where
     type Handle = Handle;
 
     fn num_resources_total(&self) -> usize {
-        1
+        16
     }
 
     fn num_resources_left(&self) -> usize {
-        1
+        16
     }
 
     fn format(&self) -> Option<DecodedFormat> {
