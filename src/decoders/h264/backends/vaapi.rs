@@ -580,7 +580,13 @@ mod tests {
         let display = Display::open().unwrap();
         let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-        test_decode_stream(h264_decoding_loop, decoder, test, true, false);
+        test_decode_stream(
+            |d, s, f| h264_decoding_loop(d, s, f, blocking_mode),
+            decoder,
+            test,
+            true,
+            false,
+        );
     }
 
     #[test]

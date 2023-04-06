@@ -25,11 +25,12 @@ use crate::decoders::h264::picture::IsIdr;
 use crate::decoders::h264::picture::PictureData;
 use crate::decoders::h264::picture::Reference;
 use crate::decoders::BlockingMode;
+use crate::decoders::DecodeError;
 use crate::decoders::DecodedHandle;
-use crate::decoders::Error as VideoDecoderError;
+use crate::decoders::DecoderEvent;
+use crate::decoders::DecodingState;
 use crate::decoders::ReadyFramesQueue;
-use crate::decoders::Result as VideoDecoderResult;
-use crate::decoders::StatelessBackendError;
+use crate::decoders::StatelessDecoderFormatNegotiator;
 use crate::decoders::VideoDecoder;
 use crate::Resolution;
 
@@ -98,24 +99,6 @@ pub struct CurrentPicInfo {
     max_long_term_frame_idx: i32,
 }
 
-/// Represents where we are in the negotiation status. We assume ownership of
-/// the incoming buffers in this special case so that clients do not have to do
-/// the bookkeeping themselves.
-enum NegotiationStatus {
-    /// Still waiting for a SPS.
-    NonNegotiated,
-    /// Saw an SPS. Negotiation is possible until the next call to decode()
-    Possible { sps: (u64, Vec<u8>) },
-    /// Negotiated. Locks in the format until a new SPS is seen.
-    Negotiated,
-}
-
-impl Default for NegotiationStatus {
-    fn default() -> Self {
-        Self::NonNegotiated
-    }
-}
-
 pub struct Decoder<T, P>
 where
     T: DecodedHandle + Clone,
@@ -129,9 +112,7 @@ where
     /// The backend used for hardware acceleration.
     backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
 
-    /// Keeps track of whether the decoded format has been negotiated with the
-    /// backend.
-    negotiation_status: NegotiationStatus,
+    decoding_state: DecodingState<Sps>,
 
     /// The current coded resolution
     coded_resolution: Resolution,
@@ -223,7 +204,7 @@ where
             blocking_mode,
             parser: Default::default(),
             coded_resolution: Default::default(),
-            negotiation_status: Default::default(),
+            decoding_state: Default::default(),
             dpb: Default::default(),
             max_num_reorder_frames: Default::default(),
             cur_sps_id: Default::default(),
@@ -2116,18 +2097,14 @@ where
     }
 
     /// Submits the picture to the accelerator.
-    fn submit_picture(&mut self) -> VideoDecoderResult<(PictureData, T)> {
+    fn submit_picture(&mut self) -> Result<(PictureData, T), DecodeError> {
         let picture = self.cur_pic.take().unwrap();
-
-        let block = matches!(self.blocking_mode, BlockingMode::Blocking)
-            || matches!(self.negotiation_status, NegotiationStatus::Possible { .. });
 
         let handle = self
             .backend
-            .submit_picture(self.cur_backend_pic.take().unwrap())
-            .map_err(VideoDecoderError::StatelessBackendError)?;
+            .submit_picture(self.cur_backend_pic.take().unwrap())?;
 
-        if block {
+        if self.blocking_mode == BlockingMode::Blocking {
             handle.sync()?;
         }
 
@@ -2159,11 +2136,9 @@ where
         None
     }
 
-    fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> VideoDecoderResult<()> {
+    fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         if self.backend.num_resources_left() == 0 {
-            return Err(VideoDecoderError::StatelessBackendError(
-                StatelessBackendError::OutOfResources,
-            ));
+            return Err(DecodeError::CheckEvents);
         }
 
         let mut cursor = Cursor::new(bitstream);
@@ -2205,106 +2180,37 @@ where
 
         Ok(())
     }
-
-    /// Make sure that the next frame is ready to be sent to the client.
-    fn block_on_one(&mut self) -> anyhow::Result<()> {
-        if let Some(handle) = &self.ready_queue.peek() {
-            return handle.sync().map_err(|e| e.into());
-        }
-
-        Ok(())
-    }
 }
 
 impl<T, P> VideoDecoder for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
-    fn decode(
-        &mut self,
-        timestamp: u64,
-        bitstream: &[u8],
-    ) -> VideoDecoderResult<Vec<Box<dyn DecodedHandle>>> {
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         let sps = Self::peek_sps(&mut self.parser, bitstream);
 
-        if let Some(sps) = &sps {
-            if Self::negotiation_possible(sps, &self.dpb, self.coded_resolution)
-                && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
-            {
-                self.negotiation_status = NegotiationStatus::NonNegotiated
+        if let Some(sps) = sps {
+            if Self::negotiation_possible(&sps, &self.dpb, self.coded_resolution) {
+                self.backend.new_sequence(&sps)?;
+                self.decoding_state = DecodingState::AwaitingFormat(sps);
             }
         }
 
-        match &mut self.negotiation_status {
-            NegotiationStatus::NonNegotiated => {
-                if let Some(sps) = &sps {
-                    self.backend.new_sequence(sps)?;
-
-                    self.negotiation_status = NegotiationStatus::Possible {
-                        sps: (timestamp, Vec::from(bitstream)),
-                    }
-                }
-
-                return Ok(vec![]);
-            }
-
-            NegotiationStatus::Possible { sps } => {
-                let (timestamp, buffer) = sps.clone();
-
-                self.decode_access_unit(timestamp, &buffer)?;
-
-                self.negotiation_status = NegotiationStatus::Negotiated;
-            }
-
-            NegotiationStatus::Negotiated => (),
-        };
-
-        self.decode_access_unit(timestamp, bitstream)?;
-
-        if self.backend.num_resources_left() == 0 {
-            self.block_on_one()?;
+        match &mut self.decoding_state {
+            // Skip input until we get information from the stream.
+            DecodingState::AwaitingStreamInfo => Ok(()),
+            // Ask the client to confirm the format before we can process this.
+            DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
+            DecodingState::Decoding => self.decode_access_unit(timestamp, bitstream),
         }
-
-        Ok(self
-            .ready_queue
-            .get_ready_frames()?
-            .into_iter()
-            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
-            .collect())
     }
 
-    fn flush(&mut self) -> VideoDecoderResult<Vec<Box<dyn DecodedHandle>>> {
-        // Decode whatever is pending using the default format. Mainly covers
-        // the rare case where only one buffer is sent.
-        if let NegotiationStatus::Possible { sps } = &self.negotiation_status {
-            let (timestamp, buffer) = sps.clone();
-            self.decode_access_unit(timestamp, &buffer)?;
-        }
-
+    fn flush(&mut self) {
         self.drain();
-
-        Ok(self
-            .ready_queue
-            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
-            .collect())
     }
 
-    fn negotiation_possible(&self) -> bool {
-        matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
-    }
-
-    fn num_resources_left(&self) -> Option<usize> {
-        if matches!(self.negotiation_status, NegotiationStatus::NonNegotiated) {
-            return None;
-        }
-
-        let left_in_the_backend = self.backend.num_resources_left();
-
-        if let NegotiationStatus::Possible { .. } = &self.negotiation_status {
-            Some(left_in_the_backend - 1)
-        } else {
-            Some(left_in_the_backend)
-        }
+    fn num_resources_left(&self) -> usize {
+        self.backend.num_resources_left()
     }
 
     fn num_resources_total(&self) -> usize {
@@ -2313,6 +2219,28 @@ where
 
     fn coded_resolution(&self) -> Option<Resolution> {
         self.backend.coded_resolution()
+    }
+
+    fn next_event(&mut self) -> Option<DecoderEvent> {
+        // The next event is either the next frame, or, if we are awaiting negotiation, the format
+        // change event that will allow us to keep going.
+        (&mut self.ready_queue)
+            .next()
+            .map(|handle| DecoderEvent::FrameReady(Box::new(handle)))
+            .or_else(|| {
+                if let DecodingState::AwaitingFormat(sps) = &self.decoding_state {
+                    Some(DecoderEvent::FormatChanged(Box::new(
+                        StatelessDecoderFormatNegotiator::new(self, sps.clone(), |decoder, sps| {
+                            // Apply the SPS settings to the decoder so we don't enter the AwaitingFormat state
+                            // on the next decode() call.
+                            decoder.apply_sps(sps);
+                            decoder.decoding_state = DecodingState::Decoding;
+                        }),
+                    )))
+                } else {
+                    None
+                }
+            })
     }
 }
 
@@ -2326,7 +2254,9 @@ pub mod tests {
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
     use crate::decoders::BlockingMode;
+    use crate::decoders::DecodeError;
     use crate::decoders::DecodedHandle;
+    use crate::decoders::DecoderEvent;
     use crate::decoders::VideoDecoder;
     use crate::utils::nalu::Header;
     use crate::utils::nalu_reader::NaluReader;
@@ -2390,6 +2320,7 @@ pub mod tests {
         decoder: &mut D,
         test_stream: &[u8],
         on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
+        blocking_mode: BlockingMode,
     ) where
         D: VideoDecoder,
     {
@@ -2397,15 +2328,44 @@ pub mod tests {
         let mut frame_num = 0;
 
         for data in frame_iter {
-            for frame in decoder.decode(frame_num, data).unwrap() {
-                on_new_frame(frame);
-                frame_num += 1;
+            loop {
+                let res = decoder.decode(frame_num, data);
+                match &res {
+                    Ok(()) => frame_num += 1,
+                    Err(DecodeError::CheckEvents) => (),
+                    Err(e) => panic!("{:#}", e),
+                }
+
+                if matches!(res, Err(DecodeError::CheckEvents))
+                    || blocking_mode == BlockingMode::Blocking
+                {
+                    while let Some(event) = decoder.next_event() {
+                        match event {
+                            DecoderEvent::FrameReady(frame) => {
+                                on_new_frame(frame);
+                            }
+                            DecoderEvent::FormatChanged(_) => {}
+                        }
+                    }
+                }
+
+                // Break the loop so we can process the next NAL if we sent the current one
+                // successfully.
+                if res.is_ok() {
+                    break;
+                }
             }
         }
 
-        for frame in decoder.flush().unwrap() {
-            on_new_frame(frame);
-            frame_num += 1;
+        decoder.flush();
+        while let Some(event) = decoder.next_event() {
+            match event {
+                DecoderEvent::FrameReady(frame) => {
+                    on_new_frame(frame);
+                    frame_num += 1;
+                }
+                DecoderEvent::FormatChanged(_) => (),
+            }
         }
     }
 
@@ -2486,7 +2446,13 @@ pub mod tests {
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-        test_decode_stream(h264_decoding_loop, decoder, test, false, false);
+        test_decode_stream(
+            |d, s, f| h264_decoding_loop(d, s, f, blocking_mode),
+            decoder,
+            test,
+            false,
+            false,
+        );
     }
 
     /// A 64x64 progressive byte-stream encoded I-frame to make it easier to

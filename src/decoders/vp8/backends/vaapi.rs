@@ -320,7 +320,13 @@ mod tests {
         let display = Display::open().unwrap();
         let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-        test_decode_stream(vp8_decoding_loop, decoder, test, true, false);
+        test_decode_stream(
+            |d, s, c| vp8_decoding_loop(d, s, c, blocking_mode),
+            decoder,
+            test,
+            true,
+            false,
+        );
     }
 
     #[test]

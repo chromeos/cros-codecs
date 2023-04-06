@@ -71,56 +71,133 @@ pub(crate) trait VideoDecoderBackend {
     fn try_format(&mut self, format: DecodedFormat) -> Result<()>;
 }
 
+/// Trait for objects allowing to negotiate the output format of a decoder.
+///
+/// A decoder always has a valid output format set, but that format can change if the stream
+/// requests it. When this happens, the decoder stops accepting new input and a `FormatChanged`
+/// event is emitted, carrying a negotiator trait object that allows the client to acknowledge that
+/// the format change took place, and (in the future) negotiate its specifics.
+///
+/// When the object is dropped, the decoder can accept and process new input again.
+pub trait DecoderFormatNegotiator<'a> {}
+
+/// Helper to implement `DecoderFormatNegotiator` for stateless decoders.
+struct StatelessDecoderFormatNegotiator<'a, D, H, F>
+where
+    D: VideoDecoder,
+    F: Fn(&mut D, &H),
+{
+    decoder: &'a mut D,
+    format_hint: H,
+    apply_format: F,
+}
+
+impl<'a, D, H, F> StatelessDecoderFormatNegotiator<'a, D, H, F>
+where
+    D: VideoDecoder,
+    F: Fn(&mut D, &H),
+{
+    /// Creates a new format negotiator.
+    ///
+    /// `decoder` is the decoder negotiation is done for. The decoder is exclusively borrowed as
+    /// long as this object exists.
+    ///
+    /// `format_hint` is a codec-specific structure describing the properties of the format.
+    ///
+    /// `apply_format` is a closure called when the object is dropped, and is responsible for
+    /// applying the format and allowing decoding to resume.
+    fn new(decoder: &'a mut D, format_hint: H, apply_format: F) -> Self {
+        Self {
+            decoder,
+            format_hint,
+            apply_format,
+        }
+    }
+}
+
+impl<'a, D, H, F> DecoderFormatNegotiator<'a> for StatelessDecoderFormatNegotiator<'a, D, H, F>
+where
+    D: VideoDecoder,
+    F: Fn(&mut D, &H),
+{
+}
+
+impl<'a, D, H, F> Drop for StatelessDecoderFormatNegotiator<'a, D, H, F>
+where
+    D: VideoDecoder,
+    F: Fn(&mut D, &H),
+{
+    fn drop(&mut self) {
+        (self.apply_format)(self.decoder, &self.format_hint)
+    }
+}
+
+/// Events that can be retrieved using the `next_event` method of a decoder.
+pub enum DecoderEvent<'a> {
+    /// The next frame has been decoded.
+    FrameReady(Box<dyn DecodedHandle>),
+    /// The format of the stream has changed and action is required.
+    FormatChanged(Box<dyn DecoderFormatNegotiator<'a> + 'a>),
+}
+
+/// Decoder implementations can use this struct to represent their decoding state.
+#[derive(Default)]
+enum DecodingState<T> {
+    /// Decoder will ignore all input until format and resolution information passes by.
+    #[default]
+    AwaitingStreamInfo,
+    /// Decoder is stopped until the client has confirmed the output format.
+    AwaitingFormat(T),
+    /// Decoder is currently decoding input.
+    Decoding,
+}
+
+#[derive(Debug, Error)]
+/// Error possibly returned by the `decode` method..
+pub enum DecodeError {
+    #[error("cannot accept more input until pending events are processed")]
+    CheckEvents,
+    #[error("decoder error: {0}")]
+    DecoderError(#[from] anyhow::Error),
+    #[error("backend error: {0}")]
+    BackendError(#[from] StatelessBackendError),
+}
+
+/// Stateless video decoder interface.
+///
+/// A stateless decoder differs from a stateful one in that its input and output queues are not
+/// operating independently: a new decode unit can only be processed if there is already an output
+/// resource available to receive its decoded content.
+///
+/// Therefore `decode` can refuse work if there is no output resource available at the time of
+/// calling, in which case the caller is responsible for calling `decode` again with the same
+/// parameters after processing at least one pending output frame and returning it to the decoder.
 pub trait VideoDecoder {
-    /// Decode the `bitstream` represented by `timestamp`. Returns zero or more
-    /// decoded handles representing the decoded data.
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<Vec<Box<dyn DecodedHandle>>>;
+    /// Try to decode the `bitstream` represented by `timestamp`.
+    ///
+    /// This method will return `DecodeError::CheckEvents` if processing cannot take place until
+    /// pending events are handled. This could either be because a change of output format has
+    /// been detected that the client should acknowledge, or because there are no available output
+    /// resources and dequeueing and returning pending frames will fix that. After the cause has
+    /// been addressed, the client is responsible for calling this method again with the same data.
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> std::result::Result<(), DecodeError>;
 
-    /// Flush the decoder i.e. finish processing all queued decode requests and
-    /// emit frames for them.
-    fn flush(&mut self) -> Result<Vec<Box<dyn DecodedHandle>>>;
+    /// Flush the decoder i.e. finish processing all pending decode requests and make sure the
+    /// resulting frames are ready to be retrieved via `next_event`.
+    fn flush(&mut self);
 
-    /// Whether negotiation of the decoded format is possible. In particular, a
-    /// decoder will indicate that negotiation is possible after enough metadata
-    /// is collected from parsing the bitstream through calls to the `decode()`
-    /// method.
-    ///
-    /// The negotiation process will start as soon as `negotiation_possible()`
-    /// returns true. At this moment, the client and the backend can settle on a
-    /// format by using the `supported_formats_for_stream()`, `format()` and
-    /// `try_format()` methods.
-    ///
-    /// When `negotiation_possible()` returns true, the client may also query
-    /// the backend for new values for the coded resolution, display resolution
-    /// and/or to the number of resources allocated.
-    ///
-    /// The negotiation process ends as soon as another call to `decode()` is
-    /// made, at which point any queued data will be processed first in order to
-    /// generate any frames that might have been pending while the negotiation
-    /// process was under way and `negotiation_possible()` will from then on
-    /// return false.
-    ///
-    /// If no action is undertaken by the client in the window of time where
-    /// `negotiation_possible()` returns true, it is assumed that the default
-    /// format chosen by the backend is acceptable.
-    ///
-    /// The negotiation process can happen more than once if new stream metadata
-    /// indicate a change of the stream parameters such that the current decoded
-    /// format becomes incompatible with the stream. In this case,
-    /// `negotiation_possible()` will once again return true and the same
-    /// process described above will take place.
-    fn negotiation_possible(&self) -> bool;
-
-    /// Gets the number of output resources left in the backend after accounting
-    /// for any buffers that might be queued in the decoder.
-    fn num_resources_left(&self) -> Option<usize>;
+    /// Gets the number of output resources left in the backend.
+    fn num_resources_left(&self) -> usize;
 
     /// Gets the number of output resources allocated by the backend.
     fn num_resources_total(&self) -> usize;
-    ///
+
     /// Returns the current coded resolution of the bitstream being processed.
     /// This may be None if we have not read the stream parameters yet.
     fn coded_resolution(&self) -> Option<Resolution>;
+
+    /// Returns the next event, if there is any pending.
+    fn next_event(&mut self) -> Option<DecoderEvent>;
 }
 
 pub trait DynHandle {

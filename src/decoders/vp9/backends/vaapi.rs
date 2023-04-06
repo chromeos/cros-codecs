@@ -326,7 +326,13 @@ mod tests {
         let display = Display::open().unwrap();
         let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
-        test_decode_stream(vp9_decoding_loop, decoder, test, true, false);
+        test_decode_stream(
+            |d, s, c| vp9_decoding_loop(d, s, c, blocking_mode),
+            decoder,
+            test,
+            true,
+            false,
+        );
     }
 
     #[test]
@@ -399,7 +405,7 @@ mod tests {
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(
-            vp9_decoding_loop,
+            |d, s, c| vp9_decoding_loop(d, s, c, BlockingMode::Blocking),
             decoder,
             &DECODE_RESOLUTION_CHANGE_500FRAMES,
             false,
@@ -417,7 +423,7 @@ mod tests {
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(
-            vp9_decoding_loop,
+            |d, s, c| vp9_decoding_loop(d, s, c, BlockingMode::NonBlocking),
             decoder,
             &DECODE_RESOLUTION_CHANGE_500FRAMES,
             false,

@@ -2,41 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use anyhow::anyhow;
-
 use crate::decoders::vp8::backends::StatelessDecoderBackend;
 use crate::decoders::vp8::parser::Frame;
 use crate::decoders::vp8::parser::Header;
 use crate::decoders::vp8::parser::Parser;
 use crate::decoders::BlockingMode;
+use crate::decoders::DecodeError;
 use crate::decoders::DecodedHandle;
+use crate::decoders::DecoderEvent;
+use crate::decoders::DecodingState;
 use crate::decoders::ReadyFramesQueue;
-use crate::decoders::Result as VideoDecoderResult;
+use crate::decoders::StatelessDecoderFormatNegotiator;
 use crate::decoders::VideoDecoder;
 use crate::Resolution;
-
-/// Represents where we are in the negotiation status. We assume ownership of
-/// the incoming buffers in this special case so that clients do not have to do
-/// the bookkeeping themselves.
-enum NegotiationStatus {
-    /// Still waiting for a key frame.
-    NonNegotiated,
-
-    /// Saw a key frame. Negotiation is possible until the next call to decode()
-    Possible {
-        key_frame: (u64, Box<Header>, Vec<u8>, Box<Parser>),
-    },
-
-    /// Negotiated. Locks in the format until a new key frame is seen if that
-    /// new key frame changes the stream parameters.
-    Negotiated,
-}
-
-impl Default for NegotiationStatus {
-    fn default() -> Self {
-        Self::NonNegotiated
-    }
-}
 
 pub struct Decoder<T: DecodedHandle> {
     /// A parser to extract bitstream data and build frame data in turn
@@ -48,9 +26,7 @@ pub struct Decoder<T: DecodedHandle> {
     /// The backend used for hardware acceleration.
     backend: Box<dyn StatelessDecoderBackend<Handle = T>>,
 
-    /// Keeps track of whether the decoded format has been negotiated with the
-    /// backend.
-    negotiation_status: NegotiationStatus,
+    decoding_state: DecodingState<Header>,
 
     /// The current resolution
     coded_resolution: Resolution,
@@ -77,7 +53,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
             blocking_mode,
             // wait_keyframe: true,
             parser: Default::default(),
-            negotiation_status: Default::default(),
+            decoding_state: Default::default(),
             last_picture: Default::default(),
             golden_ref_picture: Default::default(),
             alt_ref_picture: Default::default(),
@@ -155,46 +131,36 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         Ok(())
     }
 
-    fn block_on_one(&mut self) -> anyhow::Result<()> {
-        if let Some(handle) = self.ready_queue.peek() {
-            return handle.sync().map_err(|e| e.into());
-        }
-
-        Ok(())
-    }
-
     /// Handle a single frame.
     fn handle_frame(
         &mut self,
         frame: Frame<&[u8]>,
         timestamp: u64,
         queued_parser_state: Option<Parser>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), DecodeError> {
+        if self.backend.num_resources_left() == 0 {
+            return Err(DecodeError::CheckEvents);
+        }
+
         let parser = match &queued_parser_state {
             Some(parser) => parser,
             None => &self.parser,
         };
 
-        let block = matches!(self.blocking_mode, BlockingMode::Blocking)
-            || matches!(self.negotiation_status, NegotiationStatus::Possible { .. });
-
         let show_frame = frame.header.show_frame();
 
-        let decoded_handle = self
-            .backend
-            .submit_picture(
-                &frame.header,
-                self.last_picture.as_ref(),
-                self.golden_ref_picture.as_ref(),
-                self.alt_ref_picture.as_ref(),
-                frame.bitstream,
-                parser.segmentation(),
-                parser.mb_lf_adjust(),
-                timestamp,
-            )
-            .map_err(|e| anyhow!(e))?;
+        let decoded_handle = self.backend.submit_picture(
+            &frame.header,
+            self.last_picture.as_ref(),
+            self.golden_ref_picture.as_ref(),
+            self.alt_ref_picture.as_ref(),
+            frame.bitstream,
+            parser.segmentation(),
+            parser.mb_lf_adjust(),
+            timestamp,
+        )?;
 
-        if block {
+        if self.blocking_mode == BlockingMode::Blocking {
             decoded_handle.sync()?;
         }
 
@@ -225,113 +191,28 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
 }
 
 impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
-    fn decode(
-        &mut self,
-        timestamp: u64,
-        bitstream: &[u8],
-    ) -> VideoDecoderResult<Vec<Box<dyn DecodedHandle>>> {
-        let frame = self.parser.parse_frame(bitstream).map_err(|e| anyhow!(e))?;
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
+        let frame = self.parser.parse_frame(bitstream)?;
 
-        if frame.header.key_frame()
-            && self.negotiation_possible(&frame)
-            && matches!(self.negotiation_status, NegotiationStatus::Negotiated)
-        {
-            self.negotiation_status = NegotiationStatus::NonNegotiated;
+        if frame.header.key_frame() && self.negotiation_possible(&frame) {
+            self.backend.new_sequence(&frame.header)?;
+            self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
         }
 
-        match &mut self.negotiation_status {
-            NegotiationStatus::NonNegotiated => {
-                if frame.header.key_frame() {
-                    self.backend.new_sequence(&frame.header)?;
-
-                    self.coded_resolution = Resolution {
-                        width: u32::from(frame.header.width()),
-                        height: u32::from(frame.header.height()),
-                    };
-
-                    self.negotiation_status = NegotiationStatus::Possible {
-                        key_frame: (
-                            timestamp,
-                            Box::new(frame.header),
-                            Vec::from(frame.bitstream),
-                            Box::new(self.parser.clone()),
-                        ),
-                    }
-                }
-
-                return Ok(vec![]);
-            }
-
-            NegotiationStatus::Possible { key_frame } => {
-                let (timestamp, header, bitstream, parser) = key_frame.clone();
-                let key_frame = Frame {
-                    bitstream: bitstream.as_ref(),
-                    header: *header,
-                };
-
-                self.handle_frame(key_frame, timestamp, Some(*parser))?;
-
-                self.negotiation_status = NegotiationStatus::Negotiated;
-            }
-
-            NegotiationStatus::Negotiated => (),
-        };
-
-        self.handle_frame(frame, timestamp, None)?;
-
-        if self.backend.num_resources_left() == 0 {
-            self.block_on_one()?;
+        match &mut self.decoding_state {
+            // Skip input until we get information from the stream.
+            DecodingState::AwaitingStreamInfo => Ok(()),
+            // Ask the client to confirm the format before we can process this.
+            DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
+            DecodingState::Decoding => self.handle_frame(frame, timestamp, None),
         }
-
-        Ok(self
-            .ready_queue
-            .get_ready_frames()?
-            .into_iter()
-            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
-            .collect())
     }
 
-    fn flush(&mut self) -> crate::decoders::Result<Vec<Box<dyn DecodedHandle>>> {
-        // Decode whatever is pending using the default format. Mainly covers
-        // the rare case where only one buffer is sent.
-        if let NegotiationStatus::Possible { key_frame } = &self.negotiation_status {
-            let (timestamp, header, bitstream, parser) = key_frame;
+    // All the submitted frames are already in the ready queue.
+    fn flush(&mut self) {}
 
-            let bitstream = bitstream.clone();
-            let header = header.as_ref().clone();
-
-            let key_frame = Frame {
-                bitstream: bitstream.as_ref(),
-                header,
-            };
-            let timestamp = *timestamp;
-            let parser = *parser.clone();
-
-            self.handle_frame(key_frame, timestamp, Some(parser))?;
-        }
-
-        Ok(self
-            .ready_queue
-            .map(|h| Box::new(h) as Box<dyn DecodedHandle>)
-            .collect())
-    }
-
-    fn negotiation_possible(&self) -> bool {
-        matches!(self.negotiation_status, NegotiationStatus::Possible { .. })
-    }
-
-    fn num_resources_left(&self) -> Option<usize> {
-        if matches!(self.negotiation_status, NegotiationStatus::NonNegotiated) {
-            return None;
-        }
-
-        let left_in_the_backend = self.backend.num_resources_left();
-
-        if let NegotiationStatus::Possible { .. } = &self.negotiation_status {
-            Some(left_in_the_backend - 1)
-        } else {
-            Some(left_in_the_backend)
-        }
+    fn num_resources_left(&self) -> usize {
+        self.backend.num_resources_left()
     }
 
     fn num_resources_total(&self) -> usize {
@@ -340,6 +221,29 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
 
     fn coded_resolution(&self) -> Option<Resolution> {
         self.backend.coded_resolution()
+    }
+
+    fn next_event(&mut self) -> Option<DecoderEvent> {
+        // The next event is either the next frame, or, if we are awaiting negotiation, the format
+        // change event that will allow us to keep going.
+        (&mut self.ready_queue)
+            .next()
+            .map(|handle| DecoderEvent::FrameReady(Box::new(handle)))
+            .or_else(|| {
+                if let DecodingState::AwaitingFormat(hdr) = &self.decoding_state {
+                    Some(DecoderEvent::FormatChanged(Box::new(
+                        StatelessDecoderFormatNegotiator::new(self, hdr.clone(), |decoder, hdr| {
+                            decoder.coded_resolution = Resolution {
+                                width: hdr.width() as u32,
+                                height: hdr.height() as u32,
+                            };
+                            decoder.decoding_state = DecodingState::Decoding;
+                        }),
+                    )))
+                } else {
+                    None
+                }
+            })
     }
 }
 
@@ -352,7 +256,9 @@ pub mod tests {
     use crate::decoders::tests::TestStream;
     use crate::decoders::vp8::decoder::Decoder;
     use crate::decoders::BlockingMode;
+    use crate::decoders::DecodeError;
     use crate::decoders::DecodedHandle;
+    use crate::decoders::DecoderEvent;
     use crate::decoders::VideoDecoder;
     use crate::utils::read_ivf_packet;
 
@@ -360,6 +266,7 @@ pub mod tests {
         decoder: &mut D,
         test_stream: &[u8],
         on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
+        blocking_mode: BlockingMode,
     ) where
         D: VideoDecoder,
     {
@@ -370,15 +277,43 @@ pub mod tests {
         cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
 
         while let Some(packet) = read_ivf_packet(&mut cursor) {
-            for frame in decoder.decode(frame_num, packet.as_ref()).unwrap() {
-                on_new_frame(frame);
-                frame_num += 1;
+            loop {
+                let res = decoder.decode(frame_num, &packet);
+                match &res {
+                    Ok(()) => frame_num += 1,
+                    Err(DecodeError::CheckEvents) => (),
+                    Err(e) => panic!("{:#}", e),
+                }
+
+                if matches!(res, Err(DecodeError::CheckEvents))
+                    || blocking_mode == BlockingMode::Blocking
+                {
+                    while let Some(event) = decoder.next_event() {
+                        match event {
+                            DecoderEvent::FrameReady(frame) => {
+                                on_new_frame(frame);
+                            }
+                            DecoderEvent::FormatChanged(_) => {}
+                        }
+                    }
+                }
+
+                // Break the loop so we can process the next NAL if we sent the current one
+                // successfully.
+                if res.is_ok() {
+                    break;
+                }
             }
         }
 
-        for frame in decoder.flush().unwrap() {
-            on_new_frame(frame);
-            frame_num += 1;
+        decoder.flush();
+        while let Some(event) = decoder.next_event() {
+            match event {
+                DecoderEvent::FrameReady(frame) => {
+                    on_new_frame(frame);
+                }
+                DecoderEvent::FormatChanged(_) => (),
+            }
         }
     }
 
@@ -386,7 +321,13 @@ pub mod tests {
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
-        test_decode_stream(vp8_decoding_loop, decoder, test, false, false);
+        test_decode_stream(
+            |d, s, c| vp8_decoding_loop(d, s, c, blocking_mode),
+            decoder,
+            test,
+            false,
+            false,
+        );
     }
 
     /// Same as Chromium's test-25fps.vp8
