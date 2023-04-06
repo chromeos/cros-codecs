@@ -2343,6 +2343,60 @@ pub mod tests {
     use crate::utils::nalu::Header;
     use crate::utils::nalu_reader::NaluReader;
 
+    /// Iterator over groups of Nalus that can contain a whole frame.
+    struct H264FrameIterator<'a> {
+        stream: &'a [u8],
+        cursor: Cursor<&'a [u8]>,
+        aud_parser: AccessUnitParser<&'a [u8]>,
+    }
+
+    impl<'a> H264FrameIterator<'a> {
+        fn new(stream: &'a [u8]) -> Self {
+            Self {
+                stream,
+                cursor: Cursor::new(stream),
+                aud_parser: Default::default(),
+            }
+        }
+    }
+
+    impl<'a> Iterator for H264FrameIterator<'a> {
+        type Item = &'a [u8];
+
+        fn next(&mut self) -> Option<Self::Item> {
+            while let Ok(Some(nalu)) = Nalu::next(&mut self.cursor) {
+                if let Some(access_unit) = self.aud_parser.accumulate(nalu) {
+                    let start_nalu = access_unit.nalus.first().unwrap();
+                    let end_nalu = access_unit.nalus.last().unwrap();
+
+                    let start_offset = start_nalu.sc_offset();
+                    let end_offset = end_nalu.offset() + end_nalu.size();
+
+                    let data = &self.stream[start_offset..end_offset];
+
+                    return Some(data);
+                }
+            }
+
+            // Process any left over NALUs, even if we could not fit them into an AU using the
+            // heuristic.
+            if !self.aud_parser.nalus.is_empty() {
+                let nalus = self.aud_parser.nalus.drain(..).collect::<Vec<_>>();
+                let start_nalu = nalus.first().unwrap();
+                let end_nalu = nalus.last().unwrap();
+
+                let start_offset = start_nalu.sc_offset();
+                let end_offset = end_nalu.offset() + end_nalu.size();
+
+                let data = &self.stream[start_offset..end_offset];
+
+                Some(data)
+            } else {
+                None
+            }
+        }
+    }
+
     /// H.264 decoding loop for use with `test_decode_stream`.
     pub fn h264_decoding_loop<D>(
         decoder: &mut D,
@@ -2351,44 +2405,14 @@ pub mod tests {
     ) where
         D: VideoDecoder,
     {
-        let mut cursor = Cursor::new(test_stream);
-
-        let mut aud_parser = AccessUnitParser::default();
+        let frame_iter = H264FrameIterator::new(test_stream);
         let mut frame_num = 0;
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
-            if let Some(access_unit) = aud_parser.accumulate(nalu) {
-                let start_nalu = access_unit.nalus.first().unwrap();
-                let end_nalu = access_unit.nalus.last().unwrap();
-
-                let start_offset = start_nalu.sc_offset();
-                let end_offset = end_nalu.offset() + end_nalu.size();
-
-                let data = &test_stream[start_offset..end_offset];
-
-                for frame in decoder.decode(frame_num, data).unwrap() {
-                    on_new_frame(frame);
-                    frame_num += 1;
-                }
-            }
-        }
-
-        // Process any left over NALUs, even if we could not fit them into an AU using the heuristic.
-        #[allow(unused_assignments)]
-        if !aud_parser.nalus.is_empty() {
-            let start_nalu = aud_parser.nalus.first().unwrap();
-            let end_nalu = aud_parser.nalus.last().unwrap();
-
-            let start_offset = start_nalu.sc_offset();
-            let end_offset = end_nalu.offset() + end_nalu.size();
-
-            let data = &test_stream[start_offset..end_offset];
-
+        for data in frame_iter {
             for frame in decoder.decode(frame_num, data).unwrap() {
-                on_new_frame(frame)
+                on_new_frame(frame);
+                frame_num += 1;
             }
-
-            frame_num += 1;
         }
 
         for frame in decoder.flush().unwrap() {
