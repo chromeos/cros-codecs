@@ -56,6 +56,10 @@ impl<T: DecodedHandle + Clone> Dpb<T> {
         self.entries.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Get a reference to the whole DPB entries.
     pub fn entries(&self) -> &Vec<DpbEntry<T>> {
         &self.entries

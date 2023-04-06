@@ -1505,7 +1505,7 @@ where
     }
 
     fn handle_frame_num_gap(&mut self, frame_num: i32, timestamp: u64) -> anyhow::Result<()> {
-        if self.dpb.len() == 0 {
+        if self.dpb.is_empty() {
             return Ok(());
         }
 
@@ -1656,7 +1656,7 @@ where
         if self.dpb.interlaced() {
             if self.last_field.is_some() {
                 prev_field = self.last_field.clone();
-            } else if self.dpb.len() > 0 {
+            } else if !self.dpb.is_empty() {
                 // Use the last entry in the DPB
                 let last_handle = self.dpb.entries().last().unwrap();
                 let prev_pic = last_handle.0.borrow();
