@@ -444,7 +444,7 @@ mod tests {
         // FRAME 0
 
         let packet = read_ivf_packet(&mut cursor).unwrap();
-        let mut frames = parser.parse_chunk(|| &packet).unwrap();
+        let mut frames = parser.parse_chunk(&packet).unwrap();
         assert_eq!(frames.len(), 1);
         let frame = frames.remove(0);
 
@@ -515,7 +515,7 @@ mod tests {
         // FRAME 1
 
         let packet = read_ivf_packet(&mut cursor).unwrap();
-        let mut frames = parser.parse_chunk(|| &packet).unwrap();
+        let mut frames = parser.parse_chunk(&packet).unwrap();
         assert_eq!(frames.len(), 2);
         let frame = frames.remove(0);
         assert_eq!(frame.as_ref().len(), 2390);

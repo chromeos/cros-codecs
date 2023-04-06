@@ -934,18 +934,18 @@ impl Parser {
 
     /// Parses VP9 frames from the data in `resource`. This can result in more than one frame if the
     /// data passed in contains a VP9 superframe.
-    pub fn parse_chunk<T: AsRef<[u8]>>(
+    pub fn parse_chunk<T: AsRef<[u8]> + Copy>(
         &mut self,
-        resource: impl Fn() -> T,
+        resource: T,
     ) -> anyhow::Result<Vec<Frame<T>>> {
-        let superframe_hdr = Parser::parse_superframe_hdr(resource())?;
+        let superframe_hdr = Parser::parse_superframe_hdr(resource)?;
         let mut offset = 0;
 
         let mut frames = vec![];
 
         for i in 0..superframe_hdr.frames_in_superframe {
             let frame_sz = superframe_hdr.frame_sizes[i as usize];
-            let frame = self.parse_frame(resource(), offset, frame_sz)?;
+            let frame = self.parse_frame(resource, offset, frame_sz)?;
             offset += frame_sz;
             frames.push(frame);
         }
@@ -976,7 +976,7 @@ mod tests {
 
         let mut parser = Parser::default();
         let frames = parser
-            .parse_chunk(|| VP9_TEST_SUPERFRAME)
+            .parse_chunk(VP9_TEST_SUPERFRAME)
             .expect("Parsing a superframe failed");
 
         assert_eq!(frames.len(), 2);
@@ -1000,7 +1000,7 @@ mod tests {
         let mut frame_n = 0;
         while let Some(packet) = read_ivf_packet(&mut cursor) {
             let frames = parser
-                .parse_chunk(|| packet.as_ref())
+                .parse_chunk(packet.as_ref())
                 .expect("Parsing a superframe failed");
 
             if frame_n == 0 {

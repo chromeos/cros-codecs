@@ -345,7 +345,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
 
 impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
-        let frames = self.parser.parse_chunk(|| bitstream)?;
+        let frames = self.parser.parse_chunk(bitstream)?;
 
         if matches!(self.decoding_state, DecodingState::Decoding)
             && self.num_resources_left() < frames.len()
