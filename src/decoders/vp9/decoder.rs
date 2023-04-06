@@ -147,16 +147,11 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
             // Otherwise, we must actually arrange to decode a frame
             let refresh_frame_flags = frame.header.refresh_frame_flags;
 
-            let offset = frame.offset;
-            let size = frame.size;
-
-            let bitstream = &frame.bitstream[offset..offset + size];
-
             Self::update_segmentation(&frame.header, &mut self.segmentation)?;
             let decoded_handle = self.backend.submit_picture(
                 &frame.header,
                 &self.reference_frames,
-                bitstream,
+                frame.as_ref(),
                 timestamp,
                 &self.segmentation,
             )?;

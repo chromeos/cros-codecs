@@ -448,7 +448,7 @@ mod tests {
         assert_eq!(frames.len(), 1);
         let frame = frames.remove(0);
 
-        assert_eq!(frame.size, 10674);
+        assert_eq!(frame.as_ref().len(), 10674);
 
         let pic_param = VaapiBackend::build_pic_param(
             &frame.header,
@@ -461,7 +461,8 @@ mod tests {
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size).unwrap();
+        let slice_param =
+            VaapiBackend::build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
@@ -517,7 +518,7 @@ mod tests {
         let mut frames = parser.parse_chunk(|| &packet).unwrap();
         assert_eq!(frames.len(), 2);
         let frame = frames.remove(0);
-        assert_eq!(frame.size, 2390);
+        assert_eq!(frame.as_ref().len(), 2390);
 
         let pic_param = VaapiBackend::build_pic_param(&frame.header, [0; NUM_REF_FRAMES]).unwrap();
         let pic_param = match pic_param {
@@ -526,7 +527,8 @@ mod tests {
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size).unwrap();
+        let slice_param =
+            VaapiBackend::build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
@@ -578,7 +580,7 @@ mod tests {
         // FRAME 2
 
         let frame = frames.remove(0);
-        assert_eq!(frame.size, 108);
+        assert_eq!(frame.as_ref().len(), 108);
 
         let pic_param =
             VaapiBackend::build_pic_param(&frame.header, [0, 0, 1, 0, 0, 0, 0, 0]).unwrap();
@@ -588,7 +590,8 @@ mod tests {
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param = VaapiBackend::build_slice_param(&segmentation, frame.size).unwrap();
+        let slice_param =
+            VaapiBackend::build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
