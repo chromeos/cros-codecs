@@ -454,6 +454,9 @@ impl GenericBackendHandle {
     ///
     /// Note that DynMappableHandle is downcastable.
     pub fn image(&mut self) -> anyhow::Result<Image> {
+        // Image can only be retrieved in the `Ready` state.
+        self.sync()?;
+
         match &mut self.state {
             PictureState::Ready(picture) => {
                 // Get the associated VAImage, which will map the
@@ -468,8 +471,8 @@ impl GenericBackendHandle {
 
                 Ok(image)
             }
-            PictureState::Pending { .. } => Err(anyhow!("Mapping failed")),
-            PictureState::Invalid => unreachable!(),
+            // Either we are in `Ready` state or `sync` failed and we returned.
+            PictureState::Pending(_) | PictureState::Invalid => unreachable!(),
         }
     }
 
