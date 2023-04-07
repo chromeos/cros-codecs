@@ -416,9 +416,6 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
 
 #[cfg(test)]
 pub mod tests {
-    use std::io::Cursor;
-    use std::io::Seek;
-
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
     use crate::decoders::vp9::decoder::Decoder;
@@ -427,7 +424,7 @@ pub mod tests {
     use crate::decoders::DecodedHandle;
     use crate::decoders::DecoderEvent;
     use crate::decoders::VideoDecoder;
-    use crate::utils::read_ivf_packet;
+    use crate::utils::IvfIterator;
 
     pub fn vp9_decoding_loop<D>(
         decoder: &mut D,
@@ -437,15 +434,12 @@ pub mod tests {
     ) where
         D: VideoDecoder,
     {
-        let mut cursor = Cursor::new(test_stream);
+        let ivf_iter = IvfIterator::new(test_stream);
         let mut frame_num = 0;
 
-        // Skip the IVH header entirely.
-        cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
-
-        while let Some(packet) = read_ivf_packet(&mut cursor) {
+        for packet in ivf_iter {
             loop {
-                let res = decoder.decode(frame_num, &packet);
+                let res = decoder.decode(frame_num, packet);
                 match &res {
                     Ok(()) => frame_num += 1,
                     Err(DecodeError::CheckEvents) => (),

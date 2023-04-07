@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 use std::io::Cursor;
-use std::io::Read;
+use std::io::Seek;
 
 use bytes::Buf;
 
@@ -14,19 +14,44 @@ pub(crate) mod nalu_reader;
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
 
-/// Read and return the data from the next IVF packet. Returns `None` if there is no more data
-/// to read.
-pub fn read_ivf_packet(cursor: &mut Cursor<&[u8]>) -> Option<Box<[u8]>> {
-    if !cursor.has_remaining() {
-        return None;
+/// Iterator over IVF packets.
+pub struct IvfIterator<'a> {
+    data: &'a [u8],
+    cursor: Cursor<&'a [u8]>,
+}
+
+impl<'a> IvfIterator<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
+        let mut cursor = Cursor::new(data);
+
+        // Skip the IVH header entirely.
+        cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
+
+        Self { data, cursor }
     }
+}
 
-    let len = cursor.get_u32_le();
-    // Skip PTS.
-    let _ = cursor.get_u64_le();
+impl<'a> Iterator for IvfIterator<'a> {
+    type Item = &'a [u8];
 
-    let mut buf = vec![0u8; len as usize];
-    cursor.read_exact(&mut buf).unwrap();
+    fn next(&mut self) -> Option<Self::Item> {
+        // Make sure we have a header.
+        if self.cursor.remaining() < 6 {
+            return None;
+        }
 
-    Some(buf.into_boxed_slice())
+        let len = self.cursor.get_u32_le() as usize;
+        // Skip PTS.
+        let _ = self.cursor.get_u64_le();
+
+        if self.cursor.remaining() < len {
+            return None;
+        }
+
+        let start = self.cursor.position() as usize;
+        let _ = self.cursor.seek(std::io::SeekFrom::Current(len as i64));
+        let end = self.cursor.position() as usize;
+
+        Some(&self.data[start..end])
+    }
 }

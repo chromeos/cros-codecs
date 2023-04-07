@@ -956,9 +956,6 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-    use std::io::Seek;
-
     use crate::decoders::vp9::parser::BitDepth;
     use crate::decoders::vp9::parser::ColorSpace;
     use crate::decoders::vp9::parser::FrameType;
@@ -967,7 +964,7 @@ mod tests {
     use crate::decoders::vp9::parser::Profile;
     use crate::decoders::vp9::parser::MAX_SEGMENTS;
     use crate::decoders::vp9::parser::SEG_LVL_MAX;
-    use crate::utils::read_ivf_packet;
+    use crate::utils::IvfIterator;
 
     #[test]
     fn test_parse_superframe() {
@@ -991,14 +988,10 @@ mod tests {
         // Muxed as IVF
         const TEST_STREAM: &[u8] = include_bytes!("test_data/test-25fps.vp9");
 
-        let mut cursor = Cursor::new(TEST_STREAM);
         let mut parser = Parser::default();
+        let ivf_iter = IvfIterator::new(TEST_STREAM);
 
-        // Skip the IVH header entirely.
-        cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
-
-        let mut frame_n = 0;
-        while let Some(packet) = read_ivf_packet(&mut cursor) {
+        for (frame_n, packet) in ivf_iter.enumerate() {
             let frames = parser
                 .parse_chunk(packet.as_ref())
                 .expect("Parsing a superframe failed");
@@ -1261,8 +1254,6 @@ mod tests {
 
                 assert!(!h.lossless);
             }
-
-            frame_n += 1;
         }
     }
 }

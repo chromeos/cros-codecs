@@ -296,9 +296,6 @@ impl Decoder<VADecodedHandle> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-    use std::io::Seek;
-
     use libva::BufferType;
     use libva::Display;
     use libva::IQMatrix;
@@ -311,8 +308,8 @@ mod tests {
     use crate::decoders::vp8::decoder::Decoder;
     use crate::decoders::vp8::parser::Parser;
     use crate::decoders::BlockingMode;
-    use crate::utils::read_ivf_packet;
     use crate::utils::vaapi::VaapiBackend;
+    use crate::utils::IvfIterator;
     use crate::Resolution;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
@@ -357,13 +354,11 @@ mod tests {
             include_bytes!("../test_data/test-25fps-vp8-probability-table-2.bin");
 
         let mut parser: Parser = Default::default();
-        let mut cursor = Cursor::new(TEST_STREAM);
-        // Skip the IVH header entirely.
-        cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
+        let mut ivf_iter = IvfIterator::new(TEST_STREAM);
 
         // FRAME 0
 
-        let packet = read_ivf_packet(&mut cursor).unwrap();
+        let packet = ivf_iter.next().unwrap();
         let frame = parser.parse_frame(packet).unwrap();
 
         assert_eq!(frame.size(), 14788);
@@ -500,7 +495,7 @@ mod tests {
 
         // FRAME 1
 
-        let packet = read_ivf_packet(&mut cursor).unwrap();
+        let packet = ivf_iter.next().unwrap();
         let frame = parser.parse_frame(packet).unwrap();
 
         assert_eq!(frame.size(), 257);
@@ -615,7 +610,7 @@ mod tests {
 
         // FRAME 2
 
-        let packet = read_ivf_packet(&mut cursor).unwrap();
+        let packet = ivf_iter.next().unwrap();
         let frame = parser.parse_frame(packet).unwrap();
 
         assert_eq!(frame.size(), 131);

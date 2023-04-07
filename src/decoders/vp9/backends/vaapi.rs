@@ -299,10 +299,6 @@ impl Decoder<VADecodedHandle> {
 
 #[cfg(test)]
 mod tests {
-
-    use std::io::Cursor;
-    use std::io::Seek;
-
     use libva::BufferType;
     use libva::Display;
     use libva::PictureParameter;
@@ -317,9 +313,9 @@ mod tests {
     use crate::decoders::vp9::parser::MAX_SEGMENTS;
     use crate::decoders::vp9::parser::NUM_REF_FRAMES;
     use crate::decoders::BlockingMode;
-    use crate::utils::read_ivf_packet;
     use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
     use crate::utils::vaapi::VaapiBackend;
+    use crate::utils::IvfIterator;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
     fn test_decoder_vaapi(test: &TestStream, blocking_mode: BlockingMode) {
@@ -436,14 +432,12 @@ mod tests {
     fn build_pic_params() {
         const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.vp9");
         let mut parser: Parser = Default::default();
-        let mut cursor = Cursor::new(TEST_STREAM);
-        // Skip the IVH header entirely.
-        cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
         let mut segmentation: [Segmentation; MAX_SEGMENTS] = Default::default();
+        let mut ivf_iter = IvfIterator::new(TEST_STREAM);
 
         // FRAME 0
 
-        let packet = read_ivf_packet(&mut cursor).unwrap();
+        let packet = ivf_iter.next().unwrap();
         let mut frames = parser.parse_chunk(&packet).unwrap();
         assert_eq!(frames.len(), 1);
         let frame = frames.remove(0);
@@ -514,7 +508,7 @@ mod tests {
 
         // FRAME 1
 
-        let packet = read_ivf_packet(&mut cursor).unwrap();
+        let packet = ivf_iter.next().unwrap();
         let mut frames = parser.parse_chunk(&packet).unwrap();
         assert_eq!(frames.len(), 2);
         let frame = frames.remove(0);
