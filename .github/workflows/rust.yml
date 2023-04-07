@@ -1,0 +1,30 @@
+name: Health check
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: libva-dev
+        version: 1.0
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --all-features --verbose --workspace --tests --examples
+    - name: Clippy
+      run: cargo clippy --all-features --workspace --tests --examples
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Format
+      run: cargo fmt --check --all
