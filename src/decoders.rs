@@ -332,7 +332,10 @@ impl<'a, T: DecodedHandle> Iterator for &'a mut ReadyFramesQueue<T> {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::decoders::BlockingMode;
+    use crate::decoders::DecodeError;
     use crate::decoders::DecodedHandle;
+    use crate::decoders::DecoderEvent;
     use crate::decoders::VideoDecoder;
 
     /// Stream that can be used in tests, along with the CRC32 of all of its frames.
@@ -388,5 +391,49 @@ pub(crate) mod tests {
         });
 
         assert_eq!(crcs.next(), None, "decoded less frames than expected");
+    }
+
+    /// Simple decoding loop that plays the stream once from start to finish.
+    pub fn simple_playback_loop<'a, D, I>(
+        decoder: &mut D,
+        stream_iter: I,
+        on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
+        blocking_mode: BlockingMode,
+    ) where
+        D: VideoDecoder,
+        I: Iterator<Item = &'a [u8]>,
+    {
+        // Closure that drains all pending decoder events and calls `on_new_frame` on each
+        // completed frame.
+        let mut check_events = |decoder: &mut D| {
+            while let Some(event) = decoder.next_event() {
+                match event {
+                    DecoderEvent::FrameReady(frame) => {
+                        on_new_frame(frame);
+                    }
+                    DecoderEvent::FormatChanged(_) => {}
+                }
+            }
+        };
+
+        for (frame_num, packet) in stream_iter.enumerate() {
+            loop {
+                match decoder.decode(frame_num as u64, packet) {
+                    Ok(()) => {
+                        if blocking_mode == BlockingMode::Blocking {
+                            check_events(decoder);
+                        }
+                        // Break the loop so we can process the next NAL if we sent the current one
+                        // successfully.
+                        break;
+                    }
+                    Err(DecodeError::CheckEvents) => check_events(decoder),
+                    Err(e) => panic!("{:#}", e),
+                }
+            }
+        }
+
+        decoder.flush();
+        check_events(decoder);
     }
 }

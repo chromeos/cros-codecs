@@ -418,72 +418,16 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
 pub mod tests {
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
+    use crate::decoders::vp8::decoder::tests::vpx_decoding_loop;
     use crate::decoders::vp9::decoder::Decoder;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DecodeError;
-    use crate::decoders::DecodedHandle;
-    use crate::decoders::DecoderEvent;
-    use crate::decoders::VideoDecoder;
-    use crate::utils::IvfIterator;
-
-    pub fn vp9_decoding_loop<D>(
-        decoder: &mut D,
-        test_stream: &[u8],
-        on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
-        blocking_mode: BlockingMode,
-    ) where
-        D: VideoDecoder,
-    {
-        let ivf_iter = IvfIterator::new(test_stream);
-        let mut frame_num = 0;
-
-        for packet in ivf_iter {
-            loop {
-                let res = decoder.decode(frame_num, packet);
-                match &res {
-                    Ok(()) => frame_num += 1,
-                    Err(DecodeError::CheckEvents) => (),
-                    Err(e) => panic!("{:#}", e),
-                }
-
-                if matches!(res, Err(DecodeError::CheckEvents))
-                    || blocking_mode == BlockingMode::Blocking
-                {
-                    while let Some(event) = decoder.next_event() {
-                        match event {
-                            DecoderEvent::FrameReady(frame) => {
-                                on_new_frame(frame);
-                            }
-                            DecoderEvent::FormatChanged(_) => {}
-                        }
-                    }
-                }
-
-                // Break the loop so we can process the next NAL if we sent the current one
-                // successfully.
-                if res.is_ok() {
-                    break;
-                }
-            }
-        }
-
-        decoder.flush();
-        while let Some(event) = decoder.next_event() {
-            match event {
-                DecoderEvent::FrameReady(frame) => {
-                    on_new_frame(frame);
-                }
-                DecoderEvent::FormatChanged(_) => (),
-            }
-        }
-    }
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vp9_decoding_loop(d, s, c, blocking_mode),
+            |d, s, c| vpx_decoding_loop(d, s, c, blocking_mode),
             decoder,
             test,
             false,

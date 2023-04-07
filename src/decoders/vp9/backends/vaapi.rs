@@ -306,7 +306,7 @@ mod tests {
 
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
-    use crate::decoders::vp9::decoder::tests::vp9_decoding_loop;
+    use crate::decoders::vp8::decoder::tests::vpx_decoding_loop;
     use crate::decoders::vp9::decoder::Decoder;
     use crate::decoders::vp9::decoder::Segmentation;
     use crate::decoders::vp9::parser::Parser;
@@ -323,7 +323,7 @@ mod tests {
         let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vp9_decoding_loop(d, s, c, blocking_mode),
+            |d, s, c| vpx_decoding_loop(d, s, c, blocking_mode),
             decoder,
             test,
             true,
@@ -401,7 +401,7 @@ mod tests {
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(
-            |d, s, c| vp9_decoding_loop(d, s, c, BlockingMode::Blocking),
+            |d, s, c| vpx_decoding_loop(d, s, c, BlockingMode::Blocking),
             decoder,
             &DECODE_RESOLUTION_CHANGE_500FRAMES,
             false,
@@ -419,7 +419,7 @@ mod tests {
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(
-            |d, s, c| vp9_decoding_loop(d, s, c, BlockingMode::NonBlocking),
+            |d, s, c| vpx_decoding_loop(d, s, c, BlockingMode::NonBlocking),
             decoder,
             &DECODE_RESOLUTION_CHANGE_500FRAMES,
             false,

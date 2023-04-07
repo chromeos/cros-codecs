@@ -304,7 +304,7 @@ mod tests {
 
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
-    use crate::decoders::vp8::decoder::tests::vp8_decoding_loop;
+    use crate::decoders::vp8::decoder::tests::vpx_decoding_loop;
     use crate::decoders::vp8::decoder::Decoder;
     use crate::decoders::vp8::parser::Parser;
     use crate::decoders::BlockingMode;
@@ -318,7 +318,7 @@ mod tests {
         let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vp8_decoding_loop(d, s, c, blocking_mode),
+            |d, s, c| vpx_decoding_loop(d, s, c, blocking_mode),
             decoder,
             test,
             true,

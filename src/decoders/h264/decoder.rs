@@ -2251,12 +2251,11 @@ pub mod tests {
     use crate::decoders::h264::decoder::Decoder;
     use crate::decoders::h264::parser::Nalu;
     use crate::decoders::h264::parser::NaluType;
+    use crate::decoders::tests::simple_playback_loop;
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
     use crate::decoders::BlockingMode;
-    use crate::decoders::DecodeError;
     use crate::decoders::DecodedHandle;
-    use crate::decoders::DecoderEvent;
     use crate::decoders::VideoDecoder;
     use crate::utils::nalu::Header;
     use crate::utils::nalu_reader::NaluReader;
@@ -2324,49 +2323,12 @@ pub mod tests {
     ) where
         D: VideoDecoder,
     {
-        let frame_iter = H264FrameIterator::new(test_stream);
-        let mut frame_num = 0;
-
-        for data in frame_iter {
-            loop {
-                let res = decoder.decode(frame_num, data);
-                match &res {
-                    Ok(()) => frame_num += 1,
-                    Err(DecodeError::CheckEvents) => (),
-                    Err(e) => panic!("{:#}", e),
-                }
-
-                if matches!(res, Err(DecodeError::CheckEvents))
-                    || blocking_mode == BlockingMode::Blocking
-                {
-                    while let Some(event) = decoder.next_event() {
-                        match event {
-                            DecoderEvent::FrameReady(frame) => {
-                                on_new_frame(frame);
-                            }
-                            DecoderEvent::FormatChanged(_) => {}
-                        }
-                    }
-                }
-
-                // Break the loop so we can process the next NAL if we sent the current one
-                // successfully.
-                if res.is_ok() {
-                    break;
-                }
-            }
-        }
-
-        decoder.flush();
-        while let Some(event) = decoder.next_event() {
-            match event {
-                DecoderEvent::FrameReady(frame) => {
-                    on_new_frame(frame);
-                    frame_num += 1;
-                }
-                DecoderEvent::FormatChanged(_) => (),
-            }
-        }
+        simple_playback_loop(
+            decoder,
+            H264FrameIterator::new(test_stream),
+            on_new_frame,
+            blocking_mode,
+        )
     }
 
     /// Represents an Access Unit.
