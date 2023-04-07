@@ -3,6 +3,7 @@ use bytes::Buf;
 use std::fmt::Debug;
 use std::io::Cursor;
 
+#[allow(clippy::len_without_is_empty)]
 pub trait Header: Sized {
     /// Parse the NALU header, returning it.
     fn parse<T: AsRef<[u8]>>(cursor: &Cursor<T>) -> anyhow::Result<Self>;

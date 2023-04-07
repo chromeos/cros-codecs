@@ -55,6 +55,7 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
     ) -> Result<()>;
 
     /// Called to dispatch a decode operation to the backend.
+    #[allow(clippy::too_many_arguments)]
     fn decode_slice(
         &mut self,
         picture: &mut Self::Picture,

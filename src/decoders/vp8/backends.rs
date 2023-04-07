@@ -28,6 +28,7 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
     ///
     /// This call will assign the ownership of the BackendHandle to the Picture
     /// and then assign the ownership of the Picture to the Handle.
+    #[allow(clippy::too_many_arguments)]
     fn submit_picture(
         &mut self,
         picture: &Header,

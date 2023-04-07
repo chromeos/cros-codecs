@@ -767,7 +767,7 @@ impl Parser {
         }
 
         for i in 0..num_partitions - 1 {
-            let b0 = u32::from(data[part_size_ofs + 0]);
+            let b0 = u32::from(data[part_size_ofs]);
             let b1 = u32::from(data[part_size_ofs + 1]) << 8;
             let b2 = u32::from(data[part_size_ofs + 2]) << 16;
 
