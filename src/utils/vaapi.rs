@@ -649,7 +649,7 @@ where
     fn coded_resolution(&self) -> Option<Resolution> {
         self.metadata_state
             .get_parsed()
-            .map(|m| m.surface_pool.coded_resolution)
+            .map(|m| m.surface_pool.coded_resolution())
             .ok()
     }
 
