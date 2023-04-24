@@ -257,7 +257,7 @@ pub trait DecodedHandle {
 
 /// A queue where decoding jobs wait until they are completed, at which point they can be
 /// retrieved.
-pub struct ReadyFramesQueue<T: DecodedHandle> {
+struct ReadyFramesQueue<T: DecodedHandle> {
     /// Queue of all the frames waiting to be sent to the client.
     queue: VecDeque<T>,
     /// A monotonically increasing counter used to tag frames in display
@@ -275,41 +275,9 @@ impl<T: DecodedHandle> Default for ReadyFramesQueue<T> {
 }
 
 impl<T: DecodedHandle> ReadyFramesQueue<T> {
-    /// Return a reference to the next frame, of `None` if there aren't any.
-    pub fn peek(&self) -> Option<&T> {
-        self.queue.front()
-    }
-
     /// Push `handle` to the back of the queue.
-    pub fn push(&mut self, handle: T) {
+    fn push(&mut self, handle: T) {
         self.queue.push_back(handle)
-    }
-
-    /// Returns all the frames that are decoded.
-    pub fn get_ready_frames(&mut self) -> StatelessBackendResult<Vec<T>> {
-        // Count all ready handles.
-        let num_ready = self
-            .queue
-            .iter()
-            .take_while(|&handle| handle.is_ready())
-            .count();
-
-        let retain = self.queue.split_off(num_ready);
-        // `split_off` works the opposite way of what we would like, leaving [0..num_ready) in
-        // place, so we need to swap `retain` with `ready_queue`.
-        let ready = std::mem::take(&mut self.queue);
-        self.queue = retain;
-
-        ready
-            .into_iter()
-            .map(|mut handle| {
-                handle.sync()?;
-                handle.set_display_order(self.display_order);
-                self.display_order += 1;
-
-                Ok(handle)
-            })
-            .collect()
     }
 }
 
