@@ -458,7 +458,7 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         VaapiBackend::new_sequence(self, sps)
     }
 
-    fn handle_picture(
+    fn start_picture(
         &mut self,
         picture: &mut Self::Picture,
         picture_data: &PictureData,

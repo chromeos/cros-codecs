@@ -27,7 +27,7 @@ impl StatelessDecoderBackend for Backend {
         Ok(())
     }
 
-    fn handle_picture(
+    fn start_picture(
         &mut self,
         _: &mut Self::Picture,
         _: &PictureData,

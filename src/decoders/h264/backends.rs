@@ -43,8 +43,8 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
         first_field: &Self::Handle,
     ) -> Result<Self::Picture>;
 
-    /// Called by the decoder for every frame or field found.
-    fn handle_picture(
+    /// Called by the decoder when starting a new frame or field.
+    fn start_picture(
         &mut self,
         picture: &mut Self::Picture,
         picture_data: &PictureData,

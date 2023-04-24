@@ -1763,7 +1763,7 @@ where
             self.backend.new_picture(cur_pic, timestamp)?
         };
 
-        self.backend.handle_picture(
+        self.backend.start_picture(
             &mut current_picture,
             cur_pic,
             self.parser
