@@ -455,7 +455,7 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
     type Picture = VaPicture<PictureNew>;
 
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
-        VaapiBackend::new_sequence(self, sps)
+        self.new_sequence(sps)
     }
 
     fn start_picture(
