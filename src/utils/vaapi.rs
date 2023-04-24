@@ -35,7 +35,7 @@ use crate::DecodedFormat;
 use crate::Resolution;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FormatMap {
+struct FormatMap {
     pub rt_format: u32,
     pub va_fourcc: u32,
     pub decoded_format: DecodedFormat,
@@ -43,7 +43,7 @@ pub struct FormatMap {
 
 /// Maps a given VA_RT_FORMAT to a compatible decoded format in an arbitrary
 /// preferred order.
-pub const FORMAT_MAP: [FormatMap; 2] = [
+const FORMAT_MAP: [FormatMap; 2] = [
     FormatMap {
         rt_format: libva::constants::VA_RT_FORMAT_YUV420,
         va_fourcc: libva::constants::VA_FOURCC_NV12,
@@ -115,7 +115,7 @@ impl TryInto<Surface> for PictureState {
 }
 
 /// A decoded frame handle.
-pub type DecodedHandle = Rc<RefCell<GenericBackendHandle>>;
+pub(crate) type DecodedHandle = Rc<RefCell<GenericBackendHandle>>;
 
 impl DecodedHandleTrait for DecodedHandle {
     fn display_resolution(&self) -> Resolution {
@@ -141,14 +141,14 @@ impl DecodedHandleTrait for DecodedHandle {
 
 /// A surface pool handle to reduce the number of costly Surface allocations.
 #[derive(Clone)]
-pub struct SurfacePoolHandle {
+pub(crate) struct SurfacePoolHandle {
     surfaces: Rc<RefCell<VecDeque<Surface>>>,
     coded_resolution: Resolution,
 }
 
 impl SurfacePoolHandle {
     /// Creates a new pool
-    pub fn new(surfaces: Vec<Surface>, resolution: Resolution) -> Self {
+    fn new(surfaces: Vec<Surface>, resolution: Resolution) -> Self {
         Self {
             surfaces: Rc::new(RefCell::new(VecDeque::from(surfaces))),
             coded_resolution: resolution,
@@ -156,23 +156,23 @@ impl SurfacePoolHandle {
     }
 
     /// Retrieve the current coded resolution of the pool
-    pub fn coded_resolution(&self) -> Resolution {
+    pub(crate) fn coded_resolution(&self) -> Resolution {
         self.coded_resolution
     }
 
     /// Adds a new surface to the pool
-    pub fn add_surface(&mut self, surface: Surface) {
+    fn add_surface(&mut self, surface: Surface) {
         self.surfaces.borrow_mut().push_back(surface)
     }
 
     /// Gets a free surface from the pool
-    pub fn get_surface(&mut self) -> Option<Surface> {
+    pub(crate) fn get_surface(&mut self) -> Option<Surface> {
         let mut vec = self.surfaces.borrow_mut();
         vec.pop_front()
     }
 
     /// Returns new number of surfaces left.
-    pub fn num_surfaces_left(&self) -> usize {
+    fn num_surfaces_left(&self) -> usize {
         self.surfaces.borrow().len()
     }
 }
@@ -201,18 +201,18 @@ pub(crate) struct ParsedStreamMetadata {
     /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
     pub(crate) surface_pool: SurfacePoolHandle,
     /// The number of surfaces required to parse the stream.
-    pub(crate) min_num_surfaces: usize,
+    min_num_surfaces: usize,
     /// The decoder current display resolution.
-    pub(crate) display_resolution: Resolution,
+    display_resolution: Resolution,
     /// The image format we will use to map the surfaces. This is usually the
     /// same as the surface's internal format, but occasionally we can try
     /// mapping in a different format if requested and if the VA-API driver can
     /// do it.
-    pub(crate) map_format: Rc<libva::VAImageFormat>,
+    map_format: Rc<libva::VAImageFormat>,
     /// The rt_format parsed from the stream.
-    pub(crate) rt_format: u32,
+    rt_format: u32,
     /// The profile parsed from the stream.
-    pub(crate) profile: i32,
+    profile: i32,
 }
 
 /// State of the input stream, which can be either unparsed (we don't know the stream properties
@@ -226,7 +226,7 @@ pub(crate) enum StreamMetadataState {
 }
 
 impl StreamMetadataState {
-    pub(crate) fn display(&self) -> &Rc<libva::Display> {
+    fn display(&self) -> &Rc<libva::Display> {
         match self {
             StreamMetadataState::Unparsed { display } => display,
             StreamMetadataState::Parsed(ParsedStreamMetadata { context, .. }) => context.display(),
@@ -256,7 +256,7 @@ impl StreamMetadataState {
     /// is made. Only formats that are compatible with the current color space,
     /// bit depth, and chroma format are returned such that no conversion is
     /// needed.
-    pub(crate) fn supported_formats_for_stream(&self) -> anyhow::Result<HashSet<DecodedFormat>> {
+    fn supported_formats_for_stream(&self) -> anyhow::Result<HashSet<DecodedFormat>> {
         let metadata = self.get_parsed()?;
         let display = self.display();
 
@@ -274,7 +274,7 @@ impl StreamMetadataState {
     }
 
     /// Initializes or reinitializes the codec state.
-    pub(crate) fn open<S: StreamInfo>(
+    fn open<S: StreamInfo>(
         &mut self,
         hdr: S,
         format_map: Option<&FormatMap>,
