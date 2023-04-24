@@ -237,11 +237,6 @@ impl Default for BlockingMode {
 pub trait DecodedHandle {
     fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle>;
 
-    /// Returns the display order for the picture backed by this handle, if set by the decoder.
-    fn display_order(&self) -> Option<u64>;
-    /// Sets the display order for the picture backend by this handle
-    fn set_display_order(&mut self, display_order: u64);
-
     /// Returns the timestamp of the picture.
     fn timestamp(&self) -> u64;
 
@@ -260,16 +255,12 @@ pub trait DecodedHandle {
 struct ReadyFramesQueue<T: DecodedHandle> {
     /// Queue of all the frames waiting to be sent to the client.
     queue: VecDeque<T>,
-    /// A monotonically increasing counter used to tag frames in display
-    /// order
-    display_order: u64,
 }
 
 impl<T: DecodedHandle> Default for ReadyFramesQueue<T> {
     fn default() -> Self {
         Self {
             queue: Default::default(),
-            display_order: 0,
         }
     }
 }

@@ -115,63 +115,27 @@ impl TryInto<Surface> for PictureState {
 }
 
 /// A decoded frame handle.
-pub(crate) struct DecodedHandle {
-    /// The actual object backing the handle.
-    pub(crate) inner: Rc<RefCell<GenericBackendHandle>>,
-    /// A monotonically increasing counter that denotes the display order of
-    /// this handle in comparison with other handles.
-    display_order: Option<u64>,
-}
-
-impl Clone for DecodedHandle {
-    // See https://stegosaurusdormant.com/understanding-derive-clone/ on why
-    // this cannot be derived. Note that T probably doesn't implement Clone, but
-    // it's not a problem, since Rc is Clone.
-    fn clone(&self) -> Self {
-        DecodedHandle {
-            inner: self.inner.clone(),
-            display_order: self.display_order,
-        }
-    }
-}
-
-impl DecodedHandle {
-    /// Creates a new handle
-    pub fn new(inner: Rc<RefCell<GenericBackendHandle>>) -> Self {
-        Self {
-            inner,
-            display_order: None,
-        }
-    }
-}
+pub type DecodedHandle = Rc<RefCell<GenericBackendHandle>>;
 
 impl DecodedHandleTrait for DecodedHandle {
-    fn display_order(&self) -> Option<u64> {
-        self.display_order
-    }
-
-    fn set_display_order(&mut self, display_order: u64) {
-        self.display_order = Some(display_order)
-    }
-
     fn display_resolution(&self) -> Resolution {
-        self.inner.borrow().display_resolution
+        self.borrow().display_resolution
     }
 
     fn timestamp(&self) -> u64 {
-        self.inner.borrow().timestamp()
+        self.borrow().timestamp()
     }
 
     fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle> {
-        self.inner.borrow_mut()
+        self.borrow_mut()
     }
 
     fn is_ready(&self) -> bool {
-        self.inner.borrow().is_va_ready().unwrap_or(true)
+        self.borrow().is_va_ready().unwrap_or(true)
     }
 
     fn sync(&self) -> StatelessBackendResult<()> {
-        self.inner.borrow_mut().sync().map_err(|e| e.into())
+        self.borrow_mut().sync().map_err(|e| e.into())
     }
 }
 
@@ -669,9 +633,9 @@ where
     ) -> StatelessBackendResult<<Self as VideoDecoderBackend>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
-        let handle = Rc::new(RefCell::new(GenericBackendHandle::new(picture, metadata)?));
-
-        Ok(DecodedHandle::new(handle))
+        Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
+            picture, metadata,
+        )?)))
     }
 }
 

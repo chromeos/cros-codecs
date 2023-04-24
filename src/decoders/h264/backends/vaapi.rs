@@ -94,7 +94,7 @@ impl VaapiBackend<Sps> {
     fn surface_id(handle: &Option<VADecodedHandle>) -> libva::VASurfaceID {
         match handle {
             None => libva::constants::VA_INVALID_SURFACE,
-            Some(handle) => handle.inner.borrow().surface_id(),
+            Some(handle) => handle.borrow().surface_id(),
         }
     }
 
@@ -549,7 +549,7 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         first_field.sync()?;
 
         // Decode to the same surface as the first field picture.
-        let first_va_handle = first_field.inner.borrow();
+        let first_va_handle = first_field.borrow();
         let va_picture = first_va_handle
             .picture()
             .expect("no valid backend handle after blocking on it");

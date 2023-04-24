@@ -52,12 +52,6 @@ impl DecodedHandle for Handle {
         Default::default()
     }
 
-    fn display_order(&self) -> Option<u64> {
-        None
-    }
-
-    fn set_display_order(&mut self, _: u64) {}
-
     fn timestamp(&self) -> u64 {
         0
     }

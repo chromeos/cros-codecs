@@ -251,7 +251,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
             .iter()
             .map(|h| {
                 if let Some(h) = h {
-                    h.inner.borrow().surface_id()
+                    h.borrow().surface_id()
                 } else {
                     libva::constants::VA_INVALID_SURFACE
                 }
