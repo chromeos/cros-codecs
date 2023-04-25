@@ -5,6 +5,9 @@
 pub mod decoders;
 pub mod utils;
 
+#[cfg(feature = "vaapi")]
+pub use libva;
+
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Resolution {
     pub width: u32,
