@@ -33,7 +33,6 @@ use crate::decoders::BlockingMode;
 use crate::decoders::DecodedHandle;
 use crate::decoders::StatelessBackendError;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-use crate::utils::vaapi::NegotiationStatus;
 use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
 
@@ -467,8 +466,6 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         dpb: &Dpb<Self::Handle>,
         slice: &Slice<&[u8]>,
     ) -> StatelessBackendResult<()> {
-        self.negotiation_status = NegotiationStatus::Negotiated;
-
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 

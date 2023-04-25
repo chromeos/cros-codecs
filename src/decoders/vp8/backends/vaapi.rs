@@ -21,7 +21,6 @@ use crate::decoders::vp8::parser::Segmentation;
 use crate::decoders::BlockingMode;
 use crate::decoders::StatelessBackendError;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-use crate::utils::vaapi::NegotiationStatus;
 use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
 use crate::Resolution;
@@ -239,8 +238,6 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         } else {
             libva::constants::VA_INVALID_SURFACE
         };
-
-        self.negotiation_status = NegotiationStatus::Negotiated;
 
         let metadata = self.metadata_state.get_parsed_mut()?;
         let context = &metadata.context;

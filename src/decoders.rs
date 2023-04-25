@@ -41,7 +41,7 @@ pub enum StatelessBackendError {
 
 pub type StatelessBackendResult<T> = std::result::Result<T, StatelessBackendError>;
 
-pub(crate) trait VideoDecoderBackend {
+pub(crate) trait VideoDecoderBackend<FormatInfo> {
     /// The type that the backend returns as a result of a decode operation.
     /// This will usually be some backend-specific type with a resource and a
     /// resource pool so that said buffer can be reused for another decode
@@ -68,7 +68,7 @@ pub(crate) trait VideoDecoderBackend {
     fn format(&self) -> Option<DecodedFormat>;
 
     /// Try altering the decoded format.
-    fn try_format(&mut self, format: DecodedFormat) -> Result<()>;
+    fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat) -> Result<()>;
 }
 
 /// Trait for objects allowing to negotiate the output format of a decoder.

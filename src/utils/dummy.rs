@@ -78,7 +78,7 @@ impl Backend {
     }
 }
 
-impl VideoDecoderBackend for Backend
+impl<FormatInfo> VideoDecoderBackend<FormatInfo> for Backend
 where
     Handle: DecodedHandle,
 {
@@ -96,7 +96,7 @@ where
         None
     }
 
-    fn try_format(&mut self, _: DecodedFormat) -> crate::decoders::Result<()> {
+    fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> crate::decoders::Result<()> {
         Ok(())
     }
 

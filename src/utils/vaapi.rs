@@ -7,6 +7,7 @@ use std::cell::RefMut;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use anyhow::anyhow;
@@ -537,32 +538,6 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
     }
 }
 
-/// Keeps track of where the backend is in the negotiation process.
-///
-/// The generic parameter is the data that the decoder wishes to pass from the `Possible` to the
-/// `Negotiated` state - typically, the properties of the stream like its resolution as they have
-/// been parsed.
-#[derive(Clone, Default)]
-pub(crate) enum NegotiationStatus<T> {
-    /// No property about the stream has been parsed yet.
-    #[default]
-    NonNegotiated,
-    /// Properties of the stream have been parsed and the client may query and change them.
-    Possible(T),
-    /// Stream is actively decoding and its properties cannot be changed by the client.
-    Negotiated,
-}
-
-impl<T> Debug for NegotiationStatus<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NegotiationStatus::NonNegotiated => write!(f, "NonNegotiated"),
-            NegotiationStatus::Possible(_) => write!(f, "Possible"),
-            NegotiationStatus::Negotiated => write!(f, "Negotiated"),
-        }
-    }
-}
-
 pub(crate) struct VaapiBackend<StreamData>
 where
     for<'a> &'a StreamData: StreamInfo,
@@ -571,8 +546,8 @@ where
     display: Rc<Display>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
-    /// The negotiation status
-    pub(crate) negotiation_status: NegotiationStatus<Box<StreamData>>,
+    /// Make sure the backend is typed by stream information provider.
+    _stream_data: PhantomData<StreamData>,
 }
 
 impl<StreamData> VaapiBackend<StreamData>
@@ -584,7 +559,7 @@ where
         Self {
             display,
             metadata_state: StreamMetadataState::Unparsed,
-            negotiation_status: Default::default(),
+            _stream_data: PhantomData,
         }
     }
 
@@ -593,7 +568,6 @@ where
         stream_params: &StreamData,
     ) -> StatelessBackendResult<()> {
         self.metadata_state = StreamMetadataState::open(&self.display, stream_params, None)?;
-        self.negotiation_status = NegotiationStatus::Possible(Box::new(stream_params.clone()));
 
         Ok(())
     }
@@ -601,7 +575,7 @@ where
     pub(crate) fn process_picture(
         &mut self,
         picture: libva::Picture<PictureNew>,
-    ) -> StatelessBackendResult<<Self as VideoDecoderBackend>::Handle> {
+    ) -> StatelessBackendResult<<Self as VideoDecoderBackend<StreamData>>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
         Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
@@ -630,7 +604,7 @@ where
     }
 }
 
-impl<StreamData> VideoDecoderBackend for VaapiBackend<StreamData>
+impl<StreamData> VideoDecoderBackend<StreamData> for VaapiBackend<StreamData>
 where
     StreamData: Clone,
     for<'a> &'a StreamData: StreamInfo,
@@ -674,19 +648,11 @@ where
         DecodedFormat::try_from(map_format.as_ref()).ok()
     }
 
-    fn try_format(&mut self, format: crate::DecodedFormat) -> VideoDecoderResult<()> {
-        let header = match &self.negotiation_status {
-            NegotiationStatus::Possible(header) => header,
-            _ => {
-                return Err(VideoDecoderError::StatelessBackendError(
-                    StatelessBackendError::NegotiationFailed(anyhow!(
-                        "Negotiation is not possible at this stage {:?}",
-                        self.negotiation_status
-                    )),
-                ))
-            }
-        };
-
+    fn try_format(
+        &mut self,
+        format_info: &StreamData,
+        format: crate::DecodedFormat,
+    ) -> VideoDecoderResult<()> {
         let supported_formats_for_stream = self.supported_formats_for_stream()?;
 
         if supported_formats_for_stream.contains(&format) {
@@ -696,7 +662,7 @@ where
                 .unwrap();
 
             self.metadata_state =
-                StreamMetadataState::open(&self.display, header.as_ref(), Some(map_format))?;
+                StreamMetadataState::open(&self.display, format_info, Some(map_format))?;
 
             Ok(())
         } else {

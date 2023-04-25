@@ -20,7 +20,7 @@ pub type Result<T> = crate::decoders::StatelessBackendResult<T>;
 /// where it will wait until the current decode finishes, or in non-blocking
 /// mode, where it should return immediately with any previously decoded frames
 /// that happen to be ready.
-pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
+pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend<Header> {
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> Result<()>;
 

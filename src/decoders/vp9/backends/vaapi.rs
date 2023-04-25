@@ -24,7 +24,6 @@ use crate::decoders::vp9::parser::NUM_REF_FRAMES;
 use crate::decoders::BlockingMode;
 use crate::decoders::StatelessBackendError;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-use crate::utils::vaapi::NegotiationStatus;
 use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
 
@@ -245,8 +244,6 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         timestamp: u64,
         segmentation: &[Segmentation; MAX_SEGMENTS],
     ) -> StatelessBackendResult<Self::Handle> {
-        self.negotiation_status = NegotiationStatus::Negotiated;
-
         let reference_frames: [u32; NUM_REF_FRAMES] = reference_frames
             .iter()
             .map(|h| {

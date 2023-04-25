@@ -22,7 +22,7 @@ pub mod vaapi;
 /// where it will wait until the current decode finishes, or in non-blocking
 /// mode, where it should return immediately with any previously decoded frames
 /// that happen to be ready.
-pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend {
+pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend<Sps> {
     /// Type used by the backend to represent a picture in the process of being decoded.
     type Picture;
 
