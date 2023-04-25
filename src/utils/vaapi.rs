@@ -219,20 +219,13 @@ pub(crate) struct ParsedStreamMetadata {
 /// yet) or parsed (we know the stream properties and are ready to decode).
 pub(crate) enum StreamMetadataState {
     /// The metadata for the current stream has not yet been parsed.
-    Unparsed { display: Rc<Display> },
+    Unparsed,
     /// The metadata for the current stream has been parsed and a suitable
     /// VAContext has been created to accomodate it.
     Parsed(ParsedStreamMetadata),
 }
 
 impl StreamMetadataState {
-    fn display(&self) -> &Rc<libva::Display> {
-        match self {
-            StreamMetadataState::Unparsed { display } => display,
-            StreamMetadataState::Parsed(ParsedStreamMetadata { context, .. }) => context.display(),
-        }
-    }
-
     /// Returns a reference to the parsed metadata state or an error if we haven't reached that
     /// state yet.
     pub(crate) fn get_parsed(&self) -> anyhow::Result<&ParsedStreamMetadata> {
@@ -251,35 +244,12 @@ impl StreamMetadataState {
         }
     }
 
-    /// Gets a set of supported formats for the particular stream being
-    /// processed. This requires that some buffers be processed before this call
-    /// is made. Only formats that are compatible with the current color space,
-    /// bit depth, and chroma format are returned such that no conversion is
-    /// needed.
-    fn supported_formats_for_stream(&self) -> anyhow::Result<HashSet<DecodedFormat>> {
-        let metadata = self.get_parsed()?;
-        let display = self.display();
-
-        let image_formats = display.query_image_formats()?;
-
-        let formats = supported_formats_for_rt_format(
-            display,
-            metadata.rt_format,
-            metadata.profile,
-            libva::VAEntrypoint::VAEntrypointVLD,
-            &image_formats,
-        )?;
-
-        Ok(formats.into_iter().map(|f| f.decoded_format).collect())
-    }
-
     /// Initializes or reinitializes the codec state.
     fn open<S: StreamInfo>(
-        &mut self,
+        display: &Rc<Display>,
         hdr: S,
         format_map: Option<&FormatMap>,
-    ) -> anyhow::Result<()> {
-        let display = self.display();
+    ) -> anyhow::Result<StreamMetadataState> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
         let (frame_w, frame_h) = hdr.coded_size();
@@ -342,7 +312,7 @@ impl StreamMetadataState {
 
         let surface_pool = SurfacePoolHandle::new(surfaces, coded_resolution);
 
-        *self = StreamMetadataState::Parsed(ParsedStreamMetadata {
+        Ok(StreamMetadataState::Parsed(ParsedStreamMetadata {
             context,
             config,
             surface_pool,
@@ -351,9 +321,7 @@ impl StreamMetadataState {
             map_format: Rc::new(map_format),
             rt_format,
             profile: va_profile,
-        });
-
-        Ok(())
+        }))
     }
 }
 
@@ -599,6 +567,8 @@ pub(crate) struct VaapiBackend<StreamData>
 where
     for<'a> &'a StreamData: StreamInfo,
 {
+    /// VA display in use for this stream.
+    display: Rc<Display>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
     /// The negotiation status
@@ -612,7 +582,8 @@ where
 {
     pub(crate) fn new(display: Rc<libva::Display>) -> Self {
         Self {
-            metadata_state: StreamMetadataState::Unparsed { display },
+            display,
+            metadata_state: StreamMetadataState::Unparsed,
             negotiation_status: Default::default(),
         }
     }
@@ -621,7 +592,7 @@ where
         &mut self,
         stream_params: &StreamData,
     ) -> StatelessBackendResult<()> {
-        self.metadata_state.open(stream_params, None)?;
+        self.metadata_state = StreamMetadataState::open(&self.display, stream_params, None)?;
         self.negotiation_status = NegotiationStatus::Possible(Box::new(stream_params.clone()));
 
         Ok(())
@@ -636,6 +607,26 @@ where
         Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
             picture, metadata,
         )?)))
+    }
+
+    /// Gets a set of supported formats for the particular stream being
+    /// processed. This requires that some buffers be processed before this call
+    /// is made. Only formats that are compatible with the current color space,
+    /// bit depth, and chroma format are returned such that no conversion is
+    /// needed.
+    fn supported_formats_for_stream(&self) -> anyhow::Result<HashSet<DecodedFormat>> {
+        let metadata = self.metadata_state.get_parsed()?;
+        let image_formats = self.display.query_image_formats()?;
+
+        let formats = supported_formats_for_rt_format(
+            &self.display,
+            metadata.rt_format,
+            metadata.profile,
+            libva::VAEntrypoint::VAEntrypointVLD,
+            &image_formats,
+        )?;
+
+        Ok(formats.into_iter().map(|f| f.decoded_format).collect())
     }
 }
 
@@ -696,7 +687,7 @@ where
             }
         };
 
-        let supported_formats_for_stream = self.metadata_state.supported_formats_for_stream()?;
+        let supported_formats_for_stream = self.supported_formats_for_stream()?;
 
         if supported_formats_for_stream.contains(&format) {
             let map_format = FORMAT_MAP
@@ -704,8 +695,8 @@ where
                 .find(|&map| map.decoded_format == format)
                 .unwrap();
 
-            self.metadata_state
-                .open(header.as_ref(), Some(map_format))?;
+            self.metadata_state =
+                StreamMetadataState::open(&self.display, header.as_ref(), Some(map_format))?;
 
             Ok(())
         } else {
