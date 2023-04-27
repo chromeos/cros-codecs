@@ -79,7 +79,14 @@ pub(crate) trait VideoDecoderBackend<FormatInfo> {
 /// the format change took place, and (in the future) negotiate its specifics.
 ///
 /// When the object is dropped, the decoder can accept and process new input again.
-pub trait DecoderFormatNegotiator<'a> {}
+pub trait DecoderFormatNegotiator<'a> {
+    /// Gets the number of output resources allocated by the backend.
+    fn num_resources_total(&self) -> usize;
+
+    /// Returns the current coded resolution of the bitstream being processed.
+    /// This may be None if we have not read the stream parameters yet.
+    fn coded_resolution(&self) -> Resolution;
+}
 
 /// Helper to implement `DecoderFormatNegotiator` for stateless decoders.
 struct StatelessDecoderFormatNegotiator<'a, D, H, F>
@@ -120,6 +127,13 @@ where
     D: VideoDecoder,
     F: Fn(&mut D, &H),
 {
+    fn num_resources_total(&self) -> usize {
+        self.decoder.num_resources_total()
+    }
+
+    fn coded_resolution(&self) -> Resolution {
+        self.decoder.coded_resolution().unwrap()
+    }
 }
 
 impl<'a, D, H, F> Drop for StatelessDecoderFormatNegotiator<'a, D, H, F>
