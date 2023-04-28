@@ -15,7 +15,8 @@ anyhow = "1"
 bitreader = "0.3.6"
 bytes = "1.1.0"
 enumn = "0.1.4"
-libva = { git = "https://github.com/chromeos/cros-libva", rev = "b70ea48", package = "cros-libva", optional = true }
+libva = { version = "0.0.2", package = "cros-libva", optional = true }
+#libva = { git = "https://github.com/chromeos/cros-libva", rev = "b70ea48", package = "cros-libva", optional = true }
 log = { version = "0", features = ["release_max_level_debug"] }
 thiserror = "1.0.31"
 crc32fast = "1.3.2"
