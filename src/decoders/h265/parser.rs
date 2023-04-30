@@ -1973,7 +1973,7 @@ impl Pps {
         self.scc_extension_flag
     }
 
-    pub fn temporal_id(&self) -> u32 {
+    pub fn temporal_id(&self) -> u8 {
         self.temporal_id
     }
 }
@@ -2770,6 +2770,10 @@ impl SliceHeader {
 
     pub fn curr_rps_idx(&self) -> u8 {
         self.curr_rps_idx
+    }
+
+    pub fn short_term_ref_pic_set(&self) -> &ShortTermRefPicSet {
+        &self.short_term_ref_pic_set
     }
 }
 
