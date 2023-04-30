@@ -142,6 +142,11 @@ impl NaluType {
     pub fn is_rasl(&self) -> bool {
         matches!(self, Self::RaslN | Self::RaslR)
     }
+
+    //// Whether this is a SLNR NALU.
+    pub fn is_slnr(&self) -> bool {
+        matches!(self, Self::RsvVclN10 | Self::RsvVclN12 | Self::RsvVclN14)
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -195,7 +200,7 @@ impl Header for NaluHeader {
     }
 }
 
-type Nalu<T> = nalu::Nalu<T, NaluHeader>;
+pub type Nalu<T> = nalu::Nalu<T, NaluHeader>;
 
 /// H265 levels as defined by table A.8.
 /// general_level_idc and sub_layer_level_idc[ OpTid ] shall be set equal to a
@@ -1782,6 +1787,9 @@ pub struct Pps {
     // Internal variables.
     /// Equivalent to QpBdOffsetY in the specification.
     qp_bd_offset_y: u32,
+
+    /// The nuh_temporal_id_plus1 - 1 of the associated NALU.
+    temporal_id: u8,
 }
 
 impl Pps {
@@ -1964,6 +1972,10 @@ impl Pps {
     pub fn scc_extension_flag(&self) -> bool {
         self.scc_extension_flag
     }
+
+    pub fn temporal_id(&self) -> u32 {
+        self.temporal_id
+    }
 }
 
 impl Default for Pps {
@@ -2014,6 +2026,7 @@ impl Default for Pps {
             qp_bd_offset_y: Default::default(),
             scc_extension: Default::default(),
             scc_extension_flag: Default::default(),
+            temporal_id: Default::default(),
         }
     }
 }
@@ -4747,6 +4760,8 @@ impl Parser {
 
             r.skip_bits(4)?; // pps_extension_4bits
         }
+
+        pps.temporal_id = nalu.header().temporal_id_plus1() - 1;
 
         let key = pps.pic_parameter_set_id;
         self.active_ppses.insert(key, pps);
