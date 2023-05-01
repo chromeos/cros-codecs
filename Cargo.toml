@@ -1,6 +1,6 @@
 [package]
 name = "cros-codecs"
-version = "0.0.1"
+version = "0.0.2"
 license = "BSD-3-Clause"
 description = "Hardware-accelerated codecs for Linux"
 repository = "https://github.com/chromeos/cros-codecs"
@@ -15,7 +15,7 @@ anyhow = "1"
 bitreader = "0.3.6"
 bytes = "1.1.0"
 enumn = "0.1.4"
-libva = { version = "0.0.2", package = "cros-libva", optional = true }
+libva = { version = "0.0.3", package = "cros-libva", optional = true }
 #libva = { git = "https://github.com/chromeos/cros-libva", rev = "b70ea48", package = "cros-libva", optional = true }
 log = { version = "0", features = ["release_max_level_debug"] }
 thiserror = "1.0.31"
