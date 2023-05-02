@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "cros-codecs"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "bitreader",
@@ -60,9 +60,9 @@ dependencies = [
 
 [[package]]
 name = "cros-libva"
-version = "0.0.2"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bfd12786569a747273ebe6d029fe7385169a36064564a9209ea644fefa88804"
+checksum = "fb352d93b5e5bd2fe76ed9d8d2b8c1994da13b2b75f0dfd5e90d69ea8829e6c5"
 dependencies = [
  "anyhow",
  "bitflags",
