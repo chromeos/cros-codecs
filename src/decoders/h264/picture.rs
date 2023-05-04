@@ -223,10 +223,6 @@ impl PictureData {
     /// Mark the picture as a reference picture.
     pub fn set_reference(&mut self, reference: Reference, apply_to_other_field: bool) {
         log::debug!("Set reference of {:#?} to {:?}", self, reference);
-        //debug
-        if self.pic_order_cnt == 18 && matches!(reference, Reference::ShortTerm) {
-            println!("debug");
-        }
         self.reference = reference;
 
         if apply_to_other_field {
