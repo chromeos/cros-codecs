@@ -239,13 +239,13 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::decoders::tests::simple_playback_loop;
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
     use crate::decoders::vp8::decoder::Decoder;
     use crate::decoders::BlockingMode;
     use crate::decoders::DecodedHandle;
     use crate::decoders::VideoDecoder;
+    use crate::utils::simple_playback_loop;
     use crate::utils::IvfIterator;
 
     /// Simple decoding loop for VP8/VP9.
