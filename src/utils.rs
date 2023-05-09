@@ -97,10 +97,11 @@ impl<T: AsRef<[u8]>> AccessUnitParser<T> {
         }
 
         self.nalus.push(nalu);
+        let nalu = self.nalus.last().unwrap();
 
         if !self.picture_started {
             self.picture_started = matches!(
-                self.nalus.last().unwrap().header().nalu_type(),
+                nalu.header().nalu_type(),
                 NaluType::Slice
                     | NaluType::SliceDpa
                     | NaluType::SliceDpb
@@ -108,33 +109,32 @@ impl<T: AsRef<[u8]>> AccessUnitParser<T> {
                     | NaluType::SliceIdr
                     | NaluType::SliceExt
             );
-        } else if matches!(
-            self.nalus.last().unwrap().header().nalu_type(),
-            NaluType::Sei | NaluType::Sps | NaluType::Pps
-        ) {
-            self.picture_started = false;
-            return Some(AccessUnit {
-                nalus: self.nalus.drain(..).collect::<Vec<_>>(),
-            });
-        } else if matches!(
-            self.nalus.last().unwrap().header().nalu_type(),
-            NaluType::Slice | NaluType::SliceDpa | NaluType::SliceIdr
-        ) {
-            let data = self.nalus.last().unwrap().data().as_ref();
-            let header_bytes = self.nalus.last().unwrap().header().len();
-            let mut r = nalu_reader::NaluReader::new(&data[header_bytes..]);
 
-            let first_mb_in_slice = r.read_ue::<u32>();
-
-            if first_mb_in_slice.is_ok() && first_mb_in_slice.unwrap() == 0 {
-                self.picture_started = false;
-                return Some(AccessUnit {
-                    nalus: self.nalus.drain(..).collect::<Vec<_>>(),
-                });
-            }
+            return None;
         }
 
-        None
+        match nalu.header().nalu_type() {
+            NaluType::Sei | NaluType::Sps | NaluType::Pps => {
+                self.picture_started = false;
+                Some(AccessUnit {
+                    nalus: self.nalus.drain(..).collect::<Vec<_>>(),
+                })
+            }
+            NaluType::Slice | NaluType::SliceDpa | NaluType::SliceIdr => {
+                let data = nalu.as_ref();
+                let mut r = nalu_reader::NaluReader::new(&data[nalu.header().len()..]);
+                let first_mb_in_slice = r.read_ue::<u32>();
+
+                if first_mb_in_slice.is_ok() && first_mb_in_slice.unwrap() == 0 {
+                    Some(AccessUnit {
+                        nalus: self.nalus.drain(..self.nalus.len() - 1).collect::<Vec<_>>(),
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 }
 
