@@ -4,6 +4,7 @@
 
 use log::debug;
 
+use crate::decoders::private::VideoDecoderPrivate;
 use crate::decoders::vp9::backends::StatelessDecoderBackend;
 use crate::decoders::vp9::lookups::AC_QLOOKUP;
 use crate::decoders::vp9::lookups::AC_QLOOKUP_10;
@@ -411,6 +412,19 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
                     None
                 }
             })
+    }
+
+    fn format(&self) -> Option<crate::DecodedFormat> {
+        self.backend.format()
+    }
+}
+
+impl<T: DecodedHandle + Clone + 'static> VideoDecoderPrivate for Decoder<T> {
+    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoders::Result<()> {
+        match &self.decoding_state {
+            DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
+            _ => Err(anyhow::anyhow!("current decoder state does not allow format change").into()),
+        }
     }
 }
 

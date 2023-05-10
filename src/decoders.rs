@@ -86,6 +86,9 @@ pub trait DecoderFormatNegotiator<'a> {
     /// Returns the current coded resolution of the bitstream being processed.
     /// This may be None if we have not read the stream parameters yet.
     fn coded_resolution(&self) -> Resolution;
+
+    fn format(&self) -> Option<DecodedFormat>;
+    fn try_format(&mut self, format: DecodedFormat) -> Result<()>;
 }
 
 /// Helper to implement `DecoderFormatNegotiator` for stateless decoders.
@@ -124,7 +127,7 @@ where
 
 impl<'a, D, H, F> DecoderFormatNegotiator<'a> for StatelessDecoderFormatNegotiator<'a, D, H, F>
 where
-    D: VideoDecoder,
+    D: VideoDecoder + private::VideoDecoderPrivate,
     F: Fn(&mut D, &H),
 {
     fn num_resources_total(&self) -> usize {
@@ -133,6 +136,17 @@ where
 
     fn coded_resolution(&self) -> Resolution {
         self.decoder.coded_resolution().unwrap()
+    }
+
+    /// Returns the current output format, if one is currently set.
+    fn format(&self) -> Option<DecodedFormat> {
+        self.decoder.format()
+    }
+
+    /// Try to apply `format` to output frames. If successful, all frames emitted after the
+    /// call will be in the new format.
+    fn try_format(&mut self, format: DecodedFormat) -> Result<()> {
+        self.decoder.try_format(format)
     }
 }
 
@@ -177,6 +191,18 @@ pub enum DecodeError {
     BackendError(#[from] StatelessBackendError),
 }
 
+mod private {
+    use super::*;
+
+    /// Private trait for methods we need to expose for crate types (e.g.
+    /// `DecoderFormatNegotiator`s), but don't want to be directly used by the client.
+    pub(crate) trait VideoDecoderPrivate {
+        /// Try to apply `format` to output frames. If successful, all frames emitted after the
+        /// call will be in the new format.
+        fn try_format(&mut self, format: DecodedFormat) -> Result<()>;
+    }
+}
+
 /// Stateless video decoder interface.
 ///
 /// A stateless decoder differs from a stateful one in that its input and output queues are not
@@ -212,6 +238,9 @@ pub trait VideoDecoder {
 
     /// Returns the next event, if there is any pending.
     fn next_event(&mut self) -> Option<DecoderEvent>;
+
+    /// Returns the current output format, if one is currently set.
+    fn format(&self) -> Option<DecodedFormat>;
 }
 
 pub trait DynHandle {

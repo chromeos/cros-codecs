@@ -24,6 +24,7 @@ use crate::decoders::h264::picture::Field;
 use crate::decoders::h264::picture::IsIdr;
 use crate::decoders::h264::picture::PictureData;
 use crate::decoders::h264::picture::Reference;
+use crate::decoders::private::VideoDecoderPrivate;
 use crate::decoders::BlockingMode;
 use crate::decoders::DecodeError;
 use crate::decoders::DecodedHandle;
@@ -2242,6 +2243,22 @@ where
                 }
             })
     }
+
+    fn format(&self) -> Option<crate::DecodedFormat> {
+        self.backend.format()
+    }
+}
+
+impl<T, P> VideoDecoderPrivate for Decoder<T, P>
+where
+    T: DecodedHandle + Clone + 'static,
+{
+    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoders::Result<()> {
+        match &self.decoding_state {
+            DecodingState::AwaitingFormat(sps) => self.backend.try_format(sps, format),
+            _ => Err(anyhow!("current decoder state does not allow format change").into()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2255,6 +2272,7 @@ pub mod tests {
     use crate::decoders::VideoDecoder;
     use crate::utils::simple_playback_loop;
     use crate::utils::H264FrameIterator;
+    use crate::DecodedFormat;
 
     /// H.264 decoding loop for use with `test_decode_stream`.
     pub fn h264_decoding_loop<D>(
@@ -2269,6 +2287,7 @@ pub mod tests {
             decoder,
             H264FrameIterator::new(test_stream),
             on_new_frame,
+            DecodedFormat::NV12,
             blocking_mode,
         )
     }

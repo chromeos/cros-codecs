@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::decoders::private::VideoDecoderPrivate;
 use crate::decoders::vp8::backends::StatelessDecoderBackend;
 use crate::decoders::vp8::parser::Frame;
 use crate::decoders::vp8::parser::Header;
@@ -235,6 +236,19 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
                 }
             })
     }
+
+    fn format(&self) -> Option<crate::DecodedFormat> {
+        self.backend.format()
+    }
+}
+
+impl<T: DecodedHandle + Clone + 'static> VideoDecoderPrivate for Decoder<T> {
+    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoders::Result<()> {
+        match &self.decoding_state {
+            DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
+            _ => Err(anyhow::anyhow!("current decoder state does not allow format change").into()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -247,6 +261,7 @@ pub mod tests {
     use crate::decoders::VideoDecoder;
     use crate::utils::simple_playback_loop;
     use crate::utils::IvfIterator;
+    use crate::DecodedFormat;
 
     /// Simple decoding loop for VP8/VP9.
     pub fn vpx_decoding_loop<D>(
@@ -261,6 +276,7 @@ pub mod tests {
             decoder,
             IvfIterator::new(test_stream),
             on_new_frame,
+            DecodedFormat::NV12,
             blocking_mode,
         )
     }

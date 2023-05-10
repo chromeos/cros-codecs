@@ -15,6 +15,7 @@ use crate::decoders::DecodedHandle;
 use crate::decoders::DecoderEvent;
 use crate::decoders::VideoDecoder;
 use crate::utils::nalu::Header;
+use crate::DecodedFormat;
 
 #[cfg(test)]
 pub(crate) mod dummy;
@@ -197,6 +198,7 @@ pub fn simple_playback_loop<'a, D, I>(
     decoder: &mut D,
     stream_iter: I,
     on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
+    output_format: DecodedFormat,
     blocking_mode: BlockingMode,
 ) where
     D: VideoDecoder + ?Sized,
@@ -210,7 +212,9 @@ pub fn simple_playback_loop<'a, D, I>(
                 DecoderEvent::FrameReady(frame) => {
                     on_new_frame(frame);
                 }
-                DecoderEvent::FormatChanged(_) => {}
+                DecoderEvent::FormatChanged(mut format_setter) => {
+                    format_setter.try_format(output_format).unwrap();
+                }
             }
         }
     };
