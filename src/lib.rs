@@ -78,6 +78,8 @@ pub fn i420_copy(
     // Advance to the offset of the U plane
     let mut src = &data[offsets[1] as usize..];
 
+    let width = width / 2;
+
     // Copy U
     for _ in 0..height / 2 {
         dst[..width].copy_from_slice(&src[..width]);
