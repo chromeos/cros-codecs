@@ -5,6 +5,8 @@
 pub mod decoders;
 pub mod utils;
 
+use std::str::FromStr;
+
 #[cfg(feature = "vaapi")]
 pub use libva;
 
@@ -18,6 +20,18 @@ pub struct Resolution {
 pub enum DecodedFormat {
     NV12,
     I420,
+}
+
+impl FromStr for DecodedFormat {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "nv12" | "NV12" => Ok(DecodedFormat::NV12),
+            "i420" | "I420" => Ok(DecodedFormat::I420),
+            _ => Err("unrecognized output format. Valid values: nv12, i420"),
+        }
+    }
 }
 
 /// Copies `src` into `dst` as NV12, removing any extra padding.
