@@ -284,7 +284,9 @@ impl StreamMetadataState {
 
         let surfaces = display.create_surfaces(
             rt_format,
-            Some(map_format.fourcc),
+            // Let the hardware decide the best internal format - we will get the desired fourcc
+            // when creating the image.
+            None,
             frame_w,
             frame_h,
             Some(libva::UsageHint::USAGE_HINT_DECODER),
