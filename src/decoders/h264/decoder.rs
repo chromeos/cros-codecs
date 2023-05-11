@@ -2279,6 +2279,7 @@ pub mod tests {
         decoder: &mut D,
         test_stream: &[u8],
         on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
+        output_format: DecodedFormat,
         blocking_mode: BlockingMode,
     ) where
         D: VideoDecoder,
@@ -2287,7 +2288,7 @@ pub mod tests {
             decoder,
             H264FrameIterator::new(test_stream),
             on_new_frame,
-            DecodedFormat::NV12,
+            output_format,
             blocking_mode,
         )
     }
@@ -2297,7 +2298,7 @@ pub mod tests {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, f| h264_decoding_loop(d, s, f, blocking_mode),
+            |d, s, f| h264_decoding_loop(d, s, f, DecodedFormat::NV12, blocking_mode),
             decoder,
             test,
             false,

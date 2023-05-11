@@ -571,14 +571,19 @@ mod tests {
     use crate::decoders::tests::test_decode_stream;
     use crate::decoders::tests::TestStream;
     use crate::decoders::BlockingMode;
+    use crate::DecodedFormat;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
-    fn test_decoder_vaapi(test: &TestStream, blocking_mode: BlockingMode) {
+    fn test_decoder_vaapi(
+        test: &TestStream,
+        output_format: DecodedFormat,
+        blocking_mode: BlockingMode,
+    ) {
         let display = Display::open().unwrap();
         let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, f| h264_decoding_loop(d, s, f, blocking_mode),
+            |d, s, f| h264_decoding_loop(d, s, f, output_format, blocking_mode),
             decoder,
             test,
             true,
@@ -591,7 +596,11 @@ mod tests {
     #[ignore]
     fn test_64x64_progressive_i_block() {
         use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I;
-        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I, BlockingMode::Blocking);
+        test_decoder_vaapi(
+            &DECODE_64X64_PROGRESSIVE_I,
+            DecodedFormat::NV12,
+            BlockingMode::Blocking,
+        );
     }
 
     #[test]
@@ -599,7 +608,11 @@ mod tests {
     #[ignore]
     fn test_64x64_progressive_i_nonblock() {
         use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I;
-        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I, BlockingMode::NonBlocking);
+        test_decoder_vaapi(
+            &DECODE_64X64_PROGRESSIVE_I,
+            DecodedFormat::NV12,
+            BlockingMode::NonBlocking,
+        );
     }
 
     #[test]
@@ -607,7 +620,11 @@ mod tests {
     #[ignore]
     fn test_64x64_progressive_i_p_block() {
         use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P;
-        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I_P, BlockingMode::Blocking);
+        test_decoder_vaapi(
+            &DECODE_64X64_PROGRESSIVE_I_P,
+            DecodedFormat::NV12,
+            BlockingMode::Blocking,
+        );
     }
 
     #[test]
@@ -615,7 +632,11 @@ mod tests {
     #[ignore]
     fn test_64x64_progressive_i_p_nonblock() {
         use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P;
-        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I_P, BlockingMode::NonBlocking);
+        test_decoder_vaapi(
+            &DECODE_64X64_PROGRESSIVE_I_P,
+            DecodedFormat::NV12,
+            BlockingMode::NonBlocking,
+        );
     }
 
     #[test]
@@ -623,7 +644,11 @@ mod tests {
     #[ignore]
     fn test_64x64_progressive_i_p_b_p_block() {
         use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P_B_P;
-        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I_P_B_P, BlockingMode::Blocking);
+        test_decoder_vaapi(
+            &DECODE_64X64_PROGRESSIVE_I_P_B_P,
+            DecodedFormat::NV12,
+            BlockingMode::Blocking,
+        );
     }
 
     #[test]
@@ -631,7 +656,11 @@ mod tests {
     #[ignore]
     fn test_64x64_progressive_i_p_b_p_nonblock() {
         use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P_B_P;
-        test_decoder_vaapi(&DECODE_64X64_PROGRESSIVE_I_P_B_P, BlockingMode::NonBlocking);
+        test_decoder_vaapi(
+            &DECODE_64X64_PROGRESSIVE_I_P_B_P,
+            DecodedFormat::NV12,
+            BlockingMode::NonBlocking,
+        );
     }
 
     #[test]
@@ -641,6 +670,7 @@ mod tests {
         use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH;
         test_decoder_vaapi(
             &DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH,
+            DecodedFormat::NV12,
             BlockingMode::Blocking,
         );
     }
@@ -652,6 +682,7 @@ mod tests {
         use crate::decoders::h264::decoder::tests::DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH;
         test_decoder_vaapi(
             &DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH,
+            DecodedFormat::NV12,
             BlockingMode::NonBlocking,
         );
     }
@@ -661,7 +692,11 @@ mod tests {
     #[ignore]
     fn test_25fps_block() {
         use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::Blocking);
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS,
+            DecodedFormat::NV12,
+            BlockingMode::Blocking,
+        );
     }
 
     #[test]
@@ -669,7 +704,11 @@ mod tests {
     #[ignore]
     fn test_25fps_nonblock() {
         use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS,
+            DecodedFormat::NV12,
+            BlockingMode::NonBlocking,
+        );
     }
 
     #[test]
@@ -677,7 +716,11 @@ mod tests {
     #[ignore]
     fn test_25fps_interlaced_block() {
         use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS_INTERLACED;
-        test_decoder_vaapi(&DECODE_TEST_25FPS_INTERLACED, BlockingMode::Blocking);
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS_INTERLACED,
+            DecodedFormat::NV12,
+            BlockingMode::Blocking,
+        );
     }
 
     #[test]
@@ -685,6 +728,10 @@ mod tests {
     #[ignore]
     fn test_25fps_interlaced_nonblock() {
         use crate::decoders::h264::decoder::tests::DECODE_TEST_25FPS_INTERLACED;
-        test_decoder_vaapi(&DECODE_TEST_25FPS_INTERLACED, BlockingMode::NonBlocking);
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS_INTERLACED,
+            DecodedFormat::NV12,
+            BlockingMode::NonBlocking,
+        );
     }
 }

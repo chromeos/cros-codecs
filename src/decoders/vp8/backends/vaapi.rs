@@ -307,15 +307,20 @@ mod tests {
     use crate::decoders::BlockingMode;
     use crate::utils::vaapi::VaapiBackend;
     use crate::utils::IvfIterator;
+    use crate::DecodedFormat;
     use crate::Resolution;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
-    fn test_decoder_vaapi(test: &TestStream, blocking_mode: BlockingMode) {
+    fn test_decoder_vaapi(
+        test: &TestStream,
+        output_format: DecodedFormat,
+        blocking_mode: BlockingMode,
+    ) {
         let display = Display::open().unwrap();
         let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vpx_decoding_loop(d, s, c, blocking_mode),
+            |d, s, c| vpx_decoding_loop(d, s, c, output_format, blocking_mode),
             decoder,
             test,
             true,
@@ -328,7 +333,11 @@ mod tests {
     #[ignore]
     fn test_25fps_block() {
         use crate::decoders::vp8::decoder::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::Blocking);
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS,
+            DecodedFormat::NV12,
+            BlockingMode::Blocking,
+        );
     }
 
     #[test]
@@ -336,7 +345,11 @@ mod tests {
     #[ignore]
     fn test_25fps_nonblock() {
         use crate::decoders::vp8::decoder::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
+        test_decoder_vaapi(
+            &DECODE_TEST_25FPS,
+            DecodedFormat::NV12,
+            BlockingMode::NonBlocking,
+        );
     }
 
     #[test]

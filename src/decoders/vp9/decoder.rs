@@ -435,13 +435,14 @@ pub mod tests {
     use crate::decoders::vp8::decoder::tests::vpx_decoding_loop;
     use crate::decoders::vp9::decoder::Decoder;
     use crate::decoders::BlockingMode;
+    use crate::DecodedFormat;
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vpx_decoding_loop(d, s, c, blocking_mode),
+            |d, s, c| vpx_decoding_loop(d, s, c, DecodedFormat::NV12, blocking_mode),
             decoder,
             test,
             false,
