@@ -473,8 +473,8 @@ impl<'a> MappableHandle for Image<'a> {
         let image_size = self.image_size();
         let image_inner = self.image();
 
-        let width = image_inner.width as u32;
-        let height = image_inner.height as u32;
+        let width = image_inner.width as usize;
+        let height = image_inner.height as usize;
 
         if buffer.len() != image_size {
             return Err(VideoDecoderError::StatelessBackendError(
@@ -522,8 +522,8 @@ impl<'a> MappableHandle for Image<'a> {
 
         crate::decoded_frame_size(
             (&image.format).try_into().unwrap(),
-            image.width,
-            image.height,
+            image.width as usize,
+            image.height as usize,
         )
     }
 }

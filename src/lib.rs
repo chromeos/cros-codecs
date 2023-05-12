@@ -38,13 +38,11 @@ impl FromStr for DecodedFormat {
 pub fn nv12_copy(
     src: &[u8],
     mut dst: &mut [u8],
-    width: u32,
-    height: u32,
+    width: usize,
+    height: usize,
     strides: [u32; 3],
     offsets: [u32; 3],
 ) {
-    let width = width.try_into().unwrap();
-    let height = height.try_into().unwrap();
     let data = src;
 
     let mut src = &data[offsets[0] as usize..];
@@ -56,11 +54,18 @@ pub fn nv12_copy(
         src = &src[strides[0] as usize..];
     }
 
+    // Align width and height to 2 for UV plane.
+    let width = if width % 2 == 1 { width + 1 } else { width };
+    let height = if height % 2 == 1 { height + 1 } else { height };
+
+    // 1 sample per 4 pixels, but we have two components per line.
+    let height = height / 2;
+
     // Advance to the offset of the chroma plane
     let mut src = &data[offsets[1] as usize..];
 
     // Copy chroma
-    for _ in 0..height / 2 {
+    for _ in 0..height {
         dst[..width].copy_from_slice(&src[..width]);
         dst = &mut dst[width..];
         src = &src[strides[1] as usize..];
@@ -71,13 +76,11 @@ pub fn nv12_copy(
 pub fn i420_copy(
     src: &[u8],
     mut dst: &mut [u8],
-    width: u32,
-    height: u32,
+    width: usize,
+    height: usize,
     strides: [u32; 3],
     offsets: [u32; 3],
 ) {
-    let width = width.try_into().unwrap();
-    let height = height.try_into().unwrap();
     let data = src;
 
     let mut src = &data[offsets[0] as usize..];
@@ -89,13 +92,19 @@ pub fn i420_copy(
         src = &src[strides[0] as usize..];
     }
 
+    // Align width and height to 2 for U and V planes.
+    let width = if width % 2 == 1 { width + 1 } else { width };
+    let height = if height % 2 == 1 { height + 1 } else { height };
+
+    // 1 sample per 4 pixels.
+    let width = width / 2;
+    let height = height / 2;
+
     // Advance to the offset of the U plane
     let mut src = &data[offsets[1] as usize..];
 
-    let width = width / 2;
-
     // Copy U
-    for _ in 0..height / 2 {
+    for _ in 0..height {
         dst[..width].copy_from_slice(&src[..width]);
         dst = &mut dst[width..];
         src = &src[strides[1] as usize..];
@@ -105,7 +114,7 @@ pub fn i420_copy(
     let mut src = &data[offsets[2] as usize..];
 
     // Copy V
-    for _ in 0..height / 2 {
+    for _ in 0..height {
         dst[..width].copy_from_slice(&src[..width]);
         dst = &mut dst[width..];
         src = &src[strides[2] as usize..];
@@ -115,8 +124,14 @@ pub fn i420_copy(
 /// Returns the size required to store a frame of `format` with size `width`x`height`, without any
 /// padding. This is the minimum size of the destination buffer passed to `nv12_copy` or
 /// `i420_copy`.
-pub fn decoded_frame_size(format: DecodedFormat, width: u16, height: u16) -> usize {
+pub fn decoded_frame_size(format: DecodedFormat, width: usize, height: usize) -> usize {
     match format {
-        DecodedFormat::I420 | DecodedFormat::NV12 => width as usize * height as usize * 3 / 2,
+        DecodedFormat::I420 | DecodedFormat::NV12 => {
+            let u_size = width * height;
+            // U and V planes need to be aligned to 2.
+            let uv_size = ((width + 1) / 2) * ((height + 1) / 2) * 2;
+
+            u_size + uv_size
+        }
     }
 }
