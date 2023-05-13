@@ -8,6 +8,7 @@ authors = ["The ChromiumOS Authors"]
 edition = "2021"
 
 [features]
+default = ["vaapi"]
 vaapi = ["libva"]
 
 [dependencies]
