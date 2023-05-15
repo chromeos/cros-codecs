@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+//! ccdec, a simple decoder program using cros-codecs. Capable of computing MD5 checksums from the
+//! input and writing the raw decoded frames to a file.
+
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;

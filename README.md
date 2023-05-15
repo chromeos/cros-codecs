@@ -21,3 +21,8 @@ Planned features:
 * V4L2 encoder support.
 * Support for H.265 and AV1.
 * C API to be used in non-Rust projects.
+
+# Example programs
+
+The `ccdec` example program is included. It can decode an encoded stream and
+write the decoded frames to a file.
