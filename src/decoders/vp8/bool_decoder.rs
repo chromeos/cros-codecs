@@ -28,6 +28,16 @@ const NORM: [u8; 256] = [
 /// Some bits are "encoded" with a 50/50 probability.
 const DEFAULT_PROBABILITY: u8 = 128;
 
+/// A capture of the state of the boolean decoder.
+///
+/// A `BoolDecoder` can be consumed and turned into this structure, which captures its state. This
+/// is useful to pass that state to the next decoding step, typically a hardware accelerator.
+pub struct BoolDecoderState {
+    pub range: usize,
+    pub value: usize,
+    pub count: isize,
+}
+
 /// The decoder state.
 #[derive(Default)]
 pub struct BoolDecoder<T> {
@@ -44,7 +54,7 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
             data: Cursor::new(data),
             range: 255usize,
             value: 0usize,
-            count: -8,
+            count: -(U8_BITS as isize),
         }
     }
 
@@ -152,21 +162,6 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
         U::try_from(value).map_err(|_| anyhow!("Conversion failed"))
     }
 
-    /// Returns the current coded value.
-    pub fn value(&self) -> usize {
-        self.value >> (BD_VALUE_SIZE - U8_BITS)
-    }
-
-    /// Returns the number of bytes in the `value` buffer.
-    pub fn count(&self) -> isize {
-        (U8_BITS as isize + self.count) % U8_BITS as isize
-    }
-
-    /// Returns the range of the current coded value.
-    pub fn range(&self) -> usize {
-        self.range
-    }
-
     /// Returns the current bit position.
     pub fn pos(&self) -> usize {
         let mut bit_count = (self.count + 8) as usize;
@@ -264,6 +259,20 @@ mod tests {
             } else {
                 assert!(bit);
             }
+        }
+    }
+}
+
+impl<T: AsRef<[u8]>> From<BoolDecoder<T>> for BoolDecoderState {
+    fn from(mut bd: BoolDecoder<T>) -> Self {
+        if bd.count < 0 {
+            let _ = bd.fill();
+        }
+
+        Self {
+            value: bd.value >> (BD_VALUE_SIZE - U8_BITS),
+            count: (U8_BITS as isize + bd.count) % U8_BITS as isize,
+            range: bd.range,
         }
     }
 }

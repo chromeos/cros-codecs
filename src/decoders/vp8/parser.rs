@@ -10,6 +10,7 @@ use bytes::Buf;
 use log::debug;
 
 use crate::decoders::vp8::bool_decoder::BoolDecoder;
+use crate::decoders::vp8::bool_decoder::BoolDecoderState;
 use crate::decoders::vp8::probs::COEFF_DEFAULT_PROBS;
 use crate::decoders::vp8::probs::COEFF_UPDATE_PROBS;
 use crate::decoders::vp8::probs::KF_UV_MODE_PROBS;
@@ -752,7 +753,11 @@ impl Parser {
         }
 
         frame.header_size = bd.pos() as u32;
-        Parser::sync_bd_state(&bd, frame);
+
+        let state: BoolDecoderState = bd.into();
+        frame.bd_range = state.range;
+        frame.bd_value = state.value;
+        frame.bd_count = state.count;
 
         Ok(())
     }
@@ -786,12 +791,6 @@ impl Parser {
 
         frame.partition_size[num_partitions - 1] = u32::try_from(data.len() - ofs)?;
         Ok(())
-    }
-
-    fn sync_bd_state<T: AsRef<[u8]>>(bd: &BoolDecoder<T>, frame: &mut Header) {
-        frame.bd_range = bd.range();
-        frame.bd_value = bd.value();
-        frame.bd_count = bd.count();
     }
 
     /// Parse a single frame from the chunk in `data`.
