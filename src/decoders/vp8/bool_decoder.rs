@@ -7,8 +7,8 @@
 use std::convert::TryFrom;
 use std::io::Cursor;
 
-use anyhow::anyhow;
 use bytes::Buf;
+use thiserror::Error;
 
 const LOTS_OF_BITS: u32 = 0x40000000;
 const U8_BITS: usize = u8::BITS as usize;
@@ -38,6 +38,16 @@ pub struct BoolDecoderState {
     pub count: isize,
 }
 
+#[derive(Debug, Error)]
+pub enum BoolDecoderError {
+    #[error("end of input reached")]
+    EndOfInput,
+    #[error("could not convert number of read bits to target type")]
+    CannotConvert,
+}
+
+type Result<T> = std::result::Result<T, BoolDecoderError>;
+
 /// The decoder state.
 #[derive(Default)]
 pub struct BoolDecoder<T> {
@@ -58,9 +68,12 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
         }
     }
 
-    /// Fills more bits from `data` to `value`. We shall keep at least 8 bits of
-    /// the current `data` in `value`.
-    fn fill(&mut self) -> anyhow::Result<()> {
+    /// Fills more bits from `data` to `value`. We shall keep at least 8 bits of the current `data`
+    /// in `value`.
+    ///
+    /// Returns `Some(())` if there was input data to fill from, `None` if we reached the end of
+    /// the input.
+    fn fill(&mut self) -> Option<()> {
         let mut shift =
             (BD_VALUE_SIZE as isize - U8_BITS as isize - (self.count + U8_BITS as isize)) as i32;
         let bits_left = (self.data.remaining() * U8_BITS) as i32;
@@ -78,19 +91,19 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
                 self.value |= (self.data.get_u8() as usize) << shift;
                 shift -= U8_BITS as i32;
             }
-            Ok(())
+            Some(())
         } else {
-            Err(anyhow!("Out of bits"))
+            None
         }
     }
 
     /// Reads the next bit from the coded stream. The probability of the bit to
     /// be one is probability / 256.
-    fn read_bit(&mut self, probability: u8) -> anyhow::Result<bool> {
+    fn read_bit(&mut self, probability: u8) -> Result<bool> {
         let split = 1 + (((self.range - 1) * probability as usize) >> 8);
 
         if self.count < 0 {
-            self.fill()?;
+            self.fill().ok_or(BoolDecoderError::EndOfInput)?;
         }
 
         let bigsplit = split << (BD_VALUE_SIZE - U8_BITS);
@@ -114,7 +127,14 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
 
     /// Reads a "literal", that is, a "num_bits"-wide unsigned value whose bits
     /// come high- to low-order, with each bit encoded at probability 1/2.
-    fn read_literal(&mut self, nbits: usize) -> anyhow::Result<i32> {
+    ///
+    /// # Panics
+    ///
+    /// Will panic if `nbits > 31`.
+    fn read_literal(&mut self, nbits: usize) -> Result<i32> {
+        // This won't perform well if we read more than 31 bits.
+        assert!(nbits <= 31);
+
         let mut ret = 0;
 
         for _ in 0..nbits {
@@ -128,7 +148,7 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
     /// end of data and failed to read the boolean. The probability of out to
     /// be true is probability / 256, e.g., when probability is 0x80, the
     /// chance is 1/2 (i.e., 0x80 / 256).
-    pub fn read_bool(&mut self) -> anyhow::Result<bool> {
+    pub fn read_bool(&mut self) -> Result<bool> {
         self.read_literal(1).map(|bit| bit != 0)
     }
 
@@ -136,20 +156,28 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
     /// end of data and failed to read the boolean. The probability of out to
     /// be true is probability / 256, e.g., when probability is 0x80, the
     /// chance is 1/2 (i.e., 0x80 / 256).
-    pub fn read_bool_with_prob(&mut self, probability: u8) -> anyhow::Result<bool> {
+    pub fn read_bool_with_prob(&mut self, probability: u8) -> Result<bool> {
         self.read_bit(probability)
     }
 
     /// Reads an unsigned literal from the coded stream.
-    pub fn read_uint<U: TryFrom<i32>>(&mut self, nbits: usize) -> anyhow::Result<U> {
+    ///
+    /// # Panics
+    ///
+    /// Will panic if `nbits > 31`.
+    pub fn read_uint<U: TryFrom<i32>>(&mut self, nbits: usize) -> Result<U> {
         let value = self.read_literal(nbits)?;
-        U::try_from(value).map_err(|_| anyhow!("Conversion failed"))
+        U::try_from(value).map_err(|_| BoolDecoderError::CannotConvert)
     }
 
     /// Reads a literal with sign from the coded stream. This is similar to the
     /// read_literal(), it first read a "num_bits"-wide unsigned value, and then
     /// read an extra bit as the sign of the literal.
-    pub fn read_sint<U: TryFrom<i32>>(&mut self, nbits: usize) -> anyhow::Result<U> {
+    ///
+    /// # Panics
+    ///
+    /// Will panic if `nbits > 31`.
+    pub fn read_sint<U: TryFrom<i32>>(&mut self, nbits: usize) -> Result<U> {
         let mut value = self.read_literal(nbits)?;
         let sign = self.read_bool()?;
 
@@ -157,7 +185,7 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
             value = -value;
         }
 
-        U::try_from(value).map_err(|_| anyhow!("Conversion failed"))
+        U::try_from(value).map_err(|_| BoolDecoderError::CannotConvert)
     }
 
     /// Returns the current bit position.
@@ -217,7 +245,7 @@ mod tests {
         assert!(bd.pos() == 0);
 
         assert!(bd.read_literal(1).unwrap() == 0);
-        assert!(bd.read_literal(32).unwrap() == 0);
+        assert!(bd.read_literal(31).unwrap() == 0);
         assert!(bd.read_sint::<i32>(1).unwrap() == 0);
         assert!(bd.read_sint::<i32>(31).unwrap() == 0);
     }
