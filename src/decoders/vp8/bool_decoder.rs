@@ -114,13 +114,11 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
 
     /// Reads a "literal", that is, a "num_bits"-wide unsigned value whose bits
     /// come high- to low-order, with each bit encoded at probability 1/2.
-    fn read_literal(&mut self, mut nbits: usize) -> anyhow::Result<i32> {
+    fn read_literal(&mut self, nbits: usize) -> anyhow::Result<i32> {
         let mut ret = 0;
 
-        while nbits > 0 {
-            let bit = self.read_bit(DEFAULT_PROBABILITY)?;
-            ret = (ret << 1) | bit as i32;
-            nbits -= 1;
+        for _ in 0..nbits {
+            ret = (ret << 1) | self.read_bit(DEFAULT_PROBABILITY)? as i32;
         }
 
         Ok(ret)
