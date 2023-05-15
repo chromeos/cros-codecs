@@ -24,6 +24,7 @@ crc32fast = "1.3.2"
 
 [dev-dependencies]
 argh = "0.1"
+md5 = "0.7"
 
 [[example]]
 name = "ccdec"

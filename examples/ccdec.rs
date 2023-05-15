@@ -43,6 +43,24 @@ impl FromStr for EncodedFormat {
     }
 }
 
+#[derive(Debug)]
+enum Md5Computation {
+    Stream,
+    Frame,
+}
+
+impl FromStr for Md5Computation {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "stream" => Ok(Md5Computation::Stream),
+            "frame" => Ok(Md5Computation::Frame),
+            _ => Err("unrecognized MD5 computation option. Valid values: stream, frame"),
+        }
+    }
+}
+
 /// Simple player using cros-codecs
 #[derive(Debug, FromArgs)]
 struct Args {
@@ -65,6 +83,11 @@ struct Args {
     /// whether to decode frames synchronously
     #[argh(switch)]
     synchronous: bool,
+
+    /// whether to display the MD5 of the decoded stream, and at which granularity (stream or
+    /// frame)
+    #[argh(option)]
+    compute_md5: Option<Md5Computation>,
 }
 
 fn main() {
@@ -124,17 +147,27 @@ fn main() {
         }
     };
 
-    let mut on_new_frame = move |handle: Box<dyn DecodedHandle>| {
-        if let Some(output) = &mut output {
+    let mut md5_context = md5::Context::new();
+
+    let mut on_new_frame = |handle: Box<dyn DecodedHandle>| {
+        if output.is_some() || args.compute_md5.is_some() {
             let mut picture = handle.dyn_picture_mut();
             let mut handle = picture.dyn_mappable_handle_mut();
             let buffer_size = handle.image_size();
             let mut frame_data = vec![0; buffer_size];
-
             handle.read(&mut frame_data).unwrap();
-            output
-                .write_all(&frame_data)
-                .expect("failed to write to output file");
+
+            if let Some(output) = &mut output {
+                output
+                    .write_all(&frame_data)
+                    .expect("failed to write to output file");
+            }
+
+            match args.compute_md5 {
+                None => (),
+                Some(Md5Computation::Frame) => println!("{:x}", md5::compute(&frame_data)),
+                Some(Md5Computation::Stream) => md5_context.consume(&frame_data),
+            }
         }
     };
 
@@ -145,4 +178,8 @@ fn main() {
         args.output_format,
         blocking_mode,
     );
+
+    if let Some(Md5Computation::Stream) = args.compute_md5 {
+        println!("{:x}", md5_context.compute());
+    }
 }
