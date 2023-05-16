@@ -5,6 +5,7 @@
 //! ccdec, a simple decoder program using cros-codecs. Capable of computing MD5 checksums from the
 //! input and writing the raw decoded frames to a file.
 
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::Cursor;
 use std::io::Read;
@@ -125,11 +126,11 @@ struct Args {
 }
 
 /// Detects the container type (IVF or MKV) and returns the corresponding frame iterator.
-fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Vec<u8>> + '_> {
+fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Cow<[u8]>> + '_> {
     if input.starts_with(&[0x1a, 0x45, 0xdf, 0xa3]) {
-        Box::new(MkvFrameIterator::new(input).unwrap())
+        Box::new(MkvFrameIterator::new(input).unwrap().map(Cow::Owned))
     } else {
-        Box::new(IvfIterator::new(input).map(ToOwned::to_owned))
+        Box::new(IvfIterator::new(input).map(Cow::Borrowed))
     }
 }
 
@@ -158,8 +159,8 @@ fn main() {
     let display = libva::Display::open().expect("failed to open libva display");
     let (mut decoder, frame_iter) = match args.input_format {
         EncodedFormat::H264 => {
-            let frame_iter = Box::new(H264FrameIterator::new(&input).map(ToOwned::to_owned))
-                as Box<dyn Iterator<Item = Vec<u8>>>;
+            let frame_iter = Box::new(H264FrameIterator::new(&input).map(Cow::Borrowed))
+                as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
             let decoder = Box::new(
                 cros_codecs::decoders::h264::decoder::Decoder::new_vaapi(display, blocking_mode)
