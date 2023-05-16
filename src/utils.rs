@@ -26,7 +26,6 @@ pub mod vaapi;
 
 /// Iterator over IVF packets.
 pub struct IvfIterator<'a> {
-    data: &'a [u8],
     cursor: Cursor<&'a [u8]>,
 }
 
@@ -37,7 +36,7 @@ impl<'a> IvfIterator<'a> {
         // Skip the IVH header entirely.
         cursor.seek(std::io::SeekFrom::Start(32)).unwrap();
 
-        Self { data, cursor }
+        Self { cursor }
     }
 }
 
@@ -62,7 +61,7 @@ impl<'a> Iterator for IvfIterator<'a> {
         let _ = self.cursor.seek(std::io::SeekFrom::Current(len as i64));
         let end = self.cursor.position() as usize;
 
-        Some(&self.data[start..end])
+        Some(&self.cursor.get_ref()[start..end])
     }
 }
 
@@ -141,7 +140,6 @@ impl<T: AsRef<[u8]>> AccessUnitParser<T> {
 
 /// Iterator over groups of Nalus that can contain a whole frame.
 pub struct H264FrameIterator<'a> {
-    stream: &'a [u8],
     cursor: Cursor<&'a [u8]>,
     aud_parser: AccessUnitParser<&'a [u8]>,
 }
@@ -149,7 +147,6 @@ pub struct H264FrameIterator<'a> {
 impl<'a> H264FrameIterator<'a> {
     pub fn new(stream: &'a [u8]) -> Self {
         Self {
-            stream,
             cursor: Cursor::new(stream),
             aud_parser: Default::default(),
         }
@@ -168,7 +165,7 @@ impl<'a> Iterator for H264FrameIterator<'a> {
                 let start_offset = start_nalu.sc_offset();
                 let end_offset = end_nalu.offset() + end_nalu.size();
 
-                let data = &self.stream[start_offset..end_offset];
+                let data = &self.cursor.get_ref()[start_offset..end_offset];
 
                 return Some(data);
             }
@@ -184,7 +181,7 @@ impl<'a> Iterator for H264FrameIterator<'a> {
             let start_offset = start_nalu.sc_offset();
             let end_offset = end_nalu.offset() + end_nalu.size();
 
-            let data = &self.stream[start_offset..end_offset];
+            let data = &self.cursor.get_ref()[start_offset..end_offset];
 
             Some(data)
         } else {
