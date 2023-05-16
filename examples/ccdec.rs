@@ -6,11 +6,9 @@
 //! input and writing the raw decoded frames to a file.
 
 use std::fs::File;
+use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
-/// Simple player example that can write decoded frames into a file.
-///
-/// Also useful for test suites like e.g. Fluster.
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -22,6 +20,8 @@ use cros_codecs::utils::simple_playback_loop;
 use cros_codecs::utils::H264FrameIterator;
 use cros_codecs::utils::IvfIterator;
 use cros_codecs::DecodedFormat;
+use matroska_demuxer::Frame;
+use matroska_demuxer::MatroskaFile;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum EncodedFormat {
@@ -40,6 +40,40 @@ impl FromStr for EncodedFormat {
             "vp9" | "VP9" => Ok(EncodedFormat::VP9),
             _ => Err("unrecognized input format. Valid values: h264, vp8, vp9"),
         }
+    }
+}
+
+struct MkvFrameIterator<T: AsRef<[u8]>> {
+    input: MatroskaFile<Cursor<T>>,
+    video_track: u64,
+}
+
+impl<T: AsRef<[u8]>> MkvFrameIterator<T> {
+    fn new(input: T) -> anyhow::Result<Self> {
+        let input = MatroskaFile::open(Cursor::new(input))?;
+        let video_track = input
+            .tracks()
+            .iter()
+            .find(|t| t.track_type() == matroska_demuxer::TrackType::Video)
+            .map(|t| t.track_number().get())
+            .ok_or_else(|| anyhow::anyhow!("no video track in input file"))?;
+
+        Ok(Self { input, video_track })
+    }
+}
+
+impl<T: AsRef<[u8]>> Iterator for MkvFrameIterator<T> {
+    type Item = Vec<u8>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut frame = Frame::default();
+        while self.input.next_frame(&mut frame).unwrap() {
+            if frame.track == self.video_track {
+                return Some(frame.data);
+            }
+        }
+
+        None
     }
 }
 
@@ -90,6 +124,15 @@ struct Args {
     compute_md5: Option<Md5Computation>,
 }
 
+/// Detects the container type (IVF or MKV) and returns the corresponding frame iterator.
+fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Vec<u8>> + '_> {
+    if input.starts_with(&[0x1a, 0x45, 0xdf, 0xa3]) {
+        Box::new(MkvFrameIterator::new(input).unwrap())
+    } else {
+        Box::new(IvfIterator::new(input).map(ToOwned::to_owned))
+    }
+}
+
 fn main() {
     let args: Args = argh::from_env();
 
@@ -115,33 +158,33 @@ fn main() {
     let display = libva::Display::open().expect("failed to open libva display");
     let (mut decoder, frame_iter) = match args.input_format {
         EncodedFormat::H264 => {
+            let frame_iter = Box::new(H264FrameIterator::new(&input).map(ToOwned::to_owned))
+                as Box<dyn Iterator<Item = Vec<u8>>>;
+
             let decoder = Box::new(
                 cros_codecs::decoders::h264::decoder::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
             ) as Box<dyn VideoDecoder>;
 
-            let frame_iter =
-                Box::new(H264FrameIterator::new(&input)) as Box<dyn Iterator<Item = &[u8]>>;
-
             (decoder, frame_iter)
         }
         EncodedFormat::VP8 => {
+            let frame_iter = create_vpx_frame_iterator(&input);
+
             let decoder = Box::new(
                 cros_codecs::decoders::vp8::decoder::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
             ) as Box<dyn VideoDecoder>;
 
-            let frame_iter = Box::new(IvfIterator::new(&input)) as Box<dyn Iterator<Item = &[u8]>>;
-
             (decoder, frame_iter)
         }
         EncodedFormat::VP9 => {
+            let frame_iter = create_vpx_frame_iterator(&input);
+
             let decoder = Box::new(
                 cros_codecs::decoders::vp9::decoder::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
             ) as Box<dyn VideoDecoder>;
-
-            let frame_iter = Box::new(IvfIterator::new(&input)) as Box<dyn Iterator<Item = &[u8]>>;
 
             (decoder, frame_iter)
         }

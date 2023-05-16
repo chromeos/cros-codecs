@@ -191,7 +191,7 @@ impl<'a> Iterator for H264FrameIterator<'a> {
 }
 
 /// Simple decoding loop that plays the stream once from start to finish.
-pub fn simple_playback_loop<'a, D, I>(
+pub fn simple_playback_loop<'a, D, R, I>(
     decoder: &mut D,
     stream_iter: I,
     on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
@@ -199,7 +199,8 @@ pub fn simple_playback_loop<'a, D, I>(
     blocking_mode: BlockingMode,
 ) where
     D: VideoDecoder + ?Sized,
-    I: Iterator<Item = &'a [u8]>,
+    R: AsRef<[u8]>,
+    I: Iterator<Item = R>,
 {
     // Closure that drains all pending decoder events and calls `on_new_frame` on each
     // completed frame.
@@ -218,7 +219,7 @@ pub fn simple_playback_loop<'a, D, I>(
 
     for (frame_num, packet) in stream_iter.enumerate() {
         loop {
-            match decoder.decode(frame_num as u64, packet) {
+            match decoder.decode(frame_num as u64, packet.as_ref()) {
                 Ok(()) => {
                     if blocking_mode == BlockingMode::Blocking {
                         check_events(decoder);

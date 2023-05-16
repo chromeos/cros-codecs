@@ -84,6 +84,7 @@ dependencies = [
  "cros-libva",
  "enumn",
  "log",
+ "matroska-demuxer",
  "md5",
  "thiserror",
 ]
@@ -121,10 +122,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "matroska-demuxer"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c235543f6a5590232d984559f6f2c53f1fde7e97d7577878847d6b62a6af5dad"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
 name = "md5"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
+
+[[package]]
+name = "once_cell"
+version = "1.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
 
 [[package]]
 name = "pkg-config"

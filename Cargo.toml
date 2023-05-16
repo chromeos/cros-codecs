@@ -24,6 +24,7 @@ crc32fast = "1.3.2"
 
 [dev-dependencies]
 argh = "0.1"
+matroska-demuxer = "0.4"
 md5 = "0.7"
 
 [[example]]
