@@ -30,6 +30,71 @@ use crate::utils::vaapi::VaapiBackend;
 /// The number of surfaces to allocate for this codec.
 const NUM_SURFACES: usize = 12;
 
+/// Returns the RT format matching the input parameters.
+fn get_rt_format(
+    profile: Profile,
+    bit_depth: BitDepth,
+    subsampling_x: bool,
+    subsampling_y: bool,
+) -> anyhow::Result<u32> {
+    match profile {
+        Profile::Profile0 => Ok(libva::constants::VA_RT_FORMAT_YUV420),
+        Profile::Profile1 => {
+            if subsampling_x && !subsampling_y {
+                Ok(libva::constants::VA_RT_FORMAT_YUV422)
+            } else if !subsampling_x && !subsampling_y {
+                Ok(libva::constants::VA_RT_FORMAT_YUV444)
+            } else {
+                Err(anyhow!(
+                    "Unsupported subsampling for profile 1: X: {:?} Y: {:?}",
+                    subsampling_x,
+                    subsampling_y
+                ))
+            }
+        }
+        Profile::Profile2 => match bit_depth {
+            BitDepth::Depth8 => Err(anyhow!(
+                "Unsupported bit depth for profile 2: {:?}",
+                bit_depth
+            )),
+            BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV420_10),
+            BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV420_12),
+        },
+        Profile::Profile3 => {
+            if subsampling_x && !subsampling_y {
+                match bit_depth {
+                        BitDepth::Depth8 => Err(anyhow!(
+                            "Unsupported (subsampling_x, subsampling_y, bit depth) combination for profile 3: ({:?}, {:?}, {:?})",
+                            subsampling_x,
+                            subsampling_y,
+                            bit_depth
+                        )),
+                        BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV422_10),
+                        BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV422_12),
+                    }
+            } else if !subsampling_x && !subsampling_y {
+                match bit_depth {
+                        BitDepth::Depth8 => Err(anyhow!(
+                            "Unsupported (subsampling_x, subsampling_y, bit depth) combination for profile 3: ({:?}, {:?}, {:?})",
+                            subsampling_x,
+                            subsampling_y,
+                            bit_depth
+                        )),
+                        BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV444_10),
+                        BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV444_12),
+                    }
+            } else {
+                Err(anyhow!(
+                            "Unsupported (subsampling_x, subsampling_y, bit depth) combination for profile 3: ({:?}, {:?}, {:?})",
+                            subsampling_x,
+                            subsampling_y,
+                            bit_depth
+                        ))
+            }
+        }
+    }
+}
+
 impl StreamInfo for &Header {
     fn va_profile(&self) -> anyhow::Result<i32> {
         Ok(match self.profile {
@@ -41,7 +106,7 @@ impl StreamInfo for &Header {
     }
 
     fn rt_format(&self) -> anyhow::Result<u32> {
-        VaapiBackend::<_>::get_rt_format(
+        get_rt_format(
             self.profile,
             self.bit_depth,
             self.subsampling_x,
@@ -62,173 +127,107 @@ impl StreamInfo for &Header {
     }
 }
 
-impl VaapiBackend<Header> {
-    fn get_rt_format(
-        profile: Profile,
-        bit_depth: BitDepth,
-        subsampling_x: bool,
-        subsampling_y: bool,
-    ) -> anyhow::Result<u32> {
-        match profile {
-            Profile::Profile0 => Ok(libva::constants::VA_RT_FORMAT_YUV420),
-            Profile::Profile1 => {
-                if subsampling_x && !subsampling_y {
-                    Ok(libva::constants::VA_RT_FORMAT_YUV422)
-                } else if !subsampling_x && !subsampling_y {
-                    Ok(libva::constants::VA_RT_FORMAT_YUV444)
-                } else {
-                    Err(anyhow!(
-                        "Unsupported subsampling for profile 1: X: {:?} Y: {:?}",
-                        subsampling_x,
-                        subsampling_y
-                    ))
-                }
-            }
-            Profile::Profile2 => match bit_depth {
-                BitDepth::Depth8 => Err(anyhow!(
-                    "Unsupported bit depth for profile 2: {:?}",
-                    bit_depth
-                )),
-                BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV420_10),
-                BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV420_12),
-            },
-            Profile::Profile3 => {
-                if subsampling_x && !subsampling_y {
-                    match bit_depth {
-                        BitDepth::Depth8 => Err(anyhow!(
-                            "Unsupported (subsampling_x, subsampling_y, bit depth) combination for profile 3: ({:?}, {:?}, {:?  })",
-                            subsampling_x,
-                            subsampling_y,
-                            bit_depth
-                        )),
-                        BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV422_10),
-                        BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV422_12),
-                    }
-                } else if !subsampling_x && !subsampling_y {
-                    match bit_depth {
-                        BitDepth::Depth8 => Err(anyhow!(
-                            "Unsupported (subsampling_x, subsampling_y, bit depth) combination for profile 3: ({:?}, {:?}, {:?})",
-                            subsampling_x,
-                            subsampling_y,
-                            bit_depth
-                        )),
-                        BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV444_10),
-                        BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV444_12),
-                    }
-                } else {
-                    Err(anyhow!(
-                            "Unsupported (subsampling_x, subsampling_y, bit depth) combination for profile 3: ({:?}, {:?}, {:?})",
-                            subsampling_x,
-                            subsampling_y,
-                            bit_depth
-                        ))
-                }
-            }
-        }
-    }
+fn build_pic_param(
+    hdr: &Header,
+    reference_frames: [u32; NUM_REF_FRAMES],
+) -> anyhow::Result<libva::BufferType> {
+    let pic_fields = libva::VP9PicFields::new(
+        hdr.subsampling_x as u32,
+        hdr.subsampling_y as u32,
+        hdr.frame_type as u32,
+        hdr.show_frame as u32,
+        hdr.error_resilient_mode as u32,
+        hdr.intra_only as u32,
+        hdr.allow_high_precision_mv as u32,
+        hdr.interpolation_filter as u32,
+        hdr.frame_parallel_decoding_mode as u32,
+        hdr.reset_frame_context as u32,
+        hdr.refresh_frame_context as u32,
+        hdr.frame_context_idx as u32,
+        hdr.seg.enabled as u32,
+        hdr.seg.temporal_update as u32,
+        hdr.seg.update_map as u32,
+        hdr.ref_frame_idx[LAST_FRAME - 1] as u32,
+        hdr.ref_frame_sign_bias[LAST_FRAME] as u32,
+        hdr.ref_frame_idx[GOLDEN_FRAME - 1] as u32,
+        hdr.ref_frame_sign_bias[GOLDEN_FRAME] as u32,
+        hdr.ref_frame_idx[ALTREF_FRAME - 1] as u32,
+        hdr.ref_frame_sign_bias[ALTREF_FRAME] as u32,
+        hdr.lossless as u32,
+    );
 
-    fn build_pic_param(
-        hdr: &Header,
-        reference_frames: [u32; NUM_REF_FRAMES],
-    ) -> anyhow::Result<libva::BufferType> {
-        let pic_fields = libva::VP9PicFields::new(
-            hdr.subsampling_x as u32,
-            hdr.subsampling_y as u32,
-            hdr.frame_type as u32,
-            hdr.show_frame as u32,
-            hdr.error_resilient_mode as u32,
-            hdr.intra_only as u32,
-            hdr.allow_high_precision_mv as u32,
-            hdr.interpolation_filter as u32,
-            hdr.frame_parallel_decoding_mode as u32,
-            hdr.reset_frame_context as u32,
-            hdr.refresh_frame_context as u32,
-            hdr.frame_context_idx as u32,
-            hdr.seg.enabled as u32,
-            hdr.seg.temporal_update as u32,
-            hdr.seg.update_map as u32,
-            hdr.ref_frame_idx[LAST_FRAME - 1] as u32,
-            hdr.ref_frame_sign_bias[LAST_FRAME] as u32,
-            hdr.ref_frame_idx[GOLDEN_FRAME - 1] as u32,
-            hdr.ref_frame_sign_bias[GOLDEN_FRAME] as u32,
-            hdr.ref_frame_idx[ALTREF_FRAME - 1] as u32,
-            hdr.ref_frame_sign_bias[ALTREF_FRAME] as u32,
-            hdr.lossless as u32,
-        );
+    let lf = &hdr.lf;
+    let seg = &hdr.seg;
 
-        let lf = &hdr.lf;
-        let seg = &hdr.seg;
+    let seg_pred_prob = if seg.temporal_update {
+        seg.pred_probs
+    } else {
+        [0xff, 0xff, 0xff]
+    };
 
-        let seg_pred_prob = if seg.temporal_update {
-            seg.pred_probs
-        } else {
-            [0xff, 0xff, 0xff]
-        };
+    let pic_param = libva::PictureParameterBufferVP9::new(
+        hdr.width.try_into().unwrap(),
+        hdr.height.try_into().unwrap(),
+        reference_frames,
+        &pic_fields,
+        lf.level,
+        lf.sharpness,
+        hdr.tile_rows_log2,
+        hdr.tile_cols_log2,
+        hdr.uncompressed_header_size_in_bytes.try_into().unwrap(),
+        hdr.header_size_in_bytes,
+        seg.tree_probs,
+        seg_pred_prob,
+        hdr.profile as u8,
+        hdr.bit_depth as u8,
+    );
 
-        let pic_param = libva::PictureParameterBufferVP9::new(
-            hdr.width.try_into().unwrap(),
-            hdr.height.try_into().unwrap(),
-            reference_frames,
-            &pic_fields,
-            lf.level,
-            lf.sharpness,
-            hdr.tile_rows_log2,
-            hdr.tile_cols_log2,
-            hdr.uncompressed_header_size_in_bytes.try_into().unwrap(),
-            hdr.header_size_in_bytes,
-            seg.tree_probs,
-            seg_pred_prob,
-            hdr.profile as u8,
-            hdr.bit_depth as u8,
-        );
+    Ok(libva::BufferType::PictureParameter(
+        libva::PictureParameter::VP9(pic_param),
+    ))
+}
 
-        Ok(libva::BufferType::PictureParameter(
-            libva::PictureParameter::VP9(pic_param),
-        ))
-    }
+fn build_slice_param(
+    seg: &[Segmentation; MAX_SEGMENTS],
+    slice_size: usize,
+) -> anyhow::Result<libva::BufferType> {
+    let seg_params: std::result::Result<[SegmentParameterVP9; MAX_SEGMENTS], _> = seg
+        .iter()
+        .map(|s| {
+            let seg_flags = libva::VP9SegmentFlags::new(
+                s.reference_frame_enabled as u16,
+                s.reference_frame as u16,
+                s.reference_skip_enabled as u16,
+            );
 
-    fn build_slice_param(
-        seg: &[Segmentation; MAX_SEGMENTS],
-        slice_size: usize,
-    ) -> anyhow::Result<libva::BufferType> {
-        let seg_params: std::result::Result<[SegmentParameterVP9; MAX_SEGMENTS], _> = seg
-            .iter()
-            .map(|s| {
-                let seg_flags = libva::VP9SegmentFlags::new(
-                    s.reference_frame_enabled as u16,
-                    s.reference_frame as u16,
-                    s.reference_skip_enabled as u16,
-                );
+            libva::SegmentParameterVP9::new(
+                &seg_flags,
+                s.lvl_lookup,
+                s.luma_ac_quant_scale,
+                s.luma_dc_quant_scale,
+                s.chroma_ac_quant_scale,
+                s.chroma_dc_quant_scale,
+            )
+        })
+        .collect::<Vec<_>>()
+        .try_into();
 
-                libva::SegmentParameterVP9::new(
-                    &seg_flags,
-                    s.lvl_lookup,
-                    s.luma_ac_quant_scale,
-                    s.luma_dc_quant_scale,
-                    s.chroma_ac_quant_scale,
-                    s.chroma_dc_quant_scale,
-                )
-            })
-            .collect::<Vec<_>>()
-            .try_into();
+    let seg_params = match seg_params {
+        Ok(seg_params) => seg_params,
 
-        let seg_params = match seg_params {
-            Ok(seg_params) => seg_params,
+        // Impossible, this is just a detour to collect into a fixed-size
+        // array whose size is the same size of the `seg` argument.
+        Err(_) => panic!("Invalid segment parameters"),
+    };
 
-            // Impossible, this is just a detour to collect into a fixed-size
-            // array whose size is the same size of the `seg` argument.
-            Err(_) => panic!("Invalid segment parameters"),
-        };
-
-        Ok(libva::BufferType::SliceParameter(
-            libva::SliceParameter::VP9(libva::SliceParameterBufferVP9::new(
-                slice_size as u32,
-                0,
-                libva::constants::VA_SLICE_DATA_FLAG_ALL,
-                seg_params,
-            )),
-        ))
-    }
+    Ok(libva::BufferType::SliceParameter(
+        libva::SliceParameter::VP9(libva::SliceParameterBufferVP9::new(
+            slice_size as u32,
+            0,
+            libva::constants::VA_SLICE_DATA_FLAG_ALL,
+            seg_params,
+        )),
+    ))
 }
 
 impl StatelessDecoderBackend for VaapiBackend<Header> {
@@ -260,10 +259,10 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         let metadata = self.metadata_state.get_parsed_mut()?;
         let context = &metadata.context;
 
-        let pic_param = context.create_buffer(Self::build_pic_param(picture, reference_frames)?)?;
+        let pic_param = context.create_buffer(build_pic_param(picture, reference_frames)?)?;
 
         let slice_param =
-            context.create_buffer(Self::build_slice_param(segmentation, bitstream.len())?)?;
+            context.create_buffer(build_slice_param(segmentation, bitstream.len())?)?;
 
         let slice_data =
             context.create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))?;
@@ -311,9 +310,10 @@ mod tests {
     use crate::decoders::vp9::parser::NUM_REF_FRAMES;
     use crate::decoders::BlockingMode;
     use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-    use crate::utils::vaapi::VaapiBackend;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
+
+    use super::*;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
     fn test_decoder_vaapi(
@@ -458,7 +458,7 @@ mod tests {
 
         assert_eq!(frame.as_ref().len(), 10674);
 
-        let pic_param = VaapiBackend::build_pic_param(
+        let pic_param = build_pic_param(
             &frame.header,
             [libva::constants::VA_INVALID_SURFACE; NUM_REF_FRAMES],
         )
@@ -469,8 +469,7 @@ mod tests {
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param =
-            VaapiBackend::build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
+        let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
@@ -528,15 +527,14 @@ mod tests {
         let frame = frames.remove(0);
         assert_eq!(frame.as_ref().len(), 2390);
 
-        let pic_param = VaapiBackend::build_pic_param(&frame.header, [0; NUM_REF_FRAMES]).unwrap();
+        let pic_param = build_pic_param(&frame.header, [0; NUM_REF_FRAMES]).unwrap();
         let pic_param = match pic_param {
             BufferType::PictureParameter(PictureParameter::VP9(pic_param)) => pic_param,
             _ => panic!(),
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param =
-            VaapiBackend::build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
+        let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
@@ -590,16 +588,14 @@ mod tests {
         let frame = frames.remove(0);
         assert_eq!(frame.as_ref().len(), 108);
 
-        let pic_param =
-            VaapiBackend::build_pic_param(&frame.header, [0, 0, 1, 0, 0, 0, 0, 0]).unwrap();
+        let pic_param = build_pic_param(&frame.header, [0, 0, 1, 0, 0, 0, 0, 0]).unwrap();
         let pic_param = match pic_param {
             BufferType::PictureParameter(PictureParameter::VP9(pic_param)) => pic_param,
             _ => panic!(),
         };
 
         Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
-        let slice_param =
-            VaapiBackend::build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
+        let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
             _ => panic!(),
