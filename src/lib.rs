@@ -16,10 +16,15 @@ pub struct Resolution {
     pub height: u32,
 }
 
+/// Formats that buffers can be mapped into for the CPU to read.
+///
+/// The conventions here largely follow these of libyuv.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DecodedFormat {
-    NV12,
+    /// Y, U and V planes, 4:2:0 sampling, 8 bits per sample.
     I420,
+    /// One Y and one interleaved UV plane, 4:2:0 sampling, 8 bits per sample.
+    NV12,
 }
 
 impl FromStr for DecodedFormat {
@@ -27,9 +32,9 @@ impl FromStr for DecodedFormat {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "nv12" | "NV12" => Ok(DecodedFormat::NV12),
             "i420" | "I420" => Ok(DecodedFormat::I420),
-            _ => Err("unrecognized output format. Valid values: nv12, i420"),
+            "nv12" | "NV12" => Ok(DecodedFormat::NV12),
+            _ => Err("unrecognized output format. Valid values: i420, nv12"),
         }
     }
 }

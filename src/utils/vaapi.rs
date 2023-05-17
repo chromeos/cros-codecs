@@ -522,8 +522,8 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
 
     fn try_from(value: &libva::VAImageFormat) -> Result<Self, Self::Error> {
         match value.fourcc {
-            libva::constants::VA_FOURCC_NV12 => Ok(DecodedFormat::NV12),
             libva::constants::VA_FOURCC_I420 => Ok(DecodedFormat::I420),
+            libva::constants::VA_FOURCC_NV12 => Ok(DecodedFormat::NV12),
             _ => Err(anyhow!("Unsupported format")),
         }
     }
