@@ -25,6 +25,10 @@ pub enum DecodedFormat {
     I420,
     /// One Y and one interleaved UV plane, 4:2:0 sampling, 8 bits per sample.
     NV12,
+    /// Y, U and V planes, 4:2:0 sampling, 16 bits per sample, LE. Only the 10 LSBs are used.
+    I010,
+    /// Y, U and V planes, 4:2:0 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
+    I012,
 }
 
 impl FromStr for DecodedFormat {
@@ -34,7 +38,9 @@ impl FromStr for DecodedFormat {
         match s {
             "i420" | "I420" => Ok(DecodedFormat::I420),
             "nv12" | "NV12" => Ok(DecodedFormat::NV12),
-            _ => Err("unrecognized output format. Valid values: i420, nv12"),
+            "i010" | "I010" => Ok(DecodedFormat::I010),
+            "i012" | "I012" => Ok(DecodedFormat::I012),
+            _ => Err("unrecognized output format. Valid values: i420, nv12, i010, i012"),
         }
     }
 }
@@ -136,6 +142,9 @@ pub fn decoded_frame_size(format: DecodedFormat, width: usize, height: usize) ->
             let uv_size = ((width + 1) / 2) * ((height + 1) / 2) * 2;
 
             u_size + uv_size
+        }
+        DecodedFormat::I010 | DecodedFormat::I012 => {
+            decoded_frame_size(DecodedFormat::I420, width, height) * 2
         }
     }
 }

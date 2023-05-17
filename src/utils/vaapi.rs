@@ -11,6 +11,8 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use anyhow::anyhow;
+use byteorder::ByteOrder;
+use byteorder::LittleEndian;
 use libva::Config;
 use libva::Context;
 use libva::Display;
@@ -44,7 +46,7 @@ struct FormatMap {
 
 /// Maps a given VA_RT_FORMAT to a compatible decoded format in an arbitrary
 /// preferred order.
-const FORMAT_MAP: [FormatMap; 2] = [
+const FORMAT_MAP: [FormatMap; 4] = [
     FormatMap {
         rt_format: libva::constants::VA_RT_FORMAT_YUV420,
         va_fourcc: libva::constants::VA_FOURCC_NV12,
@@ -54,6 +56,16 @@ const FORMAT_MAP: [FormatMap; 2] = [
         rt_format: libva::constants::VA_RT_FORMAT_YUV420,
         va_fourcc: libva::constants::VA_FOURCC_I420,
         decoded_format: DecodedFormat::I420,
+    },
+    FormatMap {
+        rt_format: libva::constants::VA_RT_FORMAT_YUV420_10,
+        va_fourcc: libva::constants::VA_FOURCC_P010,
+        decoded_format: DecodedFormat::I010,
+    },
+    FormatMap {
+        rt_format: libva::constants::VA_RT_FORMAT_YUV420_12,
+        va_fourcc: libva::constants::VA_FOURCC_P012,
+        decoded_format: DecodedFormat::I012,
     },
 ];
 
@@ -496,6 +508,12 @@ impl<'a> MappableHandle for Image<'a> {
             libva::constants::VA_FOURCC_I420 => {
                 i420_copy(self.as_ref(), buffer, width, height, pitches, offsets);
             }
+            libva::constants::VA_FOURCC_P010 => {
+                p01x_to_i01x(self.as_ref(), buffer, 10, width, height, pitches, offsets);
+            }
+            libva::constants::VA_FOURCC_P012 => {
+                p01x_to_i01x(self.as_ref(), buffer, 12, width, height, pitches, offsets);
+            }
             _ => {
                 return Err(crate::decoders::Error::StatelessBackendError(
                     StatelessBackendError::UnsupportedFormat,
@@ -524,6 +542,8 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
         match value.fourcc {
             libva::constants::VA_FOURCC_I420 => Ok(DecodedFormat::I420),
             libva::constants::VA_FOURCC_NV12 => Ok(DecodedFormat::NV12),
+            libva::constants::VA_FOURCC_P010 => Ok(DecodedFormat::I010),
+            libva::constants::VA_FOURCC_P012 => Ok(DecodedFormat::I012),
             _ => Err(anyhow!("Unsupported format")),
         }
     }
@@ -654,7 +674,6 @@ where
 
             self.metadata_state =
                 StreamMetadataState::open(&self.display, format_info, Some(map_format))?;
-
             Ok(())
         } else {
             Err(VideoDecoderError::StatelessBackendError(
@@ -663,6 +682,73 @@ where
                     format
                 )),
             ))
+        }
+    }
+}
+
+/// Copies `src` into `dst` removing all padding and converting from biplanar to triplanar format.
+///
+/// `useful_pixels` is the number of useful pixels in each sample, e.g. `10` for `P010`, `12` for
+/// `P012`, etc.
+///
+/// This function is VAAPI-specific because of the unusual the source pixels are laid out: VAAPI
+/// writes the `useful_pixels` MSBs, but software generally expects the LSBs to contain the data.
+fn p01x_to_i01x(
+    src: &[u8],
+    dst: &mut [u8],
+    useful_pixels: usize,
+    width: usize,
+    height: usize,
+    strides: [usize; 3],
+    offsets: [usize; 3],
+) {
+    let sample_shift = 16 - useful_pixels;
+
+    // Copy Y.
+    //
+    // VAAPI's Y samples are two byte little endian with the bottom six bits ignored. We need to
+    // convert that to two byte little endian with top 6 bits ignored.
+
+    let src_y_lines = src[offsets[0]..]
+        .chunks(strides[0])
+        .map(|line| &line[..width * 2]);
+    let dst_y_lines = dst.chunks_mut(width * 2);
+
+    for (src_line, dst_line) in src_y_lines.zip(dst_y_lines).take(height) {
+        for (src_y, dst_y) in src_line.chunks(2).zip(dst_line.chunks_mut(2)) {
+            LittleEndian::write_u16(dst_y, LittleEndian::read_u16(src_y) >> sample_shift);
+        }
+    }
+
+    let dst_u_offset = width * 2 * height;
+
+    // Align width and height to 2 for UV plane.
+    let width = if width % 2 == 1 { width + 1 } else { width };
+    let height = if height % 2 == 1 { height + 1 } else { height };
+    // 1 sample per 4 pixels, but we have two components per line so width remains as-is.
+    let height = height / 2;
+
+    let dst_u_size = width * height;
+
+    // Copy U and V and deinterleave into different planes.
+    //
+    // We need to perform the same bit shift as luma, but also to de-interleave the data.
+    let src_uv_lines = src[offsets[1]..]
+        .chunks(strides[1])
+        .map(|line| &line[..width * 2]);
+    let (dst_u_plane, dst_v_plane) = dst[dst_u_offset..].split_at_mut(dst_u_size);
+    let dst_u_lines = dst_u_plane.chunks_mut(width);
+    let dst_v_lines = dst_v_plane.chunks_mut(width);
+    for (src_line, (dst_u_line, dst_v_line)) in
+        src_uv_lines.zip(dst_u_lines.zip(dst_v_lines)).take(height)
+    {
+        for ((src_u, src_v), (dst_u, dst_v)) in src_line
+            .chunks(4)
+            .map(|chunk| (&chunk[0..2], &chunk[2..4]))
+            .zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2)))
+        {
+            LittleEndian::write_u16(dst_u, LittleEndian::read_u16(src_u) >> sample_shift);
+            LittleEndian::write_u16(dst_v, LittleEndian::read_u16(src_v) >> sample_shift);
         }
     }
 }

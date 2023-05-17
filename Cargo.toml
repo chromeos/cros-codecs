@@ -14,6 +14,7 @@ vaapi = ["libva"]
 [dependencies]
 anyhow = "1"
 bitreader = "0.3.6"
+byteorder = "1.4.3"
 bytes = "1.1.0"
 enumn = "0.1.4"
 libva = { version = "0.0.3", package = "cros-libva", optional = true }
