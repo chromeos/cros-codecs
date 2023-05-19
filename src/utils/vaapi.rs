@@ -34,6 +34,7 @@ use crate::decoders::StatelessBackendResult;
 use crate::decoders::VideoDecoderBackend;
 use crate::i420_copy;
 use crate::nv12_copy;
+use crate::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -46,7 +47,7 @@ struct FormatMap {
 
 /// Maps a given VA_RT_FORMAT to a compatible decoded format in an arbitrary
 /// preferred order.
-const FORMAT_MAP: [FormatMap; 4] = [
+const FORMAT_MAP: [FormatMap; 6] = [
     FormatMap {
         rt_format: libva::constants::VA_RT_FORMAT_YUV420,
         va_fourcc: libva::constants::VA_FOURCC_NV12,
@@ -66,6 +67,16 @@ const FORMAT_MAP: [FormatMap; 4] = [
         rt_format: libva::constants::VA_RT_FORMAT_YUV420_12,
         va_fourcc: libva::constants::VA_FOURCC_P012,
         decoded_format: DecodedFormat::I012,
+    },
+    FormatMap {
+        rt_format: libva::constants::VA_RT_FORMAT_YUV444_10,
+        va_fourcc: libva::constants::VA_FOURCC_Y410,
+        decoded_format: DecodedFormat::I410,
+    },
+    FormatMap {
+        rt_format: libva::constants::VA_RT_FORMAT_YUV444_12,
+        va_fourcc: libva::constants::VA_FOURCC_Y412,
+        decoded_format: DecodedFormat::I412,
     },
 ];
 
@@ -514,6 +525,12 @@ impl<'a> MappableHandle for Image<'a> {
             libva::constants::VA_FOURCC_P012 => {
                 p01x_to_i01x(self.as_ref(), buffer, 12, width, height, pitches, offsets);
             }
+            libva::constants::VA_FOURCC_Y410 => {
+                y410_to_i410(self.as_ref(), buffer, width, height, pitches, offsets);
+            }
+            libva::constants::VA_FOURCC_Y412 => {
+                y412_to_i412(self.as_ref(), buffer, width, height, pitches, offsets);
+            }
             _ => {
                 return Err(crate::decoders::Error::StatelessBackendError(
                     StatelessBackendError::UnsupportedFormat,
@@ -544,6 +561,8 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
             libva::constants::VA_FOURCC_NV12 => Ok(DecodedFormat::NV12),
             libva::constants::VA_FOURCC_P010 => Ok(DecodedFormat::I010),
             libva::constants::VA_FOURCC_P012 => Ok(DecodedFormat::I012),
+            libva::constants::VA_FOURCC_Y410 => Ok(DecodedFormat::I410),
+            libva::constants::VA_FOURCC_Y412 => Ok(DecodedFormat::I412),
             _ => Err(anyhow!("Unsupported format")),
         }
     }
@@ -749,6 +768,50 @@ fn p01x_to_i01x(
         {
             LittleEndian::write_u16(dst_u, LittleEndian::read_u16(src_u) >> sample_shift);
             LittleEndian::write_u16(dst_v, LittleEndian::read_u16(src_v) >> sample_shift);
+        }
+    }
+}
+/// Copies `src` into `dst` as I412, removing all padding and changing the layout from packed to
+/// triplanar. Also drops the alpha channel.
+///
+/// This function is VAAPI-specific because the samples need to be rolled somehow...
+fn y412_to_i412(
+    src: &[u8],
+    dst: &mut [u8],
+    width: usize,
+    height: usize,
+    strides: [usize; 3],
+    offsets: [usize; 3],
+) {
+    let src_lines = src[offsets[0]..]
+        .chunks(strides[0])
+        .map(|line| &line[..width * 8]);
+
+    let dst_y_size = width * 2 * height;
+    let dst_u_size = width * 2 * height;
+
+    let (dst_y_plane, dst_uv_planes) = dst.split_at_mut(dst_y_size);
+    let (dst_u_plane, dst_v_plane) = dst_uv_planes.split_at_mut(dst_u_size);
+    let dst_y_lines = dst_y_plane.chunks_mut(width * 2);
+    let dst_u_lines = dst_u_plane.chunks_mut(width * 2);
+    let dst_v_lines = dst_v_plane.chunks_mut(width * 2);
+
+    for (src_line, (dst_y_line, (dst_u_line, dst_v_line))) in src_lines
+        .zip(dst_y_lines.zip(dst_u_lines.zip(dst_v_lines)))
+        .take(height)
+    {
+        for (src, (dst_y, (dst_u, dst_v))) in src_line.chunks(8).zip(
+            dst_y_line
+                .chunks_mut(2)
+                .zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2))),
+        ) {
+            let y = LittleEndian::read_u16(&src[2..4]);
+            let u = LittleEndian::read_u16(&src[0..2]);
+            let v = LittleEndian::read_u16(&src[4..6]);
+            // Why is that rotate_right neeed??
+            LittleEndian::write_u16(dst_y, y.rotate_right(4));
+            LittleEndian::write_u16(dst_u, u.rotate_right(4));
+            LittleEndian::write_u16(dst_v, v.rotate_right(4));
         }
     }
 }

@@ -7,6 +7,8 @@ pub mod utils;
 
 use std::str::FromStr;
 
+use byteorder::ByteOrder;
+use byteorder::LittleEndian;
 #[cfg(feature = "vaapi")]
 pub use libva;
 
@@ -29,6 +31,10 @@ pub enum DecodedFormat {
     I010,
     /// Y, U and V planes, 4:2:0 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
     I012,
+    /// Y, U and V planes, 4:4:4 sampling, 16 bits per sample, LE. Only the 10 LSBs are used.
+    I410,
+    /// Y, U and V planes, 4:4:4 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
+    I412,
 }
 
 impl FromStr for DecodedFormat {
@@ -40,7 +46,11 @@ impl FromStr for DecodedFormat {
             "nv12" | "NV12" => Ok(DecodedFormat::NV12),
             "i010" | "I010" => Ok(DecodedFormat::I010),
             "i012" | "I012" => Ok(DecodedFormat::I012),
-            _ => Err("unrecognized output format. Valid values: i420, nv12, i010, i012"),
+            "i410" | "I410" => Ok(DecodedFormat::I410),
+            "i412" | "I412" => Ok(DecodedFormat::I412),
+            _ => {
+                Err("unrecognized output format. Valid values: i420, nv12, i010, i012, i410, i412")
+            }
         }
     }
 }
@@ -145,6 +155,49 @@ pub fn decoded_frame_size(format: DecodedFormat, width: usize, height: usize) ->
         }
         DecodedFormat::I010 | DecodedFormat::I012 => {
             decoded_frame_size(DecodedFormat::I420, width, height) * 2
+        }
+        DecodedFormat::I410 | DecodedFormat::I412 => (width * height * 2) * 3,
+    }
+}
+
+/// Copies `src` into `dst` as I410, removing all padding and changing the layout from packed to
+/// triplanar. Also drops the alpha channel.
+fn y410_to_i410(
+    src: &[u8],
+    dst: &mut [u8],
+    width: usize,
+    height: usize,
+    strides: [usize; 3],
+    offsets: [usize; 3],
+) {
+    let src_lines = src[offsets[0]..]
+        .chunks(strides[0])
+        .map(|line| &line[..width * 4]);
+
+    let dst_y_size = width * 2 * height;
+    let dst_u_size = width * 2 * height;
+
+    let (dst_y_plane, dst_uv_planes) = dst.split_at_mut(dst_y_size);
+    let (dst_u_plane, dst_v_plane) = dst_uv_planes.split_at_mut(dst_u_size);
+    let dst_y_lines = dst_y_plane.chunks_mut(width * 2);
+    let dst_u_lines = dst_u_plane.chunks_mut(width * 2);
+    let dst_v_lines = dst_v_plane.chunks_mut(width * 2);
+
+    for (src_line, (dst_y_line, (dst_u_line, dst_v_line))) in src_lines
+        .zip(dst_y_lines.zip(dst_u_lines.zip(dst_v_lines)))
+        .take(height)
+    {
+        for (src, (dst_y, (dst_u, dst_v))) in src_line.chunks(4).zip(
+            dst_y_line
+                .chunks_mut(2)
+                .zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2))),
+        ) {
+            let y = LittleEndian::read_u16(&[src[1] >> 2 | src[2] << 6, src[2] >> 2 & 0b11]);
+            let u = LittleEndian::read_u16(&[src[0], src[1] & 0b11]);
+            let v = LittleEndian::read_u16(&[src[2] >> 4 | src[3] << 4, src[3] >> 4 & 0b11]);
+            LittleEndian::write_u16(dst_y, y);
+            LittleEndian::write_u16(dst_u, u);
+            LittleEndian::write_u16(dst_v, v);
         }
     }
 }
