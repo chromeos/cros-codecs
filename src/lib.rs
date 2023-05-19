@@ -40,18 +40,18 @@ pub fn nv12_copy(
     mut dst: &mut [u8],
     width: usize,
     height: usize,
-    strides: [u32; 3],
-    offsets: [u32; 3],
+    strides: [usize; 3],
+    offsets: [usize; 3],
 ) {
     let data = src;
 
-    let mut src = &data[offsets[0] as usize..];
+    let mut src = &data[offsets[0]..];
 
     // Copy luma
     for _ in 0..height {
         dst[..width].copy_from_slice(&src[..width]);
         dst = &mut dst[width..];
-        src = &src[strides[0] as usize..];
+        src = &src[strides[0]..];
     }
 
     // Align width and height to 2 for UV plane.
@@ -62,13 +62,13 @@ pub fn nv12_copy(
     let height = height / 2;
 
     // Advance to the offset of the chroma plane
-    let mut src = &data[offsets[1] as usize..];
+    let mut src = &data[offsets[1]..];
 
     // Copy chroma
     for _ in 0..height {
         dst[..width].copy_from_slice(&src[..width]);
         dst = &mut dst[width..];
-        src = &src[strides[1] as usize..];
+        src = &src[strides[1]..];
     }
 }
 
@@ -78,18 +78,18 @@ pub fn i420_copy(
     mut dst: &mut [u8],
     width: usize,
     height: usize,
-    strides: [u32; 3],
-    offsets: [u32; 3],
+    strides: [usize; 3],
+    offsets: [usize; 3],
 ) {
     let data = src;
 
-    let mut src = &data[offsets[0] as usize..];
+    let mut src = &data[offsets[0]..];
 
     // Copy luma
     for _ in 0..height {
         dst[..width].copy_from_slice(&src[..width]);
         dst = &mut dst[width..];
-        src = &src[strides[0] as usize..];
+        src = &src[strides[0]..];
     }
 
     // Align width and height to 2 for U and V planes.
@@ -101,23 +101,23 @@ pub fn i420_copy(
     let height = height / 2;
 
     // Advance to the offset of the U plane
-    let mut src = &data[offsets[1] as usize..];
+    let mut src = &data[offsets[1]..];
 
     // Copy U
     for _ in 0..height {
         dst[..width].copy_from_slice(&src[..width]);
         dst = &mut dst[width..];
-        src = &src[strides[1] as usize..];
+        src = &src[strides[1]..];
     }
 
     // Advance to the offset of the V plane
-    let mut src = &data[offsets[2] as usize..];
+    let mut src = &data[offsets[2]..];
 
     // Copy V
     for _ in 0..height {
         dst[..width].copy_from_slice(&src[..width]);
         dst = &mut dst[width..];
-        src = &src[strides[2] as usize..];
+        src = &src[strides[2]..];
     }
 }
 

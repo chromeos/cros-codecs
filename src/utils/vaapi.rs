@@ -486,26 +486,15 @@ impl<'a> MappableHandle for Image<'a> {
             ));
         }
 
+        let pitches = image_inner.pitches.map(|x| x as usize);
+        let offsets = image_inner.offsets.map(|x| x as usize);
+
         match image_inner.format.fourcc {
             libva::constants::VA_FOURCC_NV12 => {
-                nv12_copy(
-                    self.as_ref(),
-                    buffer,
-                    width,
-                    height,
-                    image_inner.pitches,
-                    image_inner.offsets,
-                );
+                nv12_copy(self.as_ref(), buffer, width, height, pitches, offsets);
             }
             libva::constants::VA_FOURCC_I420 => {
-                i420_copy(
-                    self.as_ref(),
-                    buffer,
-                    width,
-                    height,
-                    image_inner.pitches,
-                    image_inner.offsets,
-                );
+                i420_copy(self.as_ref(), buffer, width, height, pitches, offsets);
             }
             _ => {
                 return Err(crate::decoders::Error::StatelessBackendError(
