@@ -135,6 +135,8 @@ fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Cow<[u8]>>
 }
 
 fn main() {
+    env_logger::init();
+
     let args: Args = argh::from_env();
 
     let input = {
