@@ -31,6 +31,10 @@ pub enum DecodedFormat {
     I010,
     /// Y, U and V planes, 4:2:0 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
     I012,
+    /// Y, U and V planes, 4:2:2 sampling, 16 bits per sample, LE. Only the 10 LSBs are used.
+    I210,
+    /// Y, U and V planes, 4:2:2 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
+    I212,
     /// Y, U and V planes, 4:4:4 sampling, 16 bits per sample, LE. Only the 10 LSBs are used.
     I410,
     /// Y, U and V planes, 4:4:4 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
@@ -46,10 +50,12 @@ impl FromStr for DecodedFormat {
             "nv12" | "NV12" => Ok(DecodedFormat::NV12),
             "i010" | "I010" => Ok(DecodedFormat::I010),
             "i012" | "I012" => Ok(DecodedFormat::I012),
+            "i210" | "I210" => Ok(DecodedFormat::I210),
+            "i212" | "I212" => Ok(DecodedFormat::I212),
             "i410" | "I410" => Ok(DecodedFormat::I410),
             "i412" | "I412" => Ok(DecodedFormat::I412),
             _ => {
-                Err("unrecognized output format. Valid values: i420, nv12, i010, i012, i410, i412")
+                Err("unrecognized output format. Valid values: i420, nv12, i010, i012, i210, i212, i410, i412")
             }
         }
     }
@@ -155,6 +161,13 @@ pub fn decoded_frame_size(format: DecodedFormat, width: usize, height: usize) ->
         }
         DecodedFormat::I010 | DecodedFormat::I012 => {
             decoded_frame_size(DecodedFormat::I420, width, height) * 2
+        }
+        DecodedFormat::I210 | DecodedFormat::I212 => {
+            let u_size = width * height * 2;
+            // U and V planes need to be aligned to 2.
+            let uv_size = ((width + 1) / 2) * ((height + 1) / 2) * 2 * 2;
+
+            u_size + uv_size
         }
         DecodedFormat::I410 | DecodedFormat::I412 => (width * height * 2) * 3,
     }
