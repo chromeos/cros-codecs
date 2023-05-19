@@ -37,87 +37,86 @@ impl FromStr for DecodedFormat {
 /// Copies `src` into `dst` as NV12, removing any extra padding.
 pub fn nv12_copy(
     src: &[u8],
-    mut dst: &mut [u8],
+    dst: &mut [u8],
     width: usize,
     height: usize,
     strides: [usize; 3],
     offsets: [usize; 3],
 ) {
-    let data = src;
+    // Copy Y.
+    let src_y_lines = src[offsets[0]..]
+        .chunks(strides[0])
+        .map(|line| &line[..width]);
+    let dst_y_lines = dst.chunks_mut(width);
 
-    let mut src = &data[offsets[0]..];
-
-    // Copy luma
-    for _ in 0..height {
-        dst[..width].copy_from_slice(&src[..width]);
-        dst = &mut dst[width..];
-        src = &src[strides[0]..];
+    for (src_line, dst_line) in src_y_lines.zip(dst_y_lines).take(height) {
+        dst_line.copy_from_slice(src_line);
     }
+
+    let dst_u_offset = width * height;
 
     // Align width and height to 2 for UV plane.
     let width = if width % 2 == 1 { width + 1 } else { width };
     let height = if height % 2 == 1 { height + 1 } else { height };
-
-    // 1 sample per 4 pixels, but we have two components per line.
+    // 1 sample per 4 pixels, but we have two components per line so width can remain as-is.
     let height = height / 2;
 
-    // Advance to the offset of the chroma plane
-    let mut src = &data[offsets[1]..];
-
-    // Copy chroma
-    for _ in 0..height {
-        dst[..width].copy_from_slice(&src[..width]);
-        dst = &mut dst[width..];
-        src = &src[strides[1]..];
+    // Copy UV.
+    let src_uv_lines = src[offsets[1]..]
+        .chunks(strides[1])
+        .map(|line| &line[..width]);
+    let dst_uv_lines = dst[dst_u_offset..].chunks_mut(width);
+    for (src_line, dst_line) in src_uv_lines.zip(dst_uv_lines).take(height) {
+        dst_line.copy_from_slice(src_line);
     }
 }
 
 /// Copies `src` into `dst` as I420, removing any extra padding.
 pub fn i420_copy(
     src: &[u8],
-    mut dst: &mut [u8],
+    dst: &mut [u8],
     width: usize,
     height: usize,
     strides: [usize; 3],
     offsets: [usize; 3],
 ) {
-    let data = src;
+    // Copy Y.
+    let src_y_lines = src[offsets[0]..]
+        .chunks(strides[0])
+        .map(|line| &line[..width]);
+    let dst_y_lines = dst.chunks_mut(width);
 
-    let mut src = &data[offsets[0]..];
-
-    // Copy luma
-    for _ in 0..height {
-        dst[..width].copy_from_slice(&src[..width]);
-        dst = &mut dst[width..];
-        src = &src[strides[0]..];
+    for (src_line, dst_line) in src_y_lines.zip(dst_y_lines).take(height) {
+        dst_line.copy_from_slice(src_line);
     }
+
+    let dst_u_offset = width * height;
 
     // Align width and height to 2 for U and V planes.
     let width = if width % 2 == 1 { width + 1 } else { width };
     let height = if height % 2 == 1 { height + 1 } else { height };
-
     // 1 sample per 4 pixels.
     let width = width / 2;
     let height = height / 2;
 
-    // Advance to the offset of the U plane
-    let mut src = &data[offsets[1]..];
-
-    // Copy U
-    for _ in 0..height {
-        dst[..width].copy_from_slice(&src[..width]);
-        dst = &mut dst[width..];
-        src = &src[strides[1]..];
+    // Copy U.
+    let src_u_lines = src[offsets[1]..]
+        .chunks(strides[1])
+        .map(|line| &line[..width]);
+    let dst_u_lines = dst[dst_u_offset..].chunks_mut(width);
+    for (src_line, dst_line) in src_u_lines.zip(dst_u_lines).take(height) {
+        dst_line.copy_from_slice(src_line);
     }
 
-    // Advance to the offset of the V plane
-    let mut src = &data[offsets[2]..];
+    let dst_v_offset = dst_u_offset + width * height;
 
-    // Copy V
-    for _ in 0..height {
-        dst[..width].copy_from_slice(&src[..width]);
-        dst = &mut dst[width..];
-        src = &src[strides[2]..];
+    // Copy V.
+    let src_v_lines = src[offsets[2]..]
+        .chunks(strides[2])
+        .map(|line| &line[..width]);
+    let dst_v_lines = dst[dst_v_offset..].chunks_mut(width);
+    for (src_line, dst_line) in src_v_lines.zip(dst_v_lines).take(height) {
+        dst_line.copy_from_slice(src_line);
     }
 }
 
