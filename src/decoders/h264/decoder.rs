@@ -2147,9 +2147,7 @@ where
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().nalu_type() {
                 NaluType::Sps => {
-                    // Clone to avoid double-borrow on `self`.
-                    let sps = self.parser.parse_sps(&nalu)?.clone();
-                    self.apply_sps(&sps);
+                    self.parser.parse_sps(&nalu)?;
                 }
 
                 NaluType::Pps => {
