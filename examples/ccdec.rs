@@ -107,8 +107,8 @@ struct Args {
     #[argh(option)]
     output: Option<PathBuf>,
 
-    /// input format to decode from. Default: h264
-    #[argh(option, default = "EncodedFormat::H264")]
+    /// input format to decode from.
+    #[argh(option)]
     input_format: EncodedFormat,
 
     /// pixel format to decode into. Default: i420
