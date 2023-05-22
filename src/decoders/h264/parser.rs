@@ -560,6 +560,7 @@ pub enum Profile {
     Main = 77,
     Extended = 88,
     High = 100,
+    High422P = 122,
 }
 
 #[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
