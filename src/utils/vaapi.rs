@@ -321,7 +321,12 @@ impl StreamMetadataState {
             .iter()
             .find(|f| f.fourcc == format_map.va_fourcc)
             .cloned()
-            .unwrap();
+            .ok_or_else(|| {
+                anyhow!(
+                    "cannot find corresponding VA format for fourcc {:?}",
+                    format_map.va_fourcc
+                )
+            })?;
 
         let min_num_surfaces = hdr.min_num_surfaces();
 
@@ -747,7 +752,12 @@ where
             let map_format = FORMAT_MAP
                 .iter()
                 .find(|&map| map.decoded_format == format)
-                .unwrap();
+                .ok_or_else(|| {
+                    anyhow!(
+                        "cannot find corresponding VA format for decoded format {:?}",
+                        format
+                    )
+                })?;
 
             self.metadata_state =
                 StreamMetadataState::open(&self.display, format_info, Some(map_format))?;
