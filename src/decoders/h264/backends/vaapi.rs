@@ -53,6 +53,15 @@ impl StreamInfo for &Sps {
                 }
             }
             Profile::Main => Ok(libva::VAProfile::VAProfileH264Main),
+            Profile::Extended => {
+                if self.constraint_set1_flag() {
+                    Ok(libva::VAProfile::VAProfileH264Main)
+                } else {
+                    Err(anyhow!(
+                        "Unsupported stream: profile_idc=88, but constraint_set1_flag is unset"
+                    ))
+                }
+            }
             Profile::High => Ok(libva::VAProfile::VAProfileH264High),
         }
     }

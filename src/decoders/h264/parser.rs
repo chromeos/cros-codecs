@@ -558,6 +558,7 @@ impl Default for SliceType {
 pub enum Profile {
     Baseline = 66,
     Main = 77,
+    Extended = 88,
     High = 100,
 }
 
