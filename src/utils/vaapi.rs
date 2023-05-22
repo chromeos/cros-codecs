@@ -32,7 +32,7 @@ use crate::decoders::Result as VideoDecoderResult;
 use crate::decoders::StatelessBackendError;
 use crate::decoders::StatelessBackendResult;
 use crate::decoders::VideoDecoderBackend;
-use crate::i420_copy;
+use crate::i4xx_copy;
 use crate::nv12_copy;
 use crate::y410_to_i410;
 use crate::DecodedFormat;
@@ -47,7 +47,7 @@ struct FormatMap {
 
 /// Maps a given VA_RT_FORMAT to a compatible decoded format in an arbitrary
 /// preferred order.
-const FORMAT_MAP: [FormatMap; 8] = [
+const FORMAT_MAP: [FormatMap; 10] = [
     FormatMap {
         rt_format: libva::constants::VA_RT_FORMAT_YUV420,
         va_fourcc: libva::constants::VA_FOURCC_NV12,
@@ -57,6 +57,16 @@ const FORMAT_MAP: [FormatMap; 8] = [
         rt_format: libva::constants::VA_RT_FORMAT_YUV420,
         va_fourcc: libva::constants::VA_FOURCC_I420,
         decoded_format: DecodedFormat::I420,
+    },
+    FormatMap {
+        rt_format: libva::constants::VA_RT_FORMAT_YUV422,
+        va_fourcc: libva::constants::VA_FOURCC_422H,
+        decoded_format: DecodedFormat::I422,
+    },
+    FormatMap {
+        rt_format: libva::constants::VA_RT_FORMAT_YUV444,
+        va_fourcc: libva::constants::VA_FOURCC_444P,
+        decoded_format: DecodedFormat::I444,
     },
     FormatMap {
         rt_format: libva::constants::VA_RT_FORMAT_YUV420_10,
@@ -527,7 +537,37 @@ impl<'a> MappableHandle for Image<'a> {
                 nv12_copy(self.as_ref(), buffer, width, height, pitches, offsets);
             }
             libva::constants::VA_FOURCC_I420 => {
-                i420_copy(self.as_ref(), buffer, width, height, pitches, offsets);
+                i4xx_copy(
+                    self.as_ref(),
+                    buffer,
+                    width,
+                    height,
+                    pitches,
+                    offsets,
+                    (true, true),
+                );
+            }
+            libva::constants::VA_FOURCC_422H => {
+                i4xx_copy(
+                    self.as_ref(),
+                    buffer,
+                    width,
+                    height,
+                    pitches,
+                    offsets,
+                    (true, false),
+                );
+            }
+            libva::constants::VA_FOURCC_444P => {
+                i4xx_copy(
+                    self.as_ref(),
+                    buffer,
+                    width,
+                    height,
+                    pitches,
+                    offsets,
+                    (false, false),
+                );
             }
             libva::constants::VA_FOURCC_P010 => {
                 p01x_to_i01x(self.as_ref(), buffer, 10, width, height, pitches, offsets);

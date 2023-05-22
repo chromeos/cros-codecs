@@ -27,6 +27,10 @@ pub enum DecodedFormat {
     I420,
     /// One Y and one interleaved UV plane, 4:2:0 sampling, 8 bits per sample.
     NV12,
+    /// Y, U and V planes, 4:2:2 sampling, 8 bits per sample.
+    I422,
+    /// Y, U and V planes, 4:4:4 sampling, 8 bits per sample.
+    I444,
     /// Y, U and V planes, 4:2:0 sampling, 16 bits per sample, LE. Only the 10 LSBs are used.
     I010,
     /// Y, U and V planes, 4:2:0 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
@@ -47,6 +51,8 @@ impl FromStr for DecodedFormat {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "i420" | "I420" => Ok(DecodedFormat::I420),
+            "i422" | "I422" => Ok(DecodedFormat::I422),
+            "i444" | "I444" => Ok(DecodedFormat::I444),
             "nv12" | "NV12" => Ok(DecodedFormat::NV12),
             "i010" | "I010" => Ok(DecodedFormat::I010),
             "i012" | "I012" => Ok(DecodedFormat::I012),
@@ -55,7 +61,7 @@ impl FromStr for DecodedFormat {
             "i410" | "I410" => Ok(DecodedFormat::I410),
             "i412" | "I412" => Ok(DecodedFormat::I412),
             _ => {
-                Err("unrecognized output format. Valid values: i420, nv12, i010, i012, i210, i212, i410, i412")
+                Err("unrecognized output format. Valid values: i420, nv12, i422, i444, i010, i012, i210, i212, i410, i412")
             }
         }
     }
@@ -97,48 +103,58 @@ pub fn nv12_copy(
     }
 }
 
-/// Copies `src` into `dst` as I420, removing any extra padding.
-pub fn i420_copy(
+/// Copies `src` into `dst` as I4xx (YUV tri-planar).
+///
+/// This function does not change the data layout beyond removing any padding in the source, i.e.
+/// both `src` and `dst` are 3-planar YUV buffers.
+///
+/// `strides` and `offsets` give the stride and starting position of each plane in `src`. In `dst`
+/// each plane will be put sequentially one after the other.
+///
+/// `sub_h` and `sub_v` enable horizontal and vertical sub-sampling, respectively. E.g, if both
+/// `sub_h` and `sub_v` are `true` the data will be `4:2:0`, if only `sub_v` is `true` then it will be
+/// `4:2:2`, and if both are `false` then we have `4:4:4`.
+pub fn i4xx_copy(
     src: &[u8],
     dst: &mut [u8],
     width: usize,
     height: usize,
     strides: [usize; 3],
     offsets: [usize; 3],
+    (sub_h, sub_v): (bool, bool),
 ) {
+    // Align width and height of UV planes to 2 if sub-sampling is used.
+    let uv_width = if sub_h { (width + 1) / 2 } else { width };
+    let uv_height = if sub_v { (height + 1) / 2 } else { height };
+
+    let dst_y_size = width * height;
+    let dst_u_size = uv_width * uv_height;
+    let (dst_y_plane, dst_uv_planes) = dst.split_at_mut(dst_y_size);
+    let (dst_u_plane, dst_v_plane) = dst_uv_planes.split_at_mut(dst_u_size);
+
     // Copy Y.
     let src_y_lines = src[offsets[0]..]
         .chunks(strides[0])
         .map(|line| &line[..width]);
-    let dst_y_lines = dst.chunks_mut(width);
-
+    let dst_y_lines = dst_y_plane.chunks_mut(width);
     for (src_line, dst_line) in src_y_lines.zip(dst_y_lines).take(height) {
         dst_line.copy_from_slice(src_line);
     }
-
-    let dst_u_offset = width * height;
-
-    // Align width and height to 2 for U and V planes.
-    // 1 sample per 4 pixels.
-    let uv_width = if width % 2 == 1 { width + 1 } else { width } / 2;
-    let uv_height = if height % 2 == 1 { height + 1 } else { height } / 2;
 
     // Copy U.
     let src_u_lines = src[offsets[1]..]
         .chunks(strides[1])
         .map(|line| &line[..uv_width]);
-    let dst_u_lines = dst[dst_u_offset..].chunks_mut(uv_width);
+    let dst_u_lines = dst_u_plane.chunks_mut(uv_width);
     for (src_line, dst_line) in src_u_lines.zip(dst_u_lines).take(uv_height) {
         dst_line.copy_from_slice(src_line);
     }
-
-    let dst_v_offset = dst_u_offset + uv_width * uv_height;
 
     // Copy V.
     let src_v_lines = src[offsets[2]..]
         .chunks(strides[2])
         .map(|line| &line[..uv_width]);
-    let dst_v_lines = dst[dst_v_offset..].chunks_mut(uv_width);
+    let dst_v_lines = dst_v_plane.chunks_mut(uv_width);
     for (src_line, dst_line) in src_v_lines.zip(dst_v_lines).take(uv_height) {
         dst_line.copy_from_slice(src_line);
     }
@@ -156,6 +172,14 @@ pub fn decoded_frame_size(format: DecodedFormat, width: usize, height: usize) ->
 
             u_size + uv_size
         }
+        DecodedFormat::I422 => {
+            let u_size = width * height;
+            // U and V planes need to be aligned to 2.
+            let uv_size = ((width + 1) / 2) * ((height + 1) / 2) * 2 * 2;
+
+            u_size + uv_size
+        }
+        DecodedFormat::I444 => (width * height) * 3,
         DecodedFormat::I010 | DecodedFormat::I012 => {
             decoded_frame_size(DecodedFormat::I420, width, height) * 2
         }
