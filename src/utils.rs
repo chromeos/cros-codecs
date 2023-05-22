@@ -191,7 +191,7 @@ impl<'a> Iterator for H264FrameIterator<'a> {
 }
 
 /// Simple decoding loop that plays the stream once from start to finish.
-pub fn simple_playback_loop<'a, D, R, I>(
+pub fn simple_playback_loop<D, R, I>(
     decoder: &mut D,
     stream_iter: I,
     on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
