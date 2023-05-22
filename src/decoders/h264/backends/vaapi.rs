@@ -63,6 +63,7 @@ impl StreamInfo for &Sps {
                 }
             }
             Profile::High => Ok(libva::VAProfile::VAProfileH264High),
+            Profile::High422P => Ok(libva::VAProfile::VAProfileH264High),
         }
     }
 
