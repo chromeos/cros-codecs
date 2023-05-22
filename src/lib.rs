@@ -83,17 +83,16 @@ pub fn nv12_copy(
     let dst_u_offset = width * height;
 
     // Align width and height to 2 for UV plane.
-    let width = if width % 2 == 1 { width + 1 } else { width };
-    let height = if height % 2 == 1 { height + 1 } else { height };
     // 1 sample per 4 pixels, but we have two components per line so width can remain as-is.
-    let height = height / 2;
+    let uv_width = if width % 2 == 1 { width + 1 } else { width };
+    let uv_height = if height % 2 == 1 { height + 1 } else { height } / 2;
 
     // Copy UV.
     let src_uv_lines = src[offsets[1]..]
         .chunks(strides[1])
-        .map(|line| &line[..width]);
-    let dst_uv_lines = dst[dst_u_offset..].chunks_mut(width);
-    for (src_line, dst_line) in src_uv_lines.zip(dst_uv_lines).take(height) {
+        .map(|line| &line[..uv_width]);
+    let dst_uv_lines = dst[dst_u_offset..].chunks_mut(uv_width);
+    for (src_line, dst_line) in src_uv_lines.zip(dst_uv_lines).take(uv_height) {
         dst_line.copy_from_slice(src_line);
     }
 }
@@ -120,29 +119,27 @@ pub fn i420_copy(
     let dst_u_offset = width * height;
 
     // Align width and height to 2 for U and V planes.
-    let width = if width % 2 == 1 { width + 1 } else { width };
-    let height = if height % 2 == 1 { height + 1 } else { height };
     // 1 sample per 4 pixels.
-    let width = width / 2;
-    let height = height / 2;
+    let uv_width = if width % 2 == 1 { width + 1 } else { width } / 2;
+    let uv_height = if height % 2 == 1 { height + 1 } else { height } / 2;
 
     // Copy U.
     let src_u_lines = src[offsets[1]..]
         .chunks(strides[1])
-        .map(|line| &line[..width]);
-    let dst_u_lines = dst[dst_u_offset..].chunks_mut(width);
-    for (src_line, dst_line) in src_u_lines.zip(dst_u_lines).take(height) {
+        .map(|line| &line[..uv_width]);
+    let dst_u_lines = dst[dst_u_offset..].chunks_mut(uv_width);
+    for (src_line, dst_line) in src_u_lines.zip(dst_u_lines).take(uv_height) {
         dst_line.copy_from_slice(src_line);
     }
 
-    let dst_v_offset = dst_u_offset + width * height;
+    let dst_v_offset = dst_u_offset + uv_width * uv_height;
 
     // Copy V.
     let src_v_lines = src[offsets[2]..]
         .chunks(strides[2])
-        .map(|line| &line[..width]);
-    let dst_v_lines = dst[dst_v_offset..].chunks_mut(width);
-    for (src_line, dst_line) in src_v_lines.zip(dst_v_lines).take(height) {
+        .map(|line| &line[..uv_width]);
+    let dst_v_lines = dst[dst_v_offset..].chunks_mut(uv_width);
+    for (src_line, dst_line) in src_v_lines.zip(dst_v_lines).take(uv_height) {
         dst_line.copy_from_slice(src_line);
     }
 }
