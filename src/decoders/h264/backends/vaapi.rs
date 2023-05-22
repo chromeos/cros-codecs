@@ -71,15 +71,21 @@ impl StreamInfo for &Sps {
         let bit_depth_luma = self.bit_depth_chroma_minus8() + 8;
         let chroma_format_idc = self.chroma_format_idc();
 
-        match bit_depth_luma {
-            8 => match chroma_format_idc {
-                0 | 1 => Ok(libva::constants::VA_RT_FORMAT_YUV420),
-                _ => Err(anyhow!(
-                    "Unsupported chroma_format_idc: {}",
-                    chroma_format_idc
-                )),
-            },
-            _ => Err(anyhow!("Unsupported bit depth: {}", bit_depth_luma)),
+        match (bit_depth_luma, chroma_format_idc) {
+            (8, 0) | (8, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420),
+            (8, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422),
+            (8, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444),
+            (10, 0) | (10, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420_10),
+            (10, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422_10),
+            (10, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444_10),
+            (12, 0) | (12, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420_12),
+            (12, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422_12),
+            (12, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444_12),
+            _ => Err(anyhow!(
+                "unsupported bit depth/chroma format pair {}, {}",
+                bit_depth_luma,
+                chroma_format_idc
+            )),
         }
     }
 
