@@ -129,6 +129,7 @@ where
 {
     // Creates a new instance of the decoder.
     #[cfg(any(feature = "vaapi", test))]
+    #[allow(dead_code)]
     pub(crate) fn new(
         backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
@@ -171,7 +172,7 @@ where
     }
 
     /// Whether the stream parameters have changed, indicating that a negotiation window has opened.
-    fn negotiation_possible(sps: &Sps, dpb: (), current_resolution: Resolution) -> bool {
+    fn negotiation_possible(_sps: &Sps, _dpb: (), _current_resolution: Resolution) -> bool {
         todo!()
     }
 
@@ -604,7 +605,7 @@ where
             .get_pps(slice.header().pic_parameter_set_id())
             .context("Invalid PPS in handle_picture")?;
 
-        let sps = self
+        let _sps = self
             .parser
             .get_sps(pps.seq_parameter_set_id())
             .context("Invalid SPS in handle_picture")?;
@@ -648,7 +649,7 @@ where
     }
 
     /// Handle a slice. Called once per slice NALU.
-    fn handle_slice(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
+    fn handle_slice(&mut self, _timestamp: u64, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
         self.build_ref_pic_lists(slice.header())?;
 
         self.backend.decode_slice(
@@ -668,7 +669,7 @@ where
         Ok(())
     }
 
-    fn finish_picture(&mut self, mut pic: PictureData, handle: T) -> anyhow::Result<()> {
+    fn finish_picture(&mut self, pic: PictureData, handle: T) -> anyhow::Result<()> {
         log::debug!("Finishing picture POC {:?}", pic.pic_order_cnt_val);
 
         // 8.3.1
@@ -704,7 +705,7 @@ where
             match nalu.header().type_() {
                 NaluType::SpsNut => {
                     // Clone to avoid double-borrow on `self`.
-                    let sps = self.parser.parse_sps(&nalu)?.clone();
+                    let _sps = self.parser.parse_sps(&nalu)?.clone();
                     // self.apply_sps(&sps);
                 }
 
@@ -781,7 +782,7 @@ where
         let sps = Self::peek_sps(&mut self.parser, bitstream);
 
         if let Some(sps) = sps {
-            if Self::negotiation_possible(&sps, todo!(), self.coded_resolution) {
+            if Self::negotiation_possible(&sps, (), self.coded_resolution) {
                 // self.backend.new_sequence(&sps)?;
                 self.decoding_state = DecodingState::AwaitingFormat(sps);
             }
@@ -825,12 +826,16 @@ where
             .or_else(|| {
                 if let DecodingState::AwaitingFormat(sps) = &self.decoding_state {
                     Some(DecoderEvent::FormatChanged(Box::new(
-                        StatelessDecoderFormatNegotiator::new(self, sps.clone(), |decoder, sps| {
-                            // Apply the SPS settings to the decoder so we don't enter the AwaitingFormat state
-                            // on the next decode() call.
-                            // decoder.apply_sps(sps);
-                            decoder.decoding_state = DecodingState::Decoding;
-                        }),
+                        StatelessDecoderFormatNegotiator::new(
+                            self,
+                            sps.clone(),
+                            |decoder, _sps| {
+                                // Apply the SPS settings to the decoder so we don't enter the AwaitingFormat state
+                                // on the next decode() call.
+                                // decoder.apply_sps(sps);
+                                decoder.decoding_state = DecodingState::Decoding;
+                            },
+                        ),
                     )))
                 } else {
                     None
