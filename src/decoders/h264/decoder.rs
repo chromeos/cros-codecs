@@ -1883,7 +1883,7 @@ where
 
         let mut nidx = *ref_idx_lx;
 
-        for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) {
+        for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) + 1 {
             if cidx == ref_pic_list_x.len() {
                 break;
             }
@@ -1938,7 +1938,7 @@ where
             RefPicList::RefPicList1 => current_slice.header().num_ref_idx_l1_active_minus1(),
         };
 
-        for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) {
+        for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) + 1 {
             if cidx == ref_pic_list_x.len() {
                 break;
             }
