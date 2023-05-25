@@ -194,6 +194,14 @@ impl DecodedHandleTrait for DecodedHandle {
 }
 
 /// A surface pool handle to reduce the number of costly Surface allocations.
+///
+/// The pool only houses Surfaces that match the pool's coded resolution. Stale
+/// surfaces are dropped when either the pool resolution changes, or when stale
+/// surfaces are retrieved.
+///
+/// This means that this pool is suitable for inter-frame DRC, as the stale
+/// surfaces will gracefully be dropped, which is arguably better than the
+/// alternative of having more than one pool active at a time.
 #[derive(Clone)]
 pub(crate) struct SurfacePoolHandle {
     surfaces: Rc<RefCell<VecDeque<Surface>>>,
@@ -214,15 +222,43 @@ impl SurfacePoolHandle {
         self.coded_resolution
     }
 
+    /// Sets the coded resolution of the pool. Releases any stale surfaces.
+    pub(crate) fn set_coded_resolution(&mut self, resolution: Resolution) {
+        self.coded_resolution = resolution;
+        let mut surfaces = self.surfaces.borrow_mut();
+        surfaces.retain(|s| Resolution::from(s.size()) == self.coded_resolution);
+    }
+
     /// Adds a new surface to the pool
-    fn add_surface(&mut self, surface: Surface) {
-        self.surfaces.borrow_mut().push_back(surface)
+    pub(crate) fn add_surface(&mut self, surface: Surface) -> Result<(), (Surface, anyhow::Error)> {
+        if Resolution::from(surface.size()) == self.coded_resolution {
+            self.surfaces.borrow_mut().push_back(surface);
+            Ok(())
+        } else {
+            Err((
+                surface,
+                anyhow!(
+                    "Surface and pool resolution do not match. Update the pool resolution first."
+                ),
+            ))
+        }
     }
 
     /// Gets a free surface from the pool
     pub(crate) fn get_surface(&mut self) -> Option<Surface> {
         let mut vec = self.surfaces.borrow_mut();
-        vec.pop_front()
+        let surface = vec.pop_front();
+
+        // Make sure the invariant holds when debugging. Can save costly
+        // debugging time during future refactors, if any.
+        debug_assert!({
+            match surface.as_ref() {
+                Some(s) => Resolution::from(s.size()) == self.coded_resolution,
+                None => true,
+            }
+        });
+
+        surface
     }
 
     /// Returns new number of surfaces left.
@@ -401,9 +437,15 @@ impl Drop for GenericBackendHandle {
     fn drop(&mut self) {
         // Take ownership of the internal state.
         let state = std::mem::replace(&mut self.state, PictureState::Invalid);
-        if self.surface_pool.coded_resolution() == self.coded_resolution {
-            if let Ok(surface) = state.try_into() {
-                self.surface_pool.add_surface(surface);
+        if let Ok(surface) = state.try_into() {
+            // It is OK if the pool rejects the surface. It means that the
+            // surface is stale and will be gracefully dropped.
+            if let Err((surface, _)) = self.surface_pool.add_surface(surface) {
+                log::debug!(
+                    "Dropping stale surface: {}, ({:?})",
+                    surface.id(),
+                    surface.size()
+                )
             }
         }
     }
