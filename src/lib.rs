@@ -18,6 +18,13 @@ pub struct Resolution {
     pub height: u32,
 }
 
+impl Resolution {
+    /// Whether `self` can contain `other`.
+    pub fn can_contain(&self, other: Self) -> bool {
+        self.width >= other.width && self.height >= other.height
+    }
+}
+
 impl From<(u32, u32)> for Resolution {
     fn from(value: (u32, u32)) -> Self {
         Self {

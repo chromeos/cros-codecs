@@ -203,9 +203,9 @@ mod surface_pool {
 
     /// A surface pool handle to reduce the number of costly Surface allocations.
     ///
-    /// The pool only houses Surfaces that match the pool's coded resolution.
-    /// Stale surfaces are dropped when either the pool resolution changes, or
-    /// when stale surfaces are retrieved.
+    /// The pool only houses Surfaces that fits the pool's coded resolution.
+    /// Stale surfaces are dropped when either the pool resolution changes, or when
+    /// stale surfaces are retrieved.
     ///
     /// This means that this pool is suitable for inter-frame DRC, as the stale
     /// surfaces will gracefully be dropped, which is arguably better than the
@@ -233,7 +233,7 @@ mod surface_pool {
         pub(crate) fn set_coded_resolution(&mut self, resolution: Resolution) {
             self.coded_resolution = resolution;
             self.surfaces
-                .retain(|s| Resolution::from(s.size()) == self.coded_resolution);
+                .retain(|s| Resolution::from(s.size()).can_contain(self.coded_resolution));
         }
 
         /// Adds a new surface to the pool
@@ -241,14 +241,14 @@ mod surface_pool {
             &mut self,
             surface: Surface,
         ) -> Result<(), (Surface, anyhow::Error)> {
-            if Resolution::from(surface.size()) == self.coded_resolution {
+            if Resolution::from(surface.size()).can_contain(self.coded_resolution) {
                 self.surfaces.push_back(surface);
                 Ok(())
             } else {
                 Err((
                     surface,
                     anyhow!(
-                    "Surface and pool resolution do not match. Update the pool resolution first."
+                    "Surface does not fit within the pool's coded resolution. Update the pool resolution first."
                 ),
                 ))
             }
@@ -262,7 +262,7 @@ mod surface_pool {
             // debugging time during future refactors, if any.
             debug_assert!({
                 match surface.as_ref() {
-                    Some(s) => Resolution::from(s.size()) == self.coded_resolution,
+                    Some(s) => Resolution::from(s.size()).can_contain(self.coded_resolution),
                     None => true,
                 }
             });
