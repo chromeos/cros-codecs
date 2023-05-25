@@ -5,7 +5,6 @@
 use std::cell::RefCell;
 use std::cell::RefMut;
 use std::collections::HashSet;
-use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -36,6 +35,7 @@ use crate::decoders::StatelessBackendResult;
 use crate::decoders::VideoDecoderBackend;
 use crate::i4xx_copy;
 use crate::nv12_copy;
+use crate::utils::vaapi::surface_pool::SurfacePoolHandle;
 use crate::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Resolution;
@@ -193,77 +193,91 @@ impl DecodedHandleTrait for DecodedHandle {
     }
 }
 
-/// A surface pool handle to reduce the number of costly Surface allocations.
-///
-/// The pool only houses Surfaces that match the pool's coded resolution. Stale
-/// surfaces are dropped when either the pool resolution changes, or when stale
-/// surfaces are retrieved.
-///
-/// This means that this pool is suitable for inter-frame DRC, as the stale
-/// surfaces will gracefully be dropped, which is arguably better than the
-/// alternative of having more than one pool active at a time.
-#[derive(Clone)]
-pub(crate) struct SurfacePoolHandle {
-    surfaces: Rc<RefCell<VecDeque<Surface>>>,
-    coded_resolution: Resolution,
-}
+mod surface_pool {
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+    use std::rc::Rc;
 
-impl SurfacePoolHandle {
-    /// Creates a new pool
-    fn new(surfaces: Vec<Surface>, resolution: Resolution) -> Self {
-        Self {
-            surfaces: Rc::new(RefCell::new(VecDeque::from(surfaces))),
-            coded_resolution: resolution,
+    use anyhow::anyhow;
+    use libva::Surface;
+
+    use crate::Resolution;
+
+    /// A surface pool handle to reduce the number of costly Surface allocations.
+    ///
+    /// The pool only houses Surfaces that match the pool's coded resolution.
+    /// Stale surfaces are dropped when either the pool resolution changes, or
+    /// when stale surfaces are retrieved.
+    ///
+    /// This means that this pool is suitable for inter-frame DRC, as the stale
+    /// surfaces will gracefully be dropped, which is arguably better than the
+    /// alternative of having more than one pool active at a time.
+    #[derive(Clone)]
+    pub(crate) struct SurfacePoolHandle {
+        surfaces: Rc<RefCell<VecDeque<Surface>>>,
+        coded_resolution: Resolution,
+    }
+
+    impl SurfacePoolHandle {
+        /// Creates a new pool
+        pub(crate) fn new(surfaces: Vec<Surface>, resolution: Resolution) -> Self {
+            Self {
+                surfaces: Rc::new(RefCell::new(VecDeque::from(surfaces))),
+                coded_resolution: resolution,
+            }
         }
-    }
 
-    /// Retrieve the current coded resolution of the pool
-    pub(crate) fn coded_resolution(&self) -> Resolution {
-        self.coded_resolution
-    }
+        /// Retrieve the current coded resolution of the pool
+        pub(crate) fn coded_resolution(&self) -> Resolution {
+            self.coded_resolution
+        }
 
-    /// Sets the coded resolution of the pool. Releases any stale surfaces.
-    pub(crate) fn set_coded_resolution(&mut self, resolution: Resolution) {
-        self.coded_resolution = resolution;
-        let mut surfaces = self.surfaces.borrow_mut();
-        surfaces.retain(|s| Resolution::from(s.size()) == self.coded_resolution);
-    }
+        /// Sets the coded resolution of the pool. Releases any stale surfaces.
+        pub(crate) fn set_coded_resolution(&mut self, resolution: Resolution) {
+            self.coded_resolution = resolution;
+            let mut surfaces = self.surfaces.borrow_mut();
+            surfaces.retain(|s| Resolution::from(s.size()) == self.coded_resolution);
+        }
 
-    /// Adds a new surface to the pool
-    pub(crate) fn add_surface(&mut self, surface: Surface) -> Result<(), (Surface, anyhow::Error)> {
-        if Resolution::from(surface.size()) == self.coded_resolution {
-            self.surfaces.borrow_mut().push_back(surface);
-            Ok(())
-        } else {
-            Err((
-                surface,
-                anyhow!(
+        /// Adds a new surface to the pool
+        pub(crate) fn add_surface(
+            &mut self,
+            surface: Surface,
+        ) -> Result<(), (Surface, anyhow::Error)> {
+            if Resolution::from(surface.size()) == self.coded_resolution {
+                self.surfaces.borrow_mut().push_back(surface);
+                Ok(())
+            } else {
+                Err((
+                    surface,
+                    anyhow!(
                     "Surface and pool resolution do not match. Update the pool resolution first."
                 ),
-            ))
-        }
-    }
-
-    /// Gets a free surface from the pool
-    pub(crate) fn get_surface(&mut self) -> Option<Surface> {
-        let mut vec = self.surfaces.borrow_mut();
-        let surface = vec.pop_front();
-
-        // Make sure the invariant holds when debugging. Can save costly
-        // debugging time during future refactors, if any.
-        debug_assert!({
-            match surface.as_ref() {
-                Some(s) => Resolution::from(s.size()) == self.coded_resolution,
-                None => true,
+                ))
             }
-        });
+        }
 
-        surface
-    }
+        /// Gets a free surface from the pool
+        pub(crate) fn get_surface(&mut self) -> Option<Surface> {
+            let mut vec = self.surfaces.borrow_mut();
+            let surface = vec.pop_front();
 
-    /// Returns new number of surfaces left.
-    fn num_surfaces_left(&self) -> usize {
-        self.surfaces.borrow().len()
+            // Make sure the invariant holds when debugging. Can save costly
+            // debugging time during future refactors, if any.
+            debug_assert!({
+                match surface.as_ref() {
+                    Some(s) => Resolution::from(s.size()) == self.coded_resolution,
+                    None => true,
+                }
+            });
+
+            surface
+        }
+
+        /// Returns new number of surfaces left.
+        pub(crate) fn num_surfaces_left(&self) -> usize {
+            self.surfaces.borrow().len()
+        }
     }
 }
 
