@@ -349,18 +349,11 @@ impl StreamMetadataState {
         display: &Rc<Display>,
         hdr: S,
         format_map: Option<&FormatMap>,
+        old_metadata_state: StreamMetadataState,
     ) -> anyhow::Result<StreamMetadataState> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
         let (frame_w, frame_h) = hdr.coded_size();
-
-        let attrs = vec![libva::VAConfigAttrib {
-            type_: libva::VAConfigAttribType::VAConfigAttribRTFormat,
-            value: rt_format,
-        }];
-
-        let config =
-            display.create_config(attrs, va_profile, libva::VAEntrypoint::VAEntrypointVLD)?;
 
         let format_map = if let Some(format_map) = format_map {
             format_map
@@ -386,19 +379,6 @@ impl StreamMetadataState {
 
         let min_num_surfaces = hdr.min_num_surfaces();
 
-        let surfaces = display.create_surfaces(
-            rt_format,
-            // Let the hardware decide the best internal format - we will get the desired fourcc
-            // when creating the image.
-            None,
-            frame_w,
-            frame_h,
-            Some(libva::UsageHint::USAGE_HINT_DECODER),
-            min_num_surfaces,
-        )?;
-
-        let context = display.create_context(&config, frame_w, frame_h, Some(&surfaces), true)?;
-
         let coded_resolution = Resolution {
             width: frame_w,
             height: frame_h,
@@ -411,7 +391,86 @@ impl StreamMetadataState {
             height: visible_rect.1 .1 - visible_rect.0 .1,
         };
 
-        let surface_pool = Rc::new(RefCell::new(SurfacePool::new(surfaces, coded_resolution)));
+        let (create_new_surfaces, surface_pool) = match old_metadata_state {
+            StreamMetadataState::Unparsed => (
+                true,
+                Rc::new(RefCell::new(SurfacePool::new(vec![], coded_resolution))),
+            ),
+            StreamMetadataState::Parsed(ParsedStreamMetadata {
+                min_num_surfaces: old_min_num_surfaces,
+                ref surface_pool,
+                ..
+            }) => {
+                let create_new_surfaces = min_num_surfaces > old_min_num_surfaces
+                    || !surface_pool
+                        .borrow()
+                        .coded_resolution()
+                        .can_contain(coded_resolution);
+
+                (create_new_surfaces, Rc::clone(surface_pool))
+            }
+        };
+
+        if !surface_pool
+            .borrow()
+            .coded_resolution()
+            .can_contain(coded_resolution)
+        {
+            // Purge the old surfaces to receive the new ones below. This
+            // ensures that the pool is always set to the largest resolution in
+            // the stream, so that no new allocations are needed when we come
+            // across a smaller resolution. In particular, for
+            // video-conferencing applications, which are subject to bandwidth
+            // fluctuations, this can be very advantageous as it avoid
+            // reallocating all the time.
+            surface_pool
+                .borrow_mut()
+                .set_coded_resolution(coded_resolution);
+        }
+
+        let (config, context) = match old_metadata_state {
+            // Reuse current context.
+            StreamMetadataState::Parsed(old_state)
+                if old_state.rt_format == rt_format && old_state.profile == va_profile =>
+            {
+                (old_state.config, old_state.context)
+            }
+            // Create new context.
+            _ => {
+                let config = display.create_config(
+                    vec![libva::VAConfigAttrib {
+                        type_: libva::VAConfigAttribType::VAConfigAttribRTFormat,
+                        value: rt_format,
+                    }],
+                    va_profile,
+                    libva::VAEntrypoint::VAEntrypointVLD,
+                )?;
+
+                let context = display.create_context(&config, frame_w, frame_h, None, true)?;
+
+                (config, context)
+            }
+        };
+
+        if create_new_surfaces {
+            let surfaces = display.create_surfaces(
+                rt_format,
+                // Let the hardware decide the best internal format - we will get the desired fourcc
+                // when creating the image.
+                None,
+                frame_w,
+                frame_h,
+                Some(libva::UsageHint::USAGE_HINT_DECODER),
+                min_num_surfaces,
+            )?;
+
+            for surface in surfaces {
+                surface_pool
+                    .borrow_mut()
+                    .add_surface(surface)
+                    .map_err(|e| e.1)?;
+            }
+        }
 
         Ok(StreamMetadataState::Parsed(ParsedStreamMetadata {
             context,
@@ -713,7 +772,11 @@ where
         &mut self,
         stream_params: &StreamData,
     ) -> StatelessBackendResult<()> {
-        self.metadata_state = StreamMetadataState::open(&self.display, stream_params, None)?;
+        let old_metadata_state =
+            std::mem::replace(&mut self.metadata_state, StreamMetadataState::Unparsed);
+
+        self.metadata_state =
+            StreamMetadataState::open(&self.display, stream_params, None, old_metadata_state)?;
 
         Ok(())
     }
@@ -812,8 +875,26 @@ where
                     )
                 })?;
 
-            self.metadata_state =
-                StreamMetadataState::open(&self.display, format_info, Some(map_format))?;
+            let old_metadata_state =
+                std::mem::replace(&mut self.metadata_state, StreamMetadataState::Unparsed);
+
+            // TODO: since we have established that it's best to let the VA
+            // driver choose the surface's internal (tiled) format, and map to
+            // the fourcc we want on-the-fly, this call to open() becomes
+            // redundant.
+            //
+            // Let's fix it at a later commit, because it involves other,
+            // non-related, cleanups.
+            //
+            // This does not apply to other (future) backends, like V4L2, which
+            // need to reallocate on format change.
+            self.metadata_state = StreamMetadataState::open(
+                &self.display,
+                format_info,
+                Some(map_format),
+                old_metadata_state,
+            )?;
+
             Ok(())
         } else {
             Err(VideoDecoderError::StatelessBackendError(
