@@ -18,6 +18,15 @@ pub struct Resolution {
     pub height: u32,
 }
 
+impl From<(u32, u32)> for Resolution {
+    fn from(value: (u32, u32)) -> Self {
+        Self {
+            width: value.0,
+            height: value.1,
+        }
+    }
+}
+
 /// Formats that buffers can be mapped into for the CPU to read.
 ///
 /// The conventions here largely follow these of libyuv.
