@@ -445,7 +445,7 @@ impl GenericBackendHandle {
         // Image can only be retrieved in the `Ready` state.
         self.sync()?;
 
-        match &mut self.state {
+        match &self.state {
             PictureState::Ready(picture) => {
                 // Get the associated VAImage, which will map the
                 // VASurface onto our address space.
