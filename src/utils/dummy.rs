@@ -48,6 +48,10 @@ impl Clone for Handle {
 }
 
 impl DecodedHandle for Handle {
+    fn coded_resolution(&self) -> Resolution {
+        Default::default()
+    }
+
     fn display_resolution(&self) -> Resolution {
         Default::default()
     }

@@ -170,6 +170,10 @@ impl TryInto<Surface> for PictureState {
 pub(crate) type DecodedHandle = Rc<RefCell<GenericBackendHandle>>;
 
 impl DecodedHandleTrait for DecodedHandle {
+    fn coded_resolution(&self) -> Resolution {
+        self.borrow().coded_resolution
+    }
+
     fn display_resolution(&self) -> Resolution {
         self.borrow().display_resolution
     }
@@ -302,6 +306,8 @@ pub(crate) struct ParsedStreamMetadata {
     pub(crate) surface_pool: Rc<RefCell<SurfacePool>>,
     /// The number of surfaces required to parse the stream.
     min_num_surfaces: usize,
+    /// The decoder current coded resolution.
+    coded_resolution: Resolution,
     /// The decoder current display resolution.
     display_resolution: Resolution,
     /// The image format we will use to map the surfaces. This is usually the
@@ -477,6 +483,7 @@ impl StreamMetadataState {
             config,
             surface_pool,
             min_num_surfaces,
+            coded_resolution,
             display_resolution,
             map_format: Rc::new(map_format),
             rt_format,
@@ -529,7 +536,7 @@ impl GenericBackendHandle {
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
             state: PictureState::Pending(picture),
-            coded_resolution: metadata.surface_pool.borrow().coded_resolution(),
+            coded_resolution: metadata.coded_resolution,
             display_resolution: metadata.display_resolution,
             map_format: Rc::clone(&metadata.map_format),
             surface_pool: Rc::clone(&metadata.surface_pool),
@@ -823,7 +830,7 @@ where
     fn coded_resolution(&self) -> Option<Resolution> {
         self.metadata_state
             .get_parsed()
-            .map(|m| m.surface_pool.borrow().coded_resolution())
+            .map(|m| m.coded_resolution)
             .ok()
     }
 
