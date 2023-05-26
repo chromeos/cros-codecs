@@ -283,6 +283,9 @@ pub trait DecodedHandle {
     /// Returns the timestamp of the picture.
     fn timestamp(&self) -> u64;
 
+    /// Returns the coded resolution at the time this handle was decoded.
+    fn coded_resolution(&self) -> Resolution;
+
     /// Returns the display resolution at the time this handle was decoded.
     fn display_resolution(&self) -> Resolution;
 
