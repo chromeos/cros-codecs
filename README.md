@@ -6,14 +6,15 @@ decoding and encoding on Linux.
 It is developed for use in ChromeOS (particularly [crosvm](https://github.com/google/crosvm)), but
 has dependency to ChromeOS and should this be usable anywhere.
 
-This crate is still under heavy development and is not recommended for use yet. Currently
-implemented features are:
+This crate is still under heavy development and is not recommended for use yet.
+
+## Current features
 
 * Simple decoder API,
 * VAAPI decoder support (using [cros-libva](https://github.com/chromeos/cros-libva)) for H.264, VP8
   and VP9.
 
-Planned features:
+## Planned features:
 
 * Stateful V4L2 decoder support.
 * Stateless V4L2 decoder support.
@@ -22,7 +23,11 @@ Planned features:
 * Support for H.265 and AV1.
 * C API to be used in non-Rust projects.
 
-# Example programs
+## Non-goals
+
+* Support for systems other than Linux.
+
+## Example programs
 
 The `ccdec` example program is included. It can decode an encoded stream and
 write the decoded frames to a file.
