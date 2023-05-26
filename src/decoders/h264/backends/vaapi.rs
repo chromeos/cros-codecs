@@ -549,6 +549,7 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         let metadata = self.metadata_state.get_parsed_mut()?;
         let surface = metadata
             .surface_pool
+            .borrow_mut()
             .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
 

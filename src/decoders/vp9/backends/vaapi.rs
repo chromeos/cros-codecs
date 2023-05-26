@@ -274,6 +274,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
 
         let surface = metadata
             .surface_pool
+            .borrow_mut()
             .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
 
