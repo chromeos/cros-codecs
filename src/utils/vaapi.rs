@@ -35,7 +35,7 @@ use crate::decoders::StatelessBackendResult;
 use crate::decoders::VideoDecoderBackend;
 use crate::i4xx_copy;
 use crate::nv12_copy;
-use crate::utils::vaapi::surface_pool::SurfacePoolHandle;
+use crate::utils::vaapi::surface_pool::SurfacePool;
 use crate::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Resolution;
@@ -194,9 +194,7 @@ impl DecodedHandleTrait for DecodedHandle {
 }
 
 mod surface_pool {
-    use std::cell::RefCell;
     use std::collections::VecDeque;
-    use std::rc::Rc;
 
     use anyhow::anyhow;
     use libva::Surface;
@@ -212,17 +210,16 @@ mod surface_pool {
     /// This means that this pool is suitable for inter-frame DRC, as the stale
     /// surfaces will gracefully be dropped, which is arguably better than the
     /// alternative of having more than one pool active at a time.
-    #[derive(Clone)]
-    pub(crate) struct SurfacePoolHandle {
-        surfaces: Rc<RefCell<VecDeque<Surface>>>,
+    pub(crate) struct SurfacePool {
+        surfaces: VecDeque<Surface>,
         coded_resolution: Resolution,
     }
 
-    impl SurfacePoolHandle {
+    impl SurfacePool {
         /// Creates a new pool
         pub(crate) fn new(surfaces: Vec<Surface>, resolution: Resolution) -> Self {
             Self {
-                surfaces: Rc::new(RefCell::new(VecDeque::from(surfaces))),
+                surfaces: VecDeque::from(surfaces),
                 coded_resolution: resolution,
             }
         }
@@ -235,8 +232,8 @@ mod surface_pool {
         /// Sets the coded resolution of the pool. Releases any stale surfaces.
         pub(crate) fn set_coded_resolution(&mut self, resolution: Resolution) {
             self.coded_resolution = resolution;
-            let mut surfaces = self.surfaces.borrow_mut();
-            surfaces.retain(|s| Resolution::from(s.size()) == self.coded_resolution);
+            self.surfaces
+                .retain(|s| Resolution::from(s.size()) == self.coded_resolution);
         }
 
         /// Adds a new surface to the pool
@@ -245,7 +242,7 @@ mod surface_pool {
             surface: Surface,
         ) -> Result<(), (Surface, anyhow::Error)> {
             if Resolution::from(surface.size()) == self.coded_resolution {
-                self.surfaces.borrow_mut().push_back(surface);
+                self.surfaces.push_back(surface);
                 Ok(())
             } else {
                 Err((
@@ -259,8 +256,7 @@ mod surface_pool {
 
         /// Gets a free surface from the pool
         pub(crate) fn get_surface(&mut self) -> Option<Surface> {
-            let mut vec = self.surfaces.borrow_mut();
-            let surface = vec.pop_front();
+            let surface = self.surfaces.pop_front();
 
             // Make sure the invariant holds when debugging. Can save costly
             // debugging time during future refactors, if any.
@@ -276,7 +272,7 @@ mod surface_pool {
 
         /// Returns new number of surfaces left.
         pub(crate) fn num_surfaces_left(&self) -> usize {
-            self.surfaces.borrow().len()
+            self.surfaces.len()
         }
     }
 }
@@ -303,7 +299,7 @@ pub(crate) struct ParsedStreamMetadata {
     #[allow(dead_code)]
     config: Config,
     /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
-    pub(crate) surface_pool: SurfacePoolHandle,
+    pub(crate) surface_pool: Rc<RefCell<SurfacePool>>,
     /// The number of surfaces required to parse the stream.
     min_num_surfaces: usize,
     /// The decoder current display resolution.
@@ -415,7 +411,7 @@ impl StreamMetadataState {
             height: visible_rect.1 .1 - visible_rect.0 .1,
         };
 
-        let surface_pool = SurfacePoolHandle::new(surfaces, coded_resolution);
+        let surface_pool = Rc::new(RefCell::new(SurfacePool::new(surfaces, coded_resolution)));
 
         Ok(StreamMetadataState::Parsed(ParsedStreamMetadata {
             context,
@@ -444,7 +440,7 @@ pub struct GenericBackendHandle {
     /// Image format for this surface, taken from the pool it originates from.
     map_format: Rc<libva::VAImageFormat>,
     /// A handle to the surface pool from which the backing surface originates.
-    surface_pool: SurfacePoolHandle,
+    surface_pool: Rc<RefCell<SurfacePool>>,
 }
 
 impl Drop for GenericBackendHandle {
@@ -454,7 +450,7 @@ impl Drop for GenericBackendHandle {
         if let Ok(surface) = state.try_into() {
             // It is OK if the pool rejects the surface. It means that the
             // surface is stale and will be gracefully dropped.
-            if let Err((surface, _)) = self.surface_pool.add_surface(surface) {
+            if let Err((surface, _)) = self.surface_pool.borrow_mut().add_surface(surface) {
                 log::debug!(
                     "Dropping stale surface: {}, ({:?})",
                     surface.id(),
@@ -474,10 +470,10 @@ impl GenericBackendHandle {
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
             state: PictureState::Pending(picture),
-            coded_resolution: metadata.surface_pool.coded_resolution(),
+            coded_resolution: metadata.surface_pool.borrow().coded_resolution(),
             display_resolution: metadata.display_resolution,
             map_format: Rc::clone(&metadata.map_format),
-            surface_pool: metadata.surface_pool.clone(),
+            surface_pool: Rc::clone(&metadata.surface_pool),
         })
     }
 
@@ -764,7 +760,7 @@ where
     fn coded_resolution(&self) -> Option<Resolution> {
         self.metadata_state
             .get_parsed()
-            .map(|m| m.surface_pool.coded_resolution())
+            .map(|m| m.surface_pool.borrow().coded_resolution())
             .ok()
     }
 
@@ -785,7 +781,7 @@ where
     fn num_resources_left(&self) -> usize {
         self.metadata_state
             .get_parsed()
-            .map(|m| m.surface_pool.num_surfaces_left())
+            .map(|m| m.surface_pool.borrow().num_surfaces_left())
             .unwrap_or(0)
     }
 

@@ -242,7 +242,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
 
         let metadata = self.metadata_state.get_parsed_mut()?;
         let context = &metadata.context;
-        let coded_resolution = metadata.surface_pool.coded_resolution();
+        let coded_resolution = metadata.surface_pool.borrow().coded_resolution();
 
         let iq_buffer = context
             .create_buffer(Self::build_iq_matrix(picture, segmentation)?)
@@ -274,6 +274,7 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
 
         let surface = metadata
             .surface_pool
+            .borrow_mut()
             .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
 
