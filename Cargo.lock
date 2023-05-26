@@ -115,13 +115,12 @@ dependencies = [
 [[package]]
 name = "cros-libva"
 version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb352d93b5e5bd2fe76ed9d8d2b8c1994da13b2b75f0dfd5e90d69ea8829e6c5"
+source = "git+https://github.com/chromeos/cros-libva?rev=f402ecc#f402ecc9e7260ae47db4c71fc288f96099972476"
 dependencies = [
- "anyhow",
  "bitflags",
  "log",
  "pkg-config",
+ "thiserror",
 ]
 
 [[package]]

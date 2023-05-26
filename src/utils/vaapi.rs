@@ -11,6 +11,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use anyhow::anyhow;
+use anyhow::Context as AnyhowContext;
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
 use libva::Config;
@@ -23,6 +24,7 @@ use libva::PictureSync;
 use libva::Surface;
 use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
+use libva::VaError;
 
 use crate::decoders::DecodedHandle as DecodedHandleTrait;
 use crate::decoders::DynHandle;
@@ -151,8 +153,14 @@ impl TryInto<Surface> for PictureState {
 
     fn try_into(self) -> Result<Surface, Self::Error> {
         match self {
-            PictureState::Ready(picture) => picture.take_surface(),
-            PictureState::Pending(picture) => picture.sync().map_err(|(e, _)| e)?.take_surface(),
+            PictureState::Ready(picture) => picture
+                .take_surface()
+                .map_err(|_| anyhow!("picture is still referenced")),
+            PictureState::Pending(picture) => picture
+                .sync()
+                .map_err(|(e, _)| e)?
+                .take_surface()
+                .map_err(|_| anyhow!("picture is still referenced")),
             PictureState::Invalid => unreachable!(),
         }
     }
@@ -179,7 +187,9 @@ impl DecodedHandleTrait for DecodedHandle {
     }
 
     fn sync(&self) -> StatelessBackendResult<()> {
-        self.borrow_mut().sync().map_err(|e| e.into())
+        self.borrow_mut().sync().context("while syncing picture")?;
+
+        Ok(())
     }
 }
 
@@ -338,16 +348,10 @@ impl StreamMetadataState {
             frame_w,
             frame_h,
             Some(libva::UsageHint::USAGE_HINT_DECODER),
-            min_num_surfaces as u32,
+            min_num_surfaces,
         )?;
 
-        let context = display.create_context(
-            &config,
-            i32::try_from(frame_w)?,
-            i32::try_from(frame_h)?,
-            Some(&surfaces),
-            true,
-        )?;
+        let context = display.create_context(&config, frame_w, frame_h, Some(&surfaces), true)?;
 
         let coded_resolution = Resolution {
             width: frame_w,
@@ -421,7 +425,7 @@ impl GenericBackendHandle {
         })
     }
 
-    pub fn sync(&mut self) -> anyhow::Result<()> {
+    fn sync(&mut self) -> Result<(), VaError> {
         let res;
 
         (self.state, res) = match std::mem::replace(&mut self.state, PictureState::Invalid) {
@@ -441,20 +445,17 @@ impl GenericBackendHandle {
     /// wants to access the backend mapping directly for any reason.
     ///
     /// Note that DynMappableHandle is downcastable.
-    pub fn image(&mut self) -> anyhow::Result<Image> {
+    fn image(&mut self) -> anyhow::Result<Image> {
         // Image can only be retrieved in the `Ready` state.
         self.sync()?;
 
         match &self.state {
             PictureState::Ready(picture) => {
-                // Get the associated VAImage, which will map the
-                // VASurface onto our address space.
-                let image = libva::Image::new(
-                    picture,
+                // Map the VASurface onto our address space.
+                let image = picture.create_image(
                     *self.map_format,
                     self.display_resolution.width,
                     self.display_resolution.height,
-                    false,
                 )?;
 
                 Ok(image)
@@ -465,7 +466,7 @@ impl GenericBackendHandle {
     }
 
     /// Returns the picture of this handle.
-    pub fn picture(&self) -> Option<&libva::Picture<PictureSync>> {
+    pub(crate) fn picture(&self) -> Option<&libva::Picture<PictureSync>> {
         match &self.state {
             PictureState::Ready(picture) => Some(picture),
             PictureState::Pending(_) => None,
@@ -474,7 +475,7 @@ impl GenericBackendHandle {
     }
 
     /// Returns the timestamp of this handle.
-    pub fn timestamp(&self) -> u64 {
+    fn timestamp(&self) -> u64 {
         match &self.state {
             PictureState::Ready(picture) => picture.timestamp(),
             PictureState::Pending(picture) => picture.timestamp(),
@@ -483,7 +484,7 @@ impl GenericBackendHandle {
     }
 
     /// Returns the id of the VA surface backing this handle.
-    pub fn surface_id(&self) -> libva::VASurfaceID {
+    pub(crate) fn surface_id(&self) -> libva::VASurfaceID {
         match &self.state {
             PictureState::Ready(picture) => picture.surface_id(),
             PictureState::Pending(picture) => picture.surface_id(),
@@ -491,7 +492,7 @@ impl GenericBackendHandle {
         }
     }
 
-    pub fn is_va_ready(&self) -> anyhow::Result<bool> {
+    fn is_va_ready(&self) -> Result<bool, VaError> {
         match &self.state {
             PictureState::Ready(_) => Ok(true),
             PictureState::Pending(picture) => picture

@@ -5,6 +5,7 @@
 use std::convert::TryFrom;
 use std::rc::Rc;
 
+use anyhow::Context;
 use libva::BufferType;
 use libva::Display;
 use libva::IQMatrix;
@@ -243,25 +244,33 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         let context = &metadata.context;
         let coded_resolution = metadata.surface_pool.coded_resolution();
 
-        let iq_buffer = context.create_buffer(Self::build_iq_matrix(picture, segmentation)?)?;
+        let iq_buffer = context
+            .create_buffer(Self::build_iq_matrix(picture, segmentation)?)
+            .context("while creating IQ matrix buffer")?;
 
-        let probs = context.create_buffer(Self::build_probability_table(picture))?;
+        let probs = context
+            .create_buffer(Self::build_probability_table(picture))
+            .context("while creating probability table buffer")?;
 
-        let pic_param = context.create_buffer(Self::build_pic_param(
-            picture,
-            &coded_resolution,
-            segmentation,
-            mb_lf_adjust,
-            last_ref,
-            golden_ref,
-            alt_ref,
-        )?)?;
+        let pic_param = context
+            .create_buffer(Self::build_pic_param(
+                picture,
+                &coded_resolution,
+                segmentation,
+                mb_lf_adjust,
+                last_ref,
+                golden_ref,
+                alt_ref,
+            )?)
+            .context("while creating pic params buffer")?;
 
-        let slice_param =
-            context.create_buffer(Self::build_slice_param(picture, bitstream.len())?)?;
+        let slice_param = context
+            .create_buffer(Self::build_slice_param(picture, bitstream.len())?)
+            .context("while creating slice params buffer")?;
 
-        let slice_data =
-            context.create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))?;
+        let slice_data = context
+            .create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))
+            .context("while creating slice data buffer")?;
 
         let surface = metadata
             .surface_pool

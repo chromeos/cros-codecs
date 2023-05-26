@@ -5,6 +5,7 @@
 use std::rc::Rc;
 
 use anyhow::anyhow;
+use anyhow::Context;
 use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
@@ -259,13 +260,17 @@ impl StatelessDecoderBackend for VaapiBackend<Header> {
         let metadata = self.metadata_state.get_parsed_mut()?;
         let context = &metadata.context;
 
-        let pic_param = context.create_buffer(build_pic_param(picture, reference_frames)?)?;
+        let pic_param = context
+            .create_buffer(build_pic_param(picture, reference_frames)?)
+            .context("while creating pic params buffer")?;
 
-        let slice_param =
-            context.create_buffer(build_slice_param(segmentation, bitstream.len())?)?;
+        let slice_param = context
+            .create_buffer(build_slice_param(segmentation, bitstream.len())?)
+            .context("while creating slice params buffer")?;
 
-        let slice_data =
-            context.create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))?;
+        let slice_data = context
+            .create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))
+            .context("while creating slice data buffer")?;
 
         let surface = metadata
             .surface_pool

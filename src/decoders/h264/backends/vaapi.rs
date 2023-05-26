@@ -488,10 +488,14 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         let surface_id = picture.surface().id();
 
         let pic_param = Self::build_pic_param(slice, picture_data, surface_id, dpb, sps, pps)?;
-        let pic_param = context.create_buffer(pic_param)?;
+        let pic_param = context
+            .create_buffer(pic_param)
+            .context("while creating picture parameter buffer")?;
 
         let iq_matrix = Self::build_iq_matrix(pps);
-        let iq_matrix = context.create_buffer(iq_matrix)?;
+        let iq_matrix = context
+            .create_buffer(iq_matrix)
+            .context("while creating IQ matrix buffer")?;
 
         picture.add_buffer(pic_param);
         picture.add_buffer(iq_matrix);
@@ -512,18 +516,21 @@ impl StatelessDecoderBackend for VaapiBackend<Sps> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
-        let slice_param = context.create_buffer(Self::build_slice_param(
-            slice,
-            ref_pic_list0,
-            ref_pic_list1,
-            sps,
-            pps,
-        )?)?;
+        let slice_param = context
+            .create_buffer(Self::build_slice_param(
+                slice,
+                ref_pic_list0,
+                ref_pic_list1,
+                sps,
+                pps,
+            )?)
+            .context("while creating slice params buffer")?;
 
         picture.add_buffer(slice_param);
 
-        let slice_data =
-            context.create_buffer(BufferType::SliceData(Vec::from(slice.nalu().as_ref())))?;
+        let slice_data = context
+            .create_buffer(BufferType::SliceData(Vec::from(slice.nalu().as_ref())))
+            .context("while creating slice data buffer")?;
 
         picture.add_buffer(slice_data);
 
