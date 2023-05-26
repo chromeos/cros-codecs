@@ -14,7 +14,6 @@ use crate::decoders::vp9::lookups::DC_QLOOKUP_10;
 use crate::decoders::vp9::lookups::DC_QLOOKUP_12;
 use crate::decoders::vp9::parser::BitDepth;
 use crate::decoders::vp9::parser::Frame;
-use crate::decoders::vp9::parser::FrameType;
 use crate::decoders::vp9::parser::Header;
 use crate::decoders::vp9::parser::Parser;
 use crate::decoders::vp9::parser::Profile;
@@ -354,14 +353,35 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
             return Err(DecodeError::CheckEvents);
         }
 
-        for frame in frames {
-            if frame.header.frame_type == FrameType::KeyFrame
-                && self.negotiation_possible(&frame.header)
-            {
+        // With SVC, the first frame will usually be a key-frame, with
+        // inter-frames carrying the other layers.
+        //
+        // We do not want each of those to be considered as a separate DRC
+        // event. Not only that, allowing them to be will cause an infinite
+        // loop.
+        //
+        // Instead, negotiate based on the largest spatial layer. That will be
+        // enough to house the other layers in between.
+        let largest_in_superframe = frames.iter().max_by(|&a, &b| {
+            let a_res = Resolution::from((a.header.width, a.header.height));
+            let b_res = Resolution::from((b.header.width, b.header.height));
+            if a_res == b_res {
+                std::cmp::Ordering::Equal
+            } else if a_res.can_contain(b_res) {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Less
+            }
+        });
+
+        if let Some(frame) = largest_in_superframe {
+            if self.negotiation_possible(&frame.header) {
                 self.backend.new_sequence(&frame.header)?;
                 self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
             }
+        }
 
+        for frame in frames {
             match &mut self.decoding_state {
                 // Skip input until we get information from the stream.
                 DecodingState::AwaitingStreamInfo => (),
