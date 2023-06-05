@@ -266,7 +266,7 @@ impl VaapiBackend<Sps> {
             sps.frame_mbs_only_flag() as u32,
             sps.mb_adaptive_frame_field_flag() as u32,
             sps.direct_8x8_inference_flag() as u32,
-            (sps.level_idc() > Level::L3_1) as u32, /* see A.3.3.2 */
+            (sps.level_idc() >= Level::L3_1) as u32, /* see A.3.3.2 */
             sps.log2_max_frame_num_minus4() as u32,
             sps.pic_order_cnt_type() as u32,
             sps.log2_max_pic_order_cnt_lsb_minus4() as u32,
