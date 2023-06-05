@@ -1518,13 +1518,16 @@ where
             .context("Invalid SPS while handling a frame_num gap")?;
 
         if !sps.gaps_in_frame_num_value_allowed_flag() {
-            return Err(anyhow!("Invalid frame_num: {}", frame_num));
+            return Err(anyhow!(
+                "Invalid frame_num: {}. Assuming unintentional loss of pictures",
+                frame_num
+            ));
         }
 
         let mut unused_short_term_frame_num =
             (self.prev_ref_pic_info.frame_num + 1) % self.curr_info.max_frame_num;
         while unused_short_term_frame_num != frame_num {
-            let mut pic = PictureData::new_non_existing(frame_num, timestamp);
+            let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
             self.compute_pic_order_count(&mut pic)?;
 
             self.update_pic_nums(unused_short_term_frame_num, &pic)?;
