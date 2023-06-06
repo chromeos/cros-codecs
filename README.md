@@ -4,7 +4,7 @@ A lightweight, simple, low-dependency, and hopefully safe crate for hardware-acc
 decoding and encoding on Linux.
 
 It is developed for use in ChromeOS (particularly [crosvm](https://github.com/google/crosvm)), but
-has dependency to ChromeOS and should this be usable anywhere.
+has no dependency to ChromeOS and should be usable anywhere.
 
 This crate is still under heavy development and is not recommended for use yet.
 
