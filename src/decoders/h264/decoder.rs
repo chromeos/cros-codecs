@@ -1434,6 +1434,15 @@ where
         }
     }
 
+    fn bump_as_needed_into_ready_queue(&mut self, current_pic: &PictureData) {
+        let bumped = self
+            .bump_as_needed(current_pic)
+            .into_iter()
+            .filter_map(|p| p.1)
+            .collect::<Vec<_>>();
+        self.ready_queue.extend(bumped);
+    }
+
     fn finish_picture(&mut self, mut pic: PictureData, handle: T) -> anyhow::Result<()> {
         debug!("Finishing picture POC {:?}", pic.pic_order_cnt);
 
@@ -1457,12 +1466,7 @@ where
         }
 
         // Bump the DPB as per C.4.5.3 to cover clauses 1, 4, 5 and 6.
-        let bumped = self
-            .bump_as_needed(&pic)
-            .into_iter()
-            .filter_map(|p| p.1)
-            .collect::<Vec<_>>();
-        self.ready_queue.extend(bumped);
+        self.bump_as_needed_into_ready_queue(&pic);
 
         let pic_rc = Rc::new(RefCell::new(pic));
         let pic = pic_rc.borrow();
@@ -1535,7 +1539,7 @@ where
             self.sliding_window_marking(&mut pic)?;
 
             self.dpb.remove_unused();
-            self.bump_as_needed(&pic);
+            self.bump_as_needed_into_ready_queue(&pic);
 
             let pic_rc = Rc::new(RefCell::new(pic));
 
