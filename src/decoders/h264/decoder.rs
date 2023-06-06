@@ -1403,7 +1403,7 @@ where
     }
 
     /// Adds picture to the ready queue if it could not be added to the DPB.
-    fn add_to_ready_queue(&mut self, pic_rc: Rc<RefCell<PictureData>>, handle: T) {
+    fn add_to_ready_queue_directly(&mut self, pic_rc: Rc<RefCell<PictureData>>, handle: T) {
         let pic = pic_rc.borrow();
 
         if matches!(pic.field, Field::Frame) {
@@ -1503,7 +1503,7 @@ where
             }
         } else {
             drop(pic);
-            self.add_to_ready_queue(pic_rc, handle);
+            self.add_to_ready_queue_directly(pic_rc, handle);
         }
 
         Ok(())
