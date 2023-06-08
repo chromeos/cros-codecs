@@ -205,7 +205,7 @@ mod surface_pool {
 
     use crate::Resolution;
 
-    /// A surface pool handle to reduce the number of costly Surface allocations.
+    /// A surface pool to reduce the number of costly Surface allocations.
     ///
     /// The pool only houses Surfaces that fits the pool's coded resolution.
     /// Stale surfaces are dropped when either the pool resolution changes, or when
