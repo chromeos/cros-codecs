@@ -4,37 +4,37 @@
 
 use log::debug;
 
-use crate::decoders::private::VideoDecoderPrivate;
-use crate::decoders::vp9::backends::StatelessDecoderBackend;
-use crate::decoders::vp9::lookups::AC_QLOOKUP;
-use crate::decoders::vp9::lookups::AC_QLOOKUP_10;
-use crate::decoders::vp9::lookups::AC_QLOOKUP_12;
-use crate::decoders::vp9::lookups::DC_QLOOKUP;
-use crate::decoders::vp9::lookups::DC_QLOOKUP_10;
-use crate::decoders::vp9::lookups::DC_QLOOKUP_12;
-use crate::decoders::vp9::parser::BitDepth;
-use crate::decoders::vp9::parser::Frame;
-use crate::decoders::vp9::parser::Header;
-use crate::decoders::vp9::parser::Parser;
-use crate::decoders::vp9::parser::Profile;
-use crate::decoders::vp9::parser::INTRA_FRAME;
-use crate::decoders::vp9::parser::LAST_FRAME;
-use crate::decoders::vp9::parser::MAX_LOOP_FILTER;
-use crate::decoders::vp9::parser::MAX_MODE_LF_DELTAS;
-use crate::decoders::vp9::parser::MAX_REF_FRAMES;
-use crate::decoders::vp9::parser::MAX_SEGMENTS;
-use crate::decoders::vp9::parser::NUM_REF_FRAMES;
-use crate::decoders::vp9::parser::SEG_LVL_ALT_L;
-use crate::decoders::vp9::parser::SEG_LVL_REF_FRAME;
-use crate::decoders::vp9::parser::SEG_LVL_SKIP;
-use crate::decoders::BlockingMode;
-use crate::decoders::DecodeError;
-use crate::decoders::DecodedHandle;
-use crate::decoders::DecoderEvent;
-use crate::decoders::DecodingState;
-use crate::decoders::ReadyFramesQueue;
-use crate::decoders::StatelessDecoderFormatNegotiator;
-use crate::decoders::VideoDecoder;
+use crate::decoder::private::VideoDecoderPrivate;
+use crate::decoder::vp9::backends::StatelessDecoderBackend;
+use crate::decoder::vp9::lookups::AC_QLOOKUP;
+use crate::decoder::vp9::lookups::AC_QLOOKUP_10;
+use crate::decoder::vp9::lookups::AC_QLOOKUP_12;
+use crate::decoder::vp9::lookups::DC_QLOOKUP;
+use crate::decoder::vp9::lookups::DC_QLOOKUP_10;
+use crate::decoder::vp9::lookups::DC_QLOOKUP_12;
+use crate::decoder::vp9::parser::BitDepth;
+use crate::decoder::vp9::parser::Frame;
+use crate::decoder::vp9::parser::Header;
+use crate::decoder::vp9::parser::Parser;
+use crate::decoder::vp9::parser::Profile;
+use crate::decoder::vp9::parser::INTRA_FRAME;
+use crate::decoder::vp9::parser::LAST_FRAME;
+use crate::decoder::vp9::parser::MAX_LOOP_FILTER;
+use crate::decoder::vp9::parser::MAX_MODE_LF_DELTAS;
+use crate::decoder::vp9::parser::MAX_REF_FRAMES;
+use crate::decoder::vp9::parser::MAX_SEGMENTS;
+use crate::decoder::vp9::parser::NUM_REF_FRAMES;
+use crate::decoder::vp9::parser::SEG_LVL_ALT_L;
+use crate::decoder::vp9::parser::SEG_LVL_REF_FRAME;
+use crate::decoder::vp9::parser::SEG_LVL_SKIP;
+use crate::decoder::BlockingMode;
+use crate::decoder::DecodeError;
+use crate::decoder::DecodedHandle;
+use crate::decoder::DecoderEvent;
+use crate::decoder::DecodingState;
+use crate::decoder::ReadyFramesQueue;
+use crate::decoder::StatelessDecoderFormatNegotiator;
+use crate::decoder::VideoDecoder;
 use crate::Resolution;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -440,7 +440,7 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
 }
 
 impl<T: DecodedHandle + Clone + 'static> VideoDecoderPrivate for Decoder<T> {
-    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoders::Result<()> {
+    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoder::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
             _ => Err(anyhow::anyhow!("current decoder state does not allow format change").into()),
@@ -450,11 +450,11 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoderPrivate for Decoder<T> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::decoders::tests::test_decode_stream;
-    use crate::decoders::tests::TestStream;
-    use crate::decoders::vp8::decoder::tests::vpx_decoding_loop;
-    use crate::decoders::vp9::decoder::Decoder;
-    use crate::decoders::BlockingMode;
+    use crate::decoder::tests::test_decode_stream;
+    use crate::decoder::tests::TestStream;
+    use crate::decoder::vp8::decoder::tests::vpx_decoding_loop;
+    use crate::decoder::vp9::decoder::Decoder;
+    use crate::decoder::BlockingMode;
     use crate::DecodedFormat;
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.

@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoders::vp8::parser::Header;
-use crate::decoders::vp8::parser::MbLfAdjustments;
-use crate::decoders::vp8::parser::Segmentation;
-use crate::decoders::VideoDecoderBackend;
+use crate::decoder::vp9::decoder::Segmentation;
+use crate::decoder::vp9::parser::Header;
+use crate::decoder::vp9::parser::MAX_SEGMENTS;
+use crate::decoder::vp9::parser::NUM_REF_FRAMES;
+use crate::decoder::VideoDecoderBackend;
 
 #[cfg(test)]
 pub mod dummy;
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
 
-pub type Result<T> = crate::decoders::StatelessBackendResult<T>;
+pub type Result<T> = crate::decoder::StatelessBackendResult<T>;
 
 /// Trait for stateless decoder backends. The decoder will call into the backend
 /// to request decode operations. The backend can operate in blocking mode,
@@ -28,16 +29,12 @@ pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend<Header> {
     ///
     /// This call will assign the ownership of the BackendHandle to the Picture
     /// and then assign the ownership of the Picture to the Handle.
-    #[allow(clippy::too_many_arguments)]
     fn submit_picture(
         &mut self,
         picture: &Header,
-        last_ref: Option<&Self::Handle>,
-        golden_ref: Option<&Self::Handle>,
-        alt_ref: Option<&Self::Handle>,
+        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
         bitstream: &[u8],
-        segmentation: &Segmentation,
-        mb_lf_adjust: &MbLfAdjustments,
         timestamp: u64,
+        segmentation: &[Segmentation; MAX_SEGMENTS],
     ) -> Result<Self::Handle>;
 }

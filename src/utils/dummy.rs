@@ -8,12 +8,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::decoders::DecodedHandle;
-use crate::decoders::DynHandle;
-use crate::decoders::MappableHandle;
-use crate::decoders::Result;
-use crate::decoders::StatelessBackendResult;
-use crate::decoders::VideoDecoderBackend;
+use crate::decoder::DecodedHandle;
+use crate::decoder::DynHandle;
+use crate::decoder::MappableHandle;
+use crate::decoder::Result;
+use crate::decoder::StatelessBackendResult;
+use crate::decoder::VideoDecoderBackend;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -100,7 +100,7 @@ where
         None
     }
 
-    fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> crate::decoders::Result<()> {
+    fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> crate::decoder::Result<()> {
         Ok(())
     }
 

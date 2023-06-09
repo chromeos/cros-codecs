@@ -2,19 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoders::private::VideoDecoderPrivate;
-use crate::decoders::vp8::backends::StatelessDecoderBackend;
-use crate::decoders::vp8::parser::Frame;
-use crate::decoders::vp8::parser::Header;
-use crate::decoders::vp8::parser::Parser;
-use crate::decoders::BlockingMode;
-use crate::decoders::DecodeError;
-use crate::decoders::DecodedHandle;
-use crate::decoders::DecoderEvent;
-use crate::decoders::DecodingState;
-use crate::decoders::ReadyFramesQueue;
-use crate::decoders::StatelessDecoderFormatNegotiator;
-use crate::decoders::VideoDecoder;
+use crate::decoder::private::VideoDecoderPrivate;
+use crate::decoder::vp8::backends::StatelessDecoderBackend;
+use crate::decoder::vp8::parser::Frame;
+use crate::decoder::vp8::parser::Header;
+use crate::decoder::vp8::parser::Parser;
+use crate::decoder::BlockingMode;
+use crate::decoder::DecodeError;
+use crate::decoder::DecodedHandle;
+use crate::decoder::DecoderEvent;
+use crate::decoder::DecodingState;
+use crate::decoder::ReadyFramesQueue;
+use crate::decoder::StatelessDecoderFormatNegotiator;
+use crate::decoder::VideoDecoder;
 use crate::Resolution;
 
 pub struct Decoder<T: DecodedHandle> {
@@ -243,7 +243,7 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
 }
 
 impl<T: DecodedHandle + Clone + 'static> VideoDecoderPrivate for Decoder<T> {
-    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoders::Result<()> {
+    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoder::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
             _ => Err(anyhow::anyhow!("current decoder state does not allow format change").into()),
@@ -253,12 +253,12 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoderPrivate for Decoder<T> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::decoders::tests::test_decode_stream;
-    use crate::decoders::tests::TestStream;
-    use crate::decoders::vp8::decoder::Decoder;
-    use crate::decoders::BlockingMode;
-    use crate::decoders::DecodedHandle;
-    use crate::decoders::VideoDecoder;
+    use crate::decoder::tests::test_decode_stream;
+    use crate::decoder::tests::TestStream;
+    use crate::decoder::vp8::decoder::Decoder;
+    use crate::decoder::BlockingMode;
+    use crate::decoder::DecodedHandle;
+    use crate::decoder::VideoDecoder;
     use crate::utils::simple_playback_loop;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;

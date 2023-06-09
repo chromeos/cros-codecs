@@ -8,16 +8,16 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::decoders::h264::backends::Result as StatelessBackendResult;
-use crate::decoders::h264::backends::StatelessDecoderBackend;
-use crate::decoders::h264::decoder::Decoder;
-use crate::decoders::h264::dpb::Dpb;
-use crate::decoders::h264::dpb::DpbEntry;
-use crate::decoders::h264::parser::Pps;
-use crate::decoders::h264::parser::Slice;
-use crate::decoders::h264::parser::Sps;
-use crate::decoders::h264::picture::PictureData;
-use crate::decoders::BlockingMode;
+use crate::decoder::h264::backends::Result as StatelessBackendResult;
+use crate::decoder::h264::backends::StatelessDecoderBackend;
+use crate::decoder::h264::decoder::Decoder;
+use crate::decoder::h264::dpb::Dpb;
+use crate::decoder::h264::dpb::DpbEntry;
+use crate::decoder::h264::parser::Pps;
+use crate::decoder::h264::parser::Slice;
+use crate::decoder::h264::parser::Sps;
+use crate::decoder::h264::picture::PictureData;
+use crate::decoder::BlockingMode;
 use crate::utils::dummy::*;
 
 impl StatelessDecoderBackend for Backend {

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-pub mod decoders;
+pub mod decoder;
 pub mod utils;
 
 use std::str::FromStr;

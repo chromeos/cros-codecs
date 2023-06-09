@@ -13,14 +13,14 @@ use libva::IQMatrixBufferVP8;
 use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 
-use crate::decoders::vp8::backends::Result as StatelessBackendResult;
-use crate::decoders::vp8::backends::StatelessDecoderBackend;
-use crate::decoders::vp8::decoder::Decoder;
-use crate::decoders::vp8::parser::Header;
-use crate::decoders::vp8::parser::MbLfAdjustments;
-use crate::decoders::vp8::parser::Segmentation;
-use crate::decoders::BlockingMode;
-use crate::decoders::StatelessBackendError;
+use crate::decoder::vp8::backends::Result as StatelessBackendResult;
+use crate::decoder::vp8::backends::StatelessDecoderBackend;
+use crate::decoder::vp8::decoder::Decoder;
+use crate::decoder::vp8::parser::Header;
+use crate::decoder::vp8::parser::MbLfAdjustments;
+use crate::decoder::vp8::parser::Segmentation;
+use crate::decoder::BlockingMode;
+use crate::decoder::StatelessBackendError;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
@@ -309,12 +309,12 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::decoders::tests::test_decode_stream;
-    use crate::decoders::tests::TestStream;
-    use crate::decoders::vp8::decoder::tests::vpx_decoding_loop;
-    use crate::decoders::vp8::decoder::Decoder;
-    use crate::decoders::vp8::parser::Parser;
-    use crate::decoders::BlockingMode;
+    use crate::decoder::tests::test_decode_stream;
+    use crate::decoder::tests::TestStream;
+    use crate::decoder::vp8::decoder::tests::vpx_decoding_loop;
+    use crate::decoder::vp8::decoder::Decoder;
+    use crate::decoder::vp8::parser::Parser;
+    use crate::decoder::BlockingMode;
     use crate::utils::vaapi::VaapiBackend;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
@@ -342,7 +342,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_25fps_block() {
-        use crate::decoders::vp8::decoder::tests::DECODE_TEST_25FPS;
+        use crate::decoder::vp8::decoder::tests::DECODE_TEST_25FPS;
         test_decoder_vaapi(
             &DECODE_TEST_25FPS,
             DecodedFormat::NV12,
@@ -354,7 +354,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_25fps_nonblock() {
-        use crate::decoders::vp8::decoder::tests::DECODE_TEST_25FPS;
+        use crate::decoder::vp8::decoder::tests::DECODE_TEST_25FPS;
         test_decoder_vaapi(
             &DECODE_TEST_25FPS,
             DecodedFormat::NV12,

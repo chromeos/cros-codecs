@@ -10,20 +10,20 @@ use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
 
-use crate::decoders::vp9::backends::Result as StatelessBackendResult;
-use crate::decoders::vp9::backends::StatelessDecoderBackend;
-use crate::decoders::vp9::decoder::Decoder;
-use crate::decoders::vp9::decoder::Segmentation;
-use crate::decoders::vp9::parser::BitDepth;
-use crate::decoders::vp9::parser::Header;
-use crate::decoders::vp9::parser::Profile;
-use crate::decoders::vp9::parser::ALTREF_FRAME;
-use crate::decoders::vp9::parser::GOLDEN_FRAME;
-use crate::decoders::vp9::parser::LAST_FRAME;
-use crate::decoders::vp9::parser::MAX_SEGMENTS;
-use crate::decoders::vp9::parser::NUM_REF_FRAMES;
-use crate::decoders::BlockingMode;
-use crate::decoders::StatelessBackendError;
+use crate::decoder::vp9::backends::Result as StatelessBackendResult;
+use crate::decoder::vp9::backends::StatelessDecoderBackend;
+use crate::decoder::vp9::decoder::Decoder;
+use crate::decoder::vp9::decoder::Segmentation;
+use crate::decoder::vp9::parser::BitDepth;
+use crate::decoder::vp9::parser::Header;
+use crate::decoder::vp9::parser::Profile;
+use crate::decoder::vp9::parser::ALTREF_FRAME;
+use crate::decoder::vp9::parser::GOLDEN_FRAME;
+use crate::decoder::vp9::parser::LAST_FRAME;
+use crate::decoder::vp9::parser::MAX_SEGMENTS;
+use crate::decoder::vp9::parser::NUM_REF_FRAMES;
+use crate::decoder::BlockingMode;
+use crate::decoder::StatelessBackendError;
 use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
 use crate::utils::vaapi::StreamInfo;
 use crate::utils::vaapi::VaapiBackend;
@@ -306,15 +306,15 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::decoders::tests::test_decode_stream;
-    use crate::decoders::tests::TestStream;
-    use crate::decoders::vp8::decoder::tests::vpx_decoding_loop;
-    use crate::decoders::vp9::decoder::Decoder;
-    use crate::decoders::vp9::decoder::Segmentation;
-    use crate::decoders::vp9::parser::Parser;
-    use crate::decoders::vp9::parser::MAX_SEGMENTS;
-    use crate::decoders::vp9::parser::NUM_REF_FRAMES;
-    use crate::decoders::BlockingMode;
+    use crate::decoder::tests::test_decode_stream;
+    use crate::decoder::tests::TestStream;
+    use crate::decoder::vp8::decoder::tests::vpx_decoding_loop;
+    use crate::decoder::vp9::decoder::Decoder;
+    use crate::decoder::vp9::decoder::Segmentation;
+    use crate::decoder::vp9::parser::Parser;
+    use crate::decoder::vp9::parser::MAX_SEGMENTS;
+    use crate::decoder::vp9::parser::NUM_REF_FRAMES;
+    use crate::decoder::BlockingMode;
     use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
@@ -343,7 +343,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_25fps_block() {
-        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS;
+        use crate::decoder::vp9::decoder::tests::DECODE_TEST_25FPS;
         test_decoder_vaapi(
             &DECODE_TEST_25FPS,
             DecodedFormat::NV12,
@@ -355,7 +355,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_25fps_nonblock() {
-        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS;
+        use crate::decoder::vp9::decoder::tests::DECODE_TEST_25FPS;
         test_decoder_vaapi(
             &DECODE_TEST_25FPS,
             DecodedFormat::NV12,
@@ -367,7 +367,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn show_existing_frame_block() {
-        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME;
+        use crate::decoder::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME;
         test_decoder_vaapi(
             &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME,
             DecodedFormat::NV12,
@@ -379,7 +379,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn show_existing_frame_nonblock() {
-        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME;
+        use crate::decoder::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME;
         test_decoder_vaapi(
             &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME,
             DecodedFormat::NV12,
@@ -391,7 +391,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn show_existing_frame2_block() {
-        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2;
+        use crate::decoder::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2;
         test_decoder_vaapi(
             &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2,
             DecodedFormat::NV12,
@@ -403,7 +403,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn show_existing_frame2_nonblock() {
-        use crate::decoders::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2;
+        use crate::decoder::vp9::decoder::tests::DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2;
         test_decoder_vaapi(
             &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2,
             DecodedFormat::NV12,
@@ -415,7 +415,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_resolution_change_500frames_block() {
-        use crate::decoders::vp9::decoder::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
+        use crate::decoder::vp9::decoder::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
         let display = Display::open().unwrap();
         let decoder = Decoder::new_vaapi(display, BlockingMode::Blocking).unwrap();
 
@@ -433,7 +433,7 @@ mod tests {
     // Ignore this test by default as it requires libva-compatible hardware.
     #[ignore]
     fn test_resolution_change_500frames_nonblock() {
-        use crate::decoders::vp9::decoder::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
+        use crate::decoder::vp9::decoder::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
         let display = Display::open().unwrap();
         let decoder = Decoder::new_vaapi(display, BlockingMode::NonBlocking).unwrap();
 

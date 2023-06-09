@@ -10,11 +10,11 @@ use std::rc::Rc;
 use anyhow::anyhow;
 use log::debug;
 
-use crate::decoders::h264::picture::Field;
-use crate::decoders::h264::picture::IsIdr;
-use crate::decoders::h264::picture::PictureData;
-use crate::decoders::h264::picture::Reference;
-use crate::decoders::DecodedHandle;
+use crate::decoder::h264::picture::Field;
+use crate::decoder::h264::picture::IsIdr;
+use crate::decoder::h264::picture::PictureData;
+use crate::decoder::h264::picture::Reference;
+use crate::decoder::DecodedHandle;
 
 // Shortcut to refer to a DPB entry.
 //

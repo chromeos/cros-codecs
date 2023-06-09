@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoders::h264::dpb::Dpb;
-use crate::decoders::h264::dpb::DpbEntry;
-use crate::decoders::h264::parser::Pps;
-use crate::decoders::h264::parser::Slice;
-use crate::decoders::h264::parser::Sps;
-use crate::decoders::h264::picture::PictureData;
-use crate::decoders::VideoDecoderBackend;
+use crate::decoder::h264::dpb::Dpb;
+use crate::decoder::h264::dpb::DpbEntry;
+use crate::decoder::h264::parser::Pps;
+use crate::decoder::h264::parser::Slice;
+use crate::decoder::h264::parser::Sps;
+use crate::decoder::h264::picture::PictureData;
+use crate::decoder::VideoDecoderBackend;
 
-pub type Result<T> = crate::decoders::StatelessBackendResult<T>;
+pub type Result<T> = crate::decoder::StatelessBackendResult<T>;
 
 #[cfg(test)]
 pub mod dummy;

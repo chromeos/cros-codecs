@@ -25,14 +25,14 @@ use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
 use libva::VaError;
 
-use crate::decoders::DecodedHandle as DecodedHandleTrait;
-use crate::decoders::DynHandle;
-use crate::decoders::Error as VideoDecoderError;
-use crate::decoders::MappableHandle;
-use crate::decoders::Result as VideoDecoderResult;
-use crate::decoders::StatelessBackendError;
-use crate::decoders::StatelessBackendResult;
-use crate::decoders::VideoDecoderBackend;
+use crate::decoder::DecodedHandle as DecodedHandleTrait;
+use crate::decoder::DynHandle;
+use crate::decoder::Error as VideoDecoderError;
+use crate::decoder::MappableHandle;
+use crate::decoder::Result as VideoDecoderResult;
+use crate::decoder::StatelessBackendError;
+use crate::decoder::StatelessBackendResult;
+use crate::decoder::VideoDecoderBackend;
 use crate::i4xx_copy;
 use crate::nv12_copy;
 use crate::utils::vaapi::surface_pool::SurfacePool;
@@ -712,7 +712,7 @@ impl<'a> MappableHandle for Image<'a> {
                 y412_to_i412(self.as_ref(), buffer, width, height, pitches, offsets);
             }
             _ => {
-                return Err(crate::decoders::Error::StatelessBackendError(
+                return Err(crate::decoder::Error::StatelessBackendError(
                     StatelessBackendError::UnsupportedFormat,
                 ))
             }

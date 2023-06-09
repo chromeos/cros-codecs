@@ -9,27 +9,27 @@ use std::rc::Rc;
 use anyhow::anyhow;
 use anyhow::Context;
 
-use crate::decoders::h265::backends::StatelessDecoderBackend;
-use crate::decoders::h265::dpb::Dpb;
-use crate::decoders::h265::dpb::DpbEntry;
-use crate::decoders::h265::parser::Nalu;
-use crate::decoders::h265::parser::NaluType;
-use crate::decoders::h265::parser::Parser;
-use crate::decoders::h265::parser::ShortTermRefPicSet;
-use crate::decoders::h265::parser::Slice;
-use crate::decoders::h265::parser::SliceHeader;
-use crate::decoders::h265::parser::Sps;
-use crate::decoders::h265::picture::PictureData;
-use crate::decoders::h265::picture::Reference;
-use crate::decoders::private::VideoDecoderPrivate;
-use crate::decoders::BlockingMode;
-use crate::decoders::DecodeError;
-use crate::decoders::DecodedHandle;
-use crate::decoders::DecoderEvent;
-use crate::decoders::DecodingState;
-use crate::decoders::ReadyFramesQueue;
-use crate::decoders::StatelessDecoderFormatNegotiator;
-use crate::decoders::VideoDecoder;
+use crate::decoder::h265::backends::StatelessDecoderBackend;
+use crate::decoder::h265::dpb::Dpb;
+use crate::decoder::h265::dpb::DpbEntry;
+use crate::decoder::h265::parser::Nalu;
+use crate::decoder::h265::parser::NaluType;
+use crate::decoder::h265::parser::Parser;
+use crate::decoder::h265::parser::ShortTermRefPicSet;
+use crate::decoder::h265::parser::Slice;
+use crate::decoder::h265::parser::SliceHeader;
+use crate::decoder::h265::parser::Sps;
+use crate::decoder::h265::picture::PictureData;
+use crate::decoder::h265::picture::Reference;
+use crate::decoder::private::VideoDecoderPrivate;
+use crate::decoder::BlockingMode;
+use crate::decoder::DecodeError;
+use crate::decoder::DecodedHandle;
+use crate::decoder::DecoderEvent;
+use crate::decoder::DecodingState;
+use crate::decoder::ReadyFramesQueue;
+use crate::decoder::StatelessDecoderFormatNegotiator;
+use crate::decoder::VideoDecoder;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -38,7 +38,7 @@ const MAX_DPB_SIZE: usize = 16;
 /// An entry in the Reference Picture Lists. Unlike H.264, H.265 can use the
 /// current picture itself as a reference.
 #[derive(Clone)]
-pub enum RefPicListEntry<T: crate::decoders::DecodedHandle + Clone> {
+pub enum RefPicListEntry<T: crate::decoder::DecodedHandle + Clone> {
     CurrentPicture(PictureData),
     DpbEntry(DpbEntry<T>),
 }
@@ -852,7 +852,7 @@ impl<T, P> VideoDecoderPrivate for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
-    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoders::Result<()> {
+    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoder::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(sps) => self.backend.try_format(sps, format),
             _ => Err(anyhow!("current decoder state does not allow format change").into()),

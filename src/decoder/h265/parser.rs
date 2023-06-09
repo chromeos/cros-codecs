@@ -5325,10 +5325,10 @@ impl Parser {
 mod tests {
     use std::io::Cursor;
 
-    use crate::decoders::h265::parser::NaluHeader;
-    use crate::decoders::h265::parser::NaluType;
-    use crate::decoders::h265::parser::Parser;
-    use crate::decoders::h265::parser::SliceType;
+    use crate::decoder::h265::parser::NaluHeader;
+    use crate::decoder::h265::parser::NaluType;
+    use crate::decoder::h265::parser::Parser;
+    use crate::decoder::h265::parser::SliceType;
     use crate::utils::nalu::Nalu;
 
     const STREAM_BEAR: &[u8] = include_bytes!("test_data/bear.hevc");

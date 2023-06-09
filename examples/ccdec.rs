@@ -14,9 +14,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use argh::FromArgs;
-use cros_codecs::decoders::BlockingMode;
-use cros_codecs::decoders::DecodedHandle;
-use cros_codecs::decoders::VideoDecoder;
+use cros_codecs::decoder::BlockingMode;
+use cros_codecs::decoder::DecodedHandle;
+use cros_codecs::decoder::VideoDecoder;
 use cros_codecs::utils::simple_playback_loop;
 use cros_codecs::utils::H264FrameIterator;
 use cros_codecs::utils::IvfIterator;
@@ -165,7 +165,7 @@ fn main() {
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
             let decoder = Box::new(
-                cros_codecs::decoders::h264::decoder::Decoder::new_vaapi(display, blocking_mode)
+                cros_codecs::decoder::h264::decoder::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
             ) as Box<dyn VideoDecoder>;
 
@@ -175,7 +175,7 @@ fn main() {
             let frame_iter = create_vpx_frame_iterator(&input);
 
             let decoder = Box::new(
-                cros_codecs::decoders::vp8::decoder::Decoder::new_vaapi(display, blocking_mode)
+                cros_codecs::decoder::vp8::decoder::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
             ) as Box<dyn VideoDecoder>;
 
@@ -185,7 +185,7 @@ fn main() {
             let frame_iter = create_vpx_frame_iterator(&input);
 
             let decoder = Box::new(
-                cros_codecs::decoders::vp9::decoder::Decoder::new_vaapi(display, blocking_mode)
+                cros_codecs::decoder::vp9::decoder::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
             ) as Box<dyn VideoDecoder>;
 

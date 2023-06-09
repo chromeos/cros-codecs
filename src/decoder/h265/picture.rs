@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoders::h265::parser::NaluType;
-use crate::decoders::h265::parser::Pps;
-use crate::decoders::h265::parser::Slice;
+use crate::decoder::h265::parser::NaluType;
+use crate::decoder::h265::parser::Pps;
+use crate::decoder::h265::parser::Slice;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Reference {

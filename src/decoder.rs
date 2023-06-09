@@ -337,8 +337,8 @@ impl<'a, T: DecodedHandle> Iterator for &'a mut ReadyFramesQueue<T> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::decoders::DecodedHandle;
-    use crate::decoders::VideoDecoder;
+    use crate::decoder::DecodedHandle;
+    use crate::decoder::VideoDecoder;
 
     /// Stream that can be used in tests, along with the CRC32 of all of its frames.
     pub struct TestStream {

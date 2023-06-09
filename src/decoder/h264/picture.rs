@@ -8,10 +8,10 @@ use std::rc::Weak;
 
 use log::debug;
 
-use crate::decoders::h264::parser::RefPicMarking;
-use crate::decoders::h264::parser::Slice;
-use crate::decoders::h264::parser::SliceType;
-use crate::decoders::h264::parser::Sps;
+use crate::decoder::h264::parser::RefPicMarking;
+use crate::decoder::h264::parser::Slice;
+use crate::decoder::h264::parser::SliceType;
+use crate::decoder::h264::parser::Sps;
 use crate::Resolution;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]

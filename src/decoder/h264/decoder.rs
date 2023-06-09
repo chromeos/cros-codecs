@@ -10,29 +10,29 @@ use anyhow::anyhow;
 use anyhow::Context;
 use log::debug;
 
-use crate::decoders::h264::backends::StatelessDecoderBackend;
-use crate::decoders::h264::dpb::Dpb;
-use crate::decoders::h264::dpb::DpbEntry;
-use crate::decoders::h264::parser::Nalu;
-use crate::decoders::h264::parser::NaluType;
-use crate::decoders::h264::parser::Parser;
-use crate::decoders::h264::parser::RefPicListModification;
-use crate::decoders::h264::parser::Slice;
-use crate::decoders::h264::parser::SliceType;
-use crate::decoders::h264::parser::Sps;
-use crate::decoders::h264::picture::Field;
-use crate::decoders::h264::picture::IsIdr;
-use crate::decoders::h264::picture::PictureData;
-use crate::decoders::h264::picture::Reference;
-use crate::decoders::private::VideoDecoderPrivate;
-use crate::decoders::BlockingMode;
-use crate::decoders::DecodeError;
-use crate::decoders::DecodedHandle;
-use crate::decoders::DecoderEvent;
-use crate::decoders::DecodingState;
-use crate::decoders::ReadyFramesQueue;
-use crate::decoders::StatelessDecoderFormatNegotiator;
-use crate::decoders::VideoDecoder;
+use crate::decoder::h264::backends::StatelessDecoderBackend;
+use crate::decoder::h264::dpb::Dpb;
+use crate::decoder::h264::dpb::DpbEntry;
+use crate::decoder::h264::parser::Nalu;
+use crate::decoder::h264::parser::NaluType;
+use crate::decoder::h264::parser::Parser;
+use crate::decoder::h264::parser::RefPicListModification;
+use crate::decoder::h264::parser::Slice;
+use crate::decoder::h264::parser::SliceType;
+use crate::decoder::h264::parser::Sps;
+use crate::decoder::h264::picture::Field;
+use crate::decoder::h264::picture::IsIdr;
+use crate::decoder::h264::picture::PictureData;
+use crate::decoder::h264::picture::Reference;
+use crate::decoder::private::VideoDecoderPrivate;
+use crate::decoder::BlockingMode;
+use crate::decoder::DecodeError;
+use crate::decoder::DecodedHandle;
+use crate::decoder::DecoderEvent;
+use crate::decoder::DecodingState;
+use crate::decoder::ReadyFramesQueue;
+use crate::decoder::StatelessDecoderFormatNegotiator;
+use crate::decoder::VideoDecoder;
 use crate::Resolution;
 
 const ZIGZAG_8X8: [usize; 64] = [
@@ -2258,7 +2258,7 @@ impl<T, P> VideoDecoderPrivate for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
-    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoders::Result<()> {
+    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoder::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(sps) => self.backend.try_format(sps, format),
             _ => Err(anyhow!("current decoder state does not allow format change").into()),
@@ -2269,12 +2269,12 @@ where
 #[cfg(test)]
 pub mod tests {
 
-    use crate::decoders::h264::decoder::Decoder;
-    use crate::decoders::tests::test_decode_stream;
-    use crate::decoders::tests::TestStream;
-    use crate::decoders::BlockingMode;
-    use crate::decoders::DecodedHandle;
-    use crate::decoders::VideoDecoder;
+    use crate::decoder::h264::decoder::Decoder;
+    use crate::decoder::tests::test_decode_stream;
+    use crate::decoder::tests::TestStream;
+    use crate::decoder::BlockingMode;
+    use crate::decoder::DecodedHandle;
+    use crate::decoder::VideoDecoder;
     use crate::utils::simple_playback_loop;
     use crate::utils::H264FrameIterator;
     use crate::DecodedFormat;
