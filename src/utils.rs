@@ -76,7 +76,7 @@ pub struct AccessUnit<T> {
 /// NAL unit of a primary coded picture and instead uses an heuristic from
 /// GStreamer that works well enough for most streams.
 #[derive(Debug, Default)]
-pub struct AccessUnitParser<T> {
+struct AccessUnitParser<T> {
     picture_started: bool,
     nalus: Vec<Nalu<T>>,
 }
