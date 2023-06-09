@@ -7,13 +7,13 @@ use std::io::Seek;
 
 use bytes::Buf;
 
-use crate::decoder::h264::parser::Nalu;
-use crate::decoder::h264::parser::NaluType;
+use crate::decoder::stateless::h264::parser::Nalu;
+use crate::decoder::stateless::h264::parser::NaluType;
+use crate::decoder::stateless::DecodeError;
+use crate::decoder::stateless::VideoDecoder;
 use crate::decoder::BlockingMode;
-use crate::decoder::DecodeError;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::VideoDecoder;
 use crate::utils::nalu::Header;
 use crate::DecodedFormat;
 

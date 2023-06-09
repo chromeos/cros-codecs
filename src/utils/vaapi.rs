@@ -25,14 +25,14 @@ use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
 use libva::VaError;
 
+use crate::decoder::stateless::StatelessBackendError;
+use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::VideoDecoderBackend;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
 use crate::decoder::Error as VideoDecoderError;
 use crate::decoder::MappableHandle;
 use crate::decoder::Result as VideoDecoderResult;
-use crate::decoder::StatelessBackendError;
-use crate::decoder::StatelessBackendResult;
-use crate::decoder::VideoDecoderBackend;
 use crate::i4xx_copy;
 use crate::nv12_copy;
 use crate::utils::vaapi::surface_pool::SurfacePool;

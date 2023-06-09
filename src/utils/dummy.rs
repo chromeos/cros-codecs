@@ -8,12 +8,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::VideoDecoderBackend;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
 use crate::decoder::Result;
-use crate::decoder::StatelessBackendResult;
-use crate::decoder::VideoDecoderBackend;
 use crate::DecodedFormat;
 use crate::Resolution;
 
