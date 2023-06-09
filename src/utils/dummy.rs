@@ -8,19 +8,17 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::VideoDecoderBackend;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
-use crate::decoder::Result;
 use crate::DecodedFormat;
 use crate::Resolution;
 
 pub struct BackendHandle;
 
 impl MappableHandle for BackendHandle {
-    fn read(&mut self, _: &mut [u8]) -> Result<()> {
+    fn read(&mut self, _: &mut [u8]) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -64,7 +62,7 @@ impl DecodedHandle for Handle {
         self.handle.borrow_mut()
     }
 
-    fn sync(&self) -> StatelessBackendResult<()> {
+    fn sync(&self) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -100,7 +98,7 @@ where
         None
     }
 
-    fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> crate::decoder::Result<()> {
+    fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
         Ok(())
     }
 

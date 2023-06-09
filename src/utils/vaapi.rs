@@ -30,9 +30,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::VideoDecoderBackend;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
-use crate::decoder::Error as VideoDecoderError;
 use crate::decoder::MappableHandle;
-use crate::decoder::Result as VideoDecoderResult;
 use crate::i4xx_copy;
 use crate::nv12_copy;
 use crate::utils::vaapi::surface_pool::SurfacePool;
@@ -190,7 +188,7 @@ impl DecodedHandleTrait for DecodedHandle {
         self.borrow().is_va_ready().unwrap_or(true)
     }
 
-    fn sync(&self) -> StatelessBackendResult<()> {
+    fn sync(&self) -> anyhow::Result<()> {
         self.borrow_mut().sync().context("while syncing picture")?;
 
         Ok(())
@@ -636,7 +634,7 @@ enum PictureState {
 }
 
 impl<'a> MappableHandle for Image<'a> {
-    fn read(&mut self, buffer: &mut [u8]) -> VideoDecoderResult<()> {
+    fn read(&mut self, buffer: &mut [u8]) -> anyhow::Result<()> {
         let image_size = self.image_size();
         let image_inner = self.image();
 
@@ -644,12 +642,10 @@ impl<'a> MappableHandle for Image<'a> {
         let height = image_inner.height as usize;
 
         if buffer.len() != image_size {
-            return Err(VideoDecoderError::StatelessBackendError(
-                StatelessBackendError::Other(anyhow!(
-                    "buffer size is {} while image size is {}",
-                    buffer.len(),
-                    image_size
-                )),
+            return Err(anyhow!(
+                "buffer size is {} while image size is {}",
+                buffer.len(),
+                image_size
             ));
         }
 
@@ -711,11 +707,7 @@ impl<'a> MappableHandle for Image<'a> {
             libva::constants::VA_FOURCC_Y412 => {
                 y412_to_i412(self.as_ref(), buffer, width, height, pitches, offsets);
             }
-            _ => {
-                return Err(crate::decoder::Error::StatelessBackendError(
-                    StatelessBackendError::UnsupportedFormat,
-                ))
-            }
+            _ => return Err(StatelessBackendError::UnsupportedFormat.into()),
         }
 
         Ok(())
@@ -868,7 +860,7 @@ where
         &mut self,
         format_info: &StreamData,
         format: crate::DecodedFormat,
-    ) -> VideoDecoderResult<()> {
+    ) -> anyhow::Result<()> {
         let supported_formats_for_stream = self.supported_formats_for_stream()?;
 
         if supported_formats_for_stream.contains(&format) {
@@ -904,12 +896,7 @@ where
 
             Ok(())
         } else {
-            Err(VideoDecoderError::StatelessBackendError(
-                StatelessBackendError::NegotiationFailed(anyhow!(
-                    "Format {:?} is unsupported.",
-                    format
-                )),
-            ))
+            Err(anyhow!("Format {:?} is unsupported.", format))
         }
     }
 }

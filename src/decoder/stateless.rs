@@ -12,7 +12,6 @@ use thiserror::Error;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::DecoderFormatNegotiator;
-use crate::decoder::Result;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -63,7 +62,7 @@ mod private {
     pub(crate) trait VideoDecoderPrivate {
         /// Try to apply `format` to output frames. If successful, all frames emitted after the
         /// call will be in the new format.
-        fn try_format(&mut self, format: DecodedFormat) -> Result<()>;
+        fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
     }
 }
 
@@ -94,7 +93,8 @@ pub(crate) trait VideoDecoderBackend<FormatInfo> {
     fn format(&self) -> Option<DecodedFormat>;
 
     /// Try altering the decoded format.
-    fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat) -> Result<()>;
+    fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat)
+        -> anyhow::Result<()>;
 }
 
 /// Helper to implement `DecoderFormatNegotiator` for stateless decoders.
@@ -151,7 +151,7 @@ where
 
     /// Try to apply `format` to output frames. If successful, all frames emitted after the
     /// call will be in the new format.
-    fn try_format(&mut self, format: DecodedFormat) -> Result<()> {
+    fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()> {
         self.decoder.try_format(format)
     }
 }

@@ -7,22 +7,8 @@ pub mod stateless;
 use std::cell::RefMut;
 use std::collections::VecDeque;
 
-use thiserror::Error;
-
-use crate::decoder::stateless::StatelessBackendError;
-use crate::decoder::stateless::StatelessBackendResult;
 use crate::DecodedFormat;
 use crate::Resolution;
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error(transparent)]
-    StatelessBackendError(#[from] StatelessBackendError),
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
-}
 
 /// Trait for objects allowing to negotiate the output format of a decoder.
 ///
@@ -41,7 +27,7 @@ pub trait DecoderFormatNegotiator<'a> {
     fn coded_resolution(&self) -> Resolution;
 
     fn format(&self) -> Option<DecodedFormat>;
-    fn try_format(&mut self, format: DecodedFormat) -> Result<()>;
+    fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
 
 /// Events that can be retrieved using the `next_event` method of a decoder.
@@ -63,7 +49,7 @@ pub trait MappableHandle {
     /// Read the contents of `self` into `buffer`.
     ///
     /// The size of `buffer` must be equal to `image_size()`, or an error will be returned.
-    fn read(&mut self, buffer: &mut [u8]) -> Result<()>;
+    fn read(&mut self, buffer: &mut [u8]) -> anyhow::Result<()>;
 
     /// Returns the size of the `buffer` argument required to call `read` on this handle.
     fn image_size(&mut self) -> usize;
@@ -83,9 +69,8 @@ impl Default for BlockingMode {
     }
 }
 
-/// The handle type used by the stateless decoder backend. The only requirement
-/// from implementors is that they give access to the underlying handle and
-/// that they can be (cheaply) cloned.
+/// The handle type used by the decoder backend. The only requirement from implementors is that
+/// they give access to the underlying handle and that they can be (cheaply) cloned.
 pub trait DecodedHandle {
     fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle>;
 
@@ -102,7 +87,7 @@ pub trait DecodedHandle {
     fn is_ready(&self) -> bool;
 
     /// Wait until this handle has been completely rendered.
-    fn sync(&self) -> StatelessBackendResult<()>;
+    fn sync(&self) -> anyhow::Result<()>;
 }
 
 /// A queue where decoding jobs wait until they are completed, at which point they can be

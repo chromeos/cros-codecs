@@ -857,10 +857,12 @@ impl<T, P> VideoDecoderPrivate for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
-    fn try_format(&mut self, format: crate::DecodedFormat) -> crate::decoder::Result<()> {
+    fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(sps) => self.backend.try_format(sps, format),
-            _ => Err(anyhow!("current decoder state does not allow format change").into()),
+            _ => Err(anyhow!(
+                "current decoder state does not allow format change"
+            )),
         }
     }
 }
