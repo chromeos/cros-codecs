@@ -59,7 +59,7 @@ mod private {
 
     /// Private trait for methods we need to expose for crate types (e.g.
     /// `DecoderFormatNegotiator`s), but don't want to be directly used by the client.
-    pub(crate) trait StatelessVideoDecoder {
+    pub(super) trait StatelessVideoDecoder {
         /// Try to apply `format` to output frames. If successful, all frames emitted after the
         /// call will be in the new format.
         fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
