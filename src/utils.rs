@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+//! Utility functions used by several parts of this crate.
+//!
+//! This module is for anything that doesn't fit into the other top-level modules. Try not to add
+//! new code here unless it really doesn't belong anywhere else.
+
 use std::io::Cursor;
 use std::io::Seek;
 

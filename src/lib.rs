@@ -2,6 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+//! This crate provides tools to help decode and encode various video codecs, leveraging the
+//! hardware acceleration available on the target.
+//!
+//! The [codec] module contains tools to parse encoded video streams like H.264 or VP9 and extract
+//! the information useful in order to perform e.g. hardware-accelerated decoding.
+//!
+//! The [backend] module contains common backend code. A backend is a provider of some way to
+//! decode or encode a particular codec, like VAAPI.
+//!
+//! The [decoder] module contains decoders that can turn an encoded video stream into a sequence of
+//! decoded frames using the hardware acceleration available on the host.
+//!
+//! The [utils] module contains some useful code that is shared between different parts of this
+//! crate and didn't fit any of the modules above.
+
 pub mod backend;
 pub mod codec;
 pub mod decoder;

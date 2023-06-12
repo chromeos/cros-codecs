@@ -2,6 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+//! Encoded stream decoding.
+//!
+//! A decoder turns an encoded stream into its corresponding decoded frames. This module provides
+//! several decoders for various codecs and backends.
+//!
+//! At the moment, only a [stateless] decoder interface is provided.
+
 pub mod stateless;
 
 use std::cell::RefMut;
