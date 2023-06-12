@@ -66,7 +66,7 @@ impl<'a> Iterator for IvfIterator<'a> {
 
 /// A H.264 Access Unit.
 #[derive(Debug, Default)]
-pub struct AccessUnit<T> {
+struct AccessUnit<T> {
     pub nalus: Vec<Nalu<T>>,
 }
 
