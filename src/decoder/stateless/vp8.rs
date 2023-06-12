@@ -26,7 +26,7 @@ use crate::decoder::ReadyFramesQueue;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP8.
-pub(crate) trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Header> {
+trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Header> {
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
@@ -77,7 +77,7 @@ pub struct Decoder<T: DecodedHandle> {
 impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     /// Create a new codec backend for VP8.
     #[cfg(any(feature = "vaapi", test))]
-    pub(crate) fn new(
+    fn new(
         backend: Box<dyn StatelessVp8DecoderBackend<Handle = T>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {

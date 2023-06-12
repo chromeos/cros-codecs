@@ -51,7 +51,7 @@ const ZIGZAG_8X8: [usize; 64] = [
 const ZIGZAG_4X4: [usize; 16] = [0, 1, 4, 8, 5, 2, 3, 6, 9, 12, 13, 10, 7, 11, 14, 15];
 
 /// Stateless backend methods specific to H.264.
-pub(crate) trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
+trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
     /// Type used by the backend to represent a picture in the process of being decoded.
     type Picture;
 
@@ -262,7 +262,7 @@ where
 {
     // Creates a new instance of the decoder.
     #[cfg(any(feature = "vaapi", test))]
-    pub(crate) fn new(
+    fn new(
         backend: Box<dyn StatelessH264DecoderBackend<Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {

@@ -44,7 +44,7 @@ use crate::decoder::ReadyFramesQueue;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP9.
-pub(crate) trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
+trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
@@ -64,7 +64,7 @@ pub(crate) trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Segmentation {
+struct Segmentation {
     /// Loop filter level
     pub lvl_lookup: [[u8; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES],
 
@@ -117,7 +117,7 @@ pub struct Decoder<T: DecodedHandle> {
 impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     /// Create a new codec backend for VP8.
     #[cfg(any(feature = "vaapi", test))]
-    pub(crate) fn new(
+    fn new(
         backend: Box<dyn StatelessVp9DecoderBackend<Handle = T>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
@@ -285,7 +285,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 
     /// Update the state of the segmentation parameters after seeing a frame
-    pub(crate) fn update_segmentation(
+    fn update_segmentation(
         hdr: &Header,
         segmentation: &mut [Segmentation; MAX_SEGMENTS],
     ) -> anyhow::Result<()> {
@@ -360,12 +360,6 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         }
 
         Ok(())
-    }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn backend(&self) -> &dyn StatelessVp9DecoderBackend<Handle = T> {
-        self.backend.as_ref()
     }
 }
 

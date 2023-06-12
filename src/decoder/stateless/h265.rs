@@ -38,7 +38,7 @@ use crate::Resolution;
 const MAX_DPB_SIZE: usize = 16;
 
 /// Stateless backend methods specific to H.265.
-pub(crate) trait StatelessH265DecoderBackend: StatelessDecoderBackend<Sps> {
+trait StatelessH265DecoderBackend: StatelessDecoderBackend<Sps> {
     /// Type used by the backend to represent a picture in the process of being decoded.
     type Picture;
 
@@ -180,7 +180,7 @@ where
     // Creates a new instance of the decoder.
     #[cfg(any(feature = "vaapi", test))]
     #[allow(dead_code)]
-    pub(crate) fn new(
+    fn new(
         backend: Box<dyn StatelessH265DecoderBackend<Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
