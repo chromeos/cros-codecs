@@ -367,7 +367,7 @@ impl<T: Clone> Dpb<T> {
         self.interlaced = interlaced;
     }
 
-    /// Gets a Vec<ContainedPicture> of short term refs into `out`
+    /// Gets a `Vec<ContainedPicture>` of short term refs into `out`
     pub fn get_short_term_refs(&self, out: &mut Vec<DpbEntry<T>>) {
         out.extend(
             self.entries
@@ -377,7 +377,7 @@ impl<T: Clone> Dpb<T> {
         )
     }
 
-    /// Gets a Vec<ContainedPicture> of long term refs into `out`
+    /// Gets a `Vec<ContainedPicture>` of long term refs into `out`
     pub fn get_long_term_refs(&self, out: &mut Vec<DpbEntry<T>>) {
         out.extend(
             self.entries

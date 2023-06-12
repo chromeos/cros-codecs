@@ -203,7 +203,7 @@ impl Header for NaluHeader {
 pub type Nalu<T> = nalu::Nalu<T, NaluHeader>;
 
 /// H265 levels as defined by table A.8.
-/// general_level_idc and sub_layer_level_idc[ OpTid ] shall be set equal to a
+/// `general_level_idc` and `sub_layer_level_idc[ OpTid ]` shall be set equal to a
 /// value of 30 times the level number specified in Table A.8
 #[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
