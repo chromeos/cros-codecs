@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-pub mod backends;
+#[cfg(test)]
+pub mod dummy;
+#[cfg(feature = "vaapi")]
+pub mod vaapi;
 
 use std::cell::RefCell;
 use std::io::Cursor;
@@ -17,6 +20,7 @@ use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::parser::Nalu;
 use crate::codec::h264::parser::NaluType;
 use crate::codec::h264::parser::Parser;
+use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::RefPicListModification;
 use crate::codec::h264::parser::Slice;
 use crate::codec::h264::parser::SliceType;
@@ -25,10 +29,11 @@ use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::Reference;
-use crate::decoder::stateless::h264::backends::StatelessH264DecoderBackend;
 use crate::decoder::stateless::private;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
@@ -44,6 +49,65 @@ const ZIGZAG_8X8: [usize; 64] = [
 ];
 
 const ZIGZAG_4X4: [usize; 16] = [0, 1, 4, 8, 5, 2, 3, 6, 9, 12, 13, 10, 7, 11, 14, 15];
+
+/// Stateless backend methods specific to H.264.
+pub(crate) trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
+    /// Type used by the backend to represent a picture in the process of being decoded.
+    type Picture;
+
+    /// Called when a new SPS is parsed.
+    fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()>;
+
+    /// Called when the decoder determines that a frame or field was found.
+    fn new_picture(
+        &mut self,
+        picture: &PictureData,
+        timestamp: u64,
+    ) -> StatelessBackendResult<Self::Picture>;
+
+    /// Called when the decoder determines that a second field was found.
+    /// Indicates that the underlying BackendHandle is to be shared between the
+    /// two pictures. This is so both fields decode to the same underlying
+    /// resource and can thus be presented together as a single frame.
+    fn new_field_picture(
+        &mut self,
+        picture: &PictureData,
+        timestamp: u64,
+        first_field: &Self::Handle,
+    ) -> StatelessBackendResult<Self::Picture>;
+
+    /// Called by the decoder when starting a new frame or field.
+    fn start_picture(
+        &mut self,
+        picture: &mut Self::Picture,
+        picture_data: &PictureData,
+        sps: &Sps,
+        pps: &Pps,
+        dpb: &Dpb<Self::Handle>,
+        slice: &Slice<&[u8]>,
+    ) -> StatelessBackendResult<()>;
+
+    /// Called to dispatch a decode operation to the backend.
+    #[allow(clippy::too_many_arguments)]
+    fn decode_slice(
+        &mut self,
+        picture: &mut Self::Picture,
+        slice: &Slice<&[u8]>,
+        sps: &Sps,
+        pps: &Pps,
+        dpb: &Dpb<Self::Handle>,
+        ref_pic_list0: &[DpbEntry<Self::Handle>],
+        ref_pic_list1: &[DpbEntry<Self::Handle>],
+    ) -> StatelessBackendResult<()>;
+
+    /// Called when the decoder wants the backend to finish the decoding
+    /// operations for `picture`. At this point, `decode_slice` has been called
+    /// for all slices.
+    ///
+    /// This call will assign the ownership of the BackendHandle to the Picture
+    /// and then assign the ownership of the Picture to the Handle.
+    fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle>;
+}
 
 #[derive(Copy, Clone, Debug)]
 enum RefPicList {

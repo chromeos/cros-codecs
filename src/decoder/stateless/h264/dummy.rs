@@ -14,9 +14,9 @@ use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::Slice;
 use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::PictureData;
-use crate::decoder::stateless::h264::backends::Result as StatelessBackendResult;
-use crate::decoder::stateless::h264::backends::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::Decoder;
+use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
+use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
 use crate::utils::dummy::*;
 

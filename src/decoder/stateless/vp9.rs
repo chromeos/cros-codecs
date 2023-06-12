@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-pub mod backends;
+#[cfg(test)]
+pub mod dummy;
+#[cfg(feature = "vaapi")]
+pub mod vaapi;
 
 use log::debug;
 
@@ -28,9 +31,10 @@ use crate::codec::vp9::parser::SEG_LVL_ALT_L;
 use crate::codec::vp9::parser::SEG_LVL_REF_FRAME;
 use crate::codec::vp9::parser::SEG_LVL_SKIP;
 use crate::decoder::stateless::private;
-use crate::decoder::stateless::vp9::backends::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
@@ -38,6 +42,26 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
 use crate::Resolution;
+
+/// Stateless backend methods specific to VP9.
+pub(crate) trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
+    /// Called when new stream parameters are found.
+    fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
+
+    /// Called when the decoder wants the backend to finish the decoding
+    /// operations for `picture`.
+    ///
+    /// This call will assign the ownership of the BackendHandle to the Picture
+    /// and then assign the ownership of the Picture to the Handle.
+    fn submit_picture(
+        &mut self,
+        picture: &Header,
+        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
+        bitstream: &[u8],
+        timestamp: u64,
+        segmentation: &[Segmentation; MAX_SEGMENTS],
+    ) -> StatelessBackendResult<Self::Handle>;
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Segmentation {

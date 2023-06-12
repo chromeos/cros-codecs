@@ -2,15 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-pub mod backends;
+#[cfg(test)]
+pub mod dummy;
+#[cfg(feature = "vaapi")]
+pub mod vaapi;
 
 use crate::codec::vp8::parser::Frame;
 use crate::codec::vp8::parser::Header;
+use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Parser;
+use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::private;
-use crate::decoder::stateless::vp8::backends::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
@@ -18,6 +24,30 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
 use crate::Resolution;
+
+/// Stateless backend methods specific to VP8.
+pub(crate) trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Header> {
+    /// Called when new stream parameters are found.
+    fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
+
+    /// Called when the decoder wants the backend to finish the decoding
+    /// operations for `picture`.
+    ///
+    /// This call will assign the ownership of the BackendHandle to the Picture
+    /// and then assign the ownership of the Picture to the Handle.
+    #[allow(clippy::too_many_arguments)]
+    fn submit_picture(
+        &mut self,
+        picture: &Header,
+        last_ref: Option<&Self::Handle>,
+        golden_ref: Option<&Self::Handle>,
+        alt_ref: Option<&Self::Handle>,
+        bitstream: &[u8],
+        segmentation: &Segmentation,
+        mb_lf_adjust: &MbLfAdjustments,
+        timestamp: u64,
+    ) -> StatelessBackendResult<Self::Handle>;
+}
 
 pub struct Decoder<T: DecodedHandle> {
     /// A parser to extract bitstream data and build frame data in turn
