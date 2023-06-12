@@ -3,15 +3,12 @@
 // found in the LICENSE file.
 
 pub mod backends;
-mod bool_decoder;
-pub mod parser;
-mod probs;
 
+use crate::codec::vp8::parser::Frame;
+use crate::codec::vp8::parser::Header;
+use crate::codec::vp8::parser::Parser;
 use crate::decoder::stateless::private;
 use crate::decoder::stateless::vp8::backends::StatelessVp8DecoderBackend;
-use crate::decoder::stateless::vp8::parser::Frame;
-use crate::decoder::stateless::vp8::parser::Header;
-use crate::decoder::stateless::vp8::parser::Parser;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
@@ -304,8 +301,8 @@ pub mod tests {
 
     /// Same as Chromium's test-25fps.vp8
     pub const DECODE_TEST_25FPS: TestStream = TestStream {
-        stream: include_bytes!("vp8/test_data/test-25fps.vp8"),
-        crcs: include_str!("vp8/test_data/test-25fps.vp8.crc"),
+        stream: include_bytes!("../../codec/vp8/test_data/test-25fps.vp8"),
+        crcs: include_str!("../../codec/vp8/test_data/test-25fps.vp8.crc"),
     };
 
     #[test]

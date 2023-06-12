@@ -3,9 +3,6 @@
 // found in the LICENSE file.
 
 pub mod backends;
-pub mod dpb;
-pub mod parser;
-pub mod picture;
 
 use std::cell::RefCell;
 use std::io::Cursor;
@@ -14,18 +11,18 @@ use std::rc::Rc;
 use anyhow::anyhow;
 use anyhow::Context;
 
+use crate::codec::h265::dpb::Dpb;
+use crate::codec::h265::dpb::DpbEntry;
+use crate::codec::h265::parser::Nalu;
+use crate::codec::h265::parser::NaluType;
+use crate::codec::h265::parser::Parser;
+use crate::codec::h265::parser::ShortTermRefPicSet;
+use crate::codec::h265::parser::Slice;
+use crate::codec::h265::parser::SliceHeader;
+use crate::codec::h265::parser::Sps;
+use crate::codec::h265::picture::PictureData;
+use crate::codec::h265::picture::Reference;
 use crate::decoder::stateless::h265::backends::StatelessH265DecoderBackend;
-use crate::decoder::stateless::h265::dpb::Dpb;
-use crate::decoder::stateless::h265::dpb::DpbEntry;
-use crate::decoder::stateless::h265::parser::Nalu;
-use crate::decoder::stateless::h265::parser::NaluType;
-use crate::decoder::stateless::h265::parser::Parser;
-use crate::decoder::stateless::h265::parser::ShortTermRefPicSet;
-use crate::decoder::stateless::h265::parser::Slice;
-use crate::decoder::stateless::h265::parser::SliceHeader;
-use crate::decoder::stateless::h265::parser::Sps;
-use crate::decoder::stateless::h265::picture::PictureData;
-use crate::decoder::stateless::h265::picture::Reference;
 use crate::decoder::stateless::private;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;

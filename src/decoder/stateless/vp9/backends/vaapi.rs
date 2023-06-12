@@ -10,16 +10,16 @@ use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
 
+use crate::codec::vp9::parser::BitDepth;
+use crate::codec::vp9::parser::Header;
+use crate::codec::vp9::parser::Profile;
+use crate::codec::vp9::parser::ALTREF_FRAME;
+use crate::codec::vp9::parser::GOLDEN_FRAME;
+use crate::codec::vp9::parser::LAST_FRAME;
+use crate::codec::vp9::parser::MAX_SEGMENTS;
+use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::backends::Result as StatelessBackendResult;
 use crate::decoder::stateless::vp9::backends::StatelessVp9DecoderBackend;
-use crate::decoder::stateless::vp9::parser::BitDepth;
-use crate::decoder::stateless::vp9::parser::Header;
-use crate::decoder::stateless::vp9::parser::Profile;
-use crate::decoder::stateless::vp9::parser::ALTREF_FRAME;
-use crate::decoder::stateless::vp9::parser::GOLDEN_FRAME;
-use crate::decoder::stateless::vp9::parser::LAST_FRAME;
-use crate::decoder::stateless::vp9::parser::MAX_SEGMENTS;
-use crate::decoder::stateless::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::Decoder;
 use crate::decoder::stateless::vp9::Segmentation;
 use crate::decoder::stateless::StatelessBackendError;
@@ -306,12 +306,12 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
+    use crate::codec::vp9::parser::Parser;
+    use crate::codec::vp9::parser::MAX_SEGMENTS;
+    use crate::codec::vp9::parser::NUM_REF_FRAMES;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
     use crate::decoder::stateless::vp8::tests::vpx_decoding_loop;
-    use crate::decoder::stateless::vp9::parser::Parser;
-    use crate::decoder::stateless::vp9::parser::MAX_SEGMENTS;
-    use crate::decoder::stateless::vp9::parser::NUM_REF_FRAMES;
     use crate::decoder::stateless::vp9::Decoder;
     use crate::decoder::stateless::vp9::Segmentation;
     use crate::decoder::BlockingMode;
@@ -450,7 +450,7 @@ mod tests {
     #[test]
     /// Check that we are able to build the VA picture parameters from the stream properly.
     fn build_pic_params() {
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.vp9");
+        const TEST_STREAM: &[u8] = include_bytes!("../../../../codec/vp9/test_data/test-25fps.vp9");
         let mut parser: Parser = Default::default();
         let mut segmentation: [Segmentation; MAX_SEGMENTS] = Default::default();
         let mut ivf_iter = IvfIterator::new(TEST_STREAM);

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoder::stateless::vp8::parser::Header;
-use crate::decoder::stateless::vp8::parser::MbLfAdjustments;
-use crate::decoder::stateless::vp8::parser::Segmentation;
+use crate::codec::vp8::parser::Header;
+use crate::codec::vp8::parser::MbLfAdjustments;
+use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::StatelessDecoderBackend;
 
 #[cfg(test)]

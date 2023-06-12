@@ -3,34 +3,32 @@
 // found in the LICENSE file.
 
 pub mod backends;
-mod lookups;
-pub mod parser;
 
 use log::debug;
 
+use crate::codec::vp9::lookups::AC_QLOOKUP;
+use crate::codec::vp9::lookups::AC_QLOOKUP_10;
+use crate::codec::vp9::lookups::AC_QLOOKUP_12;
+use crate::codec::vp9::lookups::DC_QLOOKUP;
+use crate::codec::vp9::lookups::DC_QLOOKUP_10;
+use crate::codec::vp9::lookups::DC_QLOOKUP_12;
+use crate::codec::vp9::parser::BitDepth;
+use crate::codec::vp9::parser::Frame;
+use crate::codec::vp9::parser::Header;
+use crate::codec::vp9::parser::Parser;
+use crate::codec::vp9::parser::Profile;
+use crate::codec::vp9::parser::INTRA_FRAME;
+use crate::codec::vp9::parser::LAST_FRAME;
+use crate::codec::vp9::parser::MAX_LOOP_FILTER;
+use crate::codec::vp9::parser::MAX_MODE_LF_DELTAS;
+use crate::codec::vp9::parser::MAX_REF_FRAMES;
+use crate::codec::vp9::parser::MAX_SEGMENTS;
+use crate::codec::vp9::parser::NUM_REF_FRAMES;
+use crate::codec::vp9::parser::SEG_LVL_ALT_L;
+use crate::codec::vp9::parser::SEG_LVL_REF_FRAME;
+use crate::codec::vp9::parser::SEG_LVL_SKIP;
 use crate::decoder::stateless::private;
 use crate::decoder::stateless::vp9::backends::StatelessVp9DecoderBackend;
-use crate::decoder::stateless::vp9::lookups::AC_QLOOKUP;
-use crate::decoder::stateless::vp9::lookups::AC_QLOOKUP_10;
-use crate::decoder::stateless::vp9::lookups::AC_QLOOKUP_12;
-use crate::decoder::stateless::vp9::lookups::DC_QLOOKUP;
-use crate::decoder::stateless::vp9::lookups::DC_QLOOKUP_10;
-use crate::decoder::stateless::vp9::lookups::DC_QLOOKUP_12;
-use crate::decoder::stateless::vp9::parser::BitDepth;
-use crate::decoder::stateless::vp9::parser::Frame;
-use crate::decoder::stateless::vp9::parser::Header;
-use crate::decoder::stateless::vp9::parser::Parser;
-use crate::decoder::stateless::vp9::parser::Profile;
-use crate::decoder::stateless::vp9::parser::INTRA_FRAME;
-use crate::decoder::stateless::vp9::parser::LAST_FRAME;
-use crate::decoder::stateless::vp9::parser::MAX_LOOP_FILTER;
-use crate::decoder::stateless::vp9::parser::MAX_MODE_LF_DELTAS;
-use crate::decoder::stateless::vp9::parser::MAX_REF_FRAMES;
-use crate::decoder::stateless::vp9::parser::MAX_SEGMENTS;
-use crate::decoder::stateless::vp9::parser::NUM_REF_FRAMES;
-use crate::decoder::stateless::vp9::parser::SEG_LVL_ALT_L;
-use crate::decoder::stateless::vp9::parser::SEG_LVL_REF_FRAME;
-use crate::decoder::stateless::vp9::parser::SEG_LVL_SKIP;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
@@ -478,8 +476,8 @@ pub mod tests {
 
     /// Same as Chromium's test-25fps.vp8
     pub const DECODE_TEST_25FPS: TestStream = TestStream {
-        stream: include_bytes!("vp9/test_data/test-25fps.vp9"),
-        crcs: include_str!("vp9/test_data/test-25fps.vp9.crc"),
+        stream: include_bytes!("../../codec/vp9/test_data/test-25fps.vp9"),
+        crcs: include_str!("../../codec/vp9/test_data/test-25fps.vp9.crc"),
     };
 
     #[test]
@@ -495,8 +493,8 @@ pub mod tests {
     // Remuxed from the original matroska source in libvpx using ffmpeg:
     // ffmpeg -i vp90-2-10-show-existing-frame.webm/vp90-2-10-show-existing-frame.webm -c:v copy /tmp/vp90-2-10-show-existing-frame.vp9.ivf
     pub const DECODE_TEST_25FPS_SHOW_EXISTING_FRAME: TestStream = TestStream {
-        stream: include_bytes!("vp9/test_data/vp90-2-10-show-existing-frame.vp9.ivf"),
-        crcs: include_str!("vp9/test_data/vp90-2-10-show-existing-frame.vp9.ivf.crc"),
+        stream: include_bytes!("../../codec/vp9/test_data/vp90-2-10-show-existing-frame.vp9.ivf"),
+        crcs: include_str!("../../codec/vp9/test_data/vp90-2-10-show-existing-frame.vp9.ivf.crc"),
     };
 
     #[test]
@@ -516,8 +514,8 @@ pub mod tests {
     }
 
     pub const DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2: TestStream = TestStream {
-        stream: include_bytes!("vp9/test_data/vp90-2-10-show-existing-frame2.vp9.ivf"),
-        crcs: include_str!("vp9/test_data/vp90-2-10-show-existing-frame2.vp9.ivf.crc"),
+        stream: include_bytes!("../../codec/vp9/test_data/vp90-2-10-show-existing-frame2.vp9.ivf"),
+        crcs: include_str!("../../codec/vp9/test_data/vp90-2-10-show-existing-frame2.vp9.ivf.crc"),
     };
 
     #[test]
@@ -542,8 +540,8 @@ pub mod tests {
     // resolutions that are not multiple of 4, so we're ignoring CRCs for
     // this one.
     pub const DECODE_RESOLUTION_CHANGE_500FRAMES: TestStream = TestStream {
-        stream: include_bytes!("vp9/test_data/resolution_change_500frames-vp9.ivf"),
-        crcs: include_str!("vp9/test_data/resolution_change_500frames-vp9.ivf.crc"),
+        stream: include_bytes!("../../codec/vp9/test_data/resolution_change_500frames-vp9.ivf"),
+        crcs: include_str!("../../codec/vp9/test_data/resolution_change_500frames-vp9.ivf.crc"),
     };
 
     #[test]

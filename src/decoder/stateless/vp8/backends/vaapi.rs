@@ -13,11 +13,11 @@ use libva::IQMatrixBufferVP8;
 use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 
+use crate::codec::vp8::parser::Header;
+use crate::codec::vp8::parser::MbLfAdjustments;
+use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::vp8::backends::Result as StatelessBackendResult;
 use crate::decoder::stateless::vp8::backends::StatelessVp8DecoderBackend;
-use crate::decoder::stateless::vp8::parser::Header;
-use crate::decoder::stateless::vp8::parser::MbLfAdjustments;
-use crate::decoder::stateless::vp8::parser::Segmentation;
 use crate::decoder::stateless::vp8::Decoder;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::BlockingMode;
@@ -309,9 +309,9 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
+    use crate::codec::vp8::parser::Parser;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::vp8::parser::Parser;
     use crate::decoder::stateless::vp8::tests::vpx_decoding_loop;
     use crate::decoder::stateless::vp8::Decoder;
     use crate::decoder::BlockingMode;
@@ -365,13 +365,16 @@ mod tests {
     #[test]
     /// Check that we are able to build the VA picture parameters from the stream properly.
     fn build_pic_params() {
-        const TEST_STREAM: &[u8] = include_bytes!("../test_data/test-25fps.vp8");
-        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_0: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-probability-table-0.bin");
-        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_1: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-probability-table-1.bin");
-        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_2: &[u8] =
-            include_bytes!("../test_data/test-25fps-vp8-probability-table-2.bin");
+        const TEST_STREAM: &[u8] = include_bytes!("../../../../codec/vp8/test_data/test-25fps.vp8");
+        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_0: &[u8] = include_bytes!(
+            "../../../../codec/vp8/test_data/test-25fps-vp8-probability-table-0.bin"
+        );
+        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_1: &[u8] = include_bytes!(
+            "../../../../codec/vp8/test_data/test-25fps-vp8-probability-table-1.bin"
+        );
+        const TEST_25_FPS_VP8_STREAM_PROBABILITY_TABLE_2: &[u8] = include_bytes!(
+            "../../../../codec/vp8/test_data/test-25fps-vp8-probability-table-2.bin"
+        );
 
         let mut parser: Parser = Default::default();
         let mut ivf_iter = IvfIterator::new(TEST_STREAM);

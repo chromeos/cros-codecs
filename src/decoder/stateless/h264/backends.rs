@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoder::stateless::h264::dpb::Dpb;
-use crate::decoder::stateless::h264::dpb::DpbEntry;
-use crate::decoder::stateless::h264::parser::Pps;
-use crate::decoder::stateless::h264::parser::Slice;
-use crate::decoder::stateless::h264::parser::Sps;
-use crate::decoder::stateless::h264::picture::PictureData;
+use crate::codec::h264::dpb::Dpb;
+use crate::codec::h264::dpb::DpbEntry;
+use crate::codec::h264::parser::Pps;
+use crate::codec::h264::parser::Slice;
+use crate::codec::h264::parser::Sps;
+use crate::codec::h264::picture::PictureData;
 use crate::decoder::stateless::StatelessDecoderBackend;
 
 pub type Result<T> = crate::decoder::stateless::StatelessBackendResult<T>;

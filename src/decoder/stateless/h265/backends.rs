@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoder::stateless::h265::dpb::Dpb;
-use crate::decoder::stateless::h265::parser::Pps;
-use crate::decoder::stateless::h265::parser::Slice;
-use crate::decoder::stateless::h265::parser::Sps;
-use crate::decoder::stateless::h265::picture::PictureData;
+use crate::codec::h265::dpb::Dpb;
+use crate::codec::h265::parser::Pps;
+use crate::codec::h265::parser::Slice;
+use crate::codec::h265::parser::Sps;
+use crate::codec::h265::picture::PictureData;
 use crate::decoder::stateless::h265::RefPicListEntry;
 use crate::decoder::stateless::StatelessDecoderBackend;
 

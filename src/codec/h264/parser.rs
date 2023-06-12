@@ -2703,10 +2703,10 @@ impl Header for NaluHeader {
 mod tests {
     use std::io::Cursor;
 
-    use crate::decoder::stateless::h264::parser::Level;
-    use crate::decoder::stateless::h264::parser::Nalu;
-    use crate::decoder::stateless::h264::parser::NaluType;
-    use crate::decoder::stateless::h264::parser::Parser;
+    use crate::codec::h264::parser::Level;
+    use crate::codec::h264::parser::Nalu;
+    use crate::codec::h264::parser::NaluType;
+    use crate::codec::h264::parser::Parser;
 
     const STREAM_TEST_25_FPS: &[u8] = include_bytes!("test_data/test-25fps.h264");
     const STREAM_TEST_25_FPS_NUM_NALUS: usize = 759;

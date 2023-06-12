@@ -3,9 +3,6 @@
 // found in the LICENSE file.
 
 pub mod backends;
-pub mod dpb;
-pub mod parser;
-pub mod picture;
 
 use std::cell::RefCell;
 use std::io::Cursor;
@@ -15,20 +12,20 @@ use anyhow::anyhow;
 use anyhow::Context;
 use log::debug;
 
+use crate::codec::h264::dpb::Dpb;
+use crate::codec::h264::dpb::DpbEntry;
+use crate::codec::h264::parser::Nalu;
+use crate::codec::h264::parser::NaluType;
+use crate::codec::h264::parser::Parser;
+use crate::codec::h264::parser::RefPicListModification;
+use crate::codec::h264::parser::Slice;
+use crate::codec::h264::parser::SliceType;
+use crate::codec::h264::parser::Sps;
+use crate::codec::h264::picture::Field;
+use crate::codec::h264::picture::IsIdr;
+use crate::codec::h264::picture::PictureData;
+use crate::codec::h264::picture::Reference;
 use crate::decoder::stateless::h264::backends::StatelessH264DecoderBackend;
-use crate::decoder::stateless::h264::dpb::Dpb;
-use crate::decoder::stateless::h264::dpb::DpbEntry;
-use crate::decoder::stateless::h264::parser::Nalu;
-use crate::decoder::stateless::h264::parser::NaluType;
-use crate::decoder::stateless::h264::parser::Parser;
-use crate::decoder::stateless::h264::parser::RefPicListModification;
-use crate::decoder::stateless::h264::parser::Slice;
-use crate::decoder::stateless::h264::parser::SliceType;
-use crate::decoder::stateless::h264::parser::Sps;
-use crate::decoder::stateless::h264::picture::Field;
-use crate::decoder::stateless::h264::picture::IsIdr;
-use crate::decoder::stateless::h264::picture::PictureData;
-use crate::decoder::stateless::h264::picture::Reference;
 use crate::decoder::stateless::private;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
@@ -2324,8 +2321,8 @@ pub mod tests {
     ///
     /// gst-launch-1.0 videotestsrc num-buffers=1 ! video/x-raw,format=I420,width=64,height=64 ! x264enc ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! filesink location="64x64-I.h264"
     pub const DECODE_64X64_PROGRESSIVE_I: TestStream = TestStream {
-        stream: include_bytes!("h264/test_data/64x64-I.h264"),
-        crcs: include_str!("h264/test_data/64x64-I.h264.crc"),
+        stream: include_bytes!("../../codec/h264/test_data/64x64-I.h264"),
+        crcs: include_str!("../../codec/h264/test_data/64x64-I.h264.crc"),
     };
 
     #[test]
@@ -2343,8 +2340,8 @@ pub mod tests {
     /// Encoded with the following GStreamer pipeline:
     /// gst-launch-1.0 videotestsrc num-buffers=2 ! video/x-raw,format=I420,width=64,height=64 ! x264enc b-adapt=false ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! filesink location="64x64-I-P.h264"
     pub const DECODE_64X64_PROGRESSIVE_I_P: TestStream = TestStream {
-        stream: include_bytes!("h264/test_data/64x64-I-P.h264"),
-        crcs: include_str!("h264/test_data/64x64-I-P.h264.crc"),
+        stream: include_bytes!("../../codec/h264/test_data/64x64-I-P.h264"),
+        crcs: include_str!("../../codec/h264/test_data/64x64-I-P.h264.crc"),
     };
 
     #[test]
@@ -2362,8 +2359,8 @@ pub mod tests {
     /// Encoded with the following GStreamer pipeline:
     /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=64,height=64 ! x264enc b-adapt=false bframes=1 ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream ! filesink location="64x64-I-P-B-P.h264"
     pub const DECODE_64X64_PROGRESSIVE_I_P_B_P: TestStream = TestStream {
-        stream: include_bytes!("h264/test_data/64x64-I-P-B-P.h264"),
-        crcs: include_str!("h264/test_data/64x64-I-P-B-P.h264.crc"),
+        stream: include_bytes!("../../codec/h264/test_data/64x64-I-P-B-P.h264"),
+        crcs: include_str!("../../codec/h264/test_data/64x64-I-P-B-P.h264.crc"),
     };
 
     #[test]
@@ -2383,8 +2380,8 @@ pub mod tests {
     /// Encoded with the following GStreamer pipeline:
     /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=64,height=64 ! x264enc b-adapt=false bframes=1 ! video/x-h264,profile=high,stream-format=byte-stream ! filesink location="64x64-I-P-B-P-high.h264"
     pub const DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH: TestStream = TestStream {
-        stream: include_bytes!("h264/test_data/64x64-I-P-B-P-high.h264"),
-        crcs: include_str!("h264/test_data/64x64-I-P-B-P-high.h264.crc"),
+        stream: include_bytes!("../../codec/h264/test_data/64x64-I-P-B-P-high.h264"),
+        crcs: include_str!("../../codec/h264/test_data/64x64-I-P-B-P-high.h264.crc"),
     };
 
     #[test]
@@ -2405,8 +2402,8 @@ pub mod tests {
 
     /// Same as Chromium's test-25fps.h264
     pub const DECODE_TEST_25FPS: TestStream = TestStream {
-        stream: include_bytes!("h264/test_data/test-25fps.h264"),
-        crcs: include_str!("h264/test_data/test-25fps.h264.crc"),
+        stream: include_bytes!("../../codec/h264/test_data/test-25fps.h264"),
+        crcs: include_str!("../../codec/h264/test_data/test-25fps.h264.crc"),
     };
 
     #[test]
@@ -2429,8 +2426,8 @@ pub mod tests {
     // actually works, specially that "frame splitting" works, as the fields
     // here were encoded as frames.
     pub const DECODE_TEST_25FPS_INTERLACED: TestStream = TestStream {
-        stream: include_bytes!("h264/test_data/test-25fps-interlaced.h264"),
-        crcs: include_str!("h264/test_data/test-25fps-interlaced.h264.crc"),
+        stream: include_bytes!("../../codec/h264/test_data/test-25fps-interlaced.h264"),
+        crcs: include_str!("../../codec/h264/test_data/test-25fps-interlaced.h264.crc"),
     };
 
     #[test]

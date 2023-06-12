@@ -9,16 +9,16 @@ use anyhow::anyhow;
 use bytes::Buf;
 use log::debug;
 
-use crate::decoder::stateless::vp8::bool_decoder::BoolDecoder;
-use crate::decoder::stateless::vp8::bool_decoder::BoolDecoderState;
-use crate::decoder::stateless::vp8::probs::COEFF_DEFAULT_PROBS;
-use crate::decoder::stateless::vp8::probs::COEFF_UPDATE_PROBS;
-use crate::decoder::stateless::vp8::probs::KF_UV_MODE_PROBS;
-use crate::decoder::stateless::vp8::probs::KF_Y_MODE_PROBS;
-use crate::decoder::stateless::vp8::probs::MV_DEFAULT_PROBS;
-use crate::decoder::stateless::vp8::probs::MV_UPDATE_PROBS;
-use crate::decoder::stateless::vp8::probs::NK_UV_MODE_PROBS;
-use crate::decoder::stateless::vp8::probs::NK_Y_MODE_PROBS;
+use crate::codec::vp8::bool_decoder::BoolDecoder;
+use crate::codec::vp8::bool_decoder::BoolDecoderState;
+use crate::codec::vp8::probs::COEFF_DEFAULT_PROBS;
+use crate::codec::vp8::probs::COEFF_UPDATE_PROBS;
+use crate::codec::vp8::probs::KF_UV_MODE_PROBS;
+use crate::codec::vp8::probs::KF_Y_MODE_PROBS;
+use crate::codec::vp8::probs::MV_DEFAULT_PROBS;
+use crate::codec::vp8::probs::MV_UPDATE_PROBS;
+use crate::codec::vp8::probs::NK_UV_MODE_PROBS;
+use crate::codec::vp8::probs::NK_Y_MODE_PROBS;
 
 /// Dequantization indices as parsed from the quant_indices() syntax.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

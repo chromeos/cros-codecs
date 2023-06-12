@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoder::stateless::vp9::parser::Header;
-use crate::decoder::stateless::vp9::parser::MAX_SEGMENTS;
-use crate::decoder::stateless::vp9::parser::NUM_REF_FRAMES;
+use crate::codec::vp9::parser::Header;
+use crate::codec::vp9::parser::MAX_SEGMENTS;
+use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::Segmentation;
 use crate::decoder::stateless::StatelessDecoderBackend;
 

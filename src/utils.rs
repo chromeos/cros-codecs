@@ -7,8 +7,8 @@ use std::io::Seek;
 
 use bytes::Buf;
 
-use crate::decoder::stateless::h264::parser::Nalu;
-use crate::decoder::stateless::h264::parser::NaluType;
+use crate::codec::h264::parser::Nalu;
+use crate::codec::h264::parser::NaluType;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;

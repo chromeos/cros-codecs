@@ -8,19 +8,16 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::codec::vp8::parser::Header;
+use crate::codec::vp8::parser::MbLfAdjustments;
+use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::vp8::backends::StatelessVp8DecoderBackend;
-use crate::decoder::stateless::vp8::parser::Header;
-use crate::decoder::stateless::vp8::parser::MbLfAdjustments;
-use crate::decoder::stateless::vp8::parser::Segmentation;
 use crate::decoder::stateless::vp8::Decoder;
 use crate::decoder::BlockingMode;
 use crate::utils::dummy::*;
 
 impl StatelessVp8DecoderBackend for Backend {
-    fn new_sequence(
-        &mut self,
-        _: &crate::decoder::stateless::vp8::parser::Header,
-    ) -> super::Result<()> {
+    fn new_sequence(&mut self, _: &Header) -> super::Result<()> {
         Ok(())
     }
 

@@ -8,20 +8,17 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::codec::vp9::parser::Header;
+use crate::codec::vp9::parser::MAX_SEGMENTS;
+use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::backends::StatelessVp9DecoderBackend;
-use crate::decoder::stateless::vp9::parser::Header;
-use crate::decoder::stateless::vp9::parser::MAX_SEGMENTS;
-use crate::decoder::stateless::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::Decoder;
 use crate::decoder::stateless::vp9::Segmentation;
 use crate::decoder::BlockingMode;
 use crate::utils::dummy::*;
 
 impl StatelessVp9DecoderBackend for Backend {
-    fn new_sequence(
-        &mut self,
-        _: &crate::decoder::stateless::vp9::parser::Header,
-    ) -> super::Result<()> {
+    fn new_sequence(&mut self, _: &Header) -> super::Result<()> {
         Ok(())
     }
 

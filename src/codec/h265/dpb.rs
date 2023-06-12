@@ -9,9 +9,9 @@ use std::rc::Rc;
 
 use anyhow::anyhow;
 
-use crate::decoder::stateless::h265::parser::Sps;
-use crate::decoder::stateless::h265::picture::PictureData;
-use crate::decoder::stateless::h265::picture::Reference;
+use crate::codec::h265::parser::Sps;
+use crate::codec::h265::picture::PictureData;
+use crate::codec::h265::picture::Reference;
 use crate::decoder::DecodedHandle;
 
 // Shortcut to refer to a DPB entry.

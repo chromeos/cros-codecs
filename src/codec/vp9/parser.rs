@@ -956,14 +956,14 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::decoder::stateless::vp9::parser::BitDepth;
-    use crate::decoder::stateless::vp9::parser::ColorSpace;
-    use crate::decoder::stateless::vp9::parser::FrameType;
-    use crate::decoder::stateless::vp9::parser::InterpolationFilter;
-    use crate::decoder::stateless::vp9::parser::Parser;
-    use crate::decoder::stateless::vp9::parser::Profile;
-    use crate::decoder::stateless::vp9::parser::MAX_SEGMENTS;
-    use crate::decoder::stateless::vp9::parser::SEG_LVL_MAX;
+    use crate::codec::vp9::parser::BitDepth;
+    use crate::codec::vp9::parser::ColorSpace;
+    use crate::codec::vp9::parser::FrameType;
+    use crate::codec::vp9::parser::InterpolationFilter;
+    use crate::codec::vp9::parser::Parser;
+    use crate::codec::vp9::parser::Profile;
+    use crate::codec::vp9::parser::MAX_SEGMENTS;
+    use crate::codec::vp9::parser::SEG_LVL_MAX;
     use crate::utils::IvfIterator;
 
     #[test]
@@ -1009,7 +1009,7 @@ mod tests {
                 assert!(matches!(h.color_space, ColorSpace::Unknown));
                 assert!(matches!(
                     h.color_range,
-                    crate::decoder::stateless::vp9::parser::ColorRange::StudioSwing
+                    crate::codec::vp9::parser::ColorRange::StudioSwing
                 ));
 
                 assert!(!h.show_existing_frame);
@@ -1099,7 +1099,7 @@ mod tests {
                 assert!(matches!(h.color_space, ColorSpace::Unknown));
                 assert!(matches!(
                     h.color_range,
-                    crate::decoder::stateless::vp9::parser::ColorRange::StudioSwing
+                    crate::codec::vp9::parser::ColorRange::StudioSwing
                 ));
 
                 assert!(!h.show_existing_frame);
@@ -1182,7 +1182,7 @@ mod tests {
                 assert!(matches!(h.color_space, ColorSpace::Unknown));
                 assert!(matches!(
                     h.color_range,
-                    crate::decoder::stateless::vp9::parser::ColorRange::StudioSwing
+                    crate::codec::vp9::parser::ColorRange::StudioSwing
                 ));
 
                 assert!(!h.show_existing_frame);
