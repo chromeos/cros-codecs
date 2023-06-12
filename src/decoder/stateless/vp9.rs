@@ -100,11 +100,6 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         })
     }
 
-    /// Replace a reference frame with `handle`.
-    fn replace_reference(reference: &mut Option<T>, handle: &T) {
-        *reference = Some(handle.clone());
-    }
-
     fn update_references(
         reference_frames: &mut [Option<T>; NUM_REF_FRAMES],
         picture: &T,
@@ -114,7 +109,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         for i in 0..NUM_REF_FRAMES {
             if (refresh_frame_flags & 1) == 1 {
                 debug!("Replacing reference frame {}", i);
-                Self::replace_reference(&mut reference_frames[i], picture)
+                reference_frames[i] = Some(picture.clone());
             }
 
             refresh_frame_flags >>= 1;
