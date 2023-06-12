@@ -16,6 +16,9 @@ use libva::PictureParameter;
 use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
 
+use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::StreamInfo;
+use crate::backend::vaapi::VaapiBackend;
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::parser::Level;
@@ -32,9 +35,6 @@ use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
-use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-use crate::utils::vaapi::StreamInfo;
-use crate::utils::vaapi::VaapiBackend;
 
 impl StreamInfo for &Sps {
     fn va_profile(&self) -> anyhow::Result<i32> {

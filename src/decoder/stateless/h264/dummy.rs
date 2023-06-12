@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::backend::dummy::*;
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::parser::Pps;
@@ -18,7 +19,6 @@ use crate::decoder::stateless::h264::Decoder;
 use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
-use crate::utils::dummy::*;
 
 impl StatelessH264DecoderBackend for Backend {
     type Picture = ();

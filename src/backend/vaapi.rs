@@ -25,6 +25,7 @@ use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
 use libva::VaError;
 
+use crate::backend::vaapi::surface_pool::SurfacePool;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -33,7 +34,6 @@ use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
 use crate::i4xx_copy;
 use crate::nv12_copy;
-use crate::utils::vaapi::surface_pool::SurfacePool;
 use crate::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Resolution;

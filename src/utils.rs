@@ -18,11 +18,6 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::DecodedFormat;
 
-#[cfg(test)]
-pub(crate) mod dummy;
-#[cfg(feature = "vaapi")]
-pub mod vaapi;
-
 /// Iterator over IVF packets.
 pub struct IvfIterator<'a> {
     cursor: Cursor<&'a [u8]>,

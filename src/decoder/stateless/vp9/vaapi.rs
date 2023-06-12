@@ -10,6 +10,9 @@ use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
 
+use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::StreamInfo;
+use crate::backend::vaapi::VaapiBackend;
 use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::Header;
 use crate::codec::vp9::parser::Profile;
@@ -24,9 +27,6 @@ use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
-use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-use crate::utils::vaapi::StreamInfo;
-use crate::utils::vaapi::VaapiBackend;
 
 /// The number of surfaces to allocate for this codec.
 const NUM_SURFACES: usize = 12;
@@ -306,6 +306,7 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
+    use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
     use crate::codec::vp9::parser::Parser;
     use crate::codec::vp9::parser::MAX_SEGMENTS;
     use crate::codec::vp9::parser::NUM_REF_FRAMES;
@@ -315,7 +316,6 @@ mod tests {
     use crate::decoder::stateless::vp9::Decoder;
     use crate::decoder::stateless::vp9::Segmentation;
     use crate::decoder::BlockingMode;
-    use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 

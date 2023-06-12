@@ -13,6 +13,9 @@ use libva::IQMatrixBufferVP8;
 use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 
+use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::StreamInfo;
+use crate::backend::vaapi::VaapiBackend;
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
@@ -21,9 +24,6 @@ use crate::decoder::stateless::vp8::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
-use crate::utils::vaapi::DecodedHandle as VADecodedHandle;
-use crate::utils::vaapi::StreamInfo;
-use crate::utils::vaapi::VaapiBackend;
 use crate::Resolution;
 
 /// The number of surfaces to allocate for this codec. Same as GStreamer's vavp8dec.
@@ -309,13 +309,13 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
+    use crate::backend::vaapi::VaapiBackend;
     use crate::codec::vp8::parser::Parser;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
     use crate::decoder::stateless::vp8::tests::vpx_decoding_loop;
     use crate::decoder::stateless::vp8::Decoder;
     use crate::decoder::BlockingMode;
-    use crate::utils::vaapi::VaapiBackend;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
     use crate::Resolution;
