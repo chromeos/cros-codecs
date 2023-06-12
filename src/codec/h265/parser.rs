@@ -246,16 +246,16 @@ pub struct Vps {
     temporal_id_nesting_flag: bool,
     /// ProfileTierLevel() data.
     profile_tier_level: ProfileTierLevel,
-    /// When true, specifies that vps_max_dec_pic_buffering_minus1[ i ],
-    /// vps_max_num_reorder_pics[ i ] and vps_max_latency_increase_plus1[ i ]
+    /// When true, specifies that `vps_max_dec_pic_buffering_minus1[ i ]`,
+    /// `vps_max_num_reorder_pics[ i ]` and `vps_max_latency_increase_plus1[ i ]`
     /// are present for vps_max_sub_layers_ minus1 + 1 sub-layers.
     /// vps_sub_layer_ordering_info_present_flag equal to 0 specifies that the
-    /// values of vps_max_dec_pic_buffering_minus1[ vps_max_sub_layers_minus1 ],
+    /// values of `vps_max_dec_pic_buffering_minus1[ vps_max_sub_layers_minus1 ]`,
     /// vps_max_num_reorder_pics[ vps_max_sub_ layers_minus1 ] and
-    /// vps_max_latency_increase_plus1[ vps_max_sub_layers_minus1 ] apply to all
+    /// `vps_max_latency_increase_plus1[ vps_max_sub_layers_minus1 ]` apply to all
     /// sub-layers
     sub_layer_ordering_info_present_flag: bool,
-    /// max_dec_pic_buffering_minus1[i] plus 1 specifies the maximum required
+    /// `max_dec_pic_buffering_minus1[i]` plus 1 specifies the maximum required
     /// size of the decoded picture buffer for the CVS in units of picture
     /// storage buffers when HighestTid is equal to i.
     max_dec_pic_buffering_minus1: [u32; 7],
@@ -264,8 +264,8 @@ pub struct Vps {
     /// the CVS in decoding order and follow that picture with PicOutputFlag
     /// equal to 1 in output order when HighestTid is equal to i.
     max_num_reorder_pics: [u32; 7],
-    /// When true, max_latency_increase_plus1[i] is used to compute the value of
-    /// VpsMaxLatencyPictures[ i ], which specifies the maximum number of
+    /// When true, `max_latency_increase_plus1[i]` is used to compute the value of
+    /// `VpsMaxLatencyPictures[ i ]`, which specifies the maximum number of
     /// pictures with PicOutputFlag equal to 1 that can precede any picture with
     /// PicOutputFlag equal to 1 in the CVS in output order and follow that
     /// picture with PicOutputFlag equal to 1 in decoding order when HighestTid
@@ -310,17 +310,17 @@ pub struct Vps {
     /// Specifies the number of hrd_parameters( ) syntax structures present in
     /// the VPS RBSP before the vps_extension_flag syntax element.
     num_hrd_parameters: u32,
-    /// hrd_layer_set_idx[ i ] specifies the index, into the list of layer sets
+    /// `hrd_layer_set_idx[ i ]` specifies the index, into the list of layer sets
     /// specified by the VPS, of the layer set to which the i-th hrd_parameters(
     /// ) syntax structure in the VPS applies.
     hrd_layer_set_idx: Vec<u16>,
-    /// cprms_present_flag[ i ] equal to true specifies that the HRD parameters
+    /// `cprms_present_flag[ i ]` equal to true specifies that the HRD parameters
     /// that are common for all sub-layers are present in the i-th
-    /// hrd_parameters( ) syntax structure in the VPS. cprms_present_flag[ i ]
+    /// hrd_parameters( ) syntax structure in the VPS. `cprms_present_flag[ i ]`
     /// equal to false specifies that the HRD parameters that are common for all
     /// sub-layers are not present in the i-th hrd_parameters( ) syntax
     /// structure in the VPS and are derived to be the same as the ( i − 1 )-th
-    /// hrd_parameters( ) syntax structure in the VPS. cprms_present_flag[ 0 ]
+    /// hrd_parameters( ) syntax structure in the VPS. `cprms_present_flag[ 0 ]`
     /// is inferred to be equal to true.
     cprms_present_flag: Vec<bool>,
     /// The hrd_parameters() data.
@@ -462,7 +462,7 @@ impl Default for Vps {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProfileTierLevel {
     /// Specifies the context for the interpretation of general_profile_idc and
-    /// general_profile_compatibility_flag[ j ] for all values of j in the range
+    /// `general_profile_compatibility_flag[ j ]` for all values of j in the range
     /// of 0 to 31, inclusive.
     general_profile_space: u8,
     /// Specifies the tier context for the interpretation of general_level_idc
@@ -474,7 +474,7 @@ pub struct ProfileTierLevel {
     /// Other values of general_profile_idc are reserved for future use by ITU-T
     /// | ISO/IEC.
     general_profile_idc: u8,
-    /// general_profile_compatibility_flag[ j ] equal to true, when
+    /// `general_profile_compatibility_flag[ j ]` equal to true, when
     /// general_profile_space is false, indicates that the CVS conforms to the
     /// profile indicated by general_profile_idc equal to j as specified in
     /// Annex A.
@@ -831,7 +831,7 @@ pub struct SpsSccExtension {
     /// num_palette_predictor_initializers_minus1 plus 1 specifies the number of
     /// entries in the sequence palette predictor initializer.
     num_palette_predictor_initializer_minus1: u8,
-    /// palette_predictor_initializer[ comp ][ i ] specifies the value of the
+    /// `palette_predictor_initializer[ comp ][ i ]` specifies the value of the
     /// comp-th component of the i-th palette entry in the SPS that is used to
     /// initialize the array PredictorPaletteEntries.
     palette_predictor_initializer: [[u32; 128]; 3],
@@ -949,25 +949,25 @@ pub struct Sps {
     /// Specifies the value of the variable MaxPicOrderCntLsb that is used in
     /// the decoding process for picture order count.
     log2_max_pic_order_cnt_lsb_minus4: u8,
-    /// When true, specifies that max_dec_pic_buffering_minus1[ i ],
-    /// max_num_reorder_pics[ i ] and max_latency_increase_plus1[ i ] are
+    /// When true, specifies that `max_dec_pic_buffering_minus1[ i ]`,
+    /// `max_num_reorder_pics[ i ]` and `max_latency_increase_plus1[ i ]` are
     /// present for max_sub_layers_minus1 + 1 sub- layers. When false, specifies
-    /// that the values of max_dec_pic_ buffering_minus1[ max_sub_layers_minus1
-    /// ], max_num_reorder_pics[ max_sub_layers_minus1 ] and max_
-    /// latency_increase_plus1[ max_sub_layers_minus1 ] apply to all sub-layers.
+    /// that the values of `max_dec_pic_ buffering_minus1[ max_sub_layers_minus1
+    /// ]`, `max_num_reorder_pics[ max_sub_layers_minus1 ]` and max_
+    /// `latency_increase_plus1[ max_sub_layers_minus1 ]` apply to all sub-layers.
     sub_layer_ordering_info_present_flag: bool,
-    /// max_dec_pic_buffering_minus1[ i ] plus 1 specifies the maximum required
+    /// `max_dec_pic_buffering_minus1[ i ]` plus 1 specifies the maximum required
     /// size of the decoded picture buffer for the CVS in units of picture
     /// storage buffers when HighestTid is equal to i.
     max_dec_pic_buffering_minus1: [u8; 7],
-    /// max_num_reorder_pics[ i ] indicates the maximum allowed number of
+    /// `max_num_reorder_pics[ i ]` indicates the maximum allowed number of
     /// pictures with PicOutputFlag equal to 1 that can precede any picture with
     /// PicOutputFlag equal to 1 in the CVS in decoding order and follow that
     /// picture with PicOutputFlag equal to 1 in output order when HighestTid is
     /// equal to i.
     max_num_reorder_pics: [u8; 7],
-    /// max_latency_increase_plus1[ i ] not equal to 0 is used to compute the
-    /// value of SpsMaxLatencyPictures[ i ], which specifies the maximum number
+    /// `max_latency_increase_plus1[ i ]` not equal to 0 is used to compute the
+    /// value of `SpsMaxLatencyPictures[ i ]`, which specifies the maximum number
     /// of pictures with PicOutputFlag equal to 1 that can precede any picture
     /// with PicOutputFlag equal to 1 in the CVS in output order and follow that
     /// picture with PicOutputFlag equal to 1 in decoding order when HighestTid
@@ -1058,11 +1058,11 @@ pub struct Sps {
     /// Specifies the number of candidate long-term reference pictures that are
     /// specified in the SPS.
     num_long_term_ref_pics_sps: u8,
-    /// lt_ref_pic_poc_lsb_sps[ i ] specifies the picture order count modulo
+    /// `lt_ref_pic_poc_lsb_sps[ i ]` specifies the picture order count modulo
     /// MaxPicOrderCntLsb of the i-th candidate long-term reference picture
     /// specified in the SPS.
     lt_ref_pic_poc_lsb_sps: Vec<u32>,
-    /// used_by_curr_pic_lt_sps_flag[ i ] equal to false specifies that the i-th
+    /// `used_by_curr_pic_lt_sps_flag[ i ]` equal to false specifies that the i-th
     /// candidate long-term reference picture specified in the SPS is not used
     /// for reference by a picture that includes in its long-term reference
     /// picture set (RPS) the i-th candidate long-term reference picture
@@ -1420,7 +1420,7 @@ pub struct PpsSccExtension {
     /// chroma_bit_depth_entry_minus8 plus 8 specifies the bit depth of the
     /// chroma components of the entries of the palette predictor initializer.
     chroma_bit_depth_entry_minus8: u8,
-    /// pps_palette_predictor_initializer[ comp ][ i ] specifies the value of
+    /// `pps_palette_predictor_initializer[ comp ][ i ]` specifies the value of
     /// the comp-th component of the i-th palette entry in the PPS that is used
     /// to initialize the array PredictorPaletteEntries.
     palette_predictor_initializer: [[u8; 128]; 3],
@@ -1518,7 +1518,7 @@ pub struct PpsRangeExtension {
     /// coding block size of coding units that convey cu_chroma_qp_offset_flag.
     diff_cu_chroma_qp_offset_depth: u32,
     /// chroma_qp_offset_list_len_minus1 plus 1 specifies the number of
-    /// cb_qp_offset_list[ i ] and cr_qp_offset_list[ i ] syntax elements that
+    /// `cb_qp_offset_list[ i ]` and `cr_qp_offset_list[ i ]` syntax elements that
     /// are present in the PPS.
     chroma_qp_offset_list_len_minus1: u32,
     /// Specify offsets used in the derivation of Qp′Cb and Qp′Cr, respectively.
@@ -1690,13 +1690,13 @@ pub struct Pps {
     /// boundaries are distributed uniformly across the picture.  When not set,
     /// specifies that tile column boundaries and likewise tile row boundaries
     /// are not distributed uniformly across the picture but signalled
-    /// explicitly using the syntax elements column_width_minus1[ i ] and
-    /// row_height_minus1[ i ].
+    /// explicitly using the syntax elements `column_width_minus1[ i ]` and
+    /// `row_height_minus1[ i ]`.
     uniform_spacing_flag: bool,
-    /// column_width_minus1[ i ] plus 1 specifies the width of the i-th tile
+    /// `column_width_minus1[ i ]` plus 1 specifies the width of the i-th tile
     /// column in units of CTBs.
     column_width_minus1: [u32; 19],
-    /// row_height_minus1[ i ] plus 1 specifies the height of the i-th tile row
+    /// `row_height_minus1[ i ]` plus 1 specifies the height of the i-th tile row
     /// in units of CTBs.
     row_height_minus1: [u32; 21],
     /// When set, specifies that in-loop filtering operations may be performed
@@ -2033,11 +2033,11 @@ impl Default for Pps {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScalingLists {
-    /// plus 8 specifies the value of the variable ScalingFactor[ 2 ][ matrixId
-    /// ] [ 0 ][ 0 ] for the scaling list for the 16x16 size.
+    /// plus 8 specifies the value of the variable `ScalingFactor[ 2 ][ matrixId
+    /// ] [ 0 ][ 0 ]` for the scaling list for the 16x16 size.
     scaling_list_dc_coef_minus8_16x16: [i16; 6],
-    /// plus 8 specifies the value of the variable ScalingFactor[ 3 ][ matrixId
-    /// ][ 0 ][ 0 ] for the scaling list for the 32x32 size.
+    /// plus 8 specifies the value of the variable `ScalingFactor[ 3 ][ matrixId
+    /// ][ 0 ][ 0 ]` for the scaling list for the 32x32 size.
     scaling_list_dc_coef_minus8_32x32: [i16; 2],
     /// The 4x4 scaling list.
     scaling_list_4x4: [[u8; 16]; 6],
@@ -2091,18 +2091,18 @@ impl Default for ScalingLists {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RefPicListModification {
     /// Whenset, indicates that reference picture list 0 is specified explicitly
-    /// by a list of list_entry_l0[ i ] values.  When not set, indicates that
+    /// by a list of `list_entry_l0[ i ]` values.  When not set, indicates that
     /// reference picture list 0 is determined implicitly.
     ref_pic_list_modification_flag_l0: bool,
-    /// list_entry_l0[ i ] specifies the index of the reference picture in
+    /// `list_entry_l0[ i ]` specifies the index of the reference picture in
     /// RefPicListTemp0 to be placed at the current position of reference
     /// picture list 0.
     list_entry_l0: Vec<u32>,
     /// Whenset, indicates that reference picture list 1 is specified explicitly
-    /// by a list of list_entry_l1[ i ] values.  When not set, indicates that
+    /// by a list of `list_entry_l1[ i ]` values.  When not set, indicates that
     /// reference picture list 1 is determined implicitly.
     ref_pic_list_modification_flag_l1: bool,
-    /// list_entry_l1[ i ] specifies the index of the reference picture in
+    /// `list_entry_l1[ i ]` specifies the index of the reference picture in
     /// RefPicListTemp1 to be placed at the current position of reference
     /// picture list 1.
     list_entry_l1: Vec<u32>,
@@ -2133,39 +2133,39 @@ pub struct PredWeightTable {
     /// The difference of the base 2 logarithm of the denominator for all chroma
     /// weighting factors.
     delta_chroma_log2_weight_denom: i8,
-    /// luma_weight_l0_flag[ i ] set specifies that weighting factors for the
-    /// luma component of list 0 prediction using RefPicList0[ i ] are present.
-    /// luma_weight_l0_flag[ i ] not set specifies that these weighting factors
+    /// `luma_weight_l0_flag[ i ]` set specifies that weighting factors for the
+    /// luma component of list 0 prediction using `RefPicList0[ i ]` are present.
+    /// `luma_weight_l0_flag[ i ]` not set specifies that these weighting factors
     /// are not present.
     luma_weight_l0_flag: [bool; 15],
-    /// chroma_weight_l0_flag[ i ] set specifies that weighting factors for the
-    /// chroma prediction values of list 0 prediction using RefPicList0[ i ] are
-    /// present. chroma_weight_l0_flag[ i ] not set specifies that these
+    /// `chroma_weight_l0_flag[ i ]` set specifies that weighting factors for the
+    /// chroma prediction values of list 0 prediction using `RefPicList0[ i ]` are
+    /// present. `chroma_weight_l0_flag[ i ]` not set specifies that these
     /// weighting factors are not present.
     chroma_weight_l0_flag: [bool; 15],
-    /// delta_luma_weight_l0[ i ] is the difference of the weighting factor
+    /// `delta_luma_weight_l0[ i ]` is the difference of the weighting factor
     /// applied to the luma prediction value for list 0 prediction using
-    /// RefPicList0[ i ].
+    /// `RefPicList0[ i ]`.
     delta_luma_weight_l0: [i8; 15],
-    /// luma_offset_l0[ i ] is the additive offset applied to the luma
-    /// prediction value for list 0 prediction using RefPicList0[ i ].
+    /// `luma_offset_l0[ i ]` is the additive offset applied to the luma
+    /// prediction value for list 0 prediction using `RefPicList0[ i ]`.
     luma_offset_l0: [i8; 15],
-    /// delta_chroma_weight_l0[ i ][ j ] is the difference of the weighting
+    /// `delta_chroma_weight_l0[ i ][ j ]` is the difference of the weighting
     /// factor applied to the chroma prediction values for list 0 prediction
-    /// using RefPicList0[ i ] with j equal to 0 for Cb and j equal to 1 for Cr.
+    /// using `RefPicList0[ i ]` with j equal to 0 for Cb and j equal to 1 for Cr.
     delta_chroma_weight_l0: [[i8; 2]; 15],
-    /// delta_chroma_offset_l0[ i ][ j ] is the difference of the additive
+    /// `delta_chroma_offset_l0[ i ][ j ]` is the difference of the additive
     /// offset applied to the chroma prediction values for list 0 prediction
-    /// using RefPicList0[ i ] with j equal to 0 for Cb and j equal to 1 for Cr.
+    /// using `RefPicList0[ i ]` with j equal to 0 for Cb and j equal to 1 for Cr.
     delta_chroma_offset_l0: [[i16; 2]; 15],
 
-    // luma_weight_l1_flag[ i ], chroma_weight_l1_flag[ i ],
-    // delta_luma_weight_l1[ i ], luma_offset_l1[ i ], delta_chroma_weight_l1[ i
-    // ][ j ] and delta_chroma_offset_l1[ i ][ j ] have the same
-    // semanticsasluma_weight_l0_flag[ i ], chroma_weight_l0_flag[ i ],
-    // delta_luma_weight_l0[ i ], luma_offset_l0[ i ], delta_chroma_weight_l0[ i
-    // ][ j ] and delta_chroma_offset_l0[ i ][ j ], respectively, with l0, L0,
-    // list 0 and List0 replaced by l1, L1, list 1 and List1, respectively.
+    // `luma_weight_l1_flag[ i ]`, `chroma_weight_l1_flag[ i ]`,
+    // `delta_luma_weight_l1[ i ]`, `luma_offset_l1[ i ]`, delta_chroma_weight_l1[ i
+    // `][ j ]` and `delta_chroma_offset_l1[ i ]`[ j ] have the same
+    // `semanticsasluma_weight_l0_flag[ i ]`, `chroma_weight_l0_flag[ i ]`,
+    // `delta_luma_weight_l0[ i ]`, `luma_offset_l0[ i ]`, `delta_chroma_weight_l0[ i
+    // ][ j ]` and `delta_chroma_offset_l0[ i ][ j ]`, respectively, with `l0`, `L0`,
+    // `list 0` and `List0` replaced by `l1`, `L1`, `list 1` and `List1`, respectively.
     luma_weight_l1_flag: [bool; 15],
     chroma_weight_l1_flag: [bool; 15],
     delta_luma_weight_l1: [i8; 15],
@@ -2427,17 +2427,17 @@ pub struct SliceHeader {
     /// Specifies the number of entries in the long-term RPS of the current
     /// picture that are directly signalled in the slice header.
     num_long_term_pics: u8,
-    /// lt_idx_sps[ i ] specifies an index, into the list of candidate long-term
+    /// `lt_idx_sps[ i ]` specifies an index, into the list of candidate long-term
     /// reference pictures specified in the active SPS, of the i-th entry in the
     /// long-term RPS of the current picture.
     lt_idx_sps: [u8; 16],
-    /// poc_lsb_lt[ i ] specifies the value of the picture order count modulo
+    /// `poc_lsb_lt[ i ]` specifies the value of the picture order count modulo
     /// MaxPicOrderCntLsb of the i-th entry in the long-term RPS of the current
     /// picture.
     poc_lsb_lt: [u32; 16],
     /// Same as UsedByCurrPicLt in the specification.
     used_by_curr_pic_lt: [bool; 16],
-    /// When set, specifies that that delta_poc_msb_cycle_lt[i] is present.
+    /// When set, specifies that that `delta_poc_msb_cycle_lt[i]` is present.
     delta_poc_msb_present_flag: [bool; 16],
     /// Same as DeltaPocMsbCycleLt in the specification.
     delta_poc_msb_cycle_lt: [u32; 16],
@@ -2471,7 +2471,7 @@ pub struct SliceHeader {
     /// The RefPicListModification data.
     ref_pic_list_modification: RefPicListModification,
     /// When set, indicates that the mvd_coding( x0, y0, 1 ) syntax structure is
-    /// not parsed and MvdL1[ x0 ][ y0 ][ compIdx ] is set equal to 0 for
+    /// not parsed and `MvdL1[ x0 ]`[ y0 `][ compIdx ]` is set equal to 0 for
     /// compIdx = 0..1. When not set, indicates that the mvd_coding( x0, y0, 1 )
     /// syntax structure is parsed.
     mvd_l1_zero_flag: bool,
@@ -2540,13 +2540,13 @@ pub struct SliceHeader {
     /// upper boundaries of the current slice. The in-loop filtering operations
     /// include the deblocking filter and sample adaptive offset filter.
     loop_filter_across_slices_enabled_flag: bool,
-    /// Specifies the number of entry_point_offset_minus1[ i ] syntax elements
+    /// Specifies the number of `entry_point_offset_minus1[ i ]` syntax elements
     /// in the slice header.
     num_entry_point_offsets: u32,
     /// offset_len_minus1 plus 1 specifies the length, in bits, of the
-    /// entry_point_offset_minus1[ i ] syntax elements.
+    /// `entry_point_offset_minus1[ i ]` syntax elements.
     offset_len_minus1: u8,
-    /// entry_point_offset_minus1[ i ] plus 1 specifies the i-th entry point
+    /// `entry_point_offset_minus1[ i ]` plus 1 specifies the i-th entry point
     /// offset in bytes, and is represented by offset_len_minus1 plus 1 bits.
     /// The slice segment data that follow the slice segment header consists of
     /// num_entry_point_offsets + 1 subsets, with subset index values ranging
@@ -2861,22 +2861,22 @@ impl<T> Slice<T> {
 pub struct SublayerHrdParameters {
     // NOTE: The value of CpbCnt is cpb_cnt_minus1[i] + 1, and cpb_cnt_minus1
     // ranges from 0..=31
-    /// bit_rate_value_minus1[ i ] (together with bit_rate_scale) specifies the
+    /// `bit_rate_value_minus1[ i ]` (together with bit_rate_scale) specifies the
     /// maximum input bit rate for the i-th CPB when the CPB operates at the
     /// access unit level
     bit_rate_value_minus1: [u32; 32],
-    /// cpb_size_value_minus1[ i ] is used together with cpb_size_scale to
+    /// `cpb_size_value_minus1[ i ]` is used together with cpb_size_scale to
     /// specify the i-th CPB size when the CPB operates at the access unit
     /// level.
     cpb_size_value_minus1: [u32; 32],
-    /// cpb_size_du_value_minus1[ i ] is used together with cpb_size_du_scale to
+    /// `cpb_size_du_value_minus1[ i ]` is used together with cpb_size_du_scale to
     /// specify the i-th CPB size when the CPB operates at sub-picture level.
     cpb_size_du_value_minus1: [u32; 32],
-    /// bit_rate_du_value_minus1[ i ] (together with bit_rate_scale) specifies
+    /// `bit_rate_du_value_minus1[ i ]` (together with bit_rate_scale) specifies
     /// the maximum input bit rate for the i-th CPB when the CPB operates at the
     /// sub-picture level.
     bit_rate_du_value_minus1: [u32; 32],
-    /// cbr_flag[ i ] not set specifies that to decode this CVS by the HRD using
+    /// `cbr_flag[ i ]` not set specifies that to decode this CVS by the HRD using
     /// the i-th CPB specification.
     cbr_flag: [bool; 32],
 }
@@ -2921,7 +2921,7 @@ pub struct HrdParams {
     /// sub_pic_hrd_params_present_flag is set.
     tick_divisor_minus2: u8,
     /// du_cpb_removal_delay_increment_length_minus1 plus 1 specifies the
-    /// length, in bits, of the du_cpb_removal_delay_increment_minus1[ i ] and
+    /// length, in bits, of the `du_cpb_removal_delay_increment_minus1[ i ]` and
     /// du_common_cpb_removal_delay_increment_minus1 syntax elements of the
     /// picture timing SEI message and the du_spt_cpb_removal_delay_increment
     /// syntax element in the decoding unit information SEI message.
@@ -2939,19 +2939,19 @@ pub struct HrdParams {
     /// message and the pic_spt_dpb_output_du_delay syntax element in the
     /// decoding unit information SEI message.
     dpb_output_delay_du_length_minus1: u8,
-    /// Together with bit_rate_value_minus1[ i ], specifies the maximum input
+    /// Together with `bit_rate_value_minus1[ i ]`, specifies the maximum input
     /// bit rate of the i-th CPB.
     bit_rate_scale: u8,
-    /// Together with cpb_size_du_value_minus1[ i ], specifies the CPB size of
+    /// Together with `cpb_size_du_value_minus1[ i ]`, specifies the CPB size of
     /// the i-th CPB when the CPB operates at sub-picture level.
     cpb_size_scale: u8,
-    /// Together with cpb_size_du_value_minus1[ i ], specifies the CPB size of
+    /// Together with `cpb_size_du_value_minus1[ i ]`, specifies the CPB size of
     /// the i-th CPB when the CPB operates at sub-picture level.
     cpb_size_du_scale: u8,
     /// initial_cpb_removal_delay_length_minus1 plus 1 specifies the length, in
-    /// bits, of the nal_initial_cpb_removal_delay[ i ],
-    /// nal_initial_cpb_removal_offset[ i ], vcl_initial_cpb_removal_delay[ i ]
-    /// and vcl_initial_cpb_removal_offset[ i ] syntax elements of the buffering
+    /// bits, of the `nal_initial_cpb_removal_delay[ i ]`,
+    /// `nal_initial_cpb_removal_offset[ i ]`, `vcl_initial_cpb_removal_delay[ i ]`
+    /// and `vcl_initial_cpb_removal_offset[ i ]` syntax elements of the buffering
     /// period SEI message.
     initial_cpb_removal_delay_length_minus1: u8,
     /// au_cpb_removal_delay_length_minus1 plus 1 specifies the length, in bits,
@@ -2964,27 +2964,27 @@ pub struct HrdParams {
     /// and the pic_dpb_output_delay syntax element in the picture timing SEI
     /// message.
     dpb_output_delay_length_minus1: u8,
-    /// fixed_pic_rate_general_flag[ i ] set indicates that, when HighestTid is
+    /// `fixed_pic_rate_general_flag[ i ]` set indicates that, when HighestTid is
     /// equal to i, the temporal distance between the HRD output times of
     /// consecutive pictures in output order is constrained as specified in the
-    /// specification. fixed_pic_rate_general_flag[ i ] not set indicates that
+    /// specification. `fixed_pic_rate_general_flag[ i ]` not set indicates that
     /// this constraint may not apply.
     fixed_pic_rate_general_flag: [bool; 7],
-    /// fixed_pic_rate_within_cvs_flag[ i ] set indicates that, when HighestTid
+    /// `fixed_pic_rate_within_cvs_flag[ i ]` set indicates that, when HighestTid
     /// is equal to i, the temporal distance between the HRD output times of
     /// consecutive pictures in output order is constrained as specified in the
-    /// specification. fixed_pic_rate_within_cvs_flag[ i ] not set indicates
+    /// specification. `fixed_pic_rate_within_cvs_flag[ i ]` not set indicates
     /// that this constraint may not apply.
     fixed_pic_rate_within_cvs_flag: [bool; 7],
-    /// elemental_duration_in_tc_minus1[ i ] plus 1 (when present) specifies,
+    /// `elemental_duration_in_tc_minus1[ i ]` plus 1 (when present) specifies,
     /// when HighestTid is equal to i, the temporal distance, in clock ticks,
     /// between the elemental units that specify the HRD output times of
     /// consecutive pictures in output order as specified in the specification.
     elemental_duration_in_tc_minus1: [u32; 7],
-    /// low_delay_hrd_flag[ i ] specifies the HRD operational mode, when
+    /// `low_delay_hrd_flag[ i ]` specifies the HRD operational mode, when
     /// HighestTid is equal to i, as specified in Annex C or clause F.13.
     low_delay_hrd_flag: [bool; 7],
-    /// cpb_cnt_minus1[ i ] plus 1 specifies the number of alternative CPB
+    /// `cpb_cnt_minus1[ i ]` plus 1 specifies the number of alternative CPB
     /// specifications in the bitstream of the CVS when HighestTid is equal to
     /// i.
     cpb_cnt_minus1: [u32; 7],
@@ -3239,8 +3239,8 @@ pub struct VuiParams {
     bitstream_restriction_flag: bool,
     /// When set, indicates that each PPS that is active in the CVS has the same
     /// value of the syntax elements num_tile_columns_minus1,
-    /// num_tile_rows_minus1, uniform_spacing_flag, column_width_minus1[ i ],
-    /// row_height_minus1[ i ] and loop_filter_across_tiles_enabled_flag, when
+    /// num_tile_rows_minus1, uniform_spacing_flag, `column_width_minus1[ i ]`,
+    /// `row_height_minus1[ i ]` and loop_filter_across_tiles_enabled_flag, when
     /// present. When not set, indicates that tiles syntax elements in different
     /// PPSs may or may not have the same value
     tiles_fixed_structure_flag: bool,
@@ -3864,10 +3864,10 @@ impl Parser {
 
         *dst = *src;
 
-        //  When scaling_list_pred_mode_flag[ sizeId ][ matrixId ] is equal to
-        //  0, scaling_list_pred_matrix_id_ delta[ sizeId ][ matrixId ] is equal
+        //  When `scaling_list_pred_mode_flag[ sizeId ]`[ matrixId ] is equal to
+        //  0, scaling_list_pred_matrix_id_ `delta[ sizeId ]`[ matrixId ] is equal
         //  to 0 and sizeId is greater than 1, the value of
-        //  scaling_list_dc_coef_minus8[ sizeId − 2 ][ matrixId ] is inferred to
+        //  scaling_list_dc_coef_minus8[ sizeId − 2 `][ matrixId ]` is inferred to
         //  be equal to 8.
         //
         // Since we are using a slightly different layout here, with two
@@ -3891,9 +3891,9 @@ impl Parser {
             let step = if size_id == 3 { 3 } else { 1 };
             for matrix_id in (0..6).step_by(step) {
                 let scaling_list_pred_mode_flag = r.read_bit()?;
-                // If scaling_list_pred_matrix_id_delta[ sizeId ][ matrixId ] is
+                // If `scaling_list_pred_matrix_id_delta[ sizeId ]`[ matrixId ] is
                 // equal to 0, the scaling list is inferred from the default
-                // scaling list ScalingList[ sizeId ][ matrixId ][ i ] as specified
+                // scaling list `ScalingList[ sizeId ]`[ matrixId `][ i ]` as specified
                 // in Table 7-5 and Table 7-6 for i = 0..Min( 63, ( 1 << ( 4 + (
                 // sizeId << 1 ) ) ) − 1 ).
                 if !scaling_list_pred_mode_flag {
@@ -5051,15 +5051,15 @@ impl Parser {
 
                     let num_lt = hdr.num_long_term_sps + hdr.num_long_term_pics;
                     for i in 0..usize::from(num_lt) {
-                        // The variables PocLsbLt[ i ] and UsedByCurrPicLt[ i ] are derived as follows:
+                        // The variables `PocLsbLt[ i ]` and `UsedByCurrPicLt[ i ]` are derived as follows:
                         //
-                        // – If i is less than num_long_term_sps, PocLsbLt[ i ] is set equal to
-                        // lt_ref_pic_poc_lsb_sps[ lt_idx_sps[ i ] ] and UsedByCurrPicLt[ i ] is set equal
-                        // to used_by_curr_pic_lt_sps_flag[ lt_idx_sps[ i ] ].
+                        // – If i is less than num_long_term_sps, `PocLsbLt[ i ]` is set equal to
+                        // lt_ref_pic_poc_lsb_sps[ `lt_idx_sps[ i ]` ] and `UsedByCurrPicLt[ i ]` is set equal
+                        // to used_by_curr_pic_lt_sps_flag[ `lt_idx_sps[ i ]` ].
                         //
-                        // – Otherwise, PocLsbLt[ i ]
-                        // is set equal to poc_lsb_lt[ i ] and UsedByCurrPicLt[ i ] is set equal to
-                        // used_by_curr_pic_lt_flag[ i ].
+                        // – Otherwise, `PocLsbLt[ i ]`
+                        // is set equal to `poc_lsb_lt[ i ]` and `UsedByCurrPicLt[ i ]` is set equal to
+                        // `used_by_curr_pic_lt_flag[ i ]`.
                         if i < usize::from(hdr.num_long_term_sps) {
                             if sps.num_long_term_ref_pics_sps > 1 {
                                 let num_bits =
@@ -5086,10 +5086,10 @@ impl Parser {
 
                         hdr.delta_poc_msb_present_flag[i] = r.read_bit()?;
                         if hdr.delta_poc_msb_present_flag[i] {
-                            // The value of delta_poc_msb_cycle_lt[ i ] shall be
+                            // The value of `delta_poc_msb_cycle_lt[ i ]` shall be
                             // in the range of 0 to 2(32 −
                             // log2_max_pic_order_cnt_lsb_minus4 − 4 ),
-                            // inclusive. When delta_poc_msb_cycle_lt[ i ] is
+                            // inclusive. When `delta_poc_msb_cycle_lt[ i ]` is
                             // not present, it is inferred to be equal to 0.
                             let max =
                                 2u32.pow(32 - u32::from(sps.log2_max_pic_order_cnt_lsb_minus4) - 4);
