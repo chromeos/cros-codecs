@@ -55,20 +55,6 @@ pub trait MappableHandle {
     fn image_size(&mut self) -> usize;
 }
 
-/// Instructs the decoder on whether it should block on the decode operations.
-/// Nonblocking mode is conditional on backend support.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlockingMode {
-    Blocking,
-    NonBlocking,
-}
-
-impl Default for BlockingMode {
-    fn default() -> Self {
-        Self::Blocking
-    }
-}
-
 /// The handle type used by the decoder backend. The only requirement from implementors is that
 /// they give access to the underlying handle and that they can be (cheaply) cloned.
 pub trait DecodedHandle {
@@ -88,6 +74,20 @@ pub trait DecodedHandle {
 
     /// Wait until this handle has been completely rendered.
     fn sync(&self) -> anyhow::Result<()>;
+}
+
+/// Instructs the decoder on whether it should block on the decode operations.
+/// Nonblocking mode is conditional on backend support.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockingMode {
+    Blocking,
+    NonBlocking,
+}
+
+impl Default for BlockingMode {
+    fn default() -> Self {
+        Self::Blocking
+    }
 }
 
 /// A queue where decoding jobs wait until they are completed, at which point they can be

@@ -6,7 +6,7 @@ use crate::decoder::stateless::vp9::parser::Header;
 use crate::decoder::stateless::vp9::parser::MAX_SEGMENTS;
 use crate::decoder::stateless::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::Segmentation;
-use crate::decoder::stateless::VideoDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackend;
 
 #[cfg(test)]
 pub mod dummy;
@@ -15,12 +15,8 @@ pub mod vaapi;
 
 pub type Result<T> = crate::decoder::stateless::StatelessBackendResult<T>;
 
-/// Trait for stateless decoder backends. The decoder will call into the backend
-/// to request decode operations. The backend can operate in blocking mode,
-/// where it will wait until the current decode finishes, or in non-blocking
-/// mode, where it should return immediately with any previously decoded frames
-/// that happen to be ready.
-pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend<Header> {
+/// Stateless backend methods specific to VP9.
+pub(crate) trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> Result<()>;
 

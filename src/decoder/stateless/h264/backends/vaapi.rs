@@ -17,7 +17,7 @@ use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
 
 use crate::decoder::stateless::h264::backends::Result as StatelessBackendResult;
-use crate::decoder::stateless::h264::backends::StatelessDecoderBackend;
+use crate::decoder::stateless::h264::backends::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::dpb::Dpb;
 use crate::decoder::stateless::h264::dpb::DpbEntry;
 use crate::decoder::stateless::h264::parser::Level;
@@ -466,7 +466,7 @@ impl VaapiBackend<Sps> {
     }
 }
 
-impl StatelessDecoderBackend for VaapiBackend<Sps> {
+impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
     type Picture = VaPicture<PictureNew>;
 
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {

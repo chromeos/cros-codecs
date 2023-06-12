@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::decoder::stateless::h264::backends::Result as StatelessBackendResult;
-use crate::decoder::stateless::h264::backends::StatelessDecoderBackend;
+use crate::decoder::stateless::h264::backends::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::dpb::Dpb;
 use crate::decoder::stateless::h264::dpb::DpbEntry;
 use crate::decoder::stateless::h264::parser::Pps;
@@ -20,7 +20,7 @@ use crate::decoder::stateless::h264::Decoder;
 use crate::decoder::BlockingMode;
 use crate::utils::dummy::*;
 
-impl StatelessDecoderBackend for Backend {
+impl StatelessH264DecoderBackend for Backend {
     type Picture = ();
 
     fn new_sequence(&mut self, _: &Sps) -> StatelessBackendResult<()> {

@@ -15,7 +15,7 @@ use anyhow::anyhow;
 use anyhow::Context;
 use log::debug;
 
-use crate::decoder::stateless::h264::backends::StatelessDecoderBackend;
+use crate::decoder::stateless::h264::backends::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::dpb::Dpb;
 use crate::decoder::stateless::h264::dpb::DpbEntry;
 use crate::decoder::stateless::h264::parser::Nalu;
@@ -29,11 +29,11 @@ use crate::decoder::stateless::h264::picture::Field;
 use crate::decoder::stateless::h264::picture::IsIdr;
 use crate::decoder::stateless::h264::picture::PictureData;
 use crate::decoder::stateless::h264::picture::Reference;
-use crate::decoder::stateless::private::VideoDecoderPrivate;
+use crate::decoder::stateless::private;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
-use crate::decoder::stateless::VideoDecoder;
+use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
@@ -116,7 +116,7 @@ where
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
+    backend: Box<dyn StatelessH264DecoderBackend<Handle = T, Picture = P>>,
 
     decoding_state: DecodingState<Sps>,
 
@@ -202,7 +202,7 @@ where
     // Creates a new instance of the decoder.
     #[cfg(any(feature = "vaapi", test))]
     pub(crate) fn new(
-        backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
+        backend: Box<dyn StatelessH264DecoderBackend<Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -2193,7 +2193,7 @@ where
     }
 }
 
-impl<T, P> VideoDecoder for Decoder<T, P>
+impl<T, P> StatelessVideoDecoder for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
@@ -2259,7 +2259,7 @@ where
     }
 }
 
-impl<T, P> VideoDecoderPrivate for Decoder<T, P>
+impl<T, P> private::StatelessVideoDecoder for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
@@ -2279,7 +2279,7 @@ pub mod tests {
     use crate::decoder::stateless::h264::Decoder;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::VideoDecoder;
+    use crate::decoder::stateless::StatelessVideoDecoder;
     use crate::decoder::BlockingMode;
     use crate::decoder::DecodedHandle;
     use crate::utils::simple_playback_loop;
@@ -2294,7 +2294,7 @@ pub mod tests {
         output_format: DecodedFormat,
         blocking_mode: BlockingMode,
     ) where
-        D: VideoDecoder,
+        D: StatelessVideoDecoder,
     {
         simple_playback_loop(
             decoder,

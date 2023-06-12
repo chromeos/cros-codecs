@@ -8,7 +8,7 @@ use crate::decoder::stateless::h265::parser::Slice;
 use crate::decoder::stateless::h265::parser::Sps;
 use crate::decoder::stateless::h265::picture::PictureData;
 use crate::decoder::stateless::h265::RefPicListEntry;
-use crate::decoder::stateless::VideoDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackend;
 
 pub type Result<T> = crate::decoder::stateless::StatelessBackendResult<T>;
 
@@ -17,12 +17,8 @@ pub type Result<T> = crate::decoder::stateless::StatelessBackendResult<T>;
 // #[cfg(feature = "vaapi")]
 // pub mod vaapi;
 
-/// Trait for stateless decoder backends. The decoder will call into the backend
-/// to request decode operations. The backend can operate in blocking mode,
-/// where it will wait until the current decode finishes, or in non-blocking
-/// mode, where it should return immediately with any previously decoded frames
-/// that happen to be ready.
-pub(crate) trait StatelessDecoderBackend: VideoDecoderBackend<Sps> {
+/// Stateless backend methods specific to H.265.
+pub(crate) trait StatelessH265DecoderBackend: StatelessDecoderBackend<Sps> {
     /// Type used by the backend to represent a picture in the process of being decoded.
     type Picture;
 

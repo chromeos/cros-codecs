@@ -59,14 +59,16 @@ mod private {
 
     /// Private trait for methods we need to expose for crate types (e.g.
     /// `DecoderFormatNegotiator`s), but don't want to be directly used by the client.
-    pub(crate) trait VideoDecoderPrivate {
+    pub(crate) trait StatelessVideoDecoder {
         /// Try to apply `format` to output frames. If successful, all frames emitted after the
         /// call will be in the new format.
         fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
     }
 }
 
-pub(crate) trait VideoDecoderBackend<FormatInfo> {
+/// Common trait shared by all stateless video decoder backends, providing codec-independent
+/// methods.
+pub(crate) trait StatelessDecoderBackend<FormatInfo> {
     /// The type that the backend returns as a result of a decode operation.
     /// This will usually be some backend-specific type with a resource and a
     /// resource pool so that said buffer can be reused for another decode
@@ -100,7 +102,7 @@ pub(crate) trait VideoDecoderBackend<FormatInfo> {
 /// Helper to implement `DecoderFormatNegotiator` for stateless decoders.
 struct StatelessDecoderFormatNegotiator<'a, D, H, F>
 where
-    D: VideoDecoder,
+    D: StatelessVideoDecoder,
     F: Fn(&mut D, &H),
 {
     decoder: &'a mut D,
@@ -110,7 +112,7 @@ where
 
 impl<'a, D, H, F> StatelessDecoderFormatNegotiator<'a, D, H, F>
 where
-    D: VideoDecoder,
+    D: StatelessVideoDecoder,
     F: Fn(&mut D, &H),
 {
     /// Creates a new format negotiator.
@@ -133,7 +135,7 @@ where
 
 impl<'a, D, H, F> DecoderFormatNegotiator<'a> for StatelessDecoderFormatNegotiator<'a, D, H, F>
 where
-    D: VideoDecoder + private::VideoDecoderPrivate,
+    D: StatelessVideoDecoder + private::StatelessVideoDecoder,
     F: Fn(&mut D, &H),
 {
     fn num_resources_total(&self) -> usize {
@@ -158,7 +160,7 @@ where
 
 impl<'a, D, H, F> Drop for StatelessDecoderFormatNegotiator<'a, D, H, F>
 where
-    D: VideoDecoder,
+    D: StatelessVideoDecoder,
     F: Fn(&mut D, &H),
 {
     fn drop(&mut self) {
@@ -175,7 +177,7 @@ where
 /// Therefore `decode` can refuse work if there is no output resource available at the time of
 /// calling, in which case the caller is responsible for calling `decode` again with the same
 /// parameters after processing at least one pending output frame and returning it to the decoder.
-pub trait VideoDecoder {
+pub trait StatelessVideoDecoder {
     /// Try to decode the `bitstream` represented by `timestamp`.
     ///
     /// This method will return `DecodeError::CheckEvents` if processing cannot take place until
@@ -208,7 +210,7 @@ pub trait VideoDecoder {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::decoder::stateless::VideoDecoder;
+    use crate::decoder::stateless::StatelessVideoDecoder;
     use crate::decoder::DecodedHandle;
 
     /// Stream that can be used in tests, along with the CRC32 of all of its frames.
@@ -235,7 +237,7 @@ pub(crate) mod tests {
         check_crcs: bool,
         dump_yuv: bool,
     ) where
-        D: VideoDecoder,
+        D: StatelessVideoDecoder,
         L: Fn(&mut D, &[u8], &mut dyn FnMut(Box<dyn DecodedHandle>)),
     {
         let mut crcs = test.crcs.lines().enumerate();

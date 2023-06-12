@@ -14,7 +14,7 @@ use std::rc::Rc;
 use anyhow::anyhow;
 use anyhow::Context;
 
-use crate::decoder::stateless::h265::backends::StatelessDecoderBackend;
+use crate::decoder::stateless::h265::backends::StatelessH265DecoderBackend;
 use crate::decoder::stateless::h265::dpb::Dpb;
 use crate::decoder::stateless::h265::dpb::DpbEntry;
 use crate::decoder::stateless::h265::parser::Nalu;
@@ -26,11 +26,11 @@ use crate::decoder::stateless::h265::parser::SliceHeader;
 use crate::decoder::stateless::h265::parser::Sps;
 use crate::decoder::stateless::h265::picture::PictureData;
 use crate::decoder::stateless::h265::picture::Reference;
-use crate::decoder::stateless::private::VideoDecoderPrivate;
+use crate::decoder::stateless::private;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
-use crate::decoder::stateless::VideoDecoder;
+use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
@@ -64,7 +64,7 @@ where
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
+    backend: Box<dyn StatelessH265DecoderBackend<Handle = T, Picture = P>>,
 
     /// The backend used for hardware acceleration.
     // backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
@@ -136,7 +136,7 @@ where
     #[cfg(any(feature = "vaapi", test))]
     #[allow(dead_code)]
     pub(crate) fn new(
-        backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
+        backend: Box<dyn StatelessH265DecoderBackend<Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -779,7 +779,7 @@ where
     }
 }
 
-impl<T, P> VideoDecoder for Decoder<T, P>
+impl<T, P> StatelessVideoDecoder for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
@@ -853,7 +853,7 @@ where
     }
 }
 
-impl<T, P> VideoDecoderPrivate for Decoder<T, P>
+impl<T, P> private::StatelessVideoDecoder for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {

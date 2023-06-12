@@ -7,15 +7,15 @@ mod bool_decoder;
 pub mod parser;
 mod probs;
 
-use crate::decoder::stateless::private::VideoDecoderPrivate;
-use crate::decoder::stateless::vp8::backends::StatelessDecoderBackend;
+use crate::decoder::stateless::private;
+use crate::decoder::stateless::vp8::backends::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::vp8::parser::Frame;
 use crate::decoder::stateless::vp8::parser::Header;
 use crate::decoder::stateless::vp8::parser::Parser;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
-use crate::decoder::stateless::VideoDecoder;
+use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
@@ -30,7 +30,7 @@ pub struct Decoder<T: DecodedHandle> {
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessDecoderBackend<Handle = T>>,
+    backend: Box<dyn StatelessVp8DecoderBackend<Handle = T>>,
 
     decoding_state: DecodingState<Header>,
 
@@ -51,7 +51,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     /// Create a new codec backend for VP8.
     #[cfg(any(feature = "vaapi", test))]
     pub(crate) fn new(
-        backend: Box<dyn StatelessDecoderBackend<Handle = T>>,
+        backend: Box<dyn StatelessVp8DecoderBackend<Handle = T>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -186,7 +186,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 }
 
-impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
+impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         let frame = self.parser.parse_frame(bitstream)?;
 
@@ -247,7 +247,7 @@ impl<T: DecodedHandle + Clone + 'static> VideoDecoder for Decoder<T> {
     }
 }
 
-impl<T: DecodedHandle + Clone + 'static> VideoDecoderPrivate for Decoder<T> {
+impl<T: DecodedHandle + Clone + 'static> private::StatelessVideoDecoder for Decoder<T> {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
@@ -263,7 +263,7 @@ pub mod tests {
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
     use crate::decoder::stateless::vp8::Decoder;
-    use crate::decoder::stateless::VideoDecoder;
+    use crate::decoder::stateless::StatelessVideoDecoder;
     use crate::decoder::BlockingMode;
     use crate::decoder::DecodedHandle;
     use crate::utils::simple_playback_loop;
@@ -278,7 +278,7 @@ pub mod tests {
         output_format: DecodedFormat,
         blocking_mode: BlockingMode,
     ) where
-        D: VideoDecoder,
+        D: StatelessVideoDecoder,
     {
         simple_playback_loop(
             decoder,

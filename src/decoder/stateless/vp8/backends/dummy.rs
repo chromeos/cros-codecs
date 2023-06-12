@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::decoder::stateless::vp8::backends::StatelessDecoderBackend;
+use crate::decoder::stateless::vp8::backends::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::vp8::parser::Header;
 use crate::decoder::stateless::vp8::parser::MbLfAdjustments;
 use crate::decoder::stateless::vp8::parser::Segmentation;
@@ -16,7 +16,7 @@ use crate::decoder::stateless::vp8::Decoder;
 use crate::decoder::BlockingMode;
 use crate::utils::dummy::*;
 
-impl StatelessDecoderBackend for Backend {
+impl StatelessVp8DecoderBackend for Backend {
     fn new_sequence(
         &mut self,
         _: &crate::decoder::stateless::vp8::parser::Header,

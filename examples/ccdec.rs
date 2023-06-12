@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use argh::FromArgs;
-use cros_codecs::decoder::stateless::VideoDecoder;
+use cros_codecs::decoder::stateless::StatelessVideoDecoder;
 use cros_codecs::decoder::BlockingMode;
 use cros_codecs::decoder::DecodedHandle;
 use cros_codecs::utils::simple_playback_loop;
@@ -167,7 +167,7 @@ fn main() {
             let decoder = Box::new(
                 cros_codecs::decoder::stateless::h264::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
-            ) as Box<dyn VideoDecoder>;
+            ) as Box<dyn StatelessVideoDecoder>;
 
             (decoder, frame_iter)
         }
@@ -177,7 +177,7 @@ fn main() {
             let decoder = Box::new(
                 cros_codecs::decoder::stateless::vp8::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
-            ) as Box<dyn VideoDecoder>;
+            ) as Box<dyn StatelessVideoDecoder>;
 
             (decoder, frame_iter)
         }
@@ -187,7 +187,7 @@ fn main() {
             let decoder = Box::new(
                 cros_codecs::decoder::stateless::vp9::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
-            ) as Box<dyn VideoDecoder>;
+            ) as Box<dyn StatelessVideoDecoder>;
 
             (decoder, frame_iter)
         }

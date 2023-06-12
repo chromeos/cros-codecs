@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::decoder::stateless::VideoDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
@@ -80,7 +80,7 @@ impl Backend {
     }
 }
 
-impl<FormatInfo> VideoDecoderBackend<FormatInfo> for Backend
+impl<FormatInfo> StatelessDecoderBackend<FormatInfo> for Backend
 where
     Handle: DecodedHandle,
 {

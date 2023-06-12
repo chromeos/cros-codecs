@@ -11,7 +11,7 @@ use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
 
 use crate::decoder::stateless::vp9::backends::Result as StatelessBackendResult;
-use crate::decoder::stateless::vp9::backends::StatelessDecoderBackend;
+use crate::decoder::stateless::vp9::backends::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::vp9::parser::BitDepth;
 use crate::decoder::stateless::vp9::parser::Header;
 use crate::decoder::stateless::vp9::parser::Profile;
@@ -231,7 +231,7 @@ fn build_slice_param(
     ))
 }
 
-impl StatelessDecoderBackend for VaapiBackend<Header> {
+impl StatelessVp9DecoderBackend for VaapiBackend<Header> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         self.new_sequence(header)
     }

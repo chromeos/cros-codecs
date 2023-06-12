@@ -14,7 +14,7 @@ use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 
 use crate::decoder::stateless::vp8::backends::Result as StatelessBackendResult;
-use crate::decoder::stateless::vp8::backends::StatelessDecoderBackend;
+use crate::decoder::stateless::vp8::backends::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::vp8::parser::Header;
 use crate::decoder::stateless::vp8::parser::MbLfAdjustments;
 use crate::decoder::stateless::vp8::parser::Segmentation;
@@ -206,7 +206,7 @@ impl VaapiBackend<Header> {
     }
 }
 
-impl StatelessDecoderBackend for VaapiBackend<Header> {
+impl StatelessVp8DecoderBackend for VaapiBackend<Header> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         self.new_sequence(header)
     }

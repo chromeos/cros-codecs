@@ -27,7 +27,7 @@ use libva::VaError;
 
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
-use crate::decoder::stateless::VideoDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
@@ -783,7 +783,7 @@ where
     pub(crate) fn process_picture(
         &mut self,
         picture: libva::Picture<PictureNew>,
-    ) -> StatelessBackendResult<<Self as VideoDecoderBackend<StreamData>>::Handle> {
+    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
         Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
@@ -812,7 +812,7 @@ where
     }
 }
 
-impl<StreamData> VideoDecoderBackend<StreamData> for VaapiBackend<StreamData>
+impl<StreamData> StatelessDecoderBackend<StreamData> for VaapiBackend<StreamData>
 where
     StreamData: Clone,
     for<'a> &'a StreamData: StreamInfo,

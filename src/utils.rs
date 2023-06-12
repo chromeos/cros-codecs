@@ -10,7 +10,7 @@ use bytes::Buf;
 use crate::decoder::stateless::h264::parser::Nalu;
 use crate::decoder::stateless::h264::parser::NaluType;
 use crate::decoder::stateless::DecodeError;
-use crate::decoder::stateless::VideoDecoder;
+use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
@@ -198,7 +198,7 @@ pub fn simple_playback_loop<D, R, I>(
     output_format: DecodedFormat,
     blocking_mode: BlockingMode,
 ) where
-    D: VideoDecoder + ?Sized,
+    D: StatelessVideoDecoder + ?Sized,
     R: AsRef<[u8]>,
     I: Iterator<Item = R>,
 {
