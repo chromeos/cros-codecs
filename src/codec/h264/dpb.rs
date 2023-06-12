@@ -14,7 +14,6 @@ use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::Reference;
-use crate::decoder::DecodedHandle;
 
 // Shortcut to refer to a DPB entry.
 //
@@ -23,9 +22,9 @@ use crate::decoder::DecodedHandle;
 // The second member is the backend handle of the frame. It can be `None` if the inserted picture
 // is non-existing (i.e. `nonexisting` is true on the `PictureData`).
 #[derive(Clone)]
-pub struct DpbEntry<T: DecodedHandle + Clone>(pub Rc<RefCell<PictureData>>, pub Option<T>);
+pub struct DpbEntry<T: Clone>(pub Rc<RefCell<PictureData>>, pub Option<T>);
 
-pub struct Dpb<T: DecodedHandle + Clone> {
+pub struct Dpb<T: Clone> {
     /// List of `PictureData` and backend handles to decoded pictures.
     entries: Vec<DpbEntry<T>>,
     /// The maximum number of pictures that can be stored.
@@ -38,7 +37,7 @@ pub struct Dpb<T: DecodedHandle + Clone> {
     interlaced: bool,
 }
 
-impl<T: DecodedHandle + Clone> Dpb<T> {
+impl<T: Clone> Dpb<T> {
     /// Returns an iterator over the underlying H264 pictures stored in the
     /// DPB.
     pub fn pictures(&self) -> impl Iterator<Item = Ref<'_, PictureData>> {
@@ -389,7 +388,7 @@ impl<T: DecodedHandle + Clone> Dpb<T> {
     }
 }
 
-impl<T: DecodedHandle + Clone> Default for Dpb<T> {
+impl<T: Clone> Default for Dpb<T> {
     fn default() -> Self {
         // See https://github.com/rust-lang/rust/issues/26925 on why this can't
         // be derived.
@@ -401,7 +400,7 @@ impl<T: DecodedHandle + Clone> Default for Dpb<T> {
     }
 }
 
-impl<T: DecodedHandle + Clone> std::fmt::Debug for Dpb<T> {
+impl<T: Clone> std::fmt::Debug for Dpb<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pics = self
             .entries
