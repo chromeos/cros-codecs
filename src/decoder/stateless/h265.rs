@@ -177,7 +177,7 @@ impl<T, P> Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
-    // Creates a new instance of the decoder.
+    /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
     #[allow(dead_code)]
     fn new(

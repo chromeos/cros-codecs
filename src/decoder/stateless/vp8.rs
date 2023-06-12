@@ -75,7 +75,7 @@ pub struct Decoder<T: DecodedHandle> {
 }
 
 impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
-    /// Create a new codec backend for VP8.
+    /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
     fn new(
         backend: Box<dyn StatelessVp8DecoderBackend<Handle = T>>,
