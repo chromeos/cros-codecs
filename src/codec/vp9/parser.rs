@@ -7,6 +7,13 @@ use anyhow::Context;
 use bitreader::BitReader;
 use enumn::N;
 
+use crate::codec::vp9::lookups::AC_QLOOKUP;
+use crate::codec::vp9::lookups::AC_QLOOKUP_10;
+use crate::codec::vp9::lookups::AC_QLOOKUP_12;
+use crate::codec::vp9::lookups::DC_QLOOKUP;
+use crate::codec::vp9::lookups::DC_QLOOKUP_10;
+use crate::codec::vp9::lookups::DC_QLOOKUP_12;
+
 pub const REFS_PER_FRAME: usize = 3;
 
 pub const MAX_REF_LF_DELTAS: usize = 4;
@@ -43,6 +50,17 @@ pub const MAX_TILE_WIDTH_B64: u32 = 64;
 
 /// The number of pictures in the DPB
 pub const NUM_REF_FRAMES: usize = 8;
+
+/// A clamp such that min <= x <= max
+fn clamp<U: PartialOrd>(x: U, low: U, high: U) -> U {
+    if x > high {
+        high
+    } else if x < low {
+        low
+    } else {
+        x
+    }
+}
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, N)]
 pub enum InterpolationFilter {
@@ -189,6 +207,108 @@ pub struct SegmentationParams {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Segmentation {
+    /// Loop filter level
+    pub lvl_lookup: [[u8; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES],
+
+    /// AC quant scale for luma component
+    pub luma_ac_quant_scale: i16,
+    /// DC quant scale for luma component
+    pub luma_dc_quant_scale: i16,
+    /// AC quant scale for chroma component
+    pub chroma_ac_quant_scale: i16,
+    /// DC quant scale for chroma component
+    pub chroma_dc_quant_scale: i16,
+
+    /// Whether the alternate reference frame segment feature is enabled (SEG_LVL_REF_FRAME)
+    pub reference_frame_enabled: bool,
+    /// The feature data for the reference frame featire
+    pub reference_frame: i16,
+    /// Whether the skip segment feature is enabled (SEG_LVL_SKIP)
+    pub reference_skip_enabled: bool,
+}
+
+impl Segmentation {
+    /// Update the state of the segmentation parameters after seeing a frame
+    pub fn update_segmentation(
+        segmentation: &mut [Segmentation; MAX_SEGMENTS],
+        hdr: &Header,
+    ) -> anyhow::Result<()> {
+        let lf = &hdr.lf;
+        let seg = &hdr.seg;
+
+        let n_shift = lf.level >> 5;
+
+        for segment_id in 0..MAX_SEGMENTS as u8 {
+            let luma_dc_quant_scale = i16::try_from(hdr.get_dc_quant(segment_id, true)?)?;
+            let luma_ac_quant_scale = i16::try_from(hdr.get_ac_quant(segment_id, true)?)?;
+            let chroma_dc_quant_scale = i16::try_from(hdr.get_dc_quant(segment_id, false)?)?;
+            let chroma_ac_quant_scale = i16::try_from(hdr.get_ac_quant(segment_id, false)?)?;
+
+            let mut lvl_seg = i32::from(lf.level);
+            let mut lvl_lookup: [[u8; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES];
+
+            if lvl_seg == 0 {
+                lvl_lookup = Default::default()
+            } else {
+                // 8.8.1 Loop filter frame init process
+                if hdr.seg_feature_active(segment_id, SEG_LVL_ALT_L as u8) {
+                    if seg.abs_or_delta_update {
+                        lvl_seg =
+                            i32::from(seg.feature_data[usize::from(segment_id)][SEG_LVL_ALT_L]);
+                    } else {
+                        lvl_seg +=
+                            i32::from(seg.feature_data[usize::from(segment_id)][SEG_LVL_ALT_L]);
+                    }
+
+                    lvl_seg = clamp(lvl_seg, 0, MAX_LOOP_FILTER as i32);
+                }
+
+                if !lf.delta_enabled {
+                    lvl_lookup = [[u8::try_from(lvl_seg)?; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES]
+                } else {
+                    let intra_delta = i32::from(lf.ref_deltas[INTRA_FRAME]);
+                    let mut intra_lvl = lvl_seg + (intra_delta << n_shift);
+
+                    lvl_lookup = segmentation[usize::from(segment_id)].lvl_lookup;
+                    lvl_lookup[INTRA_FRAME][0] =
+                        u8::try_from(clamp(intra_lvl, 0, MAX_LOOP_FILTER as i32))?;
+
+                    // Note, this array has the [0] element unspecified/unused in
+                    // VP9. Confusing, but we do start to index from 1.
+                    #[allow(clippy::needless_range_loop)]
+                    for ref_ in LAST_FRAME..MAX_REF_FRAMES {
+                        for mode in 0..MAX_MODE_LF_DELTAS {
+                            let ref_delta = i32::from(lf.ref_deltas[ref_]);
+                            let mode_delta = i32::from(lf.mode_deltas[mode]);
+
+                            intra_lvl = lvl_seg + (ref_delta << n_shift) + (mode_delta << n_shift);
+
+                            lvl_lookup[ref_][mode] =
+                                u8::try_from(clamp(intra_lvl, 0, MAX_LOOP_FILTER as i32))?;
+                        }
+                    }
+                }
+            }
+
+            segmentation[usize::from(segment_id)] = Segmentation {
+                lvl_lookup,
+                luma_ac_quant_scale,
+                luma_dc_quant_scale,
+                chroma_ac_quant_scale,
+                chroma_dc_quant_scale,
+                reference_frame_enabled: seg.feature_enabled[usize::from(segment_id)]
+                    [SEG_LVL_REF_FRAME],
+                reference_frame: seg.feature_data[usize::from(segment_id)][SEG_LVL_REF_FRAME],
+                reference_skip_enabled: seg.feature_enabled[usize::from(segment_id)][SEG_LVL_SKIP],
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct FrameSize {
     width: u32,
     height: u32,
@@ -317,6 +437,60 @@ pub struct Header {
     pub header_size_in_bytes: u16,
     /// Indicates the size of the uncompressed header in bytes.
     pub uncompressed_header_size_in_bytes: u16,
+}
+
+impl Header {
+    /// An implementation of seg_feature_active as per "6.4.9 Segmentation feature active syntax"
+    pub fn seg_feature_active(&self, segment_id: u8, feature: u8) -> bool {
+        let feature_enabled = self.seg.feature_enabled;
+        self.seg.enabled && feature_enabled[usize::from(segment_id)][usize::from(feature)]
+    }
+
+    /// An implementation of get_qindex as per "8.6.1 Dequantization functions"
+    pub fn get_qindex(&self, segment_id: u8) -> i32 {
+        let base_q_idx = self.quant.base_q_idx;
+
+        if self.seg_feature_active(segment_id, 0) {
+            let mut data = self.seg.feature_data[usize::from(segment_id)][0] as i32;
+
+            if !self.seg.abs_or_delta_update {
+                data += i32::from(base_q_idx);
+            }
+
+            clamp(data, 0, 255)
+        } else {
+            i32::from(base_q_idx)
+        }
+    }
+
+    /// An implementation of get_dc_quant as per "8.6.1 Dequantization functions"
+    pub fn get_dc_quant(&self, segment_id: u8, luma: bool) -> anyhow::Result<i32> {
+        let delta_q_dc = if luma {
+            self.quant.delta_q_y_dc
+        } else {
+            self.quant.delta_q_uv_dc
+        };
+        let qindex = Self::get_qindex(self, segment_id);
+        let q_table_idx = clamp(qindex + i32::from(delta_q_dc), 0, 255) as usize;
+        match self.bit_depth {
+            BitDepth::Depth8 => Ok(i32::from(DC_QLOOKUP[q_table_idx])),
+            BitDepth::Depth10 => Ok(i32::from(DC_QLOOKUP_10[q_table_idx])),
+            BitDepth::Depth12 => Ok(i32::from(DC_QLOOKUP_12[q_table_idx])),
+        }
+    }
+
+    /// An implementation of get_ac_quant as per "8.6.1 Dequantization functions"
+    pub fn get_ac_quant(&self, segment_id: u8, luma: bool) -> anyhow::Result<i32> {
+        let delta_q_ac = if luma { 0 } else { self.quant.delta_q_uv_ac };
+        let qindex = self.get_qindex(segment_id);
+        let q_table_idx = usize::try_from(clamp(qindex + i32::from(delta_q_ac), 0, 255))?;
+
+        match self.bit_depth {
+            BitDepth::Depth8 => Ok(i32::from(AC_QLOOKUP[q_table_idx])),
+            BitDepth::Depth10 => Ok(i32::from(AC_QLOOKUP_10[q_table_idx])),
+            BitDepth::Depth12 => Ok(i32::from(AC_QLOOKUP_12[q_table_idx])),
+        }
+    }
 }
 
 /// The VP9 superframe header as per Annex B, B.2.1, B.2.2

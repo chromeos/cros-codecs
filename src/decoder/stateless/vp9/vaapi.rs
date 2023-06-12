@@ -306,7 +306,6 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
     use crate::codec::vp9::parser::Parser;
     use crate::codec::vp9::parser::MAX_SEGMENTS;
     use crate::codec::vp9::parser::NUM_REF_FRAMES;
@@ -474,7 +473,7 @@ mod tests {
             _ => panic!(),
         };
 
-        Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
+        Segmentation::update_segmentation(&mut segmentation, &frame.header).unwrap();
         let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
@@ -539,7 +538,7 @@ mod tests {
             _ => panic!(),
         };
 
-        Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
+        Segmentation::update_segmentation(&mut segmentation, &frame.header).unwrap();
         let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
@@ -600,7 +599,7 @@ mod tests {
             _ => panic!(),
         };
 
-        Decoder::<VADecodedHandle>::update_segmentation(&frame.header, &mut segmentation).unwrap();
+        Segmentation::update_segmentation(&mut segmentation, &frame.header).unwrap();
         let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
