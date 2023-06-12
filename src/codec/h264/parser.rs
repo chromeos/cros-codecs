@@ -13,9 +13,9 @@ use anyhow::Context;
 use bytes::Buf;
 use enumn::N;
 
-use crate::utils::nalu;
-use crate::utils::nalu::Header;
-use crate::utils::nalu_reader::NaluReader;
+use crate::codec::h264::nalu;
+use crate::codec::h264::nalu::Header;
+use crate::codec::h264::nalu_reader::NaluReader;
 
 pub type Nalu<T> = nalu::Nalu<T, NaluHeader>;
 

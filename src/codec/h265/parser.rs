@@ -14,9 +14,9 @@ use bitreader::BitReader;
 use bytes::Buf;
 use enumn::N;
 
-use crate::utils::nalu;
-use crate::utils::nalu::Header;
-use crate::utils::nalu_reader::NaluReader;
+use crate::codec::h264::nalu;
+use crate::codec::h264::nalu::Header;
+use crate::codec::h264::nalu_reader::NaluReader;
 
 // Given the max VPS id.
 const MAX_VPS_COUNT: usize = 16;
@@ -5325,11 +5325,11 @@ impl Parser {
 mod tests {
     use std::io::Cursor;
 
+    use crate::codec::h264::nalu::Nalu;
     use crate::codec::h265::parser::NaluHeader;
     use crate::codec::h265::parser::NaluType;
     use crate::codec::h265::parser::Parser;
     use crate::codec::h265::parser::SliceType;
-    use crate::utils::nalu::Nalu;
 
     const STREAM_BEAR: &[u8] = include_bytes!("test_data/bear.hevc");
     const STREAM_BEAR_NUM_NALUS: usize = 35;

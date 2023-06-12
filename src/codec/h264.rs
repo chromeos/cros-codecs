@@ -3,5 +3,7 @@
 // found in the LICENSE file.
 
 pub mod dpb;
+pub mod nalu;
+pub mod nalu_reader;
 pub mod parser;
 pub mod picture;

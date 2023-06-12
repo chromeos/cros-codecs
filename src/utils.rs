@@ -7,6 +7,8 @@ use std::io::Seek;
 
 use bytes::Buf;
 
+use crate::codec::h264::nalu::Header;
+use crate::codec::h264::nalu_reader;
 use crate::codec::h264::parser::Nalu;
 use crate::codec::h264::parser::NaluType;
 use crate::decoder::stateless::DecodeError;
@@ -14,13 +16,10 @@ use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::utils::nalu::Header;
 use crate::DecodedFormat;
 
 #[cfg(test)]
 pub(crate) mod dummy;
-pub mod nalu;
-pub(crate) mod nalu_reader;
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
 

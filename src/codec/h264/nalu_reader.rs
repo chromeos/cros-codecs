@@ -226,7 +226,7 @@ impl<T: AsRef<[u8]>> NaluReader<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::nalu_reader::NaluReader;
+    use super::NaluReader;
 
     // These tests are adapted from the chromium tests at media/video/h264_bit_reader_unitttest.cc
 
