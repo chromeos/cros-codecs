@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #[cfg(test)]
-pub mod dummy;
+mod dummy;
 #[cfg(feature = "vaapi")]
-pub mod vaapi;
+mod vaapi;
 
 use crate::codec::vp8::parser::Frame;
 use crate::codec::vp8::parser::Header;
