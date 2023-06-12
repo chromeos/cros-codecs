@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+//! Stateless decoders.
+//!
+//! Stateless here refers to the backend API targeted by these decoders. The decoders themselves do
+//! hold the decoding state so the backend doesn't need to.
+
 pub mod h264;
 pub mod h265;
 pub mod vp8;
@@ -15,6 +20,7 @@ use crate::decoder::DecoderFormatNegotiator;
 use crate::DecodedFormat;
 use crate::Resolution;
 
+/// Error returned by stateless backend methods.
 #[derive(Error, Debug)]
 pub enum StatelessBackendError {
     #[error("not enough resources to proceed with the operation now")]
@@ -29,6 +35,7 @@ pub enum StatelessBackendError {
     Other(#[from] anyhow::Error),
 }
 
+/// Result type returned by stateless backend methods.
 pub type StatelessBackendResult<T> = std::result::Result<T, StatelessBackendError>;
 
 /// Decoder implementations can use this struct to represent their decoding state.
@@ -43,8 +50,8 @@ enum DecodingState<T> {
     Decoding,
 }
 
+/// Error returned by the [`StatelessVideoDecoder::decode`] method.
 #[derive(Debug, Error)]
-/// Error possibly returned by the `decode` method..
 pub enum DecodeError {
     #[error("cannot accept more input until pending events are processed")]
     CheckEvents,
@@ -58,7 +65,7 @@ mod private {
     use super::*;
 
     /// Private trait for methods we need to expose for crate types (e.g.
-    /// `DecoderFormatNegotiator`s), but don't want to be directly used by the client.
+    /// [`DecoderFormatNegotiator`]s), but don't want to be directly used by the client.
     pub(super) trait StatelessVideoDecoder {
         /// Try to apply `format` to output frames. If successful, all frames emitted after the
         /// call will be in the new format.
@@ -99,7 +106,7 @@ pub(crate) trait StatelessDecoderBackend<FormatInfo> {
         -> anyhow::Result<()>;
 }
 
-/// Helper to implement `DecoderFormatNegotiator` for stateless decoders.
+/// Helper to implement [`DecoderFormatNegotiator`] for stateless decoders.
 struct StatelessDecoderFormatNegotiator<'a, D, H, F>
 where
     D: StatelessVideoDecoder,
@@ -174,13 +181,16 @@ where
 /// operating independently: a new decode unit can only be processed if there is already an output
 /// resource available to receive its decoded content.
 ///
-/// Therefore `decode` can refuse work if there is no output resource available at the time of
-/// calling, in which case the caller is responsible for calling `decode` again with the same
-/// parameters after processing at least one pending output frame and returning it to the decoder.
+/// Therefore [`decode`] can refuse work if there is no output resource
+/// available at the time of calling, in which case the caller is responsible for calling
+/// [`decode`] again with the same parameters after processing at least one
+/// pending output frame and returning it to the decoder.
+///
+/// [`decode`]: StatelessVideoDecoder::decode
 pub trait StatelessVideoDecoder {
     /// Try to decode the `bitstream` represented by `timestamp`.
     ///
-    /// This method will return `DecodeError::CheckEvents` if processing cannot take place until
+    /// This method will return [`DecodeError::CheckEvents`] if processing cannot take place until
     /// pending events are handled. This could either be because a change of output format has
     /// been detected that the client should acknowledge, or because there are no available output
     /// resources and dequeueing and returning pending frames will fix that. After the cause has
@@ -188,7 +198,9 @@ pub trait StatelessVideoDecoder {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> std::result::Result<(), DecodeError>;
 
     /// Flush the decoder i.e. finish processing all pending decode requests and make sure the
-    /// resulting frames are ready to be retrieved via `next_event`.
+    /// resulting frames are ready to be retrieved via [`next_event`].
+    ///
+    /// [`next_event`]: StatelessVideoDecoder::next_event
     fn flush(&mut self);
 
     /// Gets the number of output resources left in the backend.

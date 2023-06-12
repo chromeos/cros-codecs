@@ -29,6 +29,7 @@ use byteorder::LittleEndian;
 #[cfg(feature = "vaapi")]
 pub use libva;
 
+/// A frame resolution in pixels.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Resolution {
     pub width: u32,
