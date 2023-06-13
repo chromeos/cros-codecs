@@ -2279,6 +2279,7 @@ where
 
     fn flush(&mut self) {
         self.drain();
+        self.decoding_state = DecodingState::AwaitingStreamInfo;
     }
 
     fn num_resources_left(&self) -> usize {

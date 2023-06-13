@@ -182,6 +182,8 @@ pub trait StatelessVideoDecoder {
     /// Flush the decoder i.e. finish processing all pending decode requests and make sure the
     /// resulting frames are ready to be retrieved via [`next_event`].
     ///
+    /// Note that after flushing, a key frame must be submitted before decoding can resume.
+    ///
     /// [`next_event`]: StatelessVideoDecoder::next_event
     fn flush(&mut self);
 
