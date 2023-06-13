@@ -231,8 +231,13 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
         }
     }
 
-    // All the submitted frames are already in the ready queue.
-    fn flush(&mut self) {}
+    fn flush(&mut self) {
+        // Note: all the submitted frames are already in the ready queue.
+        self.last_picture = Default::default();
+        self.golden_ref_picture = Default::default();
+        self.alt_ref_picture = Default::default();
+        self.decoding_state = DecodingState::AwaitingStreamInfo;
+    }
 
     fn num_resources_left(&self) -> usize {
         self.backend.num_resources_left()
