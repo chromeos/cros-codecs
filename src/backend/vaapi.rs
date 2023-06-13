@@ -38,6 +38,37 @@ use crate::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Resolution;
 
+fn va_fourcc_to_string(va_fourcc: u32) -> String {
+    String::from(match va_fourcc {
+        libva::constants::VA_FOURCC_NV12 => "NV12",
+        libva::constants::VA_FOURCC_I420 => "I420",
+        libva::constants::VA_FOURCC_422H => "422H",
+        libva::constants::VA_FOURCC_444P => "444P",
+        libva::constants::VA_FOURCC_P010 => "P010",
+        libva::constants::VA_FOURCC_P012 => "P012",
+        libva::constants::VA_FOURCC_Y210 => "Y210",
+        libva::constants::VA_FOURCC_Y212 => "Y212",
+        libva::constants::VA_FOURCC_Y410 => "Y410",
+        libva::constants::VA_FOURCC_Y412 => "Y412",
+        other => return format!("unknown VA fourcc 0x{:x}", other),
+    })
+}
+
+fn va_rt_format_to_string(va_rt_format: u32) -> String {
+    String::from(match va_rt_format {
+        libva::constants::VA_RT_FORMAT_YUV420 => "YUV420",
+        libva::constants::VA_RT_FORMAT_YUV422 => "YUV422",
+        libva::constants::VA_RT_FORMAT_YUV444 => "YUV444",
+        libva::constants::VA_RT_FORMAT_YUV420_10 => "YUV420_10",
+        libva::constants::VA_RT_FORMAT_YUV420_12 => "YUV420_12",
+        libva::constants::VA_RT_FORMAT_YUV422_10 => "YUV422_10",
+        libva::constants::VA_RT_FORMAT_YUV422_12 => "YUV422_12",
+        libva::constants::VA_RT_FORMAT_YUV444_10 => "YUV444_10",
+        libva::constants::VA_RT_FORMAT_YUV444_12 => "YUV444_12",
+        other => return format!("unknown VA rt_format {}", other),
+    })
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 struct FormatMap {
     pub rt_format: u32,
@@ -366,7 +397,10 @@ impl StreamMetadataState {
             FORMAT_MAP
                 .iter()
                 .find(|&map| map.rt_format == rt_format)
-                .ok_or(anyhow!("Unsupported format {}", rt_format))?
+                .ok_or(anyhow!(
+                    "format {} is not supported by your hardware or by the implementation for the current codec",
+                    va_rt_format_to_string(rt_format)
+                ))?
         };
 
         let map_format = display
@@ -376,8 +410,8 @@ impl StreamMetadataState {
             .cloned()
             .ok_or_else(|| {
                 anyhow!(
-                    "cannot find corresponding VA format for fourcc {:?}",
-                    format_map.va_fourcc
+                    "fourcc {} is not supported by your hardware or by the implementation for the current codec",
+                    va_fourcc_to_string(format_map.va_fourcc)
                 )
             })?;
 
