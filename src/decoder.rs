@@ -21,7 +21,9 @@ use crate::Resolution;
 ///
 /// This is mostly useful for the decoder where the user is expected to manage how the decoded
 /// frames buffers are allocated and when.
-pub trait SurfacePool {
+///
+/// The `M` generic parameter is the type of the descriptors for the memory backing the surfaces.
+pub trait SurfacePool<M> {
     /// Returns the coded resolution of the pool.
     ///
     /// All the frames maintained by this pool are guaranteed to be able to contain the coded
@@ -32,7 +34,7 @@ pub trait SurfacePool {
     /// Frames managed by this pool that can not contain the new resolution are dropped.
     fn set_coded_resolution(&mut self, resolution: Resolution);
     /// Add new surfaces to the pool, using `descriptors` as backing memory.
-    fn add_surfaces(&mut self, descriptors: Vec<()>) -> Result<(), anyhow::Error>;
+    fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error>;
     /// Returns new number of surfaces currently available in this pool.
     fn num_free_surfaces(&self) -> usize;
     /// Returns the total number of managed surfaces in this pool.
@@ -65,20 +67,20 @@ pub struct StreamInfo {
 /// the format change took place, and (in the future) negotiate its specifics.
 ///
 /// When the object is dropped, the decoder can accept and process new input again.
-pub trait DecoderFormatNegotiator<'a> {
+pub trait DecoderFormatNegotiator<'a, M> {
     /// Returns the current decoding parameters, as extracted from the stream.
     fn stream_info(&self) -> &StreamInfo;
-    /// Returns the frame pool in use for the decoder, set up for the new format.
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool;
+    /// Returns the surface pool in use for the decoder, set up for the new format.
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M>;
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
 
 /// Events that can be retrieved using the `next_event` method of a decoder.
-pub enum DecoderEvent<'a> {
+pub enum DecoderEvent<'a, M> {
     /// The next frame has been decoded.
     FrameReady(Box<dyn DecodedHandle>),
     /// The format of the stream has changed and action is required.
-    FormatChanged(Box<dyn DecoderFormatNegotiator<'a> + 'a>),
+    FormatChanged(Box<dyn DecoderFormatNegotiator<'a, M> + 'a>),
 }
 
 pub trait DynHandle {

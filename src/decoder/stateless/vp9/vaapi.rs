@@ -9,6 +9,7 @@ use anyhow::Context;
 use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
+use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::VaStreamInfo;
@@ -231,7 +232,7 @@ fn build_slice_param(
     ))
 }
 
-impl StatelessVp9DecoderBackend for VaapiBackend<Header> {
+impl<M: SurfaceMemoryDescriptor> StatelessVp9DecoderBackend<M> for VaapiBackend<Header, M> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         self.new_sequence(header)
     }
@@ -289,11 +290,15 @@ impl StatelessVp9DecoderBackend for VaapiBackend<Header> {
     }
 }
 
-impl Decoder<VADecodedHandle> {
+impl<M: SurfaceMemoryDescriptor + 'static> Decoder<VADecodedHandle<M>, M> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
+    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self>
+    where
+        M: From<S>,
+        S: From<M>,
+    {
         Self::new(
-            Box::new(VaapiBackend::<Header>::new(display)),
+            Box::new(VaapiBackend::<Header, M>::new(display)),
             blocking_mode,
         )
     }
@@ -327,7 +332,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+        let decoder = Decoder::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, c| vpx_decoding_loop(d, s, c, output_format, blocking_mode),
@@ -416,7 +421,7 @@ mod tests {
     fn test_resolution_change_500frames_block() {
         use crate::decoder::stateless::vp9::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
         let display = Display::open().unwrap();
-        let decoder = Decoder::new_vaapi(display, BlockingMode::Blocking).unwrap();
+        let decoder = Decoder::new_vaapi::<()>(display, BlockingMode::Blocking).unwrap();
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(
@@ -434,7 +439,7 @@ mod tests {
     fn test_resolution_change_500frames_nonblock() {
         use crate::decoder::stateless::vp9::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
         let display = Display::open().unwrap();
-        let decoder = Decoder::new_vaapi(display, BlockingMode::NonBlocking).unwrap();
+        let decoder = Decoder::new_vaapi::<()>(display, BlockingMode::NonBlocking).unwrap();
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(

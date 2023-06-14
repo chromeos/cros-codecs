@@ -90,14 +90,14 @@ impl Backend {
     }
 }
 
-impl SurfacePool for Backend {
+impl<M> SurfacePool<M> for Backend {
     fn coded_resolution(&self) -> Resolution {
         Resolution::from((320, 200))
     }
 
     fn set_coded_resolution(&mut self, _resolution: Resolution) {}
 
-    fn add_surfaces(&mut self, _descriptors: Vec<()>) -> Result<(), anyhow::Error> {
+    fn add_surfaces(&mut self, _descriptors: Vec<M>) -> Result<(), anyhow::Error> {
         Ok(())
     }
 
@@ -110,7 +110,7 @@ impl SurfacePool for Backend {
     }
 }
 
-impl<FormatInfo> StatelessDecoderBackend<FormatInfo> for Backend
+impl<FormatInfo, M> StatelessDecoderBackend<FormatInfo, M> for Backend
 where
     Handle: DecodedHandle,
 {
@@ -124,7 +124,7 @@ where
         Some(&self.stream_info)
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
         self
     }
 }

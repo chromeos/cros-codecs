@@ -17,7 +17,7 @@ use crate::decoder::stateless::vp8::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
 
-impl StatelessVp8DecoderBackend for Backend {
+impl<M> StatelessVp8DecoderBackend<M> for Backend {
     fn new_sequence(&mut self, _: &Header) -> StatelessBackendResult<()> {
         Ok(())
     }
@@ -39,7 +39,7 @@ impl StatelessVp8DecoderBackend for Backend {
     }
 }
 
-impl Decoder<Handle> {
+impl<M> Decoder<Handle, M> {
     // Creates a new instance of the decoder using the dummy backend.
     pub fn new_dummy(blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(Backend::new()), blocking_mode)

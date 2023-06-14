@@ -65,7 +65,7 @@ fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
 }
 
 /// Stateless backend methods specific to H.264.
-trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
+trait StatelessH264DecoderBackend<M>: StatelessDecoderBackend<Sps, M> {
     /// Type used by the backend to represent a picture in the process of being decoded.
     type Picture;
 
@@ -180,7 +180,7 @@ pub struct CurrentPicInfo {
     max_long_term_frame_idx: i32,
 }
 
-pub struct Decoder<T, P>
+pub struct Decoder<T, P, M>
 where
     T: DecodedHandle + Clone,
 {
@@ -191,7 +191,7 @@ where
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessH264DecoderBackend<Handle = T, Picture = P>>,
+    backend: Box<dyn StatelessH264DecoderBackend<M, Handle = T, Picture = P>>,
 
     decoding_state: DecodingState<Sps>,
 
@@ -270,14 +270,14 @@ where
     ref_pic_list1: Vec<DpbEntry<T>>,
 }
 
-impl<T, P> Decoder<T, P>
+impl<T, P, M> Decoder<T, P, M>
 where
     T: DecodedHandle + Clone + 'static,
 {
     /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
     fn new(
-        backend: Box<dyn StatelessH264DecoderBackend<Handle = T, Picture = P>>,
+        backend: Box<dyn StatelessH264DecoderBackend<M, Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -2256,7 +2256,7 @@ where
     }
 }
 
-impl<T, P> StatelessVideoDecoder for Decoder<T, P>
+impl<T, P, M> StatelessVideoDecoder<M> for Decoder<T, P, M>
 where
     T: DecodedHandle + Clone + 'static,
 {
@@ -2284,7 +2284,7 @@ where
         self.decoding_state = DecodingState::AwaitingStreamInfo;
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent> {
+    fn next_event(&mut self) -> Option<DecoderEvent<M>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
@@ -2306,7 +2306,7 @@ where
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
         self.backend.surface_pool()
     }
 
@@ -2315,7 +2315,7 @@ where
     }
 }
 
-impl<T, P> private::StatelessVideoDecoder for Decoder<T, P>
+impl<T, P, M> private::StatelessVideoDecoder for Decoder<T, P, M>
 where
     T: DecodedHandle + Clone + 'static,
 {
@@ -2350,7 +2350,7 @@ pub mod tests {
         output_format: DecodedFormat,
         blocking_mode: BlockingMode,
     ) where
-        D: StatelessVideoDecoder,
+        D: StatelessVideoDecoder<()>,
     {
         simple_playback_loop(
             decoder,

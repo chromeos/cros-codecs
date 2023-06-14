@@ -15,6 +15,7 @@ use libva::PictureNew;
 use libva::PictureParameter;
 use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
+use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::PooledSurface;
@@ -106,9 +107,9 @@ impl VaStreamInfo for &Sps {
     }
 }
 
-impl VaapiBackend<Sps> {
+impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, M> {
     /// Gets the VASurfaceID for the given `picture`.
-    fn surface_id(handle: &Option<VADecodedHandle>) -> libva::VASurfaceID {
+    fn surface_id(handle: &Option<VADecodedHandle<M>>) -> libva::VASurfaceID {
         match handle {
             None => libva::constants::VA_INVALID_SURFACE,
             Some(handle) => handle.borrow().surface_id(),
@@ -212,7 +213,7 @@ impl VaapiBackend<Sps> {
         slice: &Slice<impl AsRef<[u8]>>,
         current_picture: &PictureData,
         current_surface_id: libva::VASurfaceID,
-        dpb: &Dpb<VADecodedHandle>,
+        dpb: &Dpb<VADecodedHandle<M>>,
         sps: &Sps,
         pps: &Pps,
     ) -> anyhow::Result<BufferType> {
@@ -318,7 +319,7 @@ impl VaapiBackend<Sps> {
         )))
     }
 
-    fn fill_ref_pic_list(ref_list_x: &[DpbEntry<VADecodedHandle>]) -> [libva::PictureH264; 32] {
+    fn fill_ref_pic_list(ref_list_x: &[DpbEntry<VADecodedHandle<M>>]) -> [libva::PictureH264; 32] {
         let mut va_pics = vec![];
 
         for handle in ref_list_x {
@@ -347,8 +348,8 @@ impl VaapiBackend<Sps> {
 
     fn build_slice_param(
         slice: &Slice<impl AsRef<[u8]>>,
-        ref_list_0: &[DpbEntry<VADecodedHandle>],
-        ref_list_1: &[DpbEntry<VADecodedHandle>],
+        ref_list_0: &[DpbEntry<VADecodedHandle<M>>],
+        ref_list_1: &[DpbEntry<VADecodedHandle<M>>],
         sps: &Sps,
         pps: &Pps,
     ) -> anyhow::Result<BufferType> {
@@ -462,8 +463,8 @@ impl VaapiBackend<Sps> {
     }
 }
 
-impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
-    type Picture = VaPicture<PictureNew, PooledSurface<()>>;
+impl<M: SurfaceMemoryDescriptor> StatelessH264DecoderBackend<M> for VaapiBackend<Sps, M> {
+    type Picture = VaPicture<PictureNew, PooledSurface<M>>;
 
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
@@ -575,10 +576,19 @@ impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
     }
 }
 
-impl Decoder<VADecodedHandle, VaPicture<PictureNew, PooledSurface<()>>> {
+impl<M: SurfaceMemoryDescriptor + 'static>
+    Decoder<VADecodedHandle<M>, VaPicture<PictureNew, PooledSurface<M>>, M>
+{
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
-        Self::new(Box::new(VaapiBackend::<Sps>::new(display)), blocking_mode)
+    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self>
+    where
+        M: From<S>,
+        S: From<M>,
+    {
+        Self::new(
+            Box::new(VaapiBackend::<Sps, M>::new(display)),
+            blocking_mode,
+        )
     }
 }
 
@@ -600,7 +610,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+        let decoder = Decoder::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, f| h264_decoding_loop(d, s, f, output_format, blocking_mode),

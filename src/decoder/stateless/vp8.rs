@@ -28,7 +28,7 @@ use crate::decoder::SurfacePool;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP8.
-trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Header> {
+trait StatelessVp8DecoderBackend<M>: StatelessDecoderBackend<Header, M> {
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
@@ -51,7 +51,7 @@ trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Header> {
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
-pub struct Decoder<T: DecodedHandle> {
+pub struct Decoder<T: DecodedHandle, D> {
     /// A parser to extract bitstream data and build frame data in turn
     parser: Parser,
 
@@ -59,7 +59,7 @@ pub struct Decoder<T: DecodedHandle> {
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessVp8DecoderBackend<Handle = T>>,
+    backend: Box<dyn StatelessVp8DecoderBackend<D, Handle = T>>,
 
     decoding_state: DecodingState<Header>,
 
@@ -76,11 +76,11 @@ pub struct Decoder<T: DecodedHandle> {
     alt_ref_picture: Option<T>,
 }
 
-impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
+impl<T: DecodedHandle + Clone + 'static, D> Decoder<T, D> {
     /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
     fn new(
-        backend: Box<dyn StatelessVp8DecoderBackend<Handle = T>>,
+        backend: Box<dyn StatelessVp8DecoderBackend<D, Handle = T>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -110,25 +110,25 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
         alt_ref_picture: &mut Option<T>,
     ) -> anyhow::Result<()> {
         if header.key_frame() {
-            Decoder::replace_reference(last_picture, decoded_handle);
-            Decoder::replace_reference(golden_ref_picture, decoded_handle);
-            Decoder::replace_reference(alt_ref_picture, decoded_handle);
+            Self::replace_reference(last_picture, decoded_handle);
+            Self::replace_reference(golden_ref_picture, decoded_handle);
+            Self::replace_reference(alt_ref_picture, decoded_handle);
         } else {
             if header.refresh_alternate_frame() {
-                Decoder::replace_reference(alt_ref_picture, decoded_handle);
+                Self::replace_reference(alt_ref_picture, decoded_handle);
             } else {
                 match header.copy_buffer_to_alternate() {
                     0 => { /* do nothing */ }
 
                     1 => {
                         if let Some(last_picture) = last_picture {
-                            Decoder::replace_reference(alt_ref_picture, last_picture);
+                            Self::replace_reference(alt_ref_picture, last_picture);
                         }
                     }
 
                     2 => {
                         if let Some(golden_ref) = golden_ref_picture {
-                            Decoder::replace_reference(alt_ref_picture, golden_ref);
+                            Self::replace_reference(alt_ref_picture, golden_ref);
                         }
                     }
 
@@ -137,20 +137,20 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
             }
 
             if header.refresh_golden_frame() {
-                Decoder::replace_reference(golden_ref_picture, decoded_handle);
+                Self::replace_reference(golden_ref_picture, decoded_handle);
             } else {
                 match header.copy_buffer_to_golden() {
                     0 => { /* do nothing */ }
 
                     1 => {
                         if let Some(last_picture) = last_picture {
-                            Decoder::replace_reference(golden_ref_picture, last_picture);
+                            Self::replace_reference(golden_ref_picture, last_picture);
                         }
                     }
 
                     2 => {
                         if let Some(alt_ref) = alt_ref_picture {
-                            Decoder::replace_reference(golden_ref_picture, alt_ref);
+                            Self::replace_reference(golden_ref_picture, alt_ref);
                         }
                     }
 
@@ -159,7 +159,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
             }
 
             if header.refresh_last() {
-                Decoder::replace_reference(last_picture, decoded_handle);
+                Self::replace_reference(last_picture, decoded_handle);
             }
         }
 
@@ -215,7 +215,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
     }
 }
 
-impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
+impl<T: DecodedHandle + Clone + 'static, M> StatelessVideoDecoder<M> for Decoder<T, M> {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         let frame = self.parser.parse_frame(bitstream)?;
 
@@ -241,7 +241,7 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
         self.decoding_state = DecodingState::AwaitingStreamInfo;
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent> {
+    fn next_event(&mut self) -> Option<DecoderEvent<M>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
@@ -264,7 +264,7 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
         self.backend.surface_pool()
     }
 
@@ -273,7 +273,7 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
     }
 }
 
-impl<T: DecodedHandle + Clone + 'static> private::StatelessVideoDecoder for Decoder<T> {
+impl<T: DecodedHandle + Clone + 'static, D> private::StatelessVideoDecoder for Decoder<T, D> {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
@@ -304,7 +304,7 @@ pub mod tests {
         output_format: DecodedFormat,
         blocking_mode: BlockingMode,
     ) where
-        D: StatelessVideoDecoder,
+        D: StatelessVideoDecoder<()>,
     {
         simple_playback_loop(
             decoder,

@@ -39,7 +39,7 @@ use crate::Resolution;
 const MAX_DPB_SIZE: usize = 16;
 
 /// Stateless backend methods specific to H.265.
-trait StatelessH265DecoderBackend: StatelessDecoderBackend<Sps> {
+trait StatelessH265DecoderBackend<M>: StatelessDecoderBackend<Sps, M> {
     /// Type used by the backend to represent a picture in the process of being decoded.
     type Picture;
 
@@ -99,7 +99,7 @@ enum BumpingType {
     AfterDecoding,
 }
 
-pub struct Decoder<T, P>
+pub struct Decoder<T, P, M>
 where
     T: DecodedHandle + Clone,
 {
@@ -110,7 +110,7 @@ where
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessH265DecoderBackend<Handle = T, Picture = P>>,
+    backend: Box<dyn StatelessH265DecoderBackend<M, Handle = T, Picture = P>>,
 
     /// The backend used for hardware acceleration.
     // backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
@@ -174,7 +174,7 @@ where
     ref_pic_list1: [Option<RefPicListEntry<T>>; MAX_DPB_SIZE],
 }
 
-impl<T, P> Decoder<T, P>
+impl<T, P, M> Decoder<T, P, M>
 where
     T: DecodedHandle + Clone + 'static,
 {
@@ -182,7 +182,7 @@ where
     #[cfg(any(feature = "vaapi", test))]
     #[allow(dead_code)]
     fn new(
-        backend: Box<dyn StatelessH265DecoderBackend<Handle = T, Picture = P>>,
+        backend: Box<dyn StatelessH265DecoderBackend<M, Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -825,7 +825,7 @@ where
     }
 }
 
-impl<T, P> StatelessVideoDecoder for Decoder<T, P>
+impl<T, P, M> StatelessVideoDecoder<M> for Decoder<T, P, M>
 where
     T: DecodedHandle + Clone + 'static,
 {
@@ -853,7 +853,7 @@ where
         todo!()
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent> {
+    fn next_event(&mut self) -> Option<DecoderEvent<M>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
@@ -879,7 +879,7 @@ where
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
         self.backend.surface_pool()
     }
 
@@ -888,7 +888,7 @@ where
     }
 }
 
-impl<T, P> private::StatelessVideoDecoder for Decoder<T, P>
+impl<T, P, M> private::StatelessVideoDecoder for Decoder<T, P, M>
 where
     T: DecodedHandle + Clone + 'static,
 {

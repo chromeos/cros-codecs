@@ -168,9 +168,9 @@ fn supported_formats_for_rt_format(
 }
 
 /// A decoded frame handle.
-pub(crate) type DecodedHandle = Rc<RefCell<GenericBackendHandle<()>>>;
+pub(crate) type DecodedHandle<M> = Rc<RefCell<GenericBackendHandle<M>>>;
 
-impl DecodedHandleTrait for DecodedHandle {
+impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
     fn coded_resolution(&self) -> Resolution {
         self.borrow().coded_resolution
     }
@@ -415,7 +415,7 @@ mod surface_pool {
         }
     }
 
-    impl SurfacePool for Rc<RefCell<VaSurfacePool<()>>> {
+    impl<M: SurfaceMemoryDescriptor> SurfacePool<M> for Rc<RefCell<VaSurfacePool<M>>> {
         fn coded_resolution(&self) -> Resolution {
             (**self).borrow().coded_resolution
         }
@@ -424,7 +424,7 @@ mod surface_pool {
             (**self).borrow_mut().set_coded_resolution(resolution)
         }
 
-        fn add_surfaces(&mut self, descriptors: Vec<()>) -> Result<(), anyhow::Error> {
+        fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error> {
             (**self)
                 .borrow_mut()
                 .add_surfaces(descriptors)
@@ -505,13 +505,13 @@ impl StreamMetadataState {
     }
 
     /// Initializes or reinitializes the codec state.
-    fn open<S: VaStreamInfo>(
+    fn open<S: VaStreamInfo, M: SurfaceMemoryDescriptor>(
         display: &Rc<Display>,
         hdr: S,
         format_map: Option<&FormatMap>,
         old_metadata_state: StreamMetadataState,
-        old_surface_pool: Rc<RefCell<VaSurfacePool<()>>>,
-    ) -> anyhow::Result<(StreamMetadataState, Rc<RefCell<VaSurfacePool<()>>>)> {
+        old_surface_pool: Rc<RefCell<VaSurfacePool<M>>>,
+    ) -> anyhow::Result<(StreamMetadataState, Rc<RefCell<VaSurfacePool<M>>>)> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
 
@@ -570,7 +570,7 @@ impl StreamMetadataState {
                     libva::VAEntrypoint::VAEntrypointVLD,
                 )?;
 
-                let context = display.create_context::<()>(
+                let context = display.create_context::<M>(
                     &config,
                     coded_resolution.width,
                     coded_resolution.height,
@@ -639,10 +639,10 @@ pub struct GenericBackendHandle<M: SurfaceMemoryDescriptor> {
     map_format: Rc<libva::VAImageFormat>,
 }
 
-impl GenericBackendHandle<()> {
+impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
     /// Creates a new pending handle on `surface_id`.
     fn new(
-        picture: Picture<PictureNew, PooledSurface<()>>,
+        picture: Picture<PictureNew, PooledSurface<M>>,
         metadata: &ParsedStreamMetadata,
     ) -> anyhow::Result<Self> {
         let picture = picture.begin()?.render()?.end()?;
@@ -653,9 +653,7 @@ impl GenericBackendHandle<()> {
             map_format: Rc::clone(&metadata.map_format),
         })
     }
-}
 
-impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
     fn sync(&mut self) -> Result<(), VaError> {
         let res;
 
@@ -859,24 +857,26 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
     }
 }
 
-pub(crate) struct VaapiBackend<StreamData>
+pub(crate) struct VaapiBackend<StreamData, M>
 where
     for<'a> &'a StreamData: VaStreamInfo,
+    M: SurfaceMemoryDescriptor,
 {
     /// VA display in use for this stream.
     display: Rc<Display>,
     /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
-    pub(crate) surface_pool: Rc<RefCell<VaSurfacePool<()>>>,
+    pub(crate) surface_pool: Rc<RefCell<VaSurfacePool<M>>>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
     /// Make sure the backend is typed by stream information provider.
     _stream_data: PhantomData<StreamData>,
 }
 
-impl<StreamData> VaapiBackend<StreamData>
+impl<StreamData, M> VaapiBackend<StreamData, M>
 where
     StreamData: Clone,
     for<'a> &'a StreamData: VaStreamInfo,
+    M: SurfaceMemoryDescriptor,
 {
     pub(crate) fn new(display: Rc<libva::Display>) -> Self {
         // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
@@ -915,8 +915,8 @@ where
 
     pub(crate) fn process_picture(
         &mut self,
-        picture: libva::Picture<PictureNew, PooledSurface<()>>,
-    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle> {
+        picture: Picture<PictureNew, PooledSurface<M>>,
+    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData, M>>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
         Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
@@ -945,12 +945,13 @@ where
     }
 }
 
-impl<StreamData> StatelessDecoderBackend<StreamData> for VaapiBackend<StreamData>
+impl<StreamData, M> StatelessDecoderBackend<StreamData, M> for VaapiBackend<StreamData, M>
 where
     StreamData: Clone,
     for<'a> &'a StreamData: VaStreamInfo,
+    M: SurfaceMemoryDescriptor,
 {
-    type Handle = DecodedHandle;
+    type Handle = DecodedHandle<M>;
 
     fn try_format(
         &mut self,
@@ -997,7 +998,7 @@ where
         }
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
         &mut self.surface_pool
     }
 

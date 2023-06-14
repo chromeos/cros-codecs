@@ -197,7 +197,7 @@ pub fn simple_playback_loop<D, R, I>(
     output_format: DecodedFormat,
     blocking_mode: BlockingMode,
 ) where
-    D: StatelessVideoDecoder + ?Sized,
+    D: StatelessVideoDecoder<()> + ?Sized,
     R: AsRef<[u8]>,
     I: Iterator<Item = R>,
 {

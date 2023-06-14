@@ -193,7 +193,7 @@ fn main() {
             let decoder = Box::new(
                 cros_codecs::decoder::stateless::h264::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
-            ) as Box<dyn StatelessVideoDecoder>;
+            ) as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }
@@ -203,7 +203,7 @@ fn main() {
             let decoder = Box::new(
                 cros_codecs::decoder::stateless::vp8::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
-            ) as Box<dyn StatelessVideoDecoder>;
+            ) as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }
@@ -213,7 +213,7 @@ fn main() {
             let decoder = Box::new(
                 cros_codecs::decoder::stateless::vp9::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
-            ) as Box<dyn StatelessVideoDecoder>;
+            ) as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }
