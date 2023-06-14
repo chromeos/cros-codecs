@@ -6,10 +6,12 @@
 //! input and writing the raw decoded frames to a file.
 
 use std::borrow::Cow;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -107,6 +109,10 @@ struct Args {
     #[argh(option)]
     output: Option<PathBuf>,
 
+    /// whether to decode a frame per file. Requires "output" to be set.
+    #[argh(switch)]
+    multiple_output_files: bool,
+
     /// input format to decode from.
     #[argh(option)]
     input_format: EncodedFormat,
@@ -134,6 +140,22 @@ fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Cow<[u8]>>
     }
 }
 
+/// Decide the output file name when multiple_output_files is set
+fn decide_output_file_name<'a>(output: &'a Path, index: i32) -> PathBuf {
+    let extract_str = |s: Option<&'a OsStr>| s.and_then(|s| s.to_str()).expect("malformed file");
+
+    let [file_name, stem] = [output.file_name(), output.file_stem()].map(extract_str);
+
+    if output.extension().is_some() {
+        let [extension] = [output.extension()].map(extract_str);
+        let new_file_name = format!("{}_{}.{}", stem, index, extension);
+        PathBuf::from(String::from(output.to_str().unwrap()).replace(file_name, &new_file_name))
+    } else {
+        let new_file_name = format!("{}_{}", stem, index);
+        PathBuf::from(String::from(output.to_str().unwrap()).replace(file_name, &new_file_name))
+    }
+}
+
 fn main() {
     env_logger::init();
 
@@ -148,9 +170,13 @@ fn main() {
         buf
     };
 
-    let mut output = args
-        .output
-        .map(|p| File::create(p).expect("error creating output file"));
+    let mut output = if !args.multiple_output_files {
+        args.output
+            .as_ref()
+            .map(|p| File::create(p).expect("error creating output file"))
+    } else {
+        None
+    };
 
     let blocking_mode = if args.synchronous {
         BlockingMode::Blocking
@@ -194,16 +220,30 @@ fn main() {
     };
 
     let mut md5_context = md5::Context::new();
+    let mut output_filename_idx = 0;
 
     let mut on_new_frame = |handle: Box<dyn DecodedHandle>| {
-        if output.is_some() || args.compute_md5.is_some() {
+        if args.output.is_some() || args.compute_md5.is_some() {
             let mut picture = handle.dyn_picture_mut();
             let mut handle = picture.dyn_mappable_handle_mut();
             let buffer_size = handle.image_size();
             let mut frame_data = vec![0; buffer_size];
             handle.read(&mut frame_data).unwrap();
 
-            if let Some(output) = &mut output {
+            if args.multiple_output_files {
+                let file_name = decide_output_file_name(
+                    args.output
+                        .as_ref()
+                        .expect("multiple_output_files need output to be set"),
+                    output_filename_idx,
+                );
+
+                let mut output = File::create(file_name).expect("error creating output file");
+                output_filename_idx += 1;
+                output
+                    .write_all(&frame_data)
+                    .expect("failed to write to output file");
+            } else if let Some(output) = &mut output {
                 output
                     .write_all(&frame_data)
                     .expect("failed to write to output file");
