@@ -388,7 +388,10 @@ impl StreamMetadataState {
     ) -> anyhow::Result<StreamMetadataState> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
-        let (frame_w, frame_h) = hdr.coded_size();
+
+        let (frame_w, frame_h) = Resolution::from(hdr.coded_size())
+            .round(crate::ResolutionRoundMode::Even)
+            .into();
 
         let format_map = if let Some(format_map) = format_map {
             format_map
@@ -604,8 +607,8 @@ impl GenericBackendHandle {
                 // Map the VASurface onto our address space.
                 let image = picture.create_image(
                     *self.map_format,
-                    self.display_resolution.width,
-                    self.display_resolution.height,
+                    self.coded_resolution.into(),
+                    self.display_resolution.into(),
                 )?;
 
                 Ok(image)
@@ -672,8 +675,9 @@ impl<'a> MappableHandle for Image<'a> {
         let image_size = self.image_size();
         let image_inner = self.image();
 
-        let width = image_inner.width as usize;
-        let height = image_inner.height as usize;
+        let display_resolution = self.display_resolution();
+        let width = display_resolution.0 as usize;
+        let height = display_resolution.1 as usize;
 
         if buffer.len() != image_size {
             return Err(anyhow!(
@@ -749,11 +753,11 @@ impl<'a> MappableHandle for Image<'a> {
 
     fn image_size(&mut self) -> usize {
         let image = self.image();
-
+        let display_resolution = self.display_resolution();
         crate::decoded_frame_size(
             (&image.format).try_into().unwrap(),
-            image.width as usize,
-            image.height as usize,
+            display_resolution.0 as usize,
+            display_resolution.1 as usize,
         )
     }
 }

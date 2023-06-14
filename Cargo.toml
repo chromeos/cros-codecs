@@ -18,7 +18,7 @@ byteorder = "1.4.3"
 bytes = "1.1.0"
 enumn = "0.1.4"
 #libva = { version = "0.0.3", package = "cros-libva", optional = true }
-libva = { git = "https://github.com/chromeos/cros-libva", rev = "f402ecc", package = "cros-libva", optional = true }
+libva = { git = "https://github.com/chromeos/cros-libva", rev = "337bf985", package = "cros-libva", optional = true }
 log = { version = "0", features = ["release_max_level_debug"] }
 thiserror = "1.0.31"
 crc32fast = "1.3.2"
