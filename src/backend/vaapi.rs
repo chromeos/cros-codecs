@@ -36,23 +36,8 @@ use crate::i4xx_copy;
 use crate::nv12_copy;
 use crate::y410_to_i410;
 use crate::DecodedFormat;
+use crate::Fourcc;
 use crate::Resolution;
-
-fn va_fourcc_to_string(va_fourcc: u32) -> String {
-    String::from(match va_fourcc {
-        libva::constants::VA_FOURCC_NV12 => "NV12",
-        libva::constants::VA_FOURCC_I420 => "I420",
-        libva::constants::VA_FOURCC_422H => "422H",
-        libva::constants::VA_FOURCC_444P => "444P",
-        libva::constants::VA_FOURCC_P010 => "P010",
-        libva::constants::VA_FOURCC_P012 => "P012",
-        libva::constants::VA_FOURCC_Y210 => "Y210",
-        libva::constants::VA_FOURCC_Y212 => "Y212",
-        libva::constants::VA_FOURCC_Y410 => "Y410",
-        libva::constants::VA_FOURCC_Y412 => "Y412",
-        other => return format!("unknown VA fourcc 0x{:x}", other),
-    })
-}
 
 fn va_rt_format_to_string(va_rt_format: u32) -> String {
     String::from(match va_rt_format {
@@ -453,7 +438,7 @@ impl StreamMetadataState {
             .ok_or_else(|| {
                 anyhow!(
                     "fourcc {} is not supported by your hardware or by the implementation for the current codec",
-                    va_fourcc_to_string(format_map.va_fourcc)
+                    Fourcc::from(format_map.va_fourcc)
                 )
             })?;
 

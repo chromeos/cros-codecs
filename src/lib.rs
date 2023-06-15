@@ -82,6 +82,58 @@ impl From<Resolution> for (u32, u32) {
     }
 }
 
+/// Wrapper around u32 when they are meant to be a fourcc.
+///
+/// Provides conversion and display/debug implementations useful when dealing with fourcc codes.
+#[derive(Clone, Copy)]
+pub struct Fourcc(u32);
+
+impl From<u32> for Fourcc {
+    fn from(fourcc: u32) -> Self {
+        Self(fourcc)
+    }
+}
+
+impl From<Fourcc> for u32 {
+    fn from(fourcc: Fourcc) -> Self {
+        fourcc.0
+    }
+}
+
+impl From<[u8; 4]> for Fourcc {
+    fn from(n: [u8; 4]) -> Self {
+        Self(n[0] as u32 | (n[1] as u32) << 8 | (n[2] as u32) << 16 | (n[3] as u32) << 24)
+    }
+}
+
+impl From<Fourcc> for [u8; 4] {
+    fn from(n: Fourcc) -> Self {
+        [
+            n.0 as u8,
+            (n.0 >> 8) as u8,
+            (n.0 >> 16) as u8,
+            (n.0 >> 24) as u8,
+        ]
+    }
+}
+
+impl std::fmt::Display for Fourcc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let c: [u8; 4] = (*self).into();
+
+        f.write_fmt(format_args!(
+            "{}{}{}{}",
+            c[0] as char, c[1] as char, c[2] as char, c[3] as char
+        ))
+    }
+}
+
+impl std::fmt::Debug for Fourcc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("0x{:08x} ({})", self.0, self))
+    }
+}
+
 /// Formats that buffers can be mapped into for the CPU to read.
 ///
 /// The conventions here largely follow these of libyuv.
@@ -297,5 +349,38 @@ fn y410_to_i410(
             LittleEndian::write_u16(dst_u, u);
             LittleEndian::write_u16(dst_v, v);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Fourcc;
+
+    const NV12_FOURCC: u32 = 0x3231564E;
+
+    #[test]
+    fn fourcc_u32() {
+        let fourcc = Fourcc::from(NV12_FOURCC);
+        let value: u32 = fourcc.into();
+        assert_eq!(value, NV12_FOURCC);
+    }
+
+    #[test]
+    fn fourcc_u8_4() {
+        let fourcc = Fourcc::from(NV12_FOURCC);
+        let value: [u8; 4] = fourcc.into();
+        assert_eq!(value, *b"NV12");
+    }
+
+    #[test]
+    fn fourcc_display() {
+        let fourcc = Fourcc::from(NV12_FOURCC);
+        assert_eq!(fourcc.to_string(), "NV12");
+    }
+
+    #[test]
+    fn fourcc_debug() {
+        let fourcc = Fourcc::from(NV12_FOURCC);
+        assert_eq!(format!("{:?}", fourcc), "0x3231564e (NV12)");
     }
 }
