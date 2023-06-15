@@ -193,17 +193,11 @@ impl VaapiBackend<Sps> {
         let mut scaling_list8x8 = [[0; 64]; 2];
 
         (0..6).for_each(|i| {
-            Decoder::<VADecodedHandle, VaPicture<PictureNew, ()>>::get_raster_from_zigzag_4x4(
-                pps.scaling_lists_4x4()[i],
-                &mut scaling_list4x4[i],
-            );
+            super::get_raster_from_zigzag_4x4(pps.scaling_lists_4x4()[i], &mut scaling_list4x4[i]);
         });
 
         (0..2).for_each(|i| {
-            Decoder::<VADecodedHandle, VaPicture<PictureNew, ()>>::get_raster_from_zigzag_8x8(
-                pps.scaling_lists_8x8()[i],
-                &mut scaling_list8x8[i],
-            );
+            super::get_raster_from_zigzag_8x8(pps.scaling_lists_8x8()[i], &mut scaling_list8x8[i]);
         });
 
         BufferType::IQMatrix(IQMatrix::H264(IQMatrixBufferH264::new(

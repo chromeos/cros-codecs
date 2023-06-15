@@ -42,13 +42,25 @@ use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
 use crate::Resolution;
 
-const ZIGZAG_8X8: [usize; 64] = [
-    0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20,
-    13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59,
-    52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63,
-];
+fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
+    const ZIGZAG_8X8: [usize; 64] = [
+        0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27,
+        20, 13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
+        58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63,
+    ];
 
-const ZIGZAG_4X4: [usize; 16] = [0, 1, 4, 8, 5, 2, 3, 6, 9, 12, 13, 10, 7, 11, 14, 15];
+    for i in 0..64 {
+        dst[i] = src[ZIGZAG_8X8[i]];
+    }
+}
+
+fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
+    const ZIGZAG_4X4: [usize; 16] = [0, 1, 4, 8, 5, 2, 3, 6, 9, 12, 13, 10, 7, 11, 14, 15];
+
+    for i in 0..16 {
+        dst[i] = src[ZIGZAG_4X4[i]];
+    }
+}
 
 /// Stateless backend methods specific to H.264.
 trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
@@ -2183,18 +2195,6 @@ where
         }
 
         Ok((picture, handle))
-    }
-
-    pub fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
-        for i in 0..64 {
-            dst[i] = src[ZIGZAG_8X8[i]];
-        }
-    }
-
-    pub fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
-        for i in 0..16 {
-            dst[i] = src[ZIGZAG_4X4[i]];
-        }
     }
 
     fn peek_sps(parser: &mut Parser, bitstream: &[u8]) -> Option<Sps> {
