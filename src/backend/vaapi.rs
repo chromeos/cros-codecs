@@ -228,9 +228,12 @@ impl DecodedHandleTrait for DecodedHandle {
 
 mod surface_pool {
     use std::collections::VecDeque;
+    use std::rc::Rc;
 
     use anyhow::anyhow;
+    use libva::Display;
     use libva::Surface;
+    use libva::VaError;
 
     use crate::Resolution;
 
@@ -244,17 +247,57 @@ mod surface_pool {
     /// surfaces will gracefully be dropped, which is arguably better than the
     /// alternative of having more than one pool active at a time.
     pub(crate) struct SurfacePool {
-        surfaces: VecDeque<Surface>,
+        display: Rc<Display>,
+        rt_format: u32,
+        usage_hint: Option<libva::UsageHint>,
         coded_resolution: Resolution,
+        surfaces: VecDeque<Surface>,
     }
 
     impl SurfacePool {
-        /// Creates a new pool
-        pub(crate) fn new(surfaces: Vec<Surface>, resolution: Resolution) -> Self {
+        /// Create a new pool.
+        ///
+        /// # Arguments
+        ///
+        /// * `display` - the VA display to create the surfaces from.
+        /// * `rt_format` - the VA RT format to use for the surfaces.
+        /// * `usage_hint` - hint about how the surfaces from this pool will be used.
+        /// * `coded_resolution` - resolution of the surfaces.
+        pub(crate) fn new(
+            display: Rc<Display>,
+            rt_format: u32,
+            usage_hint: Option<libva::UsageHint>,
+            coded_resolution: Resolution,
+        ) -> Self {
             Self {
-                surfaces: VecDeque::from(surfaces),
-                coded_resolution: resolution,
+                display,
+                rt_format,
+                usage_hint,
+                coded_resolution,
+                surfaces: VecDeque::new(),
             }
+        }
+
+        /// Create new surfaces and add them to the pool.
+        ///
+        /// `num_surfaces` is the number of surfaces to be created and added.
+        pub(crate) fn create_surfaces(&mut self, num_surfaces: usize) -> Result<(), VaError> {
+            let surfaces = self.display.create_surfaces(
+                self.rt_format,
+                // Let the hardware decide the best internal format - we will get the desired fourcc
+                // when creating the image.
+                None,
+                self.coded_resolution.width,
+                self.coded_resolution.height,
+                self.usage_hint,
+                num_surfaces,
+            )?;
+
+            for surface in surfaces {
+                self.surfaces.push_back(surface);
+            }
+
+            Ok(())
         }
 
         /// Retrieve the current coded resolution of the pool
@@ -429,7 +472,12 @@ impl StreamMetadataState {
         let (create_new_surfaces, surface_pool) = match old_metadata_state {
             StreamMetadataState::Unparsed => (
                 true,
-                Rc::new(RefCell::new(SurfacePool::new(vec![], coded_resolution))),
+                Rc::new(RefCell::new(SurfacePool::new(
+                    Rc::clone(display),
+                    rt_format,
+                    Some(libva::UsageHint::USAGE_HINT_DECODER),
+                    coded_resolution,
+                ))),
             ),
             StreamMetadataState::Parsed(ParsedStreamMetadata {
                 min_num_surfaces: old_min_num_surfaces,
@@ -494,23 +542,9 @@ impl StreamMetadataState {
         };
 
         if create_new_surfaces {
-            let surfaces = display.create_surfaces(
-                rt_format,
-                // Let the hardware decide the best internal format - we will get the desired fourcc
-                // when creating the image.
-                None,
-                coded_resolution.width,
-                coded_resolution.height,
-                Some(libva::UsageHint::USAGE_HINT_DECODER),
-                min_num_surfaces,
-            )?;
-
-            for surface in surfaces {
-                surface_pool
-                    .borrow_mut()
-                    .add_surface(surface)
-                    .map_err(|e| e.1)?;
-            }
+            surface_pool
+                .borrow_mut()
+                .create_surfaces(min_num_surfaces)?;
         }
 
         Ok(StreamMetadataState::Parsed(ParsedStreamMetadata {
