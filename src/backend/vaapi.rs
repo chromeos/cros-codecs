@@ -389,9 +389,8 @@ impl StreamMetadataState {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
 
-        let (frame_w, frame_h) = Resolution::from(hdr.coded_size())
-            .round(crate::ResolutionRoundMode::Even)
-            .into();
+        let coded_resolution =
+            Resolution::from(hdr.coded_size()).round(crate::ResolutionRoundMode::Even);
 
         let format_map = if let Some(format_map) = format_map {
             format_map
@@ -419,11 +418,6 @@ impl StreamMetadataState {
             })?;
 
         let min_num_surfaces = hdr.min_num_surfaces();
-
-        let coded_resolution = Resolution {
-            width: frame_w,
-            height: frame_h,
-        };
 
         let visible_rect = hdr.visible_rect();
 
@@ -487,7 +481,13 @@ impl StreamMetadataState {
                     libva::VAEntrypoint::VAEntrypointVLD,
                 )?;
 
-                let context = display.create_context(&config, frame_w, frame_h, None, true)?;
+                let context = display.create_context(
+                    &config,
+                    coded_resolution.width,
+                    coded_resolution.height,
+                    None,
+                    true,
+                )?;
 
                 (config, context)
             }
@@ -499,8 +499,8 @@ impl StreamMetadataState {
                 // Let the hardware decide the best internal format - we will get the desired fourcc
                 // when creating the image.
                 None,
-                frame_w,
-                frame_h,
+                coded_resolution.width,
+                coded_resolution.height,
                 Some(libva::UsageHint::USAGE_HINT_DECODER),
                 min_num_surfaces,
             )?;
