@@ -26,13 +26,6 @@ use crate::Resolution;
 ///
 /// When the object is dropped, the decoder can accept and process new input again.
 pub trait DecoderFormatNegotiator<'a> {
-    /// Gets the number of output resources allocated by the backend.
-    fn num_resources_total(&self) -> usize;
-
-    /// Returns the current coded resolution of the bitstream being processed.
-    /// This may be None if we have not read the stream parameters yet.
-    fn coded_resolution(&self) -> Resolution;
-
     fn format(&self) -> Option<DecodedFormat>;
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }

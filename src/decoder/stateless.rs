@@ -145,14 +145,6 @@ where
     D: StatelessVideoDecoder + private::StatelessVideoDecoder,
     F: Fn(&mut D, &H),
 {
-    fn num_resources_total(&self) -> usize {
-        self.decoder.num_resources_total()
-    }
-
-    fn coded_resolution(&self) -> Resolution {
-        self.decoder.coded_resolution().unwrap()
-    }
-
     /// Returns the current output format, if one is currently set.
     fn format(&self) -> Option<DecodedFormat> {
         self.decoder.format()
