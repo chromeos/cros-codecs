@@ -230,7 +230,6 @@ mod surface_pool {
     use std::collections::VecDeque;
     use std::rc::Rc;
 
-    use anyhow::anyhow;
     use libva::Display;
     use libva::Surface;
     use libva::VaError;
@@ -312,21 +311,19 @@ mod surface_pool {
                 .retain(|s| Resolution::from(s.size()).can_contain(self.coded_resolution));
         }
 
-        /// Adds a new surface to the pool
-        pub(crate) fn add_surface(
-            &mut self,
-            surface: Surface,
-        ) -> Result<(), (Surface, anyhow::Error)> {
+        /// Add a surface to the pool.
+        ///
+        /// This can be an entirely new surface, or one that has been previously obtained using
+        /// `get_surface` and is returned.
+        ///
+        /// Returns an error (and the passed `surface` back) if the surface is not at least as
+        /// large as the current coded resolution of the pool.
+        pub(crate) fn add_surface(&mut self, surface: Surface) -> Result<(), Surface> {
             if Resolution::from(surface.size()).can_contain(self.coded_resolution) {
                 self.surfaces.push_back(surface);
                 Ok(())
             } else {
-                Err((
-                    surface,
-                    anyhow!(
-                    "Surface does not fit within the pool's coded resolution. Update the pool resolution first."
-                ),
-                ))
+                Err(surface)
             }
         }
 
@@ -585,7 +582,7 @@ impl Drop for GenericBackendHandle {
         if let Ok(surface) = state.try_into() {
             // It is OK if the pool rejects the surface. It means that the
             // surface is stale and will be gracefully dropped.
-            if let Err((surface, _)) = self.surface_pool.borrow_mut().add_surface(surface) {
+            if let Err(surface) = self.surface_pool.borrow_mut().add_surface(surface) {
                 log::debug!(
                     "Dropping stale surface: {}, ({:?})",
                     surface.id(),
