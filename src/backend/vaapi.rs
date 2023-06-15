@@ -588,7 +588,7 @@ impl<D: SurfaceMemoryDescriptor> Drop for GenericBackendHandle<D> {
 impl GenericBackendHandle<()> {
     /// Creates a new pending handle on `surface_id`.
     fn new(
-        picture: Picture<PictureNew, ()>,
+        picture: Picture<PictureNew, Surface<()>>,
         metadata: &ParsedStreamMetadata,
     ) -> anyhow::Result<Self> {
         let picture = picture.begin()?.render()?.end()?;
@@ -644,7 +644,7 @@ impl<D: SurfaceMemoryDescriptor> GenericBackendHandle<D> {
     }
 
     /// Returns the picture of this handle.
-    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, D>> {
+    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, Surface<D>>> {
         match &self.state {
             PictureState::Ready(picture) => Some(picture),
             PictureState::Pending(_) => None,
@@ -664,8 +664,8 @@ impl<D: SurfaceMemoryDescriptor> GenericBackendHandle<D> {
     /// Returns the id of the VA surface backing this handle.
     pub(crate) fn surface_id(&self) -> libva::VASurfaceID {
         match &self.state {
-            PictureState::Ready(picture) => picture.surface_id(),
-            PictureState::Pending(picture) => picture.surface_id(),
+            PictureState::Ready(picture) => picture.surface().id(),
+            PictureState::Pending(picture) => picture.surface().id(),
             PictureState::Invalid => unreachable!(),
         }
     }
@@ -674,6 +674,7 @@ impl<D: SurfaceMemoryDescriptor> GenericBackendHandle<D> {
         match &self.state {
             PictureState::Ready(_) => Ok(true),
             PictureState::Pending(picture) => picture
+                .surface()
                 .query_status()
                 .map(|s| s == libva::VASurfaceStatus::VASurfaceReady),
             PictureState::Invalid => unreachable!(),
@@ -689,8 +690,8 @@ impl<D: SurfaceMemoryDescriptor> DynHandle for GenericBackendHandle<D> {
 
 /// Rendering state of a VA picture.
 enum PictureState<D: SurfaceMemoryDescriptor> {
-    Ready(Picture<PictureSync, D>),
-    Pending(Picture<PictureEnd, D>),
+    Ready(Picture<PictureSync, Surface<D>>),
+    Pending(Picture<PictureEnd, Surface<D>>),
     // Only set in the destructor when we take ownership of the VA picture.
     Invalid,
 }
@@ -845,7 +846,7 @@ where
 
     pub(crate) fn process_picture(
         &mut self,
-        picture: libva::Picture<PictureNew, ()>,
+        picture: libva::Picture<PictureNew, Surface<()>>,
     ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 

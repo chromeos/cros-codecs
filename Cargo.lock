@@ -115,7 +115,7 @@ dependencies = [
 [[package]]
 name = "cros-libva"
 version = "0.0.3"
-source = "git+https://github.com/chromeos/cros-libva?rev=15dcc6de#15dcc6de29b668f0960169045910f36dd0712b71"
+source = "git+https://github.com/chromeos/cros-libva?rev=50d47af#50d47afc5d3346dd39bb3cd2306aa833725042f2"
 dependencies = [
  "bitflags",
  "log",
