@@ -32,7 +32,6 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
-use crate::DecodedFormat;
 use crate::Resolution;
 
 const MAX_DPB_SIZE: usize = 16;
@@ -891,10 +890,6 @@ where
                     None
                 }
             })
-    }
-
-    fn format(&self) -> Option<DecodedFormat> {
-        todo!()
     }
 }
 

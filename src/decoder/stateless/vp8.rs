@@ -268,10 +268,6 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
                 }
             })
     }
-
-    fn format(&self) -> Option<crate::DecodedFormat> {
-        self.backend.format()
-    }
 }
 
 impl<T: DecodedHandle + Clone + 'static> private::StatelessVideoDecoder for Decoder<T> {

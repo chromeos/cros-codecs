@@ -2314,10 +2314,6 @@ where
                 }
             })
     }
-
-    fn format(&self) -> Option<crate::DecodedFormat> {
-        self.backend.format()
-    }
 }
 
 impl<T, P> private::StatelessVideoDecoder for Decoder<T, P>

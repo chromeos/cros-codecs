@@ -94,10 +94,6 @@ where
         16
     }
 
-    fn format(&self) -> Option<DecodedFormat> {
-        None
-    }
-
     fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
         Ok(())
     }

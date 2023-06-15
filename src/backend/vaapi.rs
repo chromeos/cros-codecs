@@ -916,15 +916,6 @@ where
             .unwrap_or(0)
     }
 
-    fn format(&self) -> Option<crate::DecodedFormat> {
-        let map_format = self
-            .metadata_state
-            .get_parsed()
-            .map(|m| &m.map_format)
-            .ok()?;
-        DecodedFormat::try_from(map_format.as_ref()).ok()
-    }
-
     fn try_format(
         &mut self,
         format_info: &StreamData,

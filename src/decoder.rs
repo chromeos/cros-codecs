@@ -26,7 +26,6 @@ use crate::Resolution;
 ///
 /// When the object is dropped, the decoder can accept and process new input again.
 pub trait DecoderFormatNegotiator<'a> {
-    fn format(&self) -> Option<DecodedFormat>;
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
 

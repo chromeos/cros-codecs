@@ -96,11 +96,6 @@ pub(crate) trait StatelessDecoderBackend<FormatInfo> {
     /// Gets the number of output resources left in the backend.
     fn num_resources_left(&self) -> usize;
 
-    /// Gets the chosen format. This is set to a default after the decoder reads
-    /// enough stream metadata from the bitstream. Some buffers need to be
-    /// processed first before the default format can be set.
-    fn format(&self) -> Option<DecodedFormat>;
-
     /// Try altering the decoded format.
     fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat)
         -> anyhow::Result<()>;
@@ -145,11 +140,6 @@ where
     D: StatelessVideoDecoder + private::StatelessVideoDecoder,
     F: Fn(&mut D, &H),
 {
-    /// Returns the current output format, if one is currently set.
-    fn format(&self) -> Option<DecodedFormat> {
-        self.decoder.format()
-    }
-
     /// Try to apply `format` to output frames. If successful, all frames emitted after the
     /// call will be in the new format.
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()> {
@@ -207,9 +197,6 @@ pub trait StatelessVideoDecoder {
 
     /// Returns the next event, if there is any pending.
     fn next_event(&mut self) -> Option<DecoderEvent>;
-
-    /// Returns the current output format, if one is currently set.
-    fn format(&self) -> Option<DecodedFormat>;
 }
 
 #[cfg(test)]
