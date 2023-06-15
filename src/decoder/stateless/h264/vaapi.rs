@@ -193,14 +193,14 @@ impl VaapiBackend<Sps> {
         let mut scaling_list8x8 = [[0; 64]; 2];
 
         (0..6).for_each(|i| {
-            Decoder::<VADecodedHandle, VaPicture<PictureNew>>::get_raster_from_zigzag_4x4(
+            Decoder::<VADecodedHandle, VaPicture<PictureNew, ()>>::get_raster_from_zigzag_4x4(
                 pps.scaling_lists_4x4()[i],
                 &mut scaling_list4x4[i],
             );
         });
 
         (0..2).for_each(|i| {
-            Decoder::<VADecodedHandle, VaPicture<PictureNew>>::get_raster_from_zigzag_8x8(
+            Decoder::<VADecodedHandle, VaPicture<PictureNew, ()>>::get_raster_from_zigzag_8x8(
                 pps.scaling_lists_8x8()[i],
                 &mut scaling_list8x8[i],
             );
@@ -467,7 +467,7 @@ impl VaapiBackend<Sps> {
 }
 
 impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
-    type Picture = VaPicture<PictureNew>;
+    type Picture = VaPicture<PictureNew, ()>;
 
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
@@ -485,7 +485,7 @@ impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
-        let surface_id = picture.surface().id();
+        let surface_id = picture.surface_id();
 
         let pic_param = Self::build_pic_param(slice, picture_data, surface_id, dpb, sps, pps)?;
         let pic_param = context
@@ -579,7 +579,7 @@ impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
     }
 }
 
-impl Decoder<VADecodedHandle, VaPicture<PictureNew>> {
+impl Decoder<VADecodedHandle, VaPicture<PictureNew, ()>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(VaapiBackend::<Sps>::new(display)), blocking_mode)

@@ -17,10 +17,12 @@ use libva::Config;
 use libva::Context;
 use libva::Display;
 use libva::Image;
+use libva::Picture;
 use libva::PictureEnd;
 use libva::PictureNew;
 use libva::PictureSync;
 use libva::Surface;
+use libva::SurfaceMemoryDescriptor;
 use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
 use libva::VaError;
@@ -162,10 +164,10 @@ fn supported_formats_for_rt_format(
     Ok(supported_formats)
 }
 
-impl TryInto<Surface> for PictureState {
+impl<D: SurfaceMemoryDescriptor> TryInto<Surface<D>> for PictureState<D> {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<Surface, Self::Error> {
+    fn try_into(self) -> Result<Surface<D>, Self::Error> {
         match self {
             PictureState::Ready(picture) => picture
                 .take_surface()
@@ -181,7 +183,7 @@ impl TryInto<Surface> for PictureState {
 }
 
 /// A decoded frame handle.
-pub(crate) type DecodedHandle = Rc<RefCell<GenericBackendHandle>>;
+pub(crate) type DecodedHandle = Rc<RefCell<GenericBackendHandle<()>>>;
 
 impl DecodedHandleTrait for DecodedHandle {
     fn coded_resolution(&self) -> Resolution {
@@ -217,6 +219,7 @@ mod surface_pool {
 
     use libva::Display;
     use libva::Surface;
+    use libva::SurfaceMemoryDescriptor;
     use libva::VaError;
 
     use crate::Resolution;
@@ -230,15 +233,15 @@ mod surface_pool {
     /// This means that this pool is suitable for inter-frame DRC, as the stale
     /// surfaces will gracefully be dropped, which is arguably better than the
     /// alternative of having more than one pool active at a time.
-    pub(crate) struct SurfacePool {
+    pub(crate) struct SurfacePool<D: SurfaceMemoryDescriptor> {
         display: Rc<Display>,
         rt_format: u32,
         usage_hint: Option<libva::UsageHint>,
         coded_resolution: Resolution,
-        surfaces: VecDeque<Surface>,
+        surfaces: VecDeque<Surface<D>>,
     }
 
-    impl SurfacePool {
+    impl<D: SurfaceMemoryDescriptor> SurfacePool<D> {
         /// Create a new pool.
         ///
         /// # Arguments
@@ -265,7 +268,10 @@ mod surface_pool {
         /// Create new surfaces and add them to the pool.
         ///
         /// `num_surfaces` is the number of surfaces to be created and added.
-        pub(crate) fn create_surfaces(&mut self, num_surfaces: usize) -> Result<(), VaError> {
+        pub(crate) fn create_surfaces(
+            &mut self,
+            descriptors: Vec<D>,
+        ) -> Result<(), (VaError, Vec<D>)> {
             let surfaces = self.display.create_surfaces(
                 self.rt_format,
                 // Let the hardware decide the best internal format - we will get the desired fourcc
@@ -274,7 +280,7 @@ mod surface_pool {
                 self.coded_resolution.width,
                 self.coded_resolution.height,
                 self.usage_hint,
-                num_surfaces,
+                descriptors,
             )?;
 
             for surface in surfaces {
@@ -303,7 +309,7 @@ mod surface_pool {
         ///
         /// Returns an error (and the passed `surface` back) if the surface is not at least as
         /// large as the current coded resolution of the pool.
-        pub(crate) fn add_surface(&mut self, surface: Surface) -> Result<(), Surface> {
+        pub(crate) fn add_surface(&mut self, surface: Surface<D>) -> Result<(), Surface<D>> {
             if Resolution::from(surface.size()).can_contain(self.coded_resolution) {
                 self.surfaces.push_back(surface);
                 Ok(())
@@ -313,7 +319,7 @@ mod surface_pool {
         }
 
         /// Gets a free surface from the pool
-        pub(crate) fn get_surface(&mut self) -> Option<Surface> {
+        pub(crate) fn get_surface(&mut self) -> Option<Surface<D>> {
             let surface = self.surfaces.pop_front();
 
             // Make sure the invariant holds when debugging. Can save costly
@@ -357,7 +363,7 @@ pub(crate) struct ParsedStreamMetadata {
     #[allow(dead_code)]
     config: Config,
     /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
-    pub(crate) surface_pool: Rc<RefCell<SurfacePool>>,
+    pub(crate) surface_pool: Rc<RefCell<SurfacePool<()>>>,
     /// The number of surfaces required to parse the stream.
     min_num_surfaces: usize,
     /// The decoder current coded resolution.
@@ -511,7 +517,7 @@ impl StreamMetadataState {
                     libva::VAEntrypoint::VAEntrypointVLD,
                 )?;
 
-                let context = display.create_context(
+                let context = display.create_context::<()>(
                     &config,
                     coded_resolution.width,
                     coded_resolution.height,
@@ -526,7 +532,8 @@ impl StreamMetadataState {
         if create_new_surfaces {
             surface_pool
                 .borrow_mut()
-                .create_surfaces(min_num_surfaces)?;
+                .create_surfaces(vec![(); min_num_surfaces])
+                .map_err(|e| e.0)?;
         }
 
         Ok(StreamMetadataState::Parsed(ParsedStreamMetadata {
@@ -547,8 +554,8 @@ impl StreamMetadataState {
 ///
 /// This includes the VA picture which can be pending rendering or complete, as well as useful
 /// meta-information.
-pub struct GenericBackendHandle {
-    state: PictureState,
+pub struct GenericBackendHandle<D: SurfaceMemoryDescriptor> {
+    state: PictureState<D>,
     /// The decoder resolution when this frame was processed. Not all codecs
     /// send resolution data in every frame header.
     coded_resolution: Resolution,
@@ -557,10 +564,10 @@ pub struct GenericBackendHandle {
     /// Image format for this surface, taken from the pool it originates from.
     map_format: Rc<libva::VAImageFormat>,
     /// A handle to the surface pool from which the backing surface originates.
-    surface_pool: Rc<RefCell<SurfacePool>>,
+    surface_pool: Rc<RefCell<SurfacePool<D>>>,
 }
 
-impl Drop for GenericBackendHandle {
+impl<D: SurfaceMemoryDescriptor> Drop for GenericBackendHandle<D> {
     fn drop(&mut self) {
         // Take ownership of the internal state.
         let state = std::mem::replace(&mut self.state, PictureState::Invalid);
@@ -578,10 +585,10 @@ impl Drop for GenericBackendHandle {
     }
 }
 
-impl GenericBackendHandle {
+impl GenericBackendHandle<()> {
     /// Creates a new pending handle on `surface_id`.
     fn new(
-        picture: libva::Picture<PictureNew>,
+        picture: Picture<PictureNew, ()>,
         metadata: &ParsedStreamMetadata,
     ) -> anyhow::Result<Self> {
         let picture = picture.begin()?.render()?.end()?;
@@ -593,7 +600,9 @@ impl GenericBackendHandle {
             surface_pool: Rc::clone(&metadata.surface_pool),
         })
     }
+}
 
+impl<D: SurfaceMemoryDescriptor> GenericBackendHandle<D> {
     fn sync(&mut self) -> Result<(), VaError> {
         let res;
 
@@ -635,7 +644,7 @@ impl GenericBackendHandle {
     }
 
     /// Returns the picture of this handle.
-    pub(crate) fn picture(&self) -> Option<&libva::Picture<PictureSync>> {
+    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, D>> {
         match &self.state {
             PictureState::Ready(picture) => Some(picture),
             PictureState::Pending(_) => None,
@@ -672,16 +681,16 @@ impl GenericBackendHandle {
     }
 }
 
-impl DynHandle for GenericBackendHandle {
+impl<D: SurfaceMemoryDescriptor> DynHandle for GenericBackendHandle<D> {
     fn dyn_mappable_handle_mut<'a>(&'a mut self) -> Box<dyn MappableHandle + 'a> {
         Box::new(self.image().unwrap())
     }
 }
 
 /// Rendering state of a VA picture.
-enum PictureState {
-    Ready(libva::Picture<PictureSync>),
-    Pending(libva::Picture<PictureEnd>),
+enum PictureState<D: SurfaceMemoryDescriptor> {
+    Ready(Picture<PictureSync, D>),
+    Pending(Picture<PictureEnd, D>),
     // Only set in the destructor when we take ownership of the VA picture.
     Invalid,
 }
@@ -836,7 +845,7 @@ where
 
     pub(crate) fn process_picture(
         &mut self,
-        picture: libva::Picture<PictureNew>,
+        picture: libva::Picture<PictureNew, ()>,
     ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
