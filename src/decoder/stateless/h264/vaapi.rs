@@ -15,6 +15,7 @@ use libva::PictureNew;
 use libva::PictureParameter;
 use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
+use libva::Surface;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::StreamInfo;
@@ -462,7 +463,7 @@ impl VaapiBackend<Sps> {
 }
 
 impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
-    type Picture = VaPicture<PictureNew, ()>;
+    type Picture = VaPicture<PictureNew, Surface<()>>;
 
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
@@ -480,7 +481,7 @@ impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
-        let surface_id = picture.surface_id();
+        let surface_id = picture.surface().id();
 
         let pic_param = Self::build_pic_param(slice, picture_data, surface_id, dpb, sps, pps)?;
         let pic_param = context
@@ -574,7 +575,7 @@ impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
     }
 }
 
-impl Decoder<VADecodedHandle, VaPicture<PictureNew, ()>> {
+impl Decoder<VADecodedHandle, VaPicture<PictureNew, Surface<()>>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(VaapiBackend::<Sps>::new(display)), blocking_mode)
