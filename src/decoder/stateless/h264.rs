@@ -50,7 +50,7 @@ fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
     ];
 
     for i in 0..64 {
-        dst[i] = src[ZIGZAG_8X8[i]];
+        dst[ZIGZAG_8X8[i]] = src[i];
     }
 }
 
@@ -58,7 +58,7 @@ fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
     const ZIGZAG_4X4: [usize; 16] = [0, 1, 4, 8, 5, 2, 3, 6, 9, 12, 13, 10, 7, 11, 14, 15];
 
     for i in 0..16 {
-        dst[i] = src[ZIGZAG_4X4[i]];
+        dst[ZIGZAG_4X4[i]] = src[i];
     }
 }
 
