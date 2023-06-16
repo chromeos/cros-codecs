@@ -275,7 +275,7 @@ impl StatelessVp9DecoderBackend for VaapiBackend<Header> {
         let surface = metadata
             .surface_pool
             .borrow_mut()
-            .get_surface()
+            .get_surface(&metadata.surface_pool)
             .ok_or(StatelessBackendError::OutOfResources)?;
 
         let mut va_picture = VaPicture::new(timestamp, Rc::clone(context), surface);
