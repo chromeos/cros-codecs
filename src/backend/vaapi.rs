@@ -531,24 +531,12 @@ impl StreamMetadataState {
             height: visible_rect.1 .1 - visible_rect.0 .1,
         };
 
-        let surface_pool = match old_metadata_state {
-            StreamMetadataState::Unparsed => Rc::new(RefCell::new(SurfacePool::new(
-                Rc::clone(display),
-                rt_format,
-                Some(libva::UsageHint::USAGE_HINT_DECODER),
-                coded_resolution,
-            ))),
-            StreamMetadataState::Parsed(ParsedStreamMetadata {
-                ref surface_pool, ..
-            }) => Rc::clone(surface_pool),
-        };
-
-        let (config, context) = match old_metadata_state {
+        let (config, context, surface_pool) = match old_metadata_state {
             // Reuse current context.
             StreamMetadataState::Parsed(old_state)
                 if old_state.rt_format == rt_format && old_state.profile == va_profile =>
             {
-                (old_state.config, old_state.context)
+                (old_state.config, old_state.context, old_state.surface_pool)
             }
             // Create new context.
             _ => {
@@ -569,7 +557,14 @@ impl StreamMetadataState {
                     true,
                 )?;
 
-                (config, context)
+                let surface_pool = Rc::new(RefCell::new(SurfacePool::new(
+                    Rc::clone(display),
+                    rt_format,
+                    Some(libva::UsageHint::USAGE_HINT_DECODER),
+                    coded_resolution,
+                )));
+
+                (config, context, surface_pool)
             }
         };
 
