@@ -199,6 +199,7 @@ impl DecodedHandleTrait for DecodedHandle {
 mod surface_pool {
     use std::borrow::Borrow;
     use std::cell::RefCell;
+    use std::collections::BTreeMap;
     use std::collections::VecDeque;
     use std::rc::Rc;
     use std::rc::Weak;
@@ -206,6 +207,7 @@ mod surface_pool {
     use libva::Display;
     use libva::Surface;
     use libva::SurfaceMemoryDescriptor;
+    use libva::VASurfaceID;
     use libva::VaError;
 
     use crate::Resolution;
@@ -231,7 +233,13 @@ mod surface_pool {
         /// freely.
         pub fn detach_from_pool(mut self) -> Surface<D> {
             // `unwrap` will never fail as `surface` is `Some` up to this point.
-            self.surface.take().unwrap()
+            let surface = self.surface.take().unwrap();
+
+            if let Some(pool) = self.pool.upgrade() {
+                pool.borrow_mut().managed_surfaces.remove(&surface.id());
+            }
+
+            surface
         }
     }
 
@@ -244,18 +252,24 @@ mod surface_pool {
 
     impl<D: SurfaceMemoryDescriptor> Drop for PooledSurface<D> {
         fn drop(&mut self) {
+            // If the surface has not been detached...
             if let Some(surface) = self.surface.take() {
+                // ... and the pool still exists...
                 if let Some(pool) = self.pool.upgrade() {
-                    // It is OK if the pool rejects the surface. It means that the
-                    // surface is stale and will be gracefully dropped.
-                    if let Err(surface) = pool.borrow_mut().add_surface(surface) {
-                        log::debug!(
-                            "Dropping stale surface: {}, ({:?})",
-                            surface.id(),
-                            surface.size()
-                        )
+                    let mut pool_borrowed = pool.borrow_mut();
+                    // ... and the pool is still managing this surface, return it.
+                    if pool_borrowed.managed_surfaces.contains_key(&surface.id()) {
+                        pool_borrowed.surfaces.push_back(surface);
+                        return;
                     }
                 }
+
+                // The surface cannot be returned to the pool and can be gracefully dropped.
+                log::debug!(
+                    "Dropping stale surface: {}, ({:?})",
+                    surface.id(),
+                    surface.size()
+                )
             }
         }
     }
@@ -275,6 +289,10 @@ mod surface_pool {
         usage_hint: Option<libva::UsageHint>,
         coded_resolution: Resolution,
         surfaces: VecDeque<Surface<D>>,
+        /// All the surfaces managed by this pool, indexed by their surface ID. We keep their
+        /// resolution so we can remove them in case of a coded resolution change even if they
+        /// are currently borrowed.
+        managed_surfaces: BTreeMap<VASurfaceID, Resolution>,
     }
 
     impl<D: SurfaceMemoryDescriptor> SurfacePool<D> {
@@ -298,6 +316,7 @@ mod surface_pool {
                 usage_hint,
                 coded_resolution,
                 surfaces: VecDeque::new(),
+                managed_surfaces: Default::default(),
             }
         }
 
@@ -319,9 +338,11 @@ mod surface_pool {
                 descriptors,
             )?;
 
-            for surface in surfaces {
-                self.surfaces.push_back(surface);
+            for surface in &surfaces {
+                self.managed_surfaces
+                    .insert(surface.id(), surface.size().into());
             }
+            self.surfaces.extend(surfaces);
 
             Ok(())
         }
@@ -334,6 +355,8 @@ mod surface_pool {
         /// Sets the coded resolution of the pool. Releases any stale surfaces.
         pub(crate) fn set_coded_resolution(&mut self, resolution: Resolution) {
             self.coded_resolution = resolution;
+            self.managed_surfaces
+                .retain(|_, res| res.can_contain(self.coded_resolution));
             self.surfaces
                 .retain(|s| Resolution::from(s.size()).can_contain(self.coded_resolution));
         }
@@ -345,8 +368,11 @@ mod surface_pool {
         ///
         /// Returns an error (and the passed `surface` back) if the surface is not at least as
         /// large as the current coded resolution of the pool.
+        #[allow(dead_code)]
         pub(crate) fn add_surface(&mut self, surface: Surface<D>) -> Result<(), Surface<D>> {
             if Resolution::from(surface.size()).can_contain(self.coded_resolution) {
+                self.managed_surfaces
+                    .insert(surface.id(), surface.size().into());
                 self.surfaces.push_back(surface);
                 Ok(())
             } else {
