@@ -407,6 +407,11 @@ mod surface_pool {
         pub(crate) fn num_surfaces_left(&self) -> usize {
             self.surfaces.len()
         }
+
+        /// Returns the total number of managed surfaces in this pool.
+        pub(crate) fn num_managed_surfaces(&self) -> usize {
+            self.managed_surfaces.len()
+        }
     }
 }
 
@@ -526,47 +531,17 @@ impl StreamMetadataState {
             height: visible_rect.1 .1 - visible_rect.0 .1,
         };
 
-        let (create_new_surfaces, surface_pool) = match old_metadata_state {
-            StreamMetadataState::Unparsed => (
-                true,
-                Rc::new(RefCell::new(SurfacePool::new(
-                    Rc::clone(display),
-                    rt_format,
-                    Some(libva::UsageHint::USAGE_HINT_DECODER),
-                    coded_resolution,
-                ))),
-            ),
+        let surface_pool = match old_metadata_state {
+            StreamMetadataState::Unparsed => Rc::new(RefCell::new(SurfacePool::new(
+                Rc::clone(display),
+                rt_format,
+                Some(libva::UsageHint::USAGE_HINT_DECODER),
+                coded_resolution,
+            ))),
             StreamMetadataState::Parsed(ParsedStreamMetadata {
-                min_num_surfaces: old_min_num_surfaces,
-                ref surface_pool,
-                ..
-            }) => {
-                let create_new_surfaces = min_num_surfaces > old_min_num_surfaces
-                    || !surface_pool
-                        .borrow()
-                        .coded_resolution()
-                        .can_contain(coded_resolution);
-
-                (create_new_surfaces, Rc::clone(surface_pool))
-            }
+                ref surface_pool, ..
+            }) => Rc::clone(surface_pool),
         };
-
-        if !surface_pool
-            .borrow()
-            .coded_resolution()
-            .can_contain(coded_resolution)
-        {
-            // Purge the old surfaces to receive the new ones below. This
-            // ensures that the pool is always set to the largest resolution in
-            // the stream, so that no new allocations are needed when we come
-            // across a smaller resolution. In particular, for
-            // video-conferencing applications, which are subject to bandwidth
-            // fluctuations, this can be very advantageous as it avoid
-            // reallocating all the time.
-            surface_pool
-                .borrow_mut()
-                .set_coded_resolution(coded_resolution);
-        }
 
         let (config, context) = match old_metadata_state {
             // Reuse current context.
@@ -598,11 +573,31 @@ impl StreamMetadataState {
             }
         };
 
-        if create_new_surfaces {
+        if !surface_pool
+            .borrow()
+            .coded_resolution()
+            .can_contain(coded_resolution)
+        {
+            // Purge the old surfaces to receive the new ones below. This
+            // ensures that the pool is always set to the largest resolution in
+            // the stream, so that no new allocations are needed when we come
+            // across a smaller resolution. In particular, for
+            // video-conferencing applications, which are subject to bandwidth
+            // fluctuations, this can be very advantageous as it avoid
+            // reallocating all the time.
             surface_pool
                 .borrow_mut()
-                .create_surfaces(vec![(); min_num_surfaces])
-                .map_err(|e| e.0)?;
+                .set_coded_resolution(coded_resolution);
+        }
+
+        // Allocate the missing number of buffers in our pool for decoding to succeed.
+        {
+            let mut pool = surface_pool.borrow_mut();
+            let pool_num_surfaces = pool.num_managed_surfaces();
+            if pool_num_surfaces < min_num_surfaces {
+                pool.create_surfaces(vec![(); min_num_surfaces - pool_num_surfaces])
+                    .map_err(|e| e.0)?;
+            }
         }
 
         Ok(StreamMetadataState::Parsed(ParsedStreamMetadata {
