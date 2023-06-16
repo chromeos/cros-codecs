@@ -15,9 +15,9 @@ use libva::PictureNew;
 use libva::PictureParameter;
 use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
-use libva::Surface;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::PooledSurface;
 use crate::backend::vaapi::StreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::codec::h264::dpb::Dpb;
@@ -463,7 +463,7 @@ impl VaapiBackend<Sps> {
 }
 
 impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
-    type Picture = VaPicture<PictureNew, Surface<()>>;
+    type Picture = VaPicture<PictureNew, PooledSurface<()>>;
 
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
@@ -546,7 +546,7 @@ impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
         let surface = metadata
             .surface_pool
             .borrow_mut()
-            .get_surface()
+            .get_surface(&metadata.surface_pool)
             .ok_or(StatelessBackendError::OutOfResources)?;
 
         Ok(VaPicture::new(
@@ -575,7 +575,7 @@ impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
     }
 }
 
-impl Decoder<VADecodedHandle, VaPicture<PictureNew, Surface<()>>> {
+impl Decoder<VADecodedHandle, VaPicture<PictureNew, PooledSurface<()>>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(VaapiBackend::<Sps>::new(display)), blocking_mode)

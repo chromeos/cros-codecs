@@ -21,7 +21,6 @@ use libva::Picture;
 use libva::PictureEnd;
 use libva::PictureNew;
 use libva::PictureSync;
-use libva::Surface;
 use libva::SurfaceMemoryDescriptor;
 use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
@@ -40,6 +39,8 @@ use crate::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Resolution;
+
+pub(crate) use surface_pool::PooledSurface;
 
 fn va_rt_format_to_string(va_rt_format: u32) -> String {
     String::from(match va_rt_format {
@@ -164,24 +165,6 @@ fn supported_formats_for_rt_format(
     Ok(supported_formats)
 }
 
-impl<D: SurfaceMemoryDescriptor> TryInto<Surface<D>> for PictureState<D> {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<Surface<D>, Self::Error> {
-        match self {
-            PictureState::Ready(picture) => picture
-                .take_surface()
-                .map_err(|_| anyhow!("picture is still referenced")),
-            PictureState::Pending(picture) => picture
-                .sync()
-                .map_err(|(e, _)| e)?
-                .take_surface()
-                .map_err(|_| anyhow!("picture is still referenced")),
-            PictureState::Invalid => unreachable!(),
-        }
-    }
-}
-
 /// A decoded frame handle.
 pub(crate) type DecodedHandle = Rc<RefCell<GenericBackendHandle<()>>>;
 
@@ -214,8 +197,11 @@ impl DecodedHandleTrait for DecodedHandle {
 }
 
 mod surface_pool {
+    use std::borrow::Borrow;
+    use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::rc::Rc;
+    use std::rc::Weak;
 
     use libva::Display;
     use libva::Surface;
@@ -223,6 +209,56 @@ mod surface_pool {
     use libva::VaError;
 
     use crate::Resolution;
+
+    /// A VA Surface obtained from a `[SurfacePool]`.
+    ///
+    /// The surface will automatically be returned to its pool upon dropping, provided the pool still
+    /// exists and the surface is still compatible with it.
+    pub struct PooledSurface<D: SurfaceMemoryDescriptor> {
+        surface: Option<Surface<D>>,
+        pool: Weak<RefCell<SurfacePool<D>>>,
+    }
+
+    impl<D: SurfaceMemoryDescriptor> PooledSurface<D> {
+        fn new(surface: Surface<D>, pool: &Rc<RefCell<SurfacePool<D>>>) -> Self {
+            Self {
+                surface: Some(surface),
+                pool: Rc::downgrade(pool),
+            }
+        }
+
+        /// Detach this surface from the pool. It will not be returned, and we can dispose of it
+        /// freely.
+        pub fn detach_from_pool(mut self) -> Surface<D> {
+            // `unwrap` will never fail as `surface` is `Some` up to this point.
+            self.surface.take().unwrap()
+        }
+    }
+
+    impl<D: SurfaceMemoryDescriptor> Borrow<Surface<D>> for PooledSurface<D> {
+        fn borrow(&self) -> &Surface<D> {
+            // `unwrap` will never fail as `surface` is `Some` until the object is dropped.
+            self.surface.as_ref().unwrap()
+        }
+    }
+
+    impl<D: SurfaceMemoryDescriptor> Drop for PooledSurface<D> {
+        fn drop(&mut self) {
+            if let Some(surface) = self.surface.take() {
+                if let Some(pool) = self.pool.upgrade() {
+                    // It is OK if the pool rejects the surface. It means that the
+                    // surface is stale and will be gracefully dropped.
+                    if let Err(surface) = pool.borrow_mut().add_surface(surface) {
+                        log::debug!(
+                            "Dropping stale surface: {}, ({:?})",
+                            surface.id(),
+                            surface.size()
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     /// A surface pool to reduce the number of costly Surface allocations.
     ///
@@ -318,8 +354,15 @@ mod surface_pool {
             }
         }
 
-        /// Gets a free surface from the pool
-        pub(crate) fn get_surface(&mut self) -> Option<Surface<D>> {
+        /// Gets a free surface from the pool.
+        ///
+        /// `return_pool` is a reference to the smart pointer containing the pool. It is a bit
+        /// inelegant, but we unfortunately cannot declare `self` to be `&Rc<RefCell<Self>>` so we
+        /// have to use this workaround.
+        pub(crate) fn get_surface(
+            &mut self,
+            return_pool: &Rc<RefCell<Self>>,
+        ) -> Option<PooledSurface<D>> {
             let surface = self.surfaces.pop_front();
 
             // Make sure the invariant holds when debugging. Can save costly
@@ -331,7 +374,7 @@ mod surface_pool {
                 }
             });
 
-            surface
+            surface.map(|s| PooledSurface::new(s, return_pool))
         }
 
         /// Returns new number of surfaces left.
@@ -563,32 +606,12 @@ pub struct GenericBackendHandle<D: SurfaceMemoryDescriptor> {
     display_resolution: Resolution,
     /// Image format for this surface, taken from the pool it originates from.
     map_format: Rc<libva::VAImageFormat>,
-    /// A handle to the surface pool from which the backing surface originates.
-    surface_pool: Rc<RefCell<SurfacePool<D>>>,
-}
-
-impl<D: SurfaceMemoryDescriptor> Drop for GenericBackendHandle<D> {
-    fn drop(&mut self) {
-        // Take ownership of the internal state.
-        let state = std::mem::replace(&mut self.state, PictureState::Invalid);
-        if let Ok(surface) = state.try_into() {
-            // It is OK if the pool rejects the surface. It means that the
-            // surface is stale and will be gracefully dropped.
-            if let Err(surface) = self.surface_pool.borrow_mut().add_surface(surface) {
-                log::debug!(
-                    "Dropping stale surface: {}, ({:?})",
-                    surface.id(),
-                    surface.size()
-                )
-            }
-        }
-    }
 }
 
 impl GenericBackendHandle<()> {
     /// Creates a new pending handle on `surface_id`.
     fn new(
-        picture: Picture<PictureNew, Surface<()>>,
+        picture: Picture<PictureNew, PooledSurface<()>>,
         metadata: &ParsedStreamMetadata,
     ) -> anyhow::Result<Self> {
         let picture = picture.begin()?.render()?.end()?;
@@ -597,7 +620,6 @@ impl GenericBackendHandle<()> {
             coded_resolution: metadata.coded_resolution,
             display_resolution: metadata.display_resolution,
             map_format: Rc::clone(&metadata.map_format),
-            surface_pool: Rc::clone(&metadata.surface_pool),
         })
     }
 }
@@ -644,7 +666,7 @@ impl<D: SurfaceMemoryDescriptor> GenericBackendHandle<D> {
     }
 
     /// Returns the picture of this handle.
-    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, Surface<D>>> {
+    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledSurface<D>>> {
         match &self.state {
             PictureState::Ready(picture) => Some(picture),
             PictureState::Pending(_) => None,
@@ -690,8 +712,8 @@ impl<D: SurfaceMemoryDescriptor> DynHandle for GenericBackendHandle<D> {
 
 /// Rendering state of a VA picture.
 enum PictureState<D: SurfaceMemoryDescriptor> {
-    Ready(Picture<PictureSync, Surface<D>>),
-    Pending(Picture<PictureEnd, Surface<D>>),
+    Ready(Picture<PictureSync, PooledSurface<D>>),
+    Pending(Picture<PictureEnd, PooledSurface<D>>),
     // Only set in the destructor when we take ownership of the VA picture.
     Invalid,
 }
@@ -846,7 +868,7 @@ where
 
     pub(crate) fn process_picture(
         &mut self,
-        picture: libva::Picture<PictureNew, Surface<()>>,
+        picture: libva::Picture<PictureNew, PooledSurface<()>>,
     ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
