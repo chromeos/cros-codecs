@@ -51,159 +51,154 @@ impl StreamInfo for &Header {
     }
 }
 
-impl VaapiBackend<Header> {
-    /// A clamp such that min <= x <= max
-    fn clamp<T: PartialOrd>(x: T, low: T, high: T) -> T {
-        if x > high {
-            high
-        } else if x < low {
-            low
+/// A clamp such that min <= x <= max
+fn clamp<T: PartialOrd>(x: T, low: T, high: T) -> T {
+    if x > high {
+        high
+    } else if x < low {
+        low
+    } else {
+        x
+    }
+}
+
+fn build_iq_matrix(
+    frame_hdr: &Header,
+    segmentation: &Segmentation,
+) -> anyhow::Result<libva::BufferType> {
+    let mut quantization_index: [[u16; 6]; 4] = Default::default();
+
+    for (i, quantization_index) in quantization_index.iter_mut().enumerate() {
+        let mut qi_base: i16;
+
+        if segmentation.segmentation_enabled {
+            qi_base = i16::from(segmentation.quantizer_update_value[i]);
+            if !segmentation.segment_feature_mode {
+                qi_base += i16::from(frame_hdr.quant_indices().y_ac_qi);
+            }
         } else {
-            x
+            qi_base = i16::from(frame_hdr.quant_indices().y_ac_qi);
         }
+
+        let mut qi = qi_base;
+        quantization_index[0] = u16::try_from(clamp(qi, 0, 127))?;
+        qi = qi_base + i16::from(frame_hdr.quant_indices().y_dc_delta);
+        quantization_index[1] = u16::try_from(clamp(qi, 0, 127))?;
+        qi = qi_base + i16::from(frame_hdr.quant_indices().y2_dc_delta);
+        quantization_index[2] = u16::try_from(clamp(qi, 0, 127))?;
+        qi = qi_base + i16::from(frame_hdr.quant_indices().y2_ac_delta);
+        quantization_index[3] = u16::try_from(clamp(qi, 0, 127))?;
+        qi = qi_base + i16::from(frame_hdr.quant_indices().uv_dc_delta);
+        quantization_index[4] = u16::try_from(clamp(qi, 0, 127))?;
+        qi = qi_base + i16::from(frame_hdr.quant_indices().uv_ac_delta);
+        quantization_index[5] = u16::try_from(clamp(qi, 0, 127))?;
     }
 
-    fn build_iq_matrix(
-        frame_hdr: &Header,
-        segmentation: &Segmentation,
-    ) -> anyhow::Result<libva::BufferType> {
-        let mut quantization_index: [[u16; 6]; 4] = Default::default();
+    Ok(BufferType::IQMatrix(IQMatrix::VP8(IQMatrixBufferVP8::new(
+        quantization_index,
+    ))))
+}
 
-        for (i, quantization_index) in quantization_index.iter_mut().enumerate() {
-            let mut qi_base: i16;
+fn build_probability_table(frame_hdr: &Header) -> libva::BufferType {
+    BufferType::Probability(ProbabilityDataBufferVP8::new(frame_hdr.coeff_prob()))
+}
 
-            if segmentation.segmentation_enabled {
-                qi_base = i16::from(segmentation.quantizer_update_value[i]);
-                if !segmentation.segment_feature_mode {
-                    qi_base += i16::from(frame_hdr.quant_indices().y_ac_qi);
-                }
-            } else {
-                qi_base = i16::from(frame_hdr.quant_indices().y_ac_qi);
+fn build_pic_param(
+    frame_hdr: &Header,
+    resolution: &Resolution,
+    seg: &Segmentation,
+    adj: &MbLfAdjustments,
+    last: u32,
+    golden: u32,
+    alt: u32,
+) -> anyhow::Result<libva::BufferType> {
+    let mut loop_filter_level: [u8; 4] = Default::default();
+    let mut loop_filter_deltas_ref_frame: [i8; 4] = Default::default();
+    let mut loop_filter_deltas_mode: [i8; 4] = Default::default();
+
+    for i in 0..4 {
+        let mut level;
+        if seg.segmentation_enabled {
+            level = seg.lf_update_value[i];
+            if !seg.segment_feature_mode {
+                level += i8::try_from(frame_hdr.loop_filter_level())?;
             }
-
-            let mut qi = qi_base;
-            quantization_index[0] = u16::try_from(Self::clamp(qi, 0, 127))?;
-            qi = qi_base + i16::from(frame_hdr.quant_indices().y_dc_delta);
-            quantization_index[1] = u16::try_from(Self::clamp(qi, 0, 127))?;
-            qi = qi_base + i16::from(frame_hdr.quant_indices().y2_dc_delta);
-            quantization_index[2] = u16::try_from(Self::clamp(qi, 0, 127))?;
-            qi = qi_base + i16::from(frame_hdr.quant_indices().y2_ac_delta);
-            quantization_index[3] = u16::try_from(Self::clamp(qi, 0, 127))?;
-            qi = qi_base + i16::from(frame_hdr.quant_indices().uv_dc_delta);
-            quantization_index[4] = u16::try_from(Self::clamp(qi, 0, 127))?;
-            qi = qi_base + i16::from(frame_hdr.quant_indices().uv_ac_delta);
-            quantization_index[5] = u16::try_from(Self::clamp(qi, 0, 127))?;
+        } else {
+            level = i8::try_from(frame_hdr.loop_filter_level())?;
         }
 
-        Ok(BufferType::IQMatrix(IQMatrix::VP8(IQMatrixBufferVP8::new(
-            quantization_index,
-        ))))
+        loop_filter_level[i] = clamp(u8::try_from(level)?, 0, 63);
+        loop_filter_deltas_ref_frame[i] = adj.ref_frame_delta[i];
+        loop_filter_deltas_mode[i] = adj.mb_mode_delta[i];
     }
 
-    fn build_probability_table(frame_hdr: &Header) -> libva::BufferType {
-        BufferType::Probability(ProbabilityDataBufferVP8::new(frame_hdr.coeff_prob()))
-    }
+    let pic_fields = libva::VP8PicFields::new(
+        u32::from(!frame_hdr.key_frame()),
+        u32::from(frame_hdr.version()),
+        u32::from(seg.segmentation_enabled),
+        u32::from(seg.update_mb_segmentation_map),
+        u32::from(seg.update_segment_feature_data),
+        u32::from(frame_hdr.filter_type()),
+        u32::from(frame_hdr.sharpness_level()),
+        u32::from(adj.loop_filter_adj_enable),
+        u32::from(adj.mode_ref_lf_delta_update),
+        u32::from(frame_hdr.sign_bias_golden()),
+        u32::from(frame_hdr.sign_bias_alternate()),
+        u32::from(frame_hdr.mb_no_coeff_skip()),
+        u32::from(frame_hdr.loop_filter_level() == 0),
+    );
 
-    fn build_pic_param(
-        frame_hdr: &Header,
-        resolution: &Resolution,
-        seg: &Segmentation,
-        adj: &MbLfAdjustments,
-        last: u32,
-        golden: u32,
-        alt: u32,
-    ) -> anyhow::Result<libva::BufferType> {
-        let mut loop_filter_level: [u8; 4] = Default::default();
-        let mut loop_filter_deltas_ref_frame: [i8; 4] = Default::default();
-        let mut loop_filter_deltas_mode: [i8; 4] = Default::default();
+    let bool_coder_ctx = libva::BoolCoderContextVPX::new(
+        u8::try_from(frame_hdr.bd_range())?,
+        u8::try_from(frame_hdr.bd_value())?,
+        u8::try_from(frame_hdr.bd_count())?,
+    );
 
-        for i in 0..4 {
-            let mut level;
-            if seg.segmentation_enabled {
-                level = seg.lf_update_value[i];
-                if !seg.segment_feature_mode {
-                    level += i8::try_from(frame_hdr.loop_filter_level())?;
-                }
-            } else {
-                level = i8::try_from(frame_hdr.loop_filter_level())?;
-            }
+    let pic_param = libva::PictureParameterBufferVP8::new(
+        resolution.width,
+        resolution.height,
+        last,
+        golden,
+        alt,
+        &pic_fields,
+        seg.segment_prob,
+        loop_filter_level,
+        loop_filter_deltas_ref_frame,
+        loop_filter_deltas_mode,
+        frame_hdr.prob_skip_false(),
+        frame_hdr.prob_intra(),
+        frame_hdr.prob_last(),
+        frame_hdr.prob_golden(),
+        frame_hdr.mode_probs().intra_16x16_prob,
+        frame_hdr.mode_probs().intra_chroma_prob,
+        frame_hdr.mv_prob(),
+        &bool_coder_ctx,
+    );
 
-            loop_filter_level[i] = Self::clamp(u8::try_from(level)?, 0, 63);
-            loop_filter_deltas_ref_frame[i] = adj.ref_frame_delta[i];
-            loop_filter_deltas_mode[i] = adj.mb_mode_delta[i];
-        }
+    Ok(libva::BufferType::PictureParameter(
+        libva::PictureParameter::VP8(pic_param),
+    ))
+}
 
-        let pic_fields = libva::VP8PicFields::new(
-            u32::from(!frame_hdr.key_frame()),
-            u32::from(frame_hdr.version()),
-            u32::from(seg.segmentation_enabled),
-            u32::from(seg.update_mb_segmentation_map),
-            u32::from(seg.update_segment_feature_data),
-            u32::from(frame_hdr.filter_type()),
-            u32::from(frame_hdr.sharpness_level()),
-            u32::from(adj.loop_filter_adj_enable),
-            u32::from(adj.mode_ref_lf_delta_update),
-            u32::from(frame_hdr.sign_bias_golden()),
-            u32::from(frame_hdr.sign_bias_alternate()),
-            u32::from(frame_hdr.mb_no_coeff_skip()),
-            u32::from(frame_hdr.loop_filter_level() == 0),
-        );
+fn build_slice_param(frame_hdr: &Header, slice_size: usize) -> anyhow::Result<libva::BufferType> {
+    let mut partition_size: [u32; 9] = Default::default();
+    let num_of_partitions = (1 << frame_hdr.log2_nbr_of_dct_partitions()) + 1;
 
-        let bool_coder_ctx = libva::BoolCoderContextVPX::new(
-            u8::try_from(frame_hdr.bd_range())?,
-            u8::try_from(frame_hdr.bd_value())?,
-            u8::try_from(frame_hdr.bd_count())?,
-        );
+    partition_size[0] = frame_hdr.first_part_size() - ((frame_hdr.header_size() + 7) >> 3);
 
-        let pic_param = libva::PictureParameterBufferVP8::new(
-            resolution.width,
-            resolution.height,
-            last,
-            golden,
-            alt,
-            &pic_fields,
-            seg.segment_prob,
-            loop_filter_level,
-            loop_filter_deltas_ref_frame,
-            loop_filter_deltas_mode,
-            frame_hdr.prob_skip_false(),
-            frame_hdr.prob_intra(),
-            frame_hdr.prob_last(),
-            frame_hdr.prob_golden(),
-            frame_hdr.mode_probs().intra_16x16_prob,
-            frame_hdr.mode_probs().intra_chroma_prob,
-            frame_hdr.mv_prob(),
-            &bool_coder_ctx,
-        );
+    partition_size[1..num_of_partitions]
+        .clone_from_slice(&frame_hdr.partition_size()[..(num_of_partitions - 1)]);
 
-        Ok(libva::BufferType::PictureParameter(
-            libva::PictureParameter::VP8(pic_param),
-        ))
-    }
-
-    fn build_slice_param(
-        frame_hdr: &Header,
-        slice_size: usize,
-    ) -> anyhow::Result<libva::BufferType> {
-        let mut partition_size: [u32; 9] = Default::default();
-        let num_of_partitions = (1 << frame_hdr.log2_nbr_of_dct_partitions()) + 1;
-
-        partition_size[0] = frame_hdr.first_part_size() - ((frame_hdr.header_size() + 7) >> 3);
-
-        partition_size[1..num_of_partitions]
-            .clone_from_slice(&frame_hdr.partition_size()[..(num_of_partitions - 1)]);
-
-        Ok(libva::BufferType::SliceParameter(
-            libva::SliceParameter::VP8(libva::SliceParameterBufferVP8::new(
-                u32::try_from(slice_size)?,
-                u32::from(frame_hdr.data_chunk_size()),
-                0,
-                frame_hdr.header_size(),
-                u8::try_from(num_of_partitions)?,
-                partition_size,
-            )),
-        ))
-    }
+    Ok(libva::BufferType::SliceParameter(
+        libva::SliceParameter::VP8(libva::SliceParameterBufferVP8::new(
+            u32::try_from(slice_size)?,
+            u32::from(frame_hdr.data_chunk_size()),
+            0,
+            frame_hdr.header_size(),
+            u8::try_from(num_of_partitions)?,
+            partition_size,
+        )),
+    ))
 }
 
 impl StatelessVp8DecoderBackend for VaapiBackend<Header> {
@@ -245,15 +240,15 @@ impl StatelessVp8DecoderBackend for VaapiBackend<Header> {
         let coded_resolution = metadata.surface_pool.borrow().coded_resolution();
 
         let iq_buffer = context
-            .create_buffer(Self::build_iq_matrix(picture, segmentation)?)
+            .create_buffer(build_iq_matrix(picture, segmentation)?)
             .context("while creating IQ matrix buffer")?;
 
         let probs = context
-            .create_buffer(Self::build_probability_table(picture))
+            .create_buffer(build_probability_table(picture))
             .context("while creating probability table buffer")?;
 
         let pic_param = context
-            .create_buffer(Self::build_pic_param(
+            .create_buffer(build_pic_param(
                 picture,
                 &coded_resolution,
                 segmentation,
@@ -265,7 +260,7 @@ impl StatelessVp8DecoderBackend for VaapiBackend<Header> {
             .context("while creating pic params buffer")?;
 
         let slice_param = context
-            .create_buffer(Self::build_slice_param(picture, bitstream.len())?)
+            .create_buffer(build_slice_param(picture, bitstream.len())?)
             .context("while creating slice params buffer")?;
 
         let slice_data = context
@@ -309,7 +304,6 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
-    use crate::backend::vaapi::VaapiBackend;
     use crate::codec::vp8::parser::Parser;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
@@ -319,6 +313,8 @@ mod tests {
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
     use crate::Resolution;
+
+    use super::*;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
     fn test_decoder_vaapi(
@@ -388,7 +384,7 @@ mod tests {
             height: frame.header.height() as u32,
         };
 
-        let pic_param = VaapiBackend::build_pic_param(
+        let pic_param = build_pic_param(
             &frame.header,
             &resolution,
             parser.segmentation(),
@@ -403,20 +399,19 @@ mod tests {
             _ => panic!(),
         };
 
-        let iq_matrix =
-            VaapiBackend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix = build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
         let iq_matrix = match iq_matrix {
             BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
             _ => panic!(),
         };
 
-        let prob_table = VaapiBackend::build_probability_table(&frame.header);
+        let prob_table = build_probability_table(&frame.header);
         let prob_table = match prob_table {
             BufferType::Probability(prob_table) => prob_table,
             _ => panic!(),
         };
 
-        let slice_param = VaapiBackend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = build_slice_param(&frame.header, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),
@@ -520,7 +515,7 @@ mod tests {
 
         assert_eq!(frame.size(), 257);
 
-        let pic_param = VaapiBackend::build_pic_param(
+        let pic_param = build_pic_param(
             &frame.header,
             &resolution,
             parser.segmentation(),
@@ -535,20 +530,19 @@ mod tests {
             _ => panic!(),
         };
 
-        let iq_matrix =
-            VaapiBackend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix = build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
         let iq_matrix = match iq_matrix {
             BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
             _ => panic!(),
         };
 
-        let prob_table = VaapiBackend::build_probability_table(&frame.header);
+        let prob_table = build_probability_table(&frame.header);
         let prob_table = match prob_table {
             BufferType::Probability(prob_table) => prob_table,
             _ => panic!(),
         };
 
-        let slice_param = VaapiBackend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = build_slice_param(&frame.header, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),
@@ -635,7 +629,7 @@ mod tests {
 
         assert_eq!(frame.size(), 131);
 
-        let pic_param = VaapiBackend::build_pic_param(
+        let pic_param = build_pic_param(
             &frame.header,
             &resolution,
             parser.segmentation(),
@@ -650,20 +644,19 @@ mod tests {
             _ => panic!(),
         };
 
-        let iq_matrix =
-            VaapiBackend::build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
+        let iq_matrix = build_iq_matrix(&frame.header, parser.segmentation()).unwrap();
         let iq_matrix = match iq_matrix {
             BufferType::IQMatrix(IQMatrix::VP8(iq_matrix)) => iq_matrix,
             _ => panic!(),
         };
 
-        let prob_table = VaapiBackend::build_probability_table(&frame.header);
+        let prob_table = build_probability_table(&frame.header);
         let prob_table = match prob_table {
             BufferType::Probability(prob_table) => prob_table,
             _ => panic!(),
         };
 
-        let slice_param = VaapiBackend::build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = build_slice_param(&frame.header, frame.size()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),
