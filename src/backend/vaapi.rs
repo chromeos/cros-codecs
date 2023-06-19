@@ -26,7 +26,7 @@ use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
 use libva::VaError;
 
-use crate::backend::vaapi::surface_pool::SurfacePool;
+use crate::backend::vaapi::surface_pool::VaSurfacePool;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -34,6 +34,7 @@ use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
 use crate::decoder::StreamInfo;
+use crate::decoder::SurfacePool;
 use crate::i4xx_copy;
 use crate::nv12_copy;
 use crate::y410_to_i410;
@@ -211,19 +212,20 @@ mod surface_pool {
     use libva::VASurfaceID;
     use libva::VaError;
 
+    use crate::decoder::SurfacePool;
     use crate::Resolution;
 
     /// A VA Surface obtained from a `[SurfacePool]`.
     ///
     /// The surface will automatically be returned to its pool upon dropping, provided the pool still
     /// exists and the surface is still compatible with it.
-    pub struct PooledSurface<D: SurfaceMemoryDescriptor> {
-        surface: Option<Surface<D>>,
-        pool: Weak<RefCell<SurfacePool<D>>>,
+    pub struct PooledSurface<M: SurfaceMemoryDescriptor> {
+        surface: Option<Surface<M>>,
+        pool: Weak<RefCell<VaSurfacePool<M>>>,
     }
 
-    impl<D: SurfaceMemoryDescriptor> PooledSurface<D> {
-        fn new(surface: Surface<D>, pool: &Rc<RefCell<SurfacePool<D>>>) -> Self {
+    impl<M: SurfaceMemoryDescriptor> PooledSurface<M> {
+        fn new(surface: Surface<M>, pool: &Rc<RefCell<VaSurfacePool<M>>>) -> Self {
             Self {
                 surface: Some(surface),
                 pool: Rc::downgrade(pool),
@@ -232,7 +234,7 @@ mod surface_pool {
 
         /// Detach this surface from the pool. It will not be returned, and we can dispose of it
         /// freely.
-        pub fn detach_from_pool(mut self) -> Surface<D> {
+        pub fn detach_from_pool(mut self) -> Surface<M> {
             // `unwrap` will never fail as `surface` is `Some` up to this point.
             let surface = self.surface.take().unwrap();
 
@@ -244,14 +246,14 @@ mod surface_pool {
         }
     }
 
-    impl<D: SurfaceMemoryDescriptor> Borrow<Surface<D>> for PooledSurface<D> {
-        fn borrow(&self) -> &Surface<D> {
+    impl<M: SurfaceMemoryDescriptor> Borrow<Surface<M>> for PooledSurface<M> {
+        fn borrow(&self) -> &Surface<M> {
             // `unwrap` will never fail as `surface` is `Some` until the object is dropped.
             self.surface.as_ref().unwrap()
         }
     }
 
-    impl<D: SurfaceMemoryDescriptor> Drop for PooledSurface<D> {
+    impl<M: SurfaceMemoryDescriptor> Drop for PooledSurface<M> {
         fn drop(&mut self) {
             // If the surface has not been detached...
             if let Some(surface) = self.surface.take() {
@@ -284,19 +286,19 @@ mod surface_pool {
     /// This means that this pool is suitable for inter-frame DRC, as the stale
     /// surfaces will gracefully be dropped, which is arguably better than the
     /// alternative of having more than one pool active at a time.
-    pub(crate) struct SurfacePool<D: SurfaceMemoryDescriptor> {
+    pub(crate) struct VaSurfacePool<M: SurfaceMemoryDescriptor> {
         display: Rc<Display>,
         rt_format: u32,
         usage_hint: Option<libva::UsageHint>,
         coded_resolution: Resolution,
-        surfaces: VecDeque<Surface<D>>,
+        surfaces: VecDeque<Surface<M>>,
         /// All the surfaces managed by this pool, indexed by their surface ID. We keep their
         /// resolution so we can remove them in case of a coded resolution change even if they
         /// are currently borrowed.
         managed_surfaces: BTreeMap<VASurfaceID, Resolution>,
     }
 
-    impl<D: SurfaceMemoryDescriptor> SurfacePool<D> {
+    impl<M: SurfaceMemoryDescriptor> VaSurfacePool<M> {
         /// Create a new pool.
         ///
         /// # Arguments
@@ -321,13 +323,11 @@ mod surface_pool {
             }
         }
 
-        /// Create new surfaces and add them to the pool.
-        ///
-        /// `num_surfaces` is the number of surfaces to be created and added.
-        pub(crate) fn create_surfaces(
+        /// Create new surfaces and add them to the pool, using `descriptors` as backing memory.
+        pub(crate) fn add_surfaces(
             &mut self,
-            descriptors: Vec<D>,
-        ) -> Result<(), (VaError, Vec<D>)> {
+            descriptors: Vec<M>,
+        ) -> Result<(), (VaError, Vec<M>)> {
             let surfaces = self.display.create_surfaces(
                 self.rt_format,
                 // Let the hardware decide the best internal format - we will get the desired fourcc
@@ -370,7 +370,7 @@ mod surface_pool {
         /// Returns an error (and the passed `surface` back) if the surface is not at least as
         /// large as the current coded resolution of the pool.
         #[allow(dead_code)]
-        pub(crate) fn add_surface(&mut self, surface: Surface<D>) -> Result<(), Surface<D>> {
+        pub(crate) fn add_surface(&mut self, surface: Surface<M>) -> Result<(), Surface<M>> {
             if Resolution::from(surface.size()).can_contain(self.coded_resolution) {
                 self.managed_surfaces
                     .insert(surface.id(), surface.size().into());
@@ -389,7 +389,7 @@ mod surface_pool {
         pub(crate) fn get_surface(
             &mut self,
             return_pool: &Rc<RefCell<Self>>,
-        ) -> Option<PooledSurface<D>> {
+        ) -> Option<PooledSurface<M>> {
             let surface = self.surfaces.pop_front();
 
             // Make sure the invariant holds when debugging. Can save costly
@@ -412,6 +412,31 @@ mod surface_pool {
         /// Returns the total number of managed surfaces in this pool.
         pub(crate) fn num_managed_surfaces(&self) -> usize {
             self.managed_surfaces.len()
+        }
+    }
+
+    impl SurfacePool for Rc<RefCell<VaSurfacePool<()>>> {
+        fn coded_resolution(&self) -> Resolution {
+            (**self).borrow().coded_resolution
+        }
+
+        fn set_coded_resolution(&mut self, resolution: Resolution) {
+            (**self).borrow_mut().set_coded_resolution(resolution)
+        }
+
+        fn add_surfaces(&mut self, descriptors: Vec<()>) -> Result<(), anyhow::Error> {
+            (**self)
+                .borrow_mut()
+                .add_surfaces(descriptors)
+                .map_err(|e| anyhow::anyhow!(e.0))
+        }
+
+        fn num_free_surfaces(&self) -> usize {
+            (**self).borrow().num_surfaces_left()
+        }
+
+        fn num_managed_surfaces(&self) -> usize {
+            (**self).borrow().num_managed_surfaces()
         }
     }
 }
@@ -437,8 +462,6 @@ pub(crate) struct ParsedStreamMetadata {
     /// it does not get dropped while it is in use.
     #[allow(dead_code)]
     config: Config,
-    /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
-    pub(crate) surface_pool: Rc<RefCell<SurfacePool<()>>>,
     /// Information about the current stream, directly extracted from it.
     stream_info: StreamInfo,
     /// The image format we will use to map the surfaces. This is usually the
@@ -487,7 +510,8 @@ impl StreamMetadataState {
         hdr: S,
         format_map: Option<&FormatMap>,
         old_metadata_state: StreamMetadataState,
-    ) -> anyhow::Result<StreamMetadataState> {
+        old_surface_pool: Rc<RefCell<VaSurfacePool<()>>>,
+    ) -> anyhow::Result<(StreamMetadataState, Rc<RefCell<VaSurfacePool<()>>>)> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
 
@@ -533,7 +557,7 @@ impl StreamMetadataState {
             StreamMetadataState::Parsed(old_state)
                 if old_state.rt_format == rt_format && old_state.profile == va_profile =>
             {
-                (old_state.config, old_state.context, old_state.surface_pool)
+                (old_state.config, old_state.context, old_surface_pool)
             }
             // Create new context.
             _ => {
@@ -554,7 +578,7 @@ impl StreamMetadataState {
                     true,
                 )?;
 
-                let surface_pool = Rc::new(RefCell::new(SurfacePool::new(
+                let surface_pool = Rc::new(RefCell::new(VaSurfacePool::new(
                     Rc::clone(display),
                     rt_format,
                     Some(libva::UsageHint::USAGE_HINT_DECODER),
@@ -582,29 +606,21 @@ impl StreamMetadataState {
                 .set_coded_resolution(coded_resolution);
         }
 
-        // Allocate the missing number of buffers in our pool for decoding to succeed.
-        {
-            let mut pool = surface_pool.borrow_mut();
-            let pool_num_surfaces = pool.num_managed_surfaces();
-            if pool_num_surfaces < min_num_surfaces {
-                pool.create_surfaces(vec![(); min_num_surfaces - pool_num_surfaces])
-                    .map_err(|e| e.0)?;
-            }
-        }
-
-        Ok(StreamMetadataState::Parsed(ParsedStreamMetadata {
-            context,
-            config,
-            stream_info: StreamInfo {
-                coded_resolution,
-                display_resolution,
-                min_num_surfaces,
-            },
+        Ok((
+            StreamMetadataState::Parsed(ParsedStreamMetadata {
+                context,
+                config,
+                stream_info: StreamInfo {
+                    coded_resolution,
+                    display_resolution,
+                    min_num_surfaces,
+                },
+                map_format: Rc::new(map_format),
+                rt_format,
+                profile: va_profile,
+            }),
             surface_pool,
-            map_format: Rc::new(map_format),
-            rt_format,
-            profile: va_profile,
-        }))
+        ))
     }
 }
 
@@ -612,8 +628,8 @@ impl StreamMetadataState {
 ///
 /// This includes the VA picture which can be pending rendering or complete, as well as useful
 /// meta-information.
-pub struct GenericBackendHandle<D: SurfaceMemoryDescriptor> {
-    state: PictureState<D>,
+pub struct GenericBackendHandle<M: SurfaceMemoryDescriptor> {
+    state: PictureState<M>,
     /// The decoder resolution when this frame was processed. Not all codecs
     /// send resolution data in every frame header.
     coded_resolution: Resolution,
@@ -639,7 +655,7 @@ impl GenericBackendHandle<()> {
     }
 }
 
-impl<D: SurfaceMemoryDescriptor> GenericBackendHandle<D> {
+impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
     fn sync(&mut self) -> Result<(), VaError> {
         let res;
 
@@ -681,7 +697,7 @@ impl<D: SurfaceMemoryDescriptor> GenericBackendHandle<D> {
     }
 
     /// Returns the picture of this handle.
-    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledSurface<D>>> {
+    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledSurface<M>>> {
         match &self.state {
             PictureState::Ready(picture) => Some(picture),
             PictureState::Pending(_) => None,
@@ -719,16 +735,16 @@ impl<D: SurfaceMemoryDescriptor> GenericBackendHandle<D> {
     }
 }
 
-impl<D: SurfaceMemoryDescriptor> DynHandle for GenericBackendHandle<D> {
+impl<M: SurfaceMemoryDescriptor> DynHandle for GenericBackendHandle<M> {
     fn dyn_mappable_handle_mut<'a>(&'a mut self) -> Box<dyn MappableHandle + 'a> {
         Box::new(self.image().unwrap())
     }
 }
 
 /// Rendering state of a VA picture.
-enum PictureState<D: SurfaceMemoryDescriptor> {
-    Ready(Picture<PictureSync, PooledSurface<D>>),
-    Pending(Picture<PictureEnd, PooledSurface<D>>),
+enum PictureState<M: SurfaceMemoryDescriptor> {
+    Ready(Picture<PictureSync, PooledSurface<M>>),
+    Pending(Picture<PictureEnd, PooledSurface<M>>),
     // Only set in the destructor when we take ownership of the VA picture.
     Invalid,
 }
@@ -849,6 +865,8 @@ where
 {
     /// VA display in use for this stream.
     display: Rc<Display>,
+    /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
+    pub(crate) surface_pool: Rc<RefCell<VaSurfacePool<()>>>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
     /// Make sure the backend is typed by stream information provider.
@@ -861,8 +879,17 @@ where
     for<'a> &'a StreamData: VaStreamInfo,
 {
     pub(crate) fn new(display: Rc<libva::Display>) -> Self {
+        // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
+        let surface_pool = Rc::new(RefCell::new(VaSurfacePool::new(
+            Rc::clone(&display),
+            libva::constants::VA_RT_FORMAT_YUV420,
+            Some(libva::UsageHint::USAGE_HINT_DECODER),
+            Resolution::from((16, 16)),
+        )));
+
         Self {
             display,
+            surface_pool,
             metadata_state: StreamMetadataState::Unparsed,
             _stream_data: PhantomData,
         }
@@ -875,8 +902,13 @@ where
         let old_metadata_state =
             std::mem::replace(&mut self.metadata_state, StreamMetadataState::Unparsed);
 
-        self.metadata_state =
-            StreamMetadataState::open(&self.display, stream_params, None, old_metadata_state)?;
+        (self.metadata_state, self.surface_pool) = StreamMetadataState::open(
+            &self.display,
+            stream_params,
+            None,
+            old_metadata_state,
+            Rc::clone(&self.surface_pool),
+        )?;
 
         Ok(())
     }
@@ -920,13 +952,6 @@ where
 {
     type Handle = DecodedHandle;
 
-    fn num_resources_left(&self) -> usize {
-        self.metadata_state
-            .get_parsed()
-            .map(|m| m.surface_pool.borrow().num_surfaces_left())
-            .unwrap_or(0)
-    }
-
     fn try_format(
         &mut self,
         format_info: &StreamData,
@@ -958,17 +983,22 @@ where
             //
             // This does not apply to other (future) backends, like V4L2, which
             // need to reallocate on format change.
-            self.metadata_state = StreamMetadataState::open(
+            (self.metadata_state, self.surface_pool) = StreamMetadataState::open(
                 &self.display,
                 format_info,
                 Some(map_format),
                 old_metadata_state,
+                Rc::clone(&self.surface_pool),
             )?;
 
             Ok(())
         } else {
             Err(anyhow!("Format {:?} is unsupported.", format))
         }
+    }
+
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+        &mut self.surface_pool
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

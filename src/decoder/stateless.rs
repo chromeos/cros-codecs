@@ -18,6 +18,7 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::DecoderFormatNegotiator;
 use crate::decoder::StreamInfo;
+use crate::decoder::SurfacePool;
 use crate::DecodedFormat;
 
 /// Error returned by stateless backend methods.
@@ -82,11 +83,11 @@ pub(crate) trait StatelessDecoderBackend<FormatInfo> {
     /// operation when it goes out of scope.
     type Handle: DecodedHandle + Clone;
 
-    /// Gets the number of output resources left in the backend.
-    fn num_resources_left(&self) -> usize;
-
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;
+
+    /// Returns the surface pool currently in use by the backend.
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool;
 
     /// Try altering the decoded format.
     fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat)
@@ -138,6 +139,10 @@ where
         self.decoder.try_format(format)
     }
 
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+        self.decoder.surface_pool()
+    }
+
     fn stream_info(&self) -> &StreamInfo {
         self.decoder.stream_info().unwrap()
     }
@@ -183,8 +188,9 @@ pub trait StatelessVideoDecoder {
     /// [`next_event`]: StatelessVideoDecoder::next_event
     fn flush(&mut self);
 
-    /// Gets the number of output resources left in the backend.
-    fn num_resources_left(&self) -> usize;
+    /// Returns the surface pool in use with the decoder. Useful to add new frames as decode.
+    /// targets.
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool;
 
     fn stream_info(&self) -> Option<&StreamInfo>;
 

@@ -272,10 +272,10 @@ impl StatelessVp9DecoderBackend for VaapiBackend<Header> {
             .create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))
             .context("while creating slice data buffer")?;
 
-        let surface = metadata
+        let surface = self
             .surface_pool
             .borrow_mut()
-            .get_surface(&metadata.surface_pool)
+            .get_surface(&self.surface_pool)
             .ok_or(StatelessBackendError::OutOfResources)?;
 
         let mut va_picture = VaPicture::new(timestamp, Rc::clone(context), surface);

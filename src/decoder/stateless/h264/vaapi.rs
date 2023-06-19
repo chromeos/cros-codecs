@@ -543,10 +543,10 @@ impl StatelessH264DecoderBackend for VaapiBackend<Sps> {
         timestamp: u64,
     ) -> StatelessBackendResult<Self::Picture> {
         let metadata = self.metadata_state.get_parsed_mut()?;
-        let surface = metadata
+        let surface = self
             .surface_pool
             .borrow_mut()
-            .get_surface(&metadata.surface_pool)
+            .get_surface(&self.surface_pool)
             .ok_or(StatelessBackendError::OutOfResources)?;
 
         Ok(VaPicture::new(

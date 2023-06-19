@@ -29,6 +29,7 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
+use crate::decoder::SurfacePool;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP9.
@@ -188,7 +189,7 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
         let frames = self.parser.parse_chunk(bitstream)?;
 
         if matches!(self.decoding_state, DecodingState::Decoding)
-            && self.num_resources_left() < frames.len()
+            && self.backend.surface_pool().num_free_surfaces() < frames.len()
         {
             return Err(DecodeError::CheckEvents);
         }
@@ -240,10 +241,6 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
         self.decoding_state = DecodingState::AwaitingStreamInfo;
     }
 
-    fn num_resources_left(&self) -> usize {
-        self.backend.num_resources_left()
-    }
-
     fn next_event(&mut self) -> Option<DecoderEvent> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
@@ -267,6 +264,10 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
                     None
                 }
             })
+    }
+
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+        self.backend.surface_pool()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

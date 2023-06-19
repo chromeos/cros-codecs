@@ -211,6 +211,14 @@ pub fn simple_playback_loop<D, R, I>(
                 }
                 DecoderEvent::FormatChanged(mut format_setter) => {
                     format_setter.try_format(output_format).unwrap();
+                    // Allocate the missing number of buffers in our pool for decoding to succeed.
+                    let min_num_surfaces = format_setter.stream_info().min_num_surfaces;
+                    let pool = format_setter.surface_pool();
+                    let pool_num_surfaces = pool.num_managed_surfaces();
+                    if pool_num_surfaces < min_num_surfaces {
+                        pool.add_surfaces(vec![(); min_num_surfaces - pool_num_surfaces])
+                            .unwrap();
+                    }
                 }
             }
         }

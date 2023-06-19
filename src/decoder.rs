@@ -17,6 +17,28 @@ use std::collections::VecDeque;
 use crate::DecodedFormat;
 use crate::Resolution;
 
+/// Trait for a pool of surfaces in a particular format.
+///
+/// This is mostly useful for the decoder where the user is expected to manage how the decoded
+/// frames buffers are allocated and when.
+pub trait SurfacePool {
+    /// Returns the coded resolution of the pool.
+    ///
+    /// All the frames maintained by this pool are guaranteed to be able to contain the coded
+    /// resolution.
+    fn coded_resolution(&self) -> Resolution;
+    /// Update the coded resolution of the pool.
+    ///
+    /// Frames managed by this pool that can not contain the new resolution are dropped.
+    fn set_coded_resolution(&mut self, resolution: Resolution);
+    /// Add new surfaces to the pool, using `descriptors` as backing memory.
+    fn add_surfaces(&mut self, descriptors: Vec<()>) -> Result<(), anyhow::Error>;
+    /// Returns new number of surfaces currently available in this pool.
+    fn num_free_surfaces(&self) -> usize;
+    /// Returns the total number of managed surfaces in this pool.
+    fn num_managed_surfaces(&self) -> usize;
+}
+
 /// Information about the current stream.
 ///
 /// This is static information obtained from the stream itself about its requirements. It does not
@@ -27,7 +49,7 @@ pub struct StreamInfo {
     pub coded_resolution: Resolution,
     /// Display resolution of the stream, i.e. the part of the decoded frames we want to display.
     pub display_resolution: Resolution,
-    /// Minimum number of output buffers required for decoding to proceed.
+    /// Minimum number of output surfaces required for decoding to proceed.
     ///
     /// Codecs keep some frames as references and cannot decode immediately into them again after
     /// they are returned. Allocating at least this number of frames guarantees that the decoder
@@ -46,6 +68,8 @@ pub struct StreamInfo {
 pub trait DecoderFormatNegotiator<'a> {
     /// Returns the current decoding parameters, as extracted from the stream.
     fn stream_info(&self) -> &StreamInfo;
+    /// Returns the frame pool in use for the decoder, set up for the new format.
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool;
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
 

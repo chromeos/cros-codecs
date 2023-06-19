@@ -24,6 +24,7 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
+use crate::decoder::SurfacePool;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP8.
@@ -167,7 +168,7 @@ impl<T: DecodedHandle + Clone + 'static> Decoder<T> {
 
     /// Handle a single frame.
     fn handle_frame(&mut self, frame: Frame<&[u8]>, timestamp: u64) -> Result<(), DecodeError> {
-        if self.backend.num_resources_left() == 0 {
+        if self.backend.surface_pool().num_free_surfaces() == 0 {
             return Err(DecodeError::CheckEvents);
         }
 
@@ -240,10 +241,6 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
         self.decoding_state = DecodingState::AwaitingStreamInfo;
     }
 
-    fn num_resources_left(&self) -> usize {
-        self.backend.num_resources_left()
-    }
-
     fn next_event(&mut self) -> Option<DecoderEvent> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
@@ -265,6 +262,10 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
                     None
                 }
             })
+    }
+
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+        self.backend.surface_pool()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

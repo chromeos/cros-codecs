@@ -13,6 +13,7 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
 use crate::decoder::StreamInfo;
+use crate::decoder::SurfacePool;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -89,15 +90,31 @@ impl Backend {
     }
 }
 
+impl SurfacePool for Backend {
+    fn coded_resolution(&self) -> Resolution {
+        Resolution::from((320, 200))
+    }
+
+    fn set_coded_resolution(&mut self, _resolution: Resolution) {}
+
+    fn add_surfaces(&mut self, _descriptors: Vec<()>) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
+    fn num_free_surfaces(&self) -> usize {
+        4
+    }
+
+    fn num_managed_surfaces(&self) -> usize {
+        4
+    }
+}
+
 impl<FormatInfo> StatelessDecoderBackend<FormatInfo> for Backend
 where
     Handle: DecodedHandle,
 {
     type Handle = Handle;
-
-    fn num_resources_left(&self) -> usize {
-        16
-    }
 
     fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
         Ok(())
@@ -105,5 +122,9 @@ where
 
     fn stream_info(&self) -> Option<&StreamInfo> {
         Some(&self.stream_info)
+    }
+
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool {
+        self
     }
 }
