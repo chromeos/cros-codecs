@@ -23,6 +23,7 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
+use crate::decoder::StreamInfo;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP8.
@@ -243,14 +244,6 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
         self.backend.num_resources_left()
     }
 
-    fn num_resources_total(&self) -> usize {
-        self.backend.num_resources_total()
-    }
-
-    fn coded_resolution(&self) -> Option<Resolution> {
-        self.backend.coded_resolution()
-    }
-
     fn next_event(&mut self) -> Option<DecoderEvent> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
@@ -272,6 +265,10 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder for Decoder<T> {
                     None
                 }
             })
+    }
+
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        self.backend.stream_info()
     }
 }
 

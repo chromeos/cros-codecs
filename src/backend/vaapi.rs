@@ -33,6 +33,7 @@ use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
+use crate::decoder::StreamInfo;
 use crate::i4xx_copy;
 use crate::nv12_copy;
 use crate::y410_to_i410;
@@ -416,7 +417,7 @@ mod surface_pool {
 }
 
 /// A trait for providing the basic information needed to setup libva for decoding.
-pub(crate) trait StreamInfo {
+pub(crate) trait VaStreamInfo {
     /// Returns the VA profile of the stream.
     fn va_profile(&self) -> anyhow::Result<i32>;
     /// Returns the RT format of the stream.
@@ -438,12 +439,8 @@ pub(crate) struct ParsedStreamMetadata {
     config: Config,
     /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
     pub(crate) surface_pool: Rc<RefCell<SurfacePool<()>>>,
-    /// The number of surfaces required to parse the stream.
-    min_num_surfaces: usize,
-    /// The decoder current coded resolution.
-    coded_resolution: Resolution,
-    /// The decoder current display resolution.
-    display_resolution: Resolution,
+    /// Information about the current stream, directly extracted from it.
+    stream_info: StreamInfo,
     /// The image format we will use to map the surfaces. This is usually the
     /// same as the surface's internal format, but occasionally we can try
     /// mapping in a different format if requested and if the VA-API driver can
@@ -485,7 +482,7 @@ impl StreamMetadataState {
     }
 
     /// Initializes or reinitializes the codec state.
-    fn open<S: StreamInfo>(
+    fn open<S: VaStreamInfo>(
         display: &Rc<Display>,
         hdr: S,
         format_map: Option<&FormatMap>,
@@ -598,10 +595,12 @@ impl StreamMetadataState {
         Ok(StreamMetadataState::Parsed(ParsedStreamMetadata {
             context,
             config,
+            stream_info: StreamInfo {
+                coded_resolution,
+                display_resolution,
+                min_num_surfaces,
+            },
             surface_pool,
-            min_num_surfaces,
-            coded_resolution,
-            display_resolution,
             map_format: Rc::new(map_format),
             rt_format,
             profile: va_profile,
@@ -633,8 +632,8 @@ impl GenericBackendHandle<()> {
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
             state: PictureState::Pending(picture),
-            coded_resolution: metadata.coded_resolution,
-            display_resolution: metadata.display_resolution,
+            coded_resolution: metadata.stream_info.coded_resolution,
+            display_resolution: metadata.stream_info.display_resolution,
             map_format: Rc::clone(&metadata.map_format),
         })
     }
@@ -846,7 +845,7 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
 
 pub(crate) struct VaapiBackend<StreamData>
 where
-    for<'a> &'a StreamData: StreamInfo,
+    for<'a> &'a StreamData: VaStreamInfo,
 {
     /// VA display in use for this stream.
     display: Rc<Display>,
@@ -859,7 +858,7 @@ where
 impl<StreamData> VaapiBackend<StreamData>
 where
     StreamData: Clone,
-    for<'a> &'a StreamData: StreamInfo,
+    for<'a> &'a StreamData: VaStreamInfo,
 {
     pub(crate) fn new(display: Rc<libva::Display>) -> Self {
         Self {
@@ -917,30 +916,9 @@ where
 impl<StreamData> StatelessDecoderBackend<StreamData> for VaapiBackend<StreamData>
 where
     StreamData: Clone,
-    for<'a> &'a StreamData: StreamInfo,
+    for<'a> &'a StreamData: VaStreamInfo,
 {
     type Handle = DecodedHandle;
-
-    fn coded_resolution(&self) -> Option<Resolution> {
-        self.metadata_state
-            .get_parsed()
-            .map(|m| m.coded_resolution)
-            .ok()
-    }
-
-    fn display_resolution(&self) -> Option<Resolution> {
-        self.metadata_state
-            .get_parsed()
-            .map(|m| m.display_resolution)
-            .ok()
-    }
-
-    fn num_resources_total(&self) -> usize {
-        self.metadata_state
-            .get_parsed()
-            .map(|m| m.min_num_surfaces)
-            .unwrap_or(0)
-    }
 
     fn num_resources_left(&self) -> usize {
         self.metadata_state
@@ -991,6 +969,13 @@ where
         } else {
             Err(anyhow!("Format {:?} is unsupported.", format))
         }
+    }
+
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        self.metadata_state
+            .get_parsed()
+            .ok()
+            .map(|m| &m.stream_info)
     }
 }
 

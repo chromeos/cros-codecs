@@ -12,6 +12,7 @@ use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DynHandle;
 use crate::decoder::MappableHandle;
+use crate::decoder::StreamInfo;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -72,11 +73,19 @@ impl DecodedHandle for Handle {
 }
 
 /// Dummy backend that can be used for any codec.
-pub(crate) struct Backend;
+pub(crate) struct Backend {
+    stream_info: StreamInfo,
+}
 
 impl Backend {
     pub(crate) fn new() -> Self {
-        Self
+        Self {
+            stream_info: StreamInfo {
+                min_num_surfaces: 4,
+                coded_resolution: Resolution::from((320, 200)),
+                display_resolution: Resolution::from((320, 200)),
+            },
+        }
     }
 }
 
@@ -86,10 +95,6 @@ where
 {
     type Handle = Handle;
 
-    fn num_resources_total(&self) -> usize {
-        16
-    }
-
     fn num_resources_left(&self) -> usize {
         16
     }
@@ -98,11 +103,7 @@ where
         Ok(())
     }
 
-    fn coded_resolution(&self) -> Option<Resolution> {
-        None
-    }
-
-    fn display_resolution(&self) -> Option<Resolution> {
-        None
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        Some(&self.stream_info)
     }
 }

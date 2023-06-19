@@ -14,7 +14,7 @@ use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::StreamInfo;
+use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
@@ -29,7 +29,7 @@ use crate::Resolution;
 /// The number of surfaces to allocate for this codec. Same as GStreamer's vavp8dec.
 const NUM_SURFACES: usize = 7;
 
-impl StreamInfo for &Header {
+impl VaStreamInfo for &Header {
     fn va_profile(&self) -> anyhow::Result<i32> {
         Ok(libva::VAProfile::VAProfileVP8Version0_3)
     }

@@ -40,6 +40,7 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
+use crate::decoder::StreamInfo;
 use crate::Resolution;
 
 fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
@@ -2286,14 +2287,6 @@ where
         self.backend.num_resources_left()
     }
 
-    fn num_resources_total(&self) -> usize {
-        self.backend.num_resources_total()
-    }
-
-    fn coded_resolution(&self) -> Option<Resolution> {
-        self.backend.coded_resolution()
-    }
-
     fn next_event(&mut self) -> Option<DecoderEvent> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
@@ -2314,6 +2307,10 @@ where
                     None
                 }
             })
+    }
+
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        self.backend.stream_info()
     }
 }
 

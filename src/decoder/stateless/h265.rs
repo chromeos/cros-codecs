@@ -32,6 +32,7 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::ReadyFramesQueue;
+use crate::decoder::StreamInfo;
 use crate::Resolution;
 
 const MAX_DPB_SIZE: usize = 16;
@@ -855,17 +856,6 @@ where
         // self.backend.num_resources_left()
         todo!()
     }
-
-    fn num_resources_total(&self) -> usize {
-        // self.backend.num_resources_total()
-        todo!()
-    }
-
-    fn coded_resolution(&self) -> Option<Resolution> {
-        todo!()
-        // self.backend.coded_resolution()
-    }
-
     fn next_event(&mut self) -> Option<DecoderEvent> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
@@ -890,6 +880,10 @@ where
                     None
                 }
             })
+    }
+
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        self.backend.stream_info()
     }
 }
 

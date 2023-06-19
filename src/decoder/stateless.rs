@@ -17,8 +17,8 @@ use thiserror::Error;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::DecoderFormatNegotiator;
+use crate::decoder::StreamInfo;
 use crate::DecodedFormat;
-use crate::Resolution;
 
 /// Error returned by stateless backend methods.
 #[derive(Error, Debug)]
@@ -82,19 +82,11 @@ pub(crate) trait StatelessDecoderBackend<FormatInfo> {
     /// operation when it goes out of scope.
     type Handle: DecodedHandle + Clone;
 
-    /// Returns the current coded resolution of the bitstream being processed.
-    /// This may be None if we have not read the stream parameters yet.
-    fn coded_resolution(&self) -> Option<Resolution>;
-
-    /// Returns the current display resolution of the bitstream being processed.
-    /// This may be None if we have not read the stream parameters yet.
-    fn display_resolution(&self) -> Option<Resolution>;
-
-    /// Gets the number of output resources allocated by the backend.
-    fn num_resources_total(&self) -> usize;
-
     /// Gets the number of output resources left in the backend.
     fn num_resources_left(&self) -> usize;
+
+    /// Returns the current decoding parameters, as parsed from the stream.
+    fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Try altering the decoded format.
     fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat)
@@ -145,6 +137,10 @@ where
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()> {
         self.decoder.try_format(format)
     }
+
+    fn stream_info(&self) -> &StreamInfo {
+        self.decoder.stream_info().unwrap()
+    }
 }
 
 impl<'a, D, H, F> Drop for StatelessDecoderFormatNegotiator<'a, D, H, F>
@@ -190,12 +186,7 @@ pub trait StatelessVideoDecoder {
     /// Gets the number of output resources left in the backend.
     fn num_resources_left(&self) -> usize;
 
-    /// Gets the number of output resources allocated by the backend.
-    fn num_resources_total(&self) -> usize;
-
-    /// Returns the current coded resolution of the bitstream being processed.
-    /// This may be None if we have not read the stream parameters yet.
-    fn coded_resolution(&self) -> Option<Resolution>;
+    fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the next event, if there is any pending.
     fn next_event(&mut self) -> Option<DecoderEvent>;

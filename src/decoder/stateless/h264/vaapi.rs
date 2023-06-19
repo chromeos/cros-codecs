@@ -18,7 +18,7 @@ use libva::SliceParameter;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::PooledSurface;
-use crate::backend::vaapi::StreamInfo;
+use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
@@ -37,7 +37,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 
-impl StreamInfo for &Sps {
+impl VaStreamInfo for &Sps {
     fn va_profile(&self) -> anyhow::Result<i32> {
         let profile_idc = self.profile_idc();
         let profile = Profile::n(profile_idc)

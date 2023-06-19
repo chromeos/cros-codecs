@@ -11,7 +11,7 @@ use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::StreamInfo;
+use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::Header;
@@ -96,7 +96,7 @@ fn get_rt_format(
     }
 }
 
-impl StreamInfo for &Header {
+impl VaStreamInfo for &Header {
     fn va_profile(&self) -> anyhow::Result<i32> {
         Ok(match self.profile {
             Profile::Profile0 => libva::VAProfile::VAProfileVP9Profile0,
