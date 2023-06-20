@@ -854,9 +854,10 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
     }
 }
 
-pub(crate) struct VaapiBackend<StreamData, M>
+pub(crate) struct VaapiBackend<StreamData, BackendData, M>
 where
     for<'a> &'a StreamData: VaStreamInfo,
+    BackendData: Default,
     M: SurfaceMemoryDescriptor,
 {
     /// VA display in use for this stream.
@@ -865,15 +866,18 @@ where
     pub(crate) surface_pool: Rc<RefCell<VaSurfacePool<M>>>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
+    /// Any extra data that the backend might need to keep track of for a given codec.
+    pub(crate) backend_data: BackendData,
     /// Make sure the backend is typed by stream information provider.
     _stream_data: PhantomData<StreamData>,
 }
 
-impl<StreamData, M> VaapiBackend<StreamData, M>
+impl<StreamData, BackendData, M> VaapiBackend<StreamData, BackendData, M>
 where
     StreamData: Clone,
     for<'a> &'a StreamData: VaStreamInfo,
     M: SurfaceMemoryDescriptor,
+    BackendData: Default,
 {
     pub(crate) fn new(display: Rc<libva::Display>) -> Self {
         // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
@@ -888,6 +892,7 @@ where
             display,
             surface_pool,
             metadata_state: StreamMetadataState::Unparsed,
+            backend_data: Default::default(),
             _stream_data: PhantomData,
         }
     }
@@ -942,10 +947,12 @@ where
     }
 }
 
-impl<StreamData, M> StatelessDecoderBackend<StreamData, M> for VaapiBackend<StreamData, M>
+impl<StreamData, BackendData, M> StatelessDecoderBackend<StreamData, M>
+    for VaapiBackend<StreamData, BackendData, M>
 where
     StreamData: Clone,
     for<'a> &'a StreamData: VaStreamInfo,
+    BackendData: Default,
     M: SurfaceMemoryDescriptor,
 {
     type Handle = DecodedHandle<M>;

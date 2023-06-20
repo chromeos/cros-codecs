@@ -261,18 +261,25 @@ impl<T: AsRef<[u8]>> H265AccessUnitParser<T> {
         if Self::is_slice(nalu) {
             let data = nalu.as_ref();
             let mut r = nalu_reader::NaluReader::new(&data[nalu.header().len()..]);
-            let first_slice_segment_in_pic = r.read_bit().expect("Malformed slice");
 
-            first_slice_segment_in_pic
+            // first_slice_segment_in_pic
+            r.read_bit().expect("Malformed slice")
         } else {
             false
         }
     }
 
-    fn collect(&mut self) -> Option<H265AccessUnit<T>> {
+    fn collect(&mut self, include_current_nalu: bool) -> Option<H265AccessUnit<T>> {
         self.picture_started = false;
+
+        let len = if include_current_nalu {
+            self.nalus.len()
+        } else {
+            self.nalus.len() - 1
+        };
+
         return Some(H265AccessUnit {
-            nalus: self.nalus.drain(..).collect::<Vec<_>>(),
+            nalus: self.nalus.drain(..len).collect::<Vec<_>>(),
         });
     }
 
@@ -281,7 +288,7 @@ impl<T: AsRef<[u8]>> H265AccessUnitParser<T> {
     /// association to access units" to accumulate NAL units.
     pub fn accumulate(&mut self, nalu: H265Nalu<T>) -> Option<H265AccessUnit<T>> {
         if Self::is_delimiter(&nalu) && self.picture_started {
-            return self.collect();
+            return self.collect(true);
         }
 
         // Accumulate until we see a slice.
@@ -289,12 +296,15 @@ impl<T: AsRef<[u8]>> H265AccessUnitParser<T> {
         let nalu = self.nalus.last().unwrap();
 
         if !self.picture_started {
-            self.picture_started = Self::is_slice(&nalu);
+            self.picture_started = Self::is_slice(nalu);
             return None;
         }
 
-        if Self::specifies_new_au(&nalu) || Self::is_slice_of_next_au(&nalu) {
-            return self.collect();
+        if Self::specifies_new_au(nalu) {
+            return self.collect(true);
+        }
+        if Self::is_slice_of_next_au(nalu) {
+            return self.collect(false);
         }
 
         None

@@ -232,7 +232,7 @@ fn build_slice_param(
     ))
 }
 
-impl<M: SurfaceMemoryDescriptor> StatelessVp9DecoderBackend<M> for VaapiBackend<Header, M> {
+impl<M: SurfaceMemoryDescriptor> StatelessVp9DecoderBackend<M> for VaapiBackend<Header, (), M> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         self.new_sequence(header)
     }
@@ -298,7 +298,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> Decoder<VADecodedHandle<M>, M> {
         S: From<M>,
     {
         Self::new(
-            Box::new(VaapiBackend::<Header, M>::new(display)),
+            Box::new(VaapiBackend::<Header, (), M>::new(display)),
             blocking_mode,
         )
     }
