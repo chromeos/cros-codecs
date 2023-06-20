@@ -16,7 +16,7 @@ pub enum Reference {
 
 /// Data associated with an h.265 picture. Most fields are extracted from the
 /// slice header and kept for future processing.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct PictureData {
     // Fields extracted from the slice header. These are the CamelCase
     // variables, unless noted otherwise.
@@ -35,6 +35,7 @@ pub struct PictureData {
     pub reference: Reference,
     pub pic_latency_cnt: i32,
     pub needed_for_output: bool,
+    pub short_term_ref_pic_set_size_bits: u32,
 }
 
 impl PictureData {
@@ -137,6 +138,7 @@ impl PictureData {
             reference: Default::default(),
             pic_latency_cnt: 0,
             needed_for_output: false,
+            short_term_ref_pic_set_size_bits: hdr.st_rps_bits(),
         }
     }
 

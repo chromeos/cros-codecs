@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#[cfg(test)]
+mod dummy;
+#[cfg(feature = "vaapi")]
+mod vaapi;
+
 use std::cell::RefCell;
 use std::io::Cursor;
 use std::rc::Rc;
@@ -38,6 +43,17 @@ use crate::Resolution;
 
 const MAX_DPB_SIZE: usize = 16;
 
+// Equation 5-8
+pub(crate) fn clip3(x: i32, y: i32, z: i32) -> i32 {
+    if z < x {
+        x
+    } else if z > y {
+        y
+    } else {
+        z
+    }
+}
+
 /// Stateless backend methods specific to H.265.
 trait StatelessH265DecoderBackend<M>: StatelessDecoderBackend<Sps, M> {
     /// Type used by the backend to represent a picture in the process of being decoded.
@@ -54,6 +70,7 @@ trait StatelessH265DecoderBackend<M>: StatelessDecoderBackend<Sps, M> {
     ) -> StatelessBackendResult<Self::Picture>;
 
     /// Called by the decoder for every frame or field found.
+    #[allow(clippy::too_many_arguments)]
     fn handle_picture(
         &mut self,
         picture: &mut Self::Picture,
@@ -61,6 +78,7 @@ trait StatelessH265DecoderBackend<M>: StatelessDecoderBackend<Sps, M> {
         sps: &Sps,
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
+        rps: &RefPicSet<Self::Handle>,
         slice: &Slice<&[u8]>,
     ) -> StatelessBackendResult<()>;
 
@@ -99,6 +117,81 @@ enum BumpingType {
     AfterDecoding,
 }
 
+/// Keeps track of the last values seen for negotiation purposes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct NegotiationInfo {
+    /// The current coded resolution
+    coded_resolution: Resolution,
+    general_profile_idc: u8,
+    bit_depth_luma_minus8: u8,
+    bit_depth_chroma_minus8: u8,
+    chroma_format_idc: u8,
+}
+
+impl From<&Sps> for NegotiationInfo {
+    fn from(sps: &Sps) -> Self {
+        NegotiationInfo {
+            coded_resolution: Resolution {
+                width: sps.width().into(),
+                height: sps.height().into(),
+            },
+            general_profile_idc: sps.profile_tier_level().general_profile_idc(),
+            bit_depth_luma_minus8: sps.bit_depth_luma_minus8(),
+            bit_depth_chroma_minus8: sps.bit_depth_chroma_minus8(),
+            chroma_format_idc: sps.chroma_format_idc(),
+        }
+    }
+}
+
+/// The RefPicSet data, derived once per picture.
+#[derive(Clone, Debug)]
+struct RefPicSet<T: DecodedHandle + Clone> {
+    curr_delta_poc_msb_present_flag: [bool; MAX_DPB_SIZE],
+    foll_delta_poc_msb_present_flag: [bool; MAX_DPB_SIZE],
+
+    num_poc_st_curr_before: usize,
+    num_poc_st_curr_after: usize,
+    num_poc_st_foll: usize,
+    num_poc_lt_curr: usize,
+    num_poc_lt_foll: usize,
+
+    poc_st_curr_before: [i32; MAX_DPB_SIZE],
+    poc_st_curr_after: [i32; MAX_DPB_SIZE],
+    poc_st_foll: [i32; MAX_DPB_SIZE],
+    poc_lt_curr: [i32; MAX_DPB_SIZE],
+    poc_lt_foll: [i32; MAX_DPB_SIZE],
+
+    ref_pic_set_lt_curr: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
+    ref_pic_set_st_curr_after: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
+    ref_pic_set_st_curr_before: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
+    ref_pic_set_st_foll: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
+    ref_pic_set_lt_foll: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
+}
+
+impl<T: DecodedHandle + Clone> Default for RefPicSet<T> {
+    fn default() -> Self {
+        Self {
+            curr_delta_poc_msb_present_flag: Default::default(),
+            foll_delta_poc_msb_present_flag: Default::default(),
+            num_poc_st_curr_before: Default::default(),
+            num_poc_st_curr_after: Default::default(),
+            num_poc_st_foll: Default::default(),
+            num_poc_lt_curr: Default::default(),
+            num_poc_lt_foll: Default::default(),
+            poc_st_curr_before: Default::default(),
+            poc_st_curr_after: Default::default(),
+            poc_st_foll: Default::default(),
+            poc_lt_curr: Default::default(),
+            poc_lt_foll: Default::default(),
+            ref_pic_set_lt_curr: Default::default(),
+            ref_pic_set_st_curr_after: Default::default(),
+            ref_pic_set_st_curr_before: Default::default(),
+            ref_pic_set_st_foll: Default::default(),
+            ref_pic_set_lt_foll: Default::default(),
+        }
+    }
+}
+
 pub struct Decoder<T, P, M>
 where
     T: DecodedHandle + Clone,
@@ -116,8 +209,10 @@ where
     // backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
     decoding_state: DecodingState<Sps>,
 
-    /// The current coded resolution
-    coded_resolution: Resolution,
+    /// Keeps track of the last values seen for negotiation purposes.
+    negotiation_info: NegotiationInfo,
+
+    rps: RefPicSet<T>,
 
     ready_queue: ReadyFramesQueue<T>,
 
@@ -144,25 +239,6 @@ where
 
     // Internal variables needed during the decoding process.
     max_pic_order_cnt_lsb: i32,
-    curr_delta_poc_msb_present_flag: [bool; MAX_DPB_SIZE],
-    foll_delta_poc_msb_present_flag: [bool; MAX_DPB_SIZE],
-    num_poc_st_curr_before: usize,
-    num_poc_st_curr_after: usize,
-    num_poc_st_foll: usize,
-    num_poc_lt_curr: usize,
-    num_poc_lt_foll: usize,
-    poc_st_curr_before: [i32; MAX_DPB_SIZE],
-    poc_st_curr_after: [i32; MAX_DPB_SIZE],
-    poc_st_foll: [i32; MAX_DPB_SIZE],
-    poc_lt_curr: [i32; MAX_DPB_SIZE],
-    poc_lt_foll: [i32; MAX_DPB_SIZE],
-
-    // The reference picture set. Derived once per picture.
-    ref_pic_set_lt_curr: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
-    ref_pic_set_st_curr_after: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
-    ref_pic_set_st_curr_before: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
-    ref_pic_set_st_foll: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
-    ref_pic_set_lt_foll: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
 
     /// Reference picture list 0 for P and B slices. Retains the same meaning as
     /// in the specification. Points into the pictures stored in the DPB.
@@ -172,6 +248,9 @@ where
     /// the specification. Points into the pictures stored in the DPB. Derived
     /// once per slice.
     ref_pic_list1: [Option<RefPicListEntry<T>>; MAX_DPB_SIZE],
+    /// We keep track of the last independent header so we can copy that into
+    /// dependent slices.
+    last_independent_slice_header: Option<SliceHeader>,
 }
 
 impl<T, P, M> Decoder<T, P, M>
@@ -191,58 +270,60 @@ where
             is_first_picture_in_au: true,
             parser: Default::default(),
             decoding_state: Default::default(),
-            coded_resolution: Default::default(),
+            negotiation_info: Default::default(),
+            rps: Default::default(),
             ready_queue: Default::default(),
             cur_sps_id: Default::default(),
             cur_pps_id: Default::default(),
             cur_pic: Default::default(),
             prev_tid_0_pic: Default::default(),
             max_pic_order_cnt_lsb: Default::default(),
-            curr_delta_poc_msb_present_flag: Default::default(),
-            foll_delta_poc_msb_present_flag: Default::default(),
-            num_poc_st_curr_before: Default::default(),
-            num_poc_st_curr_after: Default::default(),
-            num_poc_st_foll: Default::default(),
-            num_poc_lt_curr: Default::default(),
-            num_poc_lt_foll: Default::default(),
-            poc_st_curr_before: Default::default(),
-            poc_st_curr_after: Default::default(),
-            poc_st_foll: Default::default(),
-            poc_lt_curr: Default::default(),
-            poc_lt_foll: Default::default(),
             ref_pic_list0: Default::default(),
             ref_pic_list1: Default::default(),
             cur_backend_pic: Default::default(),
             dpb: Default::default(),
-            ref_pic_set_lt_curr: Default::default(),
-            ref_pic_set_st_curr_after: Default::default(),
-            ref_pic_set_st_curr_before: Default::default(),
-            ref_pic_set_st_foll: Default::default(),
-            ref_pic_set_lt_foll: Default::default(),
+            last_independent_slice_header: Default::default(),
         })
     }
 
     /// Whether the stream parameters have changed, indicating that a negotiation window has opened.
-    fn negotiation_possible(_sps: &Sps, _dpb: (), _current_resolution: Resolution) -> bool {
-        todo!()
+    fn negotiation_possible(
+        sps: &Sps,
+        dpb: &Dpb<T>,
+        old_negotiation_info: &NegotiationInfo,
+    ) -> bool {
+        let negotiation_info = NegotiationInfo::from(sps);
+        let max_dpb_size = std::cmp::min(sps.max_dpb_size(), 16);
+        let prev_max_dpb_size = dpb.max_num_pics();
+
+        *old_negotiation_info != negotiation_info || prev_max_dpb_size != max_dpb_size
     }
 
-    fn peek_sps(parser: &mut Parser, bitstream: &[u8]) -> Option<Sps> {
+    fn peek_sps(parser: &mut Parser, bitstream: &[u8]) -> anyhow::Result<Option<Sps>> {
         let mut cursor = Cursor::new(bitstream);
 
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             if matches!(nalu.header().type_(), NaluType::SpsNut) {
-                let sps = parser.parse_sps(&nalu).ok()?;
-                return Some(sps.clone());
+                let sps = parser.parse_sps(&nalu)?;
+                return Ok(Some(sps.clone()));
             }
         }
 
-        None
+        Ok(None)
+    }
+
+    /// Apply the parameters of `sps` to the decoder.
+    fn apply_sps(&mut self, sps: &Sps) {
+        self.drain();
+        self.negotiation_info = NegotiationInfo::from(sps);
+
+        let max_dpb_size = std::cmp::min(sps.max_dpb_size(), 16);
+        self.dpb.set_max_num_pics(max_dpb_size);
     }
 
     // See 8.3.2, Note 2.
     fn st_ref_pic_set<'a>(hdr: &'a SliceHeader, sps: &'a Sps) -> &'a ShortTermRefPicSet {
-        if hdr.curr_rps_idx() == sps.num_long_term_ref_pics_sps() {
+        if hdr.curr_rps_idx() == sps.num_short_term_ref_pic_sets() {
             hdr.short_term_ref_pic_set()
         } else {
             &sps.short_term_ref_pic_set()[usize::from(hdr.curr_rps_idx())]
@@ -250,25 +331,26 @@ where
     }
 
     // See 8.3.2.
-    fn decode_rps(&mut self, hdr: &SliceHeader) -> anyhow::Result<()> {
+    fn decode_rps(&mut self, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
+        let hdr = slice.header();
         let cur_pic = self.cur_pic.as_ref().unwrap();
 
         if cur_pic.nal_unit_type.is_irap() && cur_pic.no_rasl_output_flag {
             self.dpb.mark_all_as_unused_for_ref();
         }
 
-        if cur_pic.is_irap {
-            self.poc_st_curr_before = Default::default();
-            self.poc_st_curr_after = Default::default();
-            self.poc_st_foll = Default::default();
-            self.poc_lt_curr = Default::default();
-            self.poc_lt_foll = Default::default();
+        if slice.nalu().header().type_().is_idr() {
+            self.rps.poc_st_curr_before = Default::default();
+            self.rps.poc_st_curr_after = Default::default();
+            self.rps.poc_st_foll = Default::default();
+            self.rps.poc_lt_curr = Default::default();
+            self.rps.poc_lt_foll = Default::default();
 
-            self.num_poc_st_curr_before = 0;
-            self.num_poc_st_curr_after = 0;
-            self.num_poc_st_foll = 0;
-            self.num_poc_lt_curr = 0;
-            self.num_poc_lt_foll = 0;
+            self.rps.num_poc_st_curr_before = 0;
+            self.rps.num_poc_st_curr_after = 0;
+            self.rps.num_poc_st_foll = 0;
+            self.rps.num_poc_lt_curr = 0;
+            self.rps.num_poc_lt_foll = 0;
         } else {
             // Equation 8-5
             let pps = self
@@ -288,31 +370,31 @@ where
                 let poc = cur_pic.pic_order_cnt_val + curr_st_rps.delta_poc_s0()[i];
 
                 if curr_st_rps.used_by_curr_pic_s0()[i] {
-                    self.poc_st_curr_before[j] = poc;
+                    self.rps.poc_st_curr_before[j] = poc;
                     j += 1;
                 } else {
-                    self.poc_st_foll[k] = poc;
+                    self.rps.poc_st_foll[k] = poc;
                     k += 1;
                 }
             }
 
-            self.num_poc_st_curr_before = j as _;
+            self.rps.num_poc_st_curr_before = j as _;
 
             let mut j = 0;
             for i in 0..usize::from(curr_st_rps.num_positive_pics()) {
                 let poc = cur_pic.pic_order_cnt_val + curr_st_rps.delta_poc_s1()[i];
 
                 if curr_st_rps.used_by_curr_pic_s1()[i] {
-                    self.poc_st_curr_after[j] = poc;
+                    self.rps.poc_st_curr_after[j] = poc;
                     j += 1;
                 } else {
-                    self.poc_st_foll[k] = poc;
+                    self.rps.poc_st_foll[k] = poc;
                     k += 1;
                 }
             }
 
-            self.num_poc_st_curr_after = j as _;
-            self.num_poc_st_foll = k as _;
+            self.rps.num_poc_st_curr_after = j as _;
+            self.rps.num_poc_st_foll = k as _;
 
             let mut j = 0;
             let mut k = 0;
@@ -328,18 +410,20 @@ where
                 }
 
                 if hdr.used_by_curr_pic_lt()[i] {
-                    self.poc_lt_curr[j] = poc_lt;
-                    self.curr_delta_poc_msb_present_flag[j] = hdr.delta_poc_msb_present_flag()[i];
+                    self.rps.poc_lt_curr[j] = poc_lt;
+                    self.rps.curr_delta_poc_msb_present_flag[j] =
+                        hdr.delta_poc_msb_present_flag()[i];
                     j += 1;
                 } else {
-                    self.poc_lt_foll[k] = poc_lt;
-                    self.foll_delta_poc_msb_present_flag[k] = hdr.delta_poc_msb_present_flag()[i];
+                    self.rps.poc_lt_foll[k] = poc_lt;
+                    self.rps.foll_delta_poc_msb_present_flag[k] =
+                        hdr.delta_poc_msb_present_flag()[i];
                     k += 1;
                 }
             }
 
-            self.num_poc_lt_curr = j as _;
-            self.num_poc_lt_foll = k as _;
+            self.rps.num_poc_lt_curr = j as _;
+            self.rps.num_poc_lt_foll = k as _;
         }
 
         self.derive_and_mark_rps(hdr)?;
@@ -361,48 +445,48 @@ where
         let max_pic_order_cnt_lsb = 2i32.pow((sps.log2_max_pic_order_cnt_lsb_minus4() + 4).into());
 
         // Equation 8-6
-        for i in 0..self.num_poc_lt_curr {
-            if !self.curr_delta_poc_msb_present_flag[i] {
-                let poc = self.poc_lt_curr[i] & (max_pic_order_cnt_lsb - 1);
-                self.ref_pic_set_lt_curr[i] = self.dpb.find_ref_by_poc(poc);
+        for i in 0..self.rps.num_poc_lt_curr {
+            if !self.rps.curr_delta_poc_msb_present_flag[i] {
+                let poc = self.rps.poc_lt_curr[i] & (max_pic_order_cnt_lsb - 1);
+                self.rps.ref_pic_set_lt_curr[i] = self.dpb.find_ref_by_poc(poc);
             } else {
-                let poc = self.poc_lt_curr[i];
-                self.ref_pic_set_lt_curr[i] = self.dpb.find_ref_by_poc(poc);
+                let poc = self.rps.poc_lt_curr[i];
+                self.rps.ref_pic_set_lt_curr[i] = self.dpb.find_ref_by_poc(poc);
             }
         }
 
-        for i in 0..self.num_poc_lt_foll {
-            if !self.foll_delta_poc_msb_present_flag[i] {
-                let poc = self.poc_lt_foll[i] & (max_pic_order_cnt_lsb - 1);
-                self.ref_pic_set_lt_foll[i] = self.dpb.find_ref_by_poc(poc);
+        for i in 0..self.rps.num_poc_lt_foll {
+            if !self.rps.foll_delta_poc_msb_present_flag[i] {
+                let poc = self.rps.poc_lt_foll[i] & (max_pic_order_cnt_lsb - 1);
+                self.rps.ref_pic_set_lt_foll[i] = self.dpb.find_ref_by_poc(poc);
             } else {
-                let poc = self.poc_lt_foll[i];
-                self.ref_pic_set_lt_foll[i] = self.dpb.find_ref_by_poc(poc);
+                let poc = self.rps.poc_lt_foll[i];
+                self.rps.ref_pic_set_lt_foll[i] = self.dpb.find_ref_by_poc(poc);
             }
         }
 
-        for pic in self.ref_pic_set_lt_curr.iter().flatten() {
+        for pic in self.rps.ref_pic_set_lt_curr.iter().flatten() {
             pic.0.borrow_mut().reference = Reference::LongTerm;
         }
 
-        for pic in self.ref_pic_set_lt_foll.iter().flatten() {
+        for pic in self.rps.ref_pic_set_lt_foll.iter().flatten() {
             pic.0.borrow_mut().reference = Reference::LongTerm;
         }
 
         // Equation 8-7
-        for i in 0..self.num_poc_st_curr_before {
-            let poc = self.poc_st_curr_before[i];
-            self.ref_pic_set_st_curr_before[i] = self.dpb.find_short_term_ref_by_poc(poc);
+        for i in 0..self.rps.num_poc_st_curr_before {
+            let poc = self.rps.poc_st_curr_before[i];
+            self.rps.ref_pic_set_st_curr_before[i] = self.dpb.find_short_term_ref_by_poc(poc);
         }
 
-        for i in 0..self.num_poc_st_curr_after {
-            let poc = self.poc_st_curr_after[i];
-            self.ref_pic_set_st_curr_after[i] = self.dpb.find_short_term_ref_by_poc(poc);
+        for i in 0..self.rps.num_poc_st_curr_after {
+            let poc = self.rps.poc_st_curr_after[i];
+            self.rps.ref_pic_set_st_curr_after[i] = self.dpb.find_short_term_ref_by_poc(poc);
         }
 
-        for i in 0..self.num_poc_st_foll {
-            let poc = self.poc_st_foll[i];
-            self.ref_pic_set_st_foll[i] = self.dpb.find_short_term_ref_by_poc(poc);
+        for i in 0..self.rps.num_poc_st_foll {
+            let poc = self.rps.poc_st_foll[i];
+            self.rps.ref_pic_set_st_foll[i] = self.dpb.find_short_term_ref_by_poc(poc);
         }
 
         // 4. All reference pictures in the DPB that are not included in
@@ -415,21 +499,29 @@ where
                 None => false,
             };
 
-            if !self.ref_pic_set_lt_curr.iter().any(find_predicate)
-                && !self.ref_pic_set_lt_foll.iter().any(find_predicate)
-                && !self.ref_pic_set_st_curr_after.iter().any(find_predicate)
-                && !self.ref_pic_set_st_curr_before.iter().any(find_predicate)
-                && !self.ref_pic_set_st_foll.iter().any(find_predicate)
+            if !self.rps.ref_pic_set_lt_curr.iter().any(find_predicate)
+                && !self.rps.ref_pic_set_lt_foll.iter().any(find_predicate)
+                && !self
+                    .rps
+                    .ref_pic_set_st_curr_after
+                    .iter()
+                    .any(find_predicate)
+                && !self
+                    .rps
+                    .ref_pic_set_st_curr_before
+                    .iter()
+                    .any(find_predicate)
+                && !self.rps.ref_pic_set_st_foll.iter().any(find_predicate)
             {
                 dpb_pic.0.borrow_mut().reference = Reference::None;
             }
         }
 
-        let total_rps_len = self.ref_pic_set_lt_curr.iter().count()
-            + self.ref_pic_set_lt_foll.iter().count()
-            + self.ref_pic_set_st_curr_after.iter().count()
-            + self.ref_pic_set_st_curr_before.iter().count()
-            + self.ref_pic_set_st_foll.iter().count();
+        let total_rps_len = self.rps.ref_pic_set_lt_curr.iter().count()
+            + self.rps.ref_pic_set_lt_foll.iter().count()
+            + self.rps.ref_pic_set_st_curr_after.iter().count()
+            + self.rps.ref_pic_set_st_curr_before.iter().count()
+            + self.rps.ref_pic_set_st_foll.iter().count();
 
         if self.dpb.entries().len() != total_rps_len {
             log::warn!("A reference pic is in more than one RPS list. This is against the specification. See 8.3.2. NOTE 5")
@@ -470,8 +562,8 @@ where
         assert!(num_rps_curr_temp_list0 as usize <= MAX_DPB_SIZE);
         while r_idx < num_rps_curr_temp_list0 {
             let mut i = 0;
-            while i < self.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_st_curr_before[i]
+            while i < self.rps.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.rps.ref_pic_set_st_curr_before[i]
                     .clone()
                     .map(|e| RefPicListEntry::DpbEntry(e));
 
@@ -480,8 +572,8 @@ where
             }
 
             let mut i = 0;
-            while i < self.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_st_curr_after[i]
+            while i < self.rps.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.rps.ref_pic_set_st_curr_after[i]
                     .clone()
                     .map(|e| RefPicListEntry::DpbEntry(e));
 
@@ -490,8 +582,8 @@ where
             }
 
             let mut i = 0;
-            while i < self.num_poc_lt_curr && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_lt_curr[i]
+            while i < self.rps.num_poc_lt_curr && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.rps.ref_pic_set_lt_curr[i]
                     .clone()
                     .map(|e| RefPicListEntry::DpbEntry(e));
 
@@ -541,8 +633,8 @@ where
             assert!(num_rps_curr_temp_list1 as usize <= MAX_DPB_SIZE);
             while r_idx < num_rps_curr_temp_list1 {
                 let mut i = 0;
-                while i < self.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_st_curr_after[i]
+                while i < self.rps.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.rps.ref_pic_set_st_curr_after[i]
                         .clone()
                         .map(|e| RefPicListEntry::DpbEntry(e));
                     i += 1;
@@ -550,8 +642,8 @@ where
                 }
 
                 let mut i = 0;
-                while i < self.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_st_curr_before[i]
+                while i < self.rps.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.rps.ref_pic_set_st_curr_before[i]
                         .clone()
                         .map(|e| RefPicListEntry::DpbEntry(e));
                     i += 1;
@@ -559,8 +651,8 @@ where
                 }
 
                 let mut i = 0;
-                while i < self.num_poc_lt_curr && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_lt_curr[i]
+                while i < self.rps.num_poc_lt_curr && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.rps.ref_pic_set_lt_curr[i]
                         .clone()
                         .map(|e| RefPicListEntry::DpbEntry(e));
                     i += 1;
@@ -598,6 +690,20 @@ where
         self.ready_queue.extend(pics.into_iter().map(|h| h.1));
 
         self.dpb.clear();
+    }
+
+    fn clear_ref_lists(&mut self) {
+        self.ref_pic_list0 = Default::default();
+        self.ref_pic_list1 = Default::default();
+        self.rps.ref_pic_set_lt_curr = Default::default();
+        self.rps.ref_pic_set_st_curr_after = Default::default();
+        self.rps.ref_pic_set_st_curr_before = Default::default();
+
+        self.rps.num_poc_lt_curr = Default::default();
+        self.rps.num_poc_lt_foll = Default::default();
+        self.rps.num_poc_st_curr_after = Default::default();
+        self.rps.num_poc_st_curr_before = Default::default();
+        self.rps.num_poc_st_foll = Default::default();
     }
 
     /// Bumps the DPB if needed.
@@ -661,7 +767,6 @@ where
             .get_sps(pps.seq_parameter_set_id())
             .context("Invalid SPS in handle_picture")?;
 
-        let hdr = slice.header();
         self.cur_pps_id = pps.pic_parameter_set_id();
         self.cur_sps_id = pps.seq_parameter_set_id();
         self.cur_pic = Some(PictureData::new_from_slice(
@@ -673,12 +778,13 @@ where
             timestamp,
         ));
 
-        self.decode_rps(hdr)?;
+        let cur_pic = self.cur_pic.as_ref().unwrap();
+        log::debug!("Decode picture POC {:?}", cur_pic.pic_order_cnt_val);
+
+        self.decode_rps(slice)?;
         self.update_dpb_before_decoding()?;
 
         let cur_pic = self.cur_pic.as_ref().unwrap();
-
-        log::debug!("Decode picture POC {:?}", cur_pic.pic_order_cnt_val);
 
         let mut cur_backend_pic = self.backend.new_picture(cur_pic, timestamp)?;
 
@@ -692,6 +798,7 @@ where
                 .get_pps(self.cur_pps_id)
                 .context("Invalid PPS in handle_picture")?,
             &self.dpb,
+            &self.rps,
             slice,
         )?;
 
@@ -728,11 +835,7 @@ where
             self.prev_tid_0_pic = Some(pic.clone());
         }
 
-        self.ref_pic_list0 = Default::default();
-        self.ref_pic_list1 = Default::default();
-        self.ref_pic_set_lt_curr = Default::default();
-        self.ref_pic_set_st_curr_after = Default::default();
-        self.ref_pic_set_st_curr_before = Default::default();
+        self.clear_ref_lists();
 
         let bumped = self
             .bump_as_needed(BumpingType::AfterDecoding)?
@@ -754,10 +857,11 @@ where
 
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().type_() {
+                NaluType::VpsNut => {
+                    self.parser.parse_vps(&nalu)?;
+                }
                 NaluType::SpsNut => {
-                    // Clone to avoid double-borrow on `self`.
-                    let _sps = self.parser.parse_sps(&nalu)?.clone();
-                    // self.apply_sps(&sps);
+                    self.parser.parse_sps(&nalu)?;
                 }
 
                 NaluType::PpsNut => {
@@ -780,14 +884,68 @@ where
                 | NaluType::RaslN
                 | NaluType::RaslR
                 | NaluType::CraNut => {
-                    let slice = self.parser.parse_slice_header(nalu)?;
+                    if matches!(self.decoding_state, DecodingState::AwaitingFormat(_)) {
+                        // If we have a forced a renegotiation when processing a
+                        // dependent slice, skip any further slices of this picture.
+                        // TODO: How are we giving back the NALUs so that the client can retry?
+                        continue;
+                    }
+
+                    let mut slice = self.parser.parse_slice_header(nalu)?;
+
+                    let first_slice_segment_in_pic_flag =
+                        slice.header().first_slice_segment_in_pic_flag();
+
+                    if slice.header().dependent_slice_segment_flag() {
+                        let previous_independent_header = self.last_independent_slice_header.as_ref().ok_or(anyhow!("Cannot process an dependent slice without first processing and independent one"))?.clone();
+                        slice.replace_header(previous_independent_header)?;
+
+                        let pps = self
+                            .parser
+                            .get_pps(slice.header().pic_parameter_set_id())
+                            .context("Invalid SPS when processing a dependent slice")?;
+
+                        let sps = self
+                            .parser
+                            .get_sps(pps.seq_parameter_set_id())
+                            .context("Invalid PPS when processing a dependent slice")?;
+
+                        // A dependent slice may refer to a previous SPS which
+                        // is not the one currently in use.
+                        if Self::negotiation_possible(sps, &self.dpb, &self.negotiation_info) {
+                            self.backend.new_sequence(sps)?;
+                            self.decoding_state = DecodingState::AwaitingFormat(sps.clone());
+                            continue;
+                        }
+                    } else {
+                        self.last_independent_slice_header = Some(slice.header().clone());
+                    }
+
                     if self.cur_pic.is_none() {
+                        if self.backend.surface_pool().num_free_surfaces() == 0 {
+                            return Err(DecodeError::CheckEvents);
+                        }
+
                         self.handle_picture(timestamp, &slice)?;
-                    } else if slice.header().first_slice_segment_in_pic_flag() {
+                    } else if first_slice_segment_in_pic_flag {
                         // We have identified a new picture and must submit the
                         // old one before proceeding.
                         let (picture, handle) = self.submit_picture()?;
                         self.finish_picture(picture, handle)?;
+
+                        // TODO: the right place to check is before starting a
+                        // picture, all other operations do not consume
+                        // resources from the backend. Maybe we should backport
+                        // this idea to h.264, as it will also crash if enough
+                        // slices make this path be taken too much, which means
+                        // that the client would not receive
+                        // DecodeError::CheckEvents (in h264's implementation),
+                        // but rather "OutOfResources" from the backend, which
+                        // will abort ccdec.
+                        if self.backend.surface_pool().num_free_surfaces() == 0 {
+                            return Err(DecodeError::CheckEvents);
+                        }
+
                         self.handle_picture(timestamp, &slice)?;
                     }
 
@@ -830,11 +988,11 @@ where
     T: DecodedHandle + Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
-        let sps = Self::peek_sps(&mut self.parser, bitstream);
+        let sps = Self::peek_sps(&mut self.parser, bitstream)?;
 
         if let Some(sps) = sps {
-            if Self::negotiation_possible(&sps, (), self.coded_resolution) {
-                // self.backend.new_sequence(&sps)?;
+            if Self::negotiation_possible(&sps, &self.dpb, &self.negotiation_info) {
+                self.backend.new_sequence(&sps)?;
                 self.decoding_state = DecodingState::AwaitingFormat(sps);
             }
         }
@@ -849,8 +1007,8 @@ where
     }
 
     fn flush(&mut self) {
-        // self.drain();
-        todo!()
+        self.drain();
+        self.decoding_state = DecodingState::AwaitingStreamInfo;
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<M>> {
@@ -862,16 +1020,12 @@ where
             .or_else(|| {
                 if let DecodingState::AwaitingFormat(sps) = &self.decoding_state {
                     Some(DecoderEvent::FormatChanged(Box::new(
-                        StatelessDecoderFormatNegotiator::new(
-                            self,
-                            sps.clone(),
-                            |decoder, _sps| {
-                                // Apply the SPS settings to the decoder so we don't enter the AwaitingFormat state
-                                // on the next decode() call.
-                                // decoder.apply_sps(sps);
-                                decoder.decoding_state = DecodingState::Decoding;
-                            },
-                        ),
+                        StatelessDecoderFormatNegotiator::new(self, sps.clone(), |decoder, sps| {
+                            // Apply the SPS settings to the decoder so we don't enter the AwaitingFormat state
+                            // on the next decode() call.
+                            decoder.apply_sps(sps);
+                            decoder.decoding_state = DecodingState::Decoding;
+                        }),
                     )))
                 } else {
                     None
@@ -899,5 +1053,146 @@ where
                 "current decoder state does not allow format change"
             )),
         }
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+
+    use crate::decoder::stateless::h265::Decoder;
+    use crate::decoder::stateless::tests::test_decode_stream;
+    use crate::decoder::stateless::tests::TestStream;
+    use crate::decoder::BlockingMode;
+    use crate::utils::simple_playback_loop;
+    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::H265FrameIterator;
+    use crate::DecodedFormat;
+
+    /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
+    fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
+        let decoder = Decoder::new_dummy(blocking_mode).unwrap();
+
+        test_decode_stream(
+            |d, s, f| {
+                simple_playback_loop(
+                    d,
+                    H265FrameIterator::new(s),
+                    f,
+                    &mut simple_playback_loop_owned_surfaces,
+                    DecodedFormat::NV12,
+                    blocking_mode,
+                )
+            },
+            decoder,
+            test,
+            false,
+            false,
+        );
+    }
+
+    /// A 64x64 progressive byte-stream encoded I-frame to make it easier to
+    /// spot errors on the libva trace.
+    /// Encoded with the following GStreamer pipeline:
+    ///
+    /// gst-launch-1.0 videotestsrc num-buffers=1 ! video/x-raw,format=I420,width=64,height=64 ! x265enc ! video/x-h265,profile=main ! filesink location="64x64-I.h265"
+    pub const DECODE_64X64_PROGRESSIVE_I: TestStream = TestStream {
+        stream: include_bytes!("../../codec/h265/test_data/64x64-I.h265"),
+        crcs: include_str!("../../codec/h265/test_data/64x64-I.h265.crc"),
+    };
+
+    #[test]
+    fn test_64x64_progressive_i_block() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_64x64_progressive_i_nonblock() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I, BlockingMode::NonBlocking);
+    }
+
+    /// A 64x64 progressive byte-stream encoded I-frame and P-frame to make
+    /// it easier to spot errors on the libva trace.
+    /// Encoded with the following GStreamer pipeline:
+    /// gst-launch-1.0 videotestsrc num-buffers=2 ! video/x-raw,format=I420,width=64,height=64 ! x265enc option-string="b-adapt=0" ! video/x-h265,profile=main ! filesink location="64x64-I-P.h265"
+    pub const DECODE_64X64_PROGRESSIVE_I_P: TestStream = TestStream {
+        stream: include_bytes!("../../codec/h265/test_data/64x64-I-P.h265"),
+        crcs: include_str!("../../codec/h265/test_data/64x64-I-P.h265.crc"),
+    };
+
+    #[test]
+    fn test_64x64_progressive_i_p_block() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_64x64_progressive_i_p_nonblock() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P, BlockingMode::NonBlocking);
+    }
+
+    /// A 64x64 progressive byte-stream encoded I-P-B-P sequence to make it
+    /// easier to it easier to spot errors on the libva trace.
+    /// Encoded with the following GStreamer pipeline:
+    /// gst-launch-1.0 videotestsrc num-buffers=3 ! video/x-raw,format=I420,width=64,height=64 ! x265enc option-string="b-adapt=0:bframes=1" ! video/x-h265,profile=main ! filesink location="64x64-I-P-B-P.h265"
+    pub const DECODE_64X64_PROGRESSIVE_I_P_B_P: TestStream = TestStream {
+        stream: include_bytes!("../../codec/h265/test_data/64x64-I-P-B-P.h265"),
+        crcs: include_str!("../../codec/h265/test_data/64x64-I-P-B-P.h265.crc"),
+    };
+
+    #[test]
+    fn test_64x64_progressive_i_p_b_p_block() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P_B_P, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_64x64_progressive_i_p_b_p_nonblock() {
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P_B_P, BlockingMode::NonBlocking);
+    }
+
+    /// Same as Chromium's test-25fps.h265
+    pub const DECODE_TEST_25FPS: TestStream = TestStream {
+        stream: include_bytes!("../../codec/h265/test_data/test-25fps.h265"),
+        crcs: include_str!("../../codec/h265/test_data/test-25fps.h265.crc"),
+    };
+
+    #[test]
+    fn test_25fps_block() {
+        test_decoder_dummy(&DECODE_TEST_25FPS, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_25fps_nonblock() {
+        test_decoder_dummy(&DECODE_TEST_25FPS, BlockingMode::NonBlocking);
+    }
+
+    /// Same as Chromium's bear.h265
+    pub const DECODE_BEAR: TestStream = TestStream {
+        stream: include_bytes!("../../codec/h265/test_data/bear.h265"),
+        crcs: include_str!("../../codec/h265/test_data/bear.h265.crc"),
+    };
+
+    #[test]
+    fn test_bear_block() {
+        test_decoder_dummy(&DECODE_BEAR, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_bear_nonblock() {
+        test_decoder_dummy(&DECODE_BEAR, BlockingMode::NonBlocking);
+    }
+
+    /// Same as Chromium's bbb.h265
+    pub const DECODE_BBB: TestStream = TestStream {
+        stream: include_bytes!("../../codec/h265/test_data/bbb.h265"),
+        crcs: include_str!("../../codec/h265/test_data/bbb.h265.crc"),
+    };
+
+    #[test]
+    fn test_bbb_block() {
+        test_decoder_dummy(&DECODE_BBB, BlockingMode::Blocking);
+    }
+
+    #[test]
+    fn test_bbb_nonblock() {
+        test_decoder_dummy(&DECODE_BBB, BlockingMode::NonBlocking);
     }
 }

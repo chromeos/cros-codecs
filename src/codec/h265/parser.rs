@@ -223,6 +223,23 @@ pub enum Level {
     L6_2 = 186,
 }
 
+/// H265 profiles. See A.3.
+#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Profile {
+    #[default]
+    Main = 1,
+    Main10 = 2,
+    MainStill = 3,
+    RangeExtensions = 4,
+    HighThroughput = 5,
+    MultiviewMain = 6,
+    ScalableMain = 7,
+    ThreeDMain = 8,
+    ScreenContentCoding = 9,
+    ScalableRangeExtensions = 10,
+    HighThroughputScreenContentCoding = 11,
+}
+
 /// A H.265 Video Parameter Set.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Vps {
@@ -540,7 +557,7 @@ pub struct ProfileTierLevel {
     /// layer to which the profile_tier_level( ) syntax structure applies.
     general_inbld_flag: bool,
     /// Indicates a level to which the CVS conforms as specified in Annex A.
-    general_level_idc: u8,
+    general_level_idc: Level,
     /// Sub-layer syntax element.
     sub_layer_profile_present_flag: [bool; 6],
     /// Sub-layer syntax element.
@@ -584,7 +601,7 @@ pub struct ProfileTierLevel {
     /// Sub-layer syntax element.
     sub_layer_inbld_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_level_idc: [u8; 6],
+    sub_layer_level_idc: [Level; 6],
 }
 
 impl ProfileTierLevel {
@@ -664,7 +681,7 @@ impl ProfileTierLevel {
         self.general_inbld_flag
     }
 
-    pub fn general_level_idc(&self) -> u8 {
+    pub fn general_level_idc(&self) -> Level {
         self.general_level_idc
     }
 
@@ -752,8 +769,30 @@ impl ProfileTierLevel {
         self.sub_layer_inbld_flag
     }
 
-    pub fn sub_layer_level_idc(&self) -> [u8; 6] {
+    pub fn sub_layer_level_idc(&self) -> [Level; 6] {
         self.sub_layer_level_idc
+    }
+
+    pub fn max_luma_ps(&self) -> u32 {
+        // See Table A.8.
+        match self.general_level_idc {
+            Level::L1 => 36864,
+            Level::L2 => 122880,
+            Level::L2_1 => 245760,
+            Level::L3 => 552960,
+            Level::L3_1 => 983040,
+            Level::L4 | Level::L4_1 => 2228224,
+            Level::L5 | Level::L5_1 | Level::L5_2 => 8912896,
+            _ => 35651584,
+        }
+    }
+
+    pub fn max_dpb_pic_buf(&self) -> u32 {
+        if self.general_profile_idc >= 1 && self.general_profile_idc <= 5 {
+            6
+        } else {
+            7
+        }
     }
 }
 
@@ -1123,6 +1162,8 @@ pub struct Sps {
     wp_offset_half_range_c: u32,
     /// Equivalent to MaxTbLog2SizeY in the specification.
     max_tb_log2_size_y: u32,
+    /// Equivalent to PicSizeInSamplesY in the specification.
+    pic_size_in_samples_y: u32,
 }
 
 impl Sps {
@@ -1350,6 +1391,10 @@ impl Sps {
         self.pic_size_in_ctbs_y
     }
 
+    pub fn pic_size_in_samples_y(&self) -> u32 {
+        self.pic_size_in_samples_y
+    }
+
     pub fn chroma_array_type(&self) -> u8 {
         self.chroma_array_type
     }
@@ -1376,6 +1421,32 @@ impl Sps {
 
     pub fn range_extension_flag(&self) -> bool {
         self.range_extension_flag
+    }
+
+    pub fn max_dpb_size(&self) -> usize {
+        let max_luma_ps = self.profile_tier_level.max_luma_ps();
+        let max_dpb_pic_buf = self.profile_tier_level.max_dpb_pic_buf();
+
+        // Equation A-2
+        let max = if self.pic_size_in_samples_y <= (max_luma_ps >> 2) {
+            std::cmp::min(4 * max_dpb_pic_buf, 16)
+        } else if self.pic_size_in_samples_y <= (max_luma_ps >> 1) {
+            std::cmp::min(2 * max_dpb_pic_buf, 16)
+        } else if self.pic_size_in_samples_y <= ((3 * max_luma_ps) >> 2) {
+            std::cmp::min(4 * max_dpb_pic_buf / 3, 16)
+        } else {
+            max_dpb_pic_buf
+        };
+
+        max as usize
+    }
+
+    pub fn width(&self) -> u16 {
+        self.pic_width_in_luma_samples
+    }
+
+    pub fn height(&self) -> u16 {
+        self.pic_height_in_luma_samples
     }
 }
 
@@ -2561,6 +2632,8 @@ pub struct SliceHeader {
     n_emulation_prevention_bytes: u32,
     /// Same as CurrRpsIdx in the specification.
     curr_rps_idx: u8,
+    /// Number of bits taken by st_ref_pic_set minus Emulation Prevention Bytes.
+    st_rps_bits: u32,
 }
 
 impl SliceHeader {
@@ -2775,6 +2848,10 @@ impl SliceHeader {
     pub fn short_term_ref_pic_set(&self) -> &ShortTermRefPicSet {
         &self.short_term_ref_pic_set
     }
+
+    pub fn st_rps_bits(&self) -> u32 {
+        self.st_rps_bits
+    }
 }
 
 impl Default for SliceHeader {
@@ -2832,6 +2909,7 @@ impl Default for SliceHeader {
             header_bit_size: Default::default(),
             n_emulation_prevention_bytes: Default::default(),
             curr_rps_idx: Default::default(),
+            st_rps_bits: Default::default(),
         }
     }
 }
@@ -2854,6 +2932,34 @@ impl<T> Slice<T> {
     /// Get a reference to the slice's nalu.
     pub fn nalu(&self) -> &Nalu<T> {
         &self.nalu
+    }
+
+    /// Sets the header for dependent slices by copying from an independent
+    /// slice.
+    pub fn replace_header(&mut self, header: SliceHeader) -> anyhow::Result<()> {
+        if !self.header.dependent_slice_segment_flag {
+            Err(anyhow!(
+                "Replacing the slice header is only possible for dependent slices"
+            ))
+        } else {
+            // We have to keep these.
+            // TODO: do we have to keep more? Maybe the computed variables must be kept too?
+            let first_slice_segment_in_pic_flag = header.first_slice_segment_in_pic_flag;
+            let no_output_of_prior_pics_flag = header.no_output_of_prior_pics_flag;
+            let pic_parameter_set_id = header.pic_parameter_set_id;
+            let dependent_slice_segment_flag = header.dependent_slice_segment_flag;
+            let segment_address = header.segment_address;
+
+            self.header = header;
+
+            self.header.first_slice_segment_in_pic_flag = first_slice_segment_in_pic_flag;
+            self.header.no_output_of_prior_pics_flag = no_output_of_prior_pics_flag;
+            self.header.pic_parameter_set_id = pic_parameter_set_id;
+            self.header.dependent_slice_segment_flag = dependent_slice_segment_flag;
+            self.header.segment_address = segment_address;
+
+            Ok(())
+        }
     }
 }
 
@@ -3537,7 +3643,7 @@ impl Parser {
             vps.max_latency_increase_plus1[i] = r.read_ue()?;
 
             if i > 0 {
-                if vps.max_dec_pic_buffering_minus1[i] >= vps.max_dec_pic_buffering_minus1[i - 1] {
+                if vps.max_dec_pic_buffering_minus1[i] < vps.max_dec_pic_buffering_minus1[i - 1] {
                     return Err(anyhow!(
                         "Invalid max_dec_pic_buffering_minus1[{}]: {}",
                         i,
@@ -3545,7 +3651,7 @@ impl Parser {
                     ));
                 }
 
-                if vps.max_num_reorder_pics[i] >= vps.max_num_reorder_pics[i - 1] {
+                if vps.max_num_reorder_pics[i] < vps.max_num_reorder_pics[i - 1] {
                     return Err(anyhow!(
                         "Invalid max_num_reorder_pics[{}]: {}",
                         i,
@@ -3732,7 +3838,9 @@ impl Parser {
             }
         }
 
-        ptl.general_level_idc = r.read_bits(8)?;
+        let level: u8 = r.read_bits(8)?;
+        ptl.general_level_idc =
+            Level::n(level).with_context(|| format!("Unsupported level {}", level))?;
 
         for i in 0..sps_max_sub_layers_minus_1 as usize {
             ptl.sub_layer_profile_present_flag[i] = r.read_bit()?;
@@ -3830,7 +3938,9 @@ impl Parser {
                 }
 
                 if ptl.sub_layer_level_present_flag[i] {
-                    ptl.sub_layer_level_idc[i] = r.read_bits(8)?;
+                    let level: u8 = r.read_bits(8)?;
+                    ptl.sub_layer_level_idc[i] =
+                        Level::n(level).with_context(|| format!("Unsupported level {}", level))?;
                 }
             }
         }
@@ -3990,7 +4100,7 @@ impl Parser {
 
             let ref_rps_idx = st_rps_idx - (st.delta_idx_minus1 + 1);
             let delta_rps =
-                ((1 - 2 * st.delta_rps_sign as u16) * (st.abs_delta_rps_minus1 + 1)) as i32;
+                (1 - 2 * st.delta_rps_sign as i32) * (st.abs_delta_rps_minus1 as i32 + 1);
 
             let ref_st = sps
                 .short_term_ref_pic_set
@@ -3998,9 +4108,11 @@ impl Parser {
                 .ok_or(anyhow!("Invalid ref_rps_idx"))?;
 
             let mut used_by_curr_pic_flag = [false; 64];
-            let mut use_delta_flag = [false; 64];
 
-            for j in 0..ref_st.num_delta_pocs as usize {
+            // 7.4.8 - defaults to 1 if not present
+            let mut use_delta_flag = [true; 64];
+
+            for j in 0..=ref_st.num_delta_pocs as usize {
                 used_by_curr_pic_flag[j] = r.read_bit()?;
                 if !used_by_curr_pic_flag[j] {
                     use_delta_flag[j] = r.read_bit()?;
@@ -4009,7 +4121,14 @@ impl Parser {
 
             // (7-61)
             let mut i = 0;
-            for j in (0..usize::from(ref_st.num_positive_pics) - 1).rev() {
+            // Ranges are [a,b[, but the real loop is [b, a], i.e.
+            // [num_positive_pics - 1, 0]. Use ..= so that b is included when
+            // rev() is called.
+            for j in (0..=isize::from(ref_st.num_positive_pics) - 1)
+                .rev()
+                .take_while(|j| *j >= 0)
+                .map(|j| j as usize)
+            {
                 let d_poc = ref_st.delta_poc_s1[j] + delta_rps;
                 if d_poc < 0 && use_delta_flag[usize::from(ref_st.num_negative_pics) + j] {
                     st.delta_poc_s0[i] = d_poc;
@@ -4023,6 +4142,8 @@ impl Parser {
             if delta_rps < 0 && use_delta_flag[ref_st.num_delta_pocs as usize] {
                 st.delta_poc_s0[i] = delta_rps;
                 st.used_by_curr_pic_s0[i] = used_by_curr_pic_flag[ref_st.num_delta_pocs as usize];
+
+                i += 1;
             }
 
             // Let's *not* change the original algorithm in any way.
@@ -4030,6 +4151,7 @@ impl Parser {
             for j in 0..ref_st.num_negative_pics as usize {
                 let d_poc = ref_st.delta_poc_s0[j] + delta_rps;
                 if d_poc < 0 && use_delta_flag[j] {
+                    st.delta_poc_s0[i] = d_poc;
                     st.used_by_curr_pic_s0[i] = used_by_curr_pic_flag[j];
 
                     i += 1;
@@ -4040,8 +4162,32 @@ impl Parser {
 
             // (7-62)
             let mut i = 0;
-            for j in (0..usize::from(ref_st.num_positive_pics) - 1).rev() {
-                let d_poc = *ref_st.delta_poc_s1.get(j).ok_or(anyhow!("Invalid data"))?;
+            // Ranges are [a,b[, but the real loop is [b, a], i.e.
+            // [num_negative_pics - 1, 0]. Use ..= so that b is included when
+            // rev() is called.
+            for j in (0..=isize::from(ref_st.num_negative_pics) - 1)
+                .rev()
+                .take_while(|j| *j >= 0)
+                .map(|j| j as usize)
+            {
+                let d_poc = ref_st.delta_poc_s0[j] + delta_rps;
+                if d_poc > 0 && use_delta_flag[j] {
+                    st.delta_poc_s1[i] = d_poc;
+                    st.used_by_curr_pic_s1[i] = used_by_curr_pic_flag[j];
+
+                    i += 1;
+                }
+            }
+
+            if delta_rps > 0 && use_delta_flag[ref_st.num_delta_pocs as usize] {
+                st.delta_poc_s1[i] = delta_rps;
+                st.used_by_curr_pic_s1[i] = used_by_curr_pic_flag[ref_st.num_delta_pocs as usize];
+
+                i += 1;
+            }
+
+            for j in 0..usize::from(ref_st.num_positive_pics) {
+                let d_poc = ref_st.delta_poc_s1[j] + delta_rps;
                 if d_poc > 0 && use_delta_flag[ref_st.num_negative_pics as usize + j] {
                     st.delta_poc_s1[i] = d_poc;
                     st.used_by_curr_pic_s1[i] =
@@ -4050,6 +4196,8 @@ impl Parser {
                     i += 1;
                 }
             }
+
+            st.num_positive_pics = i as u8;
         } else {
             st.num_negative_pics = r.read_ue_max(u32::from(
                 sps.max_dec_pic_buffering_minus1[usize::from(sps.max_sub_layers_minus1)],
@@ -4419,6 +4567,9 @@ impl Parser {
                 + sps.log2_diff_max_min_luma_transform_block_size,
         );
 
+        sps.pic_size_in_samples_y =
+            u32::from(sps.pic_width_in_luma_samples) * u32::from(sps.pic_height_in_luma_samples);
+
         if sps.max_tb_log2_size_y > std::cmp::min(sps.ctb_log2_size_y, 5) {
             return Err(anyhow!(
                 "Invalid value for MaxTbLog2SizeY: {}",
@@ -4432,7 +4583,7 @@ impl Parser {
         sps.max_transform_hierarchy_depth_intra = r.read_ue()?;
 
         sps.scaling_list_enabled_flag = r.read_bit()?;
-        if sps.scaling_list_data_present_flag {
+        if sps.scaling_list_enabled_flag {
             sps.scaling_list_data_present_flag = r.read_bit()?;
             if sps.scaling_list_data_present_flag {
                 Self::parse_scaling_list_data(&mut sps.scaling_list, &mut r)?;
@@ -5018,13 +5169,21 @@ impl Parser {
                 hdr.short_term_ref_pic_set_sps_flag = r.read_bit()?;
 
                 if !hdr.short_term_ref_pic_set_sps_flag {
+                    let epb_before = r.num_epb();
+                    let bits_left_before = r.num_bits_left();
+
                     let st_rps_idx = sps.num_short_term_ref_pic_sets;
+
                     Self::parse_short_term_ref_pic_set(
                         sps,
                         &mut hdr.short_term_ref_pic_set,
                         &mut r,
                         st_rps_idx,
                     )?;
+
+                    hdr.st_rps_bits = ((bits_left_before - r.num_bits_left())
+                        - 8 * (r.num_epb() - epb_before))
+                        as u32;
                 } else if sps.num_short_term_ref_pic_sets > 1 {
                     let num_bits = (sps.num_short_term_ref_pic_sets as f64).log2().ceil() as _;
                     hdr.short_term_ref_pic_set_idx = r.read_bits(num_bits)?;
@@ -5326,18 +5485,19 @@ mod tests {
     use std::io::Cursor;
 
     use crate::codec::h264::nalu::Nalu;
+    use crate::codec::h265::parser::Level;
     use crate::codec::h265::parser::NaluHeader;
     use crate::codec::h265::parser::NaluType;
     use crate::codec::h265::parser::Parser;
     use crate::codec::h265::parser::SliceType;
 
-    const STREAM_BEAR: &[u8] = include_bytes!("test_data/bear.hevc");
+    const STREAM_BEAR: &[u8] = include_bytes!("test_data/bear.h265");
     const STREAM_BEAR_NUM_NALUS: usize = 35;
 
-    const STREAM_BBB: &[u8] = include_bytes!("test_data/bbb.hevc");
+    const STREAM_BBB: &[u8] = include_bytes!("test_data/bbb.h265");
     const STREAM_BBB_NUM_NALUS: usize = 64;
 
-    const STREAM_TEST25FPS: &[u8] = include_bytes!("test_data/test-25fps.hevc");
+    const STREAM_TEST25FPS: &[u8] = include_bytes!("test_data/test-25fps.h265");
     const STREAM_TEST25FPS_NUM_NALUS: usize = 254;
 
     const STREAM_TEST_25_FPS_SLICE_0: &[u8] =
@@ -5470,7 +5630,7 @@ mod tests {
         assert_eq!(vps.max_sub_layers_minus1, 0);
         assert!(vps.temporal_id_nesting_flag);
         assert_eq!(vps.profile_tier_level.general_profile_idc, 1);
-        assert_eq!(vps.profile_tier_level.general_level_idc, 60);
+        assert_eq!(vps.profile_tier_level.general_level_idc, Level::L2);
         assert_eq!(vps.max_dec_pic_buffering_minus1[0], 4);
         assert_eq!(vps.max_num_reorder_pics[0], 2);
         assert_eq!(vps.max_latency_increase_plus1[0], 0);
@@ -5493,7 +5653,7 @@ mod tests {
 
         assert_eq!(sps.max_sub_layers_minus1, 0);
         assert_eq!(sps.profile_tier_level.general_profile_idc, 1);
-        assert_eq!(sps.profile_tier_level.general_level_idc, 60);
+        assert_eq!(sps.profile_tier_level.general_level_idc, Level::L2);
         assert_eq!(sps.seq_parameter_set_id, 0);
         assert_eq!(sps.chroma_format_idc, 1);
         assert!(!sps.separate_colour_plane_flag);
@@ -5698,7 +5858,7 @@ mod tests {
                 .general_lower_bit_rate_constraint_flag,
         );
         assert!(!vps.profile_tier_level.general_max_14bit_constraint_flag,);
-        assert_eq!(vps.profile_tier_level.general_level_idc, 60);
+        assert_eq!(vps.profile_tier_level.general_level_idc, Level::L2);
 
         assert!(vps.sub_layer_ordering_info_present_flag);
         assert_eq!(vps.max_dec_pic_buffering_minus1[0], 4);
@@ -5764,7 +5924,7 @@ mod tests {
                 .general_lower_bit_rate_constraint_flag,
         );
         assert!(!sps.profile_tier_level.general_max_14bit_constraint_flag,);
-        assert_eq!(sps.profile_tier_level.general_level_idc, 60);
+        assert_eq!(sps.profile_tier_level.general_level_idc, Level::L2);
 
         assert_eq!(sps.seq_parameter_set_id, 0);
         assert_eq!(sps.chroma_format_idc, 1);

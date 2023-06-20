@@ -22,6 +22,7 @@ use cros_codecs::decoder::DecodedHandle;
 use cros_codecs::utils::simple_playback_loop;
 use cros_codecs::utils::simple_playback_loop_owned_surfaces;
 use cros_codecs::utils::H264FrameIterator;
+use cros_codecs::utils::H265FrameIterator;
 use cros_codecs::utils::IvfIterator;
 use cros_codecs::DecodedFormat;
 use matroska_demuxer::Frame;
@@ -29,6 +30,7 @@ use matroska_demuxer::MatroskaFile;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum EncodedFormat {
+    H265,
     H264,
     VP8,
     VP9,
@@ -39,6 +41,7 @@ impl FromStr for EncodedFormat {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "h265" | "H265" => Ok(EncodedFormat::H265),
             "h264" | "H264" => Ok(EncodedFormat::H264),
             "vp8" | "VP8" => Ok(EncodedFormat::VP8),
             "vp9" | "VP9" => Ok(EncodedFormat::VP9),
@@ -213,6 +216,17 @@ fn main() {
 
             let decoder = Box::new(
                 cros_codecs::decoder::stateless::vp9::Decoder::new_vaapi(display, blocking_mode)
+                    .expect("failed to create decoder"),
+            ) as Box<dyn StatelessVideoDecoder<_>>;
+
+            (decoder, frame_iter)
+        }
+        EncodedFormat::H265 => {
+            let frame_iter = Box::new(H265FrameIterator::new(&input).map(Cow::Borrowed))
+                as Box<dyn Iterator<Item = Cow<[u8]>>>;
+
+            let decoder = Box::new(
+                cros_codecs::decoder::stateless::h265::Decoder::new_vaapi(display, blocking_mode)
                     .expect("failed to create decoder"),
             ) as Box<dyn StatelessVideoDecoder<_>>;
 

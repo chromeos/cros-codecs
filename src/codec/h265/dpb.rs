@@ -18,7 +18,7 @@ use crate::codec::h265::picture::Reference;
 // The first member of the tuple is the `PictureData` for the frame.
 //
 // The second member is the backend handle of the frame.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DpbEntry<T: Clone>(pub Rc<RefCell<PictureData>>, pub T);
 
 pub struct Dpb<T: Clone> {
@@ -241,6 +241,15 @@ impl<T: Clone> Dpb<T> {
         self.entries.push(DpbEntry(picture, handle));
 
         Ok(())
+    }
+
+    /// Returns all the references in the DPB.
+    pub fn get_all_references(&self) -> Vec<DpbEntry<T>> {
+        self.entries
+            .iter()
+            .filter(|e| e.0.borrow().is_ref())
+            .cloned()
+            .collect()
     }
 }
 
