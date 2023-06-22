@@ -21,6 +21,7 @@ use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
+use crate::decoder::StreamInfo;
 use crate::DecodedFormat;
 
 /// Iterator over IVF packets.
@@ -190,14 +191,15 @@ impl<'a> Iterator for H264FrameIterator<'a> {
 }
 
 /// Simple decoding loop that plays the stream once from start to finish.
-pub fn simple_playback_loop<D, R, I>(
+pub fn simple_playback_loop<D, R, I, M>(
     decoder: &mut D,
     stream_iter: I,
     on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
+    allocate_new_surfaces: &mut dyn FnMut(&StreamInfo, usize) -> Vec<M>,
     output_format: DecodedFormat,
     blocking_mode: BlockingMode,
 ) where
-    D: StatelessVideoDecoder<()> + ?Sized,
+    D: StatelessVideoDecoder<M> + ?Sized,
     R: AsRef<[u8]>,
     I: Iterator<Item = R>,
 {
@@ -213,11 +215,14 @@ pub fn simple_playback_loop<D, R, I>(
                     format_setter.try_format(output_format).unwrap();
                     // Allocate the missing number of buffers in our pool for decoding to succeed.
                     let min_num_surfaces = format_setter.stream_info().min_num_surfaces;
-                    let pool = format_setter.surface_pool();
-                    let pool_num_surfaces = pool.num_managed_surfaces();
+                    let pool_num_surfaces = format_setter.surface_pool().num_managed_surfaces();
                     if pool_num_surfaces < min_num_surfaces {
-                        pool.add_surfaces(vec![(); min_num_surfaces - pool_num_surfaces])
-                            .unwrap();
+                        let surfaces = allocate_new_surfaces(
+                            format_setter.stream_info(),
+                            min_num_surfaces - pool_num_surfaces,
+                        );
+                        let pool = format_setter.surface_pool();
+                        pool.add_surfaces(surfaces).unwrap();
                     }
                 }
             }
@@ -243,4 +248,9 @@ pub fn simple_playback_loop<D, R, I>(
 
     decoder.flush();
     check_events(decoder);
+}
+
+/// Surface allocation callback that results in self-allocated memory.
+pub fn simple_playback_loop_owned_surfaces(_: &StreamInfo, nb_surfaces: usize) -> Vec<()> {
+    vec![(); nb_surfaces]
 }

@@ -596,11 +596,13 @@ impl<M: SurfaceMemoryDescriptor + 'static>
 mod tests {
     use libva::Display;
 
-    use crate::decoder::stateless::h264::tests::h264_decoding_loop;
     use crate::decoder::stateless::h264::Decoder;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
     use crate::decoder::BlockingMode;
+    use crate::utils::simple_playback_loop;
+    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::H264FrameIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
@@ -613,7 +615,16 @@ mod tests {
         let decoder = Decoder::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, f| h264_decoding_loop(d, s, f, output_format, blocking_mode),
+            |d, s, f| {
+                simple_playback_loop(
+                    d,
+                    H264FrameIterator::new(s),
+                    f,
+                    &mut simple_playback_loop_owned_surfaces,
+                    output_format,
+                    blocking_mode,
+                )
+            },
             decoder,
             test,
             true,

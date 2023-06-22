@@ -20,6 +20,7 @@ use cros_codecs::decoder::stateless::StatelessVideoDecoder;
 use cros_codecs::decoder::BlockingMode;
 use cros_codecs::decoder::DecodedHandle;
 use cros_codecs::utils::simple_playback_loop;
+use cros_codecs::utils::simple_playback_loop_owned_surfaces;
 use cros_codecs::utils::H264FrameIterator;
 use cros_codecs::utils::IvfIterator;
 use cros_codecs::DecodedFormat;
@@ -261,6 +262,7 @@ fn main() {
         decoder.as_mut(),
         frame_iter,
         &mut on_new_frame,
+        &mut simple_playback_loop_owned_surfaces,
         args.output_format,
         blocking_mode,
     );

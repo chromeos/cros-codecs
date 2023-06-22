@@ -289,38 +289,27 @@ pub mod tests {
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
     use crate::decoder::stateless::vp8::Decoder;
-    use crate::decoder::stateless::StatelessVideoDecoder;
     use crate::decoder::BlockingMode;
-    use crate::decoder::DecodedHandle;
     use crate::utils::simple_playback_loop;
+    use crate::utils::simple_playback_loop_owned_surfaces;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
-
-    /// Simple decoding loop for VP8/VP9.
-    pub fn vpx_decoding_loop<D>(
-        decoder: &mut D,
-        test_stream: &[u8],
-        on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
-        output_format: DecodedFormat,
-        blocking_mode: BlockingMode,
-    ) where
-        D: StatelessVideoDecoder<()>,
-    {
-        simple_playback_loop(
-            decoder,
-            IvfIterator::new(test_stream),
-            on_new_frame,
-            output_format,
-            blocking_mode,
-        )
-    }
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vpx_decoding_loop(d, s, c, DecodedFormat::NV12, blocking_mode),
+            |d, s, c| {
+                simple_playback_loop(
+                    d,
+                    IvfIterator::new(s),
+                    c,
+                    &mut simple_playback_loop_owned_surfaces,
+                    DecodedFormat::NV12,
+                    blocking_mode,
+                )
+            },
             decoder,
             test,
             false,

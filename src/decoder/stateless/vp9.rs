@@ -290,9 +290,11 @@ impl<T: DecodedHandle + Clone + 'static, M> private::StatelessVideoDecoder for D
 pub mod tests {
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::vp8::tests::vpx_decoding_loop;
     use crate::decoder::stateless::vp9::Decoder;
     use crate::decoder::BlockingMode;
+    use crate::utils::simple_playback_loop;
+    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
@@ -300,7 +302,16 @@ pub mod tests {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vpx_decoding_loop(d, s, c, DecodedFormat::NV12, blocking_mode),
+            |d, s, c| {
+                simple_playback_loop(
+                    d,
+                    IvfIterator::new(s),
+                    c,
+                    &mut simple_playback_loop_owned_surfaces,
+                    DecodedFormat::NV12,
+                    blocking_mode,
+                )
+            },
             decoder,
             test,
             false,

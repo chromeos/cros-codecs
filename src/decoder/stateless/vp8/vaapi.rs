@@ -312,9 +312,10 @@ mod tests {
     use crate::codec::vp8::parser::Parser;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::vp8::tests::vpx_decoding_loop;
     use crate::decoder::stateless::vp8::Decoder;
     use crate::decoder::BlockingMode;
+    use crate::utils::simple_playback_loop;
+    use crate::utils::simple_playback_loop_owned_surfaces;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
     use crate::Resolution;
@@ -331,7 +332,16 @@ mod tests {
         let decoder = Decoder::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vpx_decoding_loop(d, s, c, output_format, blocking_mode),
+            |d, s, c| {
+                simple_playback_loop(
+                    d,
+                    IvfIterator::new(s),
+                    c,
+                    &mut simple_playback_loop_owned_surfaces,
+                    output_format,
+                    blocking_mode,
+                )
+            },
             decoder,
             test,
             true,

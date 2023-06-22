@@ -2331,42 +2331,30 @@ where
 
 #[cfg(test)]
 pub mod tests {
-
     use crate::decoder::stateless::h264::Decoder;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::StatelessVideoDecoder;
     use crate::decoder::BlockingMode;
-    use crate::decoder::DecodedHandle;
     use crate::utils::simple_playback_loop;
+    use crate::utils::simple_playback_loop_owned_surfaces;
     use crate::utils::H264FrameIterator;
     use crate::DecodedFormat;
-
-    /// H.264 decoding loop for use with `test_decode_stream`.
-    pub fn h264_decoding_loop<D>(
-        decoder: &mut D,
-        test_stream: &[u8],
-        on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
-        output_format: DecodedFormat,
-        blocking_mode: BlockingMode,
-    ) where
-        D: StatelessVideoDecoder<()>,
-    {
-        simple_playback_loop(
-            decoder,
-            H264FrameIterator::new(test_stream),
-            on_new_frame,
-            output_format,
-            blocking_mode,
-        )
-    }
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
         let decoder = Decoder::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, f| h264_decoding_loop(d, s, f, DecodedFormat::NV12, blocking_mode),
+            |d, s, f| {
+                simple_playback_loop(
+                    d,
+                    H264FrameIterator::new(s),
+                    f,
+                    &mut simple_playback_loop_owned_surfaces,
+                    DecodedFormat::NV12,
+                    blocking_mode,
+                )
+            },
             decoder,
             test,
             false,

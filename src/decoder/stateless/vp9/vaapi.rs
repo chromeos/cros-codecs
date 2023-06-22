@@ -316,10 +316,11 @@ mod tests {
     use crate::codec::vp9::parser::NUM_REF_FRAMES;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::vp8::tests::vpx_decoding_loop;
     use crate::decoder::stateless::vp9::Decoder;
     use crate::decoder::stateless::vp9::Segmentation;
     use crate::decoder::BlockingMode;
+    use crate::utils::simple_playback_loop;
+    use crate::utils::simple_playback_loop_owned_surfaces;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
@@ -335,7 +336,16 @@ mod tests {
         let decoder = Decoder::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
-            |d, s, c| vpx_decoding_loop(d, s, c, output_format, blocking_mode),
+            |d, s, c| {
+                simple_playback_loop(
+                    d,
+                    IvfIterator::new(s),
+                    c,
+                    &mut simple_playback_loop_owned_surfaces,
+                    output_format,
+                    blocking_mode,
+                )
+            },
             decoder,
             test,
             true,
@@ -425,7 +435,16 @@ mod tests {
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(
-            |d, s, c| vpx_decoding_loop(d, s, c, DecodedFormat::NV12, BlockingMode::Blocking),
+            |d, s, c| {
+                simple_playback_loop(
+                    d,
+                    IvfIterator::new(s),
+                    c,
+                    &mut simple_playback_loop_owned_surfaces,
+                    DecodedFormat::NV12,
+                    BlockingMode::Blocking,
+                )
+            },
             decoder,
             &DECODE_RESOLUTION_CHANGE_500FRAMES,
             false,
@@ -443,7 +462,16 @@ mod tests {
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(
-            |d, s, c| vpx_decoding_loop(d, s, c, DecodedFormat::NV12, BlockingMode::NonBlocking),
+            |d, s, c| {
+                simple_playback_loop(
+                    d,
+                    IvfIterator::new(s),
+                    c,
+                    &mut simple_playback_loop_owned_surfaces,
+                    DecodedFormat::NV12,
+                    BlockingMode::NonBlocking,
+                )
+            },
             decoder,
             &DECODE_RESOLUTION_CHANGE_500FRAMES,
             false,
