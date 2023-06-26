@@ -324,10 +324,7 @@ mod surface_pool {
         }
 
         /// Create new surfaces and add them to the pool, using `descriptors` as backing memory.
-        pub(crate) fn add_surfaces(
-            &mut self,
-            descriptors: Vec<M>,
-        ) -> Result<(), (VaError, Vec<M>)> {
+        pub(crate) fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), VaError> {
             let surfaces = self.display.create_surfaces(
                 self.rt_format,
                 // Let the hardware decide the best internal format - we will get the desired fourcc
@@ -428,7 +425,7 @@ mod surface_pool {
             (**self)
                 .borrow_mut()
                 .add_surfaces(descriptors)
-                .map_err(|e| anyhow::anyhow!(e.0))
+                .map_err(|e| anyhow::anyhow!(e))
         }
 
         fn num_free_surfaces(&self) -> usize {
