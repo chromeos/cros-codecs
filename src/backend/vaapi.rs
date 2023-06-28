@@ -7,6 +7,7 @@ use std::cell::RefMut;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::os::fd::AsRawFd;
 use std::rc::Rc;
 
 use anyhow::anyhow;
@@ -37,6 +38,7 @@ use crate::decoder::StreamInfo;
 use crate::decoder::SurfacePool;
 use crate::i4xx_copy;
 use crate::nv12_copy;
+use crate::utils::DmabufSurface;
 use crate::utils::UserPtrSurface;
 use crate::y410_to_i410;
 use crate::DecodedFormat;
@@ -1239,6 +1241,72 @@ impl libva::ExternalBufferDescriptor for UserPtrSurface {
             num_buffers: self.buffers.len() as u32,
             flags: 0,
             private_data: std::ptr::null_mut(),
+        }
+    }
+}
+
+impl libva::ExternalBufferDescriptor for DmabufSurface {
+    const MEMORY_TYPE: libva::MemoryType = libva::MemoryType::DrmPrime2;
+    type DescriptorAttribute = libva::VADRMPRIMESurfaceDescriptor;
+
+    fn va_surface_attribute(&mut self) -> Self::DescriptorAttribute {
+        let objects = self
+            .fds
+            .iter()
+            .map(|fd| libva::VADRMPRIMESurfaceDescriptorObject {
+                fd: fd.as_raw_fd(),
+                // libva seems happy is we leave this to zero, which is fortunate as I cannot find
+                // a way to obtain the size from a GBM buffer object.
+                size: 0,
+                // TODO should the descriptor be moved to individual objects?
+                drm_format_modifier: self.layout.format.1,
+            })
+            .chain(std::iter::repeat(Default::default()))
+            .take(4)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+        let layers = [
+            libva::VADRMPRIMESurfaceDescriptorLayer {
+                drm_format: self.layout.format.0.into(),
+                num_planes: self.layout.planes.len() as u32,
+                object_index: [0, 0, 0, 0],
+                offset: self
+                    .layout
+                    .planes
+                    .iter()
+                    .map(|p| p.offset as u32)
+                    .chain(std::iter::repeat(0))
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
+                pitch: self
+                    .layout
+                    .planes
+                    .iter()
+                    .map(|p| p.stride as u32)
+                    .chain(std::iter::repeat(0))
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
+            },
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        ];
+
+        libva::VADRMPRIMESurfaceDescriptor {
+            // TODO should we match and use VA_FOURCC_* here?
+            fourcc: self.layout.format.0.into(),
+            width: self.layout.size.width,
+            height: self.layout.size.height,
+            num_objects: 1,
+            objects,
+            num_layers: 1,
+            layers,
         }
     }
 }

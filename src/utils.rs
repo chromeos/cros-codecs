@@ -9,6 +9,7 @@
 
 use std::io::Cursor;
 use std::io::Seek;
+use std::os::fd::OwnedFd;
 
 use bytes::Buf;
 
@@ -507,6 +508,11 @@ impl UserPtrSurface {
             },
         }
     }
+}
+
+pub struct DmabufSurface {
+    pub fds: Vec<OwnedFd>,
+    pub layout: SurfaceLayout,
 }
 
 impl Drop for UserPtrSurface {
