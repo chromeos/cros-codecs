@@ -368,17 +368,18 @@ pub fn simple_playback_loop<D, R, I, M>(
     decoder: &mut D,
     stream_iter: I,
     on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle>),
-    allocate_new_surfaces: &mut dyn FnMut(&StreamInfo, usize) -> Vec<M>,
+    allocate_new_surfaces: &mut dyn FnMut(&StreamInfo, usize) -> anyhow::Result<Vec<M>>,
     output_format: DecodedFormat,
     blocking_mode: BlockingMode,
-) where
+) -> anyhow::Result<()>
+where
     D: StatelessVideoDecoder<M> + ?Sized,
     R: AsRef<[u8]>,
     I: Iterator<Item = R>,
 {
     // Closure that drains all pending decoder events and calls `on_new_frame` on each
     // completed frame.
-    let mut check_events = |decoder: &mut D| {
+    let mut check_events = |decoder: &mut D| -> anyhow::Result<()> {
         while let Some(event) = decoder.next_event() {
             match event {
                 DecoderEvent::FrameReady(frame) => {
@@ -393,13 +394,15 @@ pub fn simple_playback_loop<D, R, I, M>(
                         let surfaces = allocate_new_surfaces(
                             format_setter.stream_info(),
                             min_num_surfaces - pool_num_surfaces,
-                        );
+                        )?;
                         let pool = format_setter.surface_pool();
                         pool.add_surfaces(surfaces).unwrap();
                     }
                 }
             }
         }
+
+        Ok(())
     };
 
     for (frame_num, packet) in stream_iter.enumerate() {
@@ -407,23 +410,26 @@ pub fn simple_playback_loop<D, R, I, M>(
             match decoder.decode(frame_num as u64, packet.as_ref()) {
                 Ok(()) => {
                     if blocking_mode == BlockingMode::Blocking {
-                        check_events(decoder);
+                        check_events(decoder)?;
                     }
                     // Break the loop so we can process the next NAL if we sent the current one
                     // successfully.
                     break;
                 }
-                Err(DecodeError::CheckEvents) => check_events(decoder),
+                Err(DecodeError::CheckEvents) => check_events(decoder)?,
                 Err(e) => panic!("{:#}", e),
             }
         }
     }
 
     decoder.flush();
-    check_events(decoder);
+    check_events(decoder)
 }
 
 /// Surface allocation callback that results in self-allocated memory.
-pub fn simple_playback_loop_owned_surfaces(_: &StreamInfo, nb_surfaces: usize) -> Vec<()> {
-    vec![(); nb_surfaces]
+pub fn simple_playback_loop_owned_surfaces(
+    _: &StreamInfo,
+    nb_surfaces: usize,
+) -> anyhow::Result<Vec<()>> {
+    Ok(vec![(); nb_surfaces])
 }

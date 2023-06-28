@@ -233,7 +233,7 @@ pub(crate) mod tests {
         dump_yuv: bool,
     ) where
         D: StatelessVideoDecoder<M>,
-        L: Fn(&mut D, &[u8], &mut dyn FnMut(Box<dyn DecodedHandle>)),
+        L: Fn(&mut D, &[u8], &mut dyn FnMut(Box<dyn DecodedHandle>)) -> anyhow::Result<()>,
     {
         let mut crcs = test.crcs.lines().enumerate();
 
@@ -258,7 +258,8 @@ pub(crate) mod tests {
                     assert_eq!(frame_crc, expected_crc, "at frame {}", frame_num);
                 }
             }
-        });
+        })
+        .unwrap();
 
         assert_eq!(crcs.next(), None, "decoded less frames than expected");
     }

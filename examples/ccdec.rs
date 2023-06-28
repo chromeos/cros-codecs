@@ -279,7 +279,8 @@ fn main() {
         &mut simple_playback_loop_owned_surfaces,
         args.output_format,
         blocking_mode,
-    );
+    )
+    .expect("error during playback loop");
 
     if let Some(Md5Computation::Stream) = args.compute_md5 {
         println!("{:x}", md5_context.compute());
