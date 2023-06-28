@@ -25,6 +25,10 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
 use crate::DecodedFormat;
+use crate::Fourcc;
+use crate::PlaneLayout;
+use crate::Resolution;
+use crate::SurfaceLayout;
 
 /// Iterator over IVF packets.
 pub struct IvfIterator<'a> {
@@ -432,4 +436,84 @@ pub fn simple_playback_loop_owned_surfaces(
     nb_surfaces: usize,
 ) -> anyhow::Result<Vec<()>> {
     Ok(vec![(); nb_surfaces])
+}
+
+/// Surface allocation callback that returns user-allocated memory for the surfaces.
+pub fn simple_playback_loop_userptr_surfaces(
+    stream_info: &StreamInfo,
+    nb_surfaces: usize,
+) -> anyhow::Result<Vec<UserPtrSurface>> {
+    let alloc_function = match stream_info.format {
+        DecodedFormat::I420 | DecodedFormat::NV12 => &UserPtrSurface::new_nv12,
+        _ => anyhow::bail!(
+            "{:?} format is unsupported with user memory",
+            stream_info.format
+        ),
+    };
+
+    Ok((0..nb_surfaces)
+        .map(|_| alloc_function(stream_info.coded_resolution))
+        .collect::<Vec<_>>())
+}
+
+/// A structure that holds user-allocated memory for a surface as well as its layout.
+#[derive(Debug)]
+pub struct UserPtrSurface {
+    pub buffers: Vec<*mut u8>,
+    pub mem_layout: std::alloc::Layout,
+    pub layout: SurfaceLayout,
+}
+
+impl UserPtrSurface {
+    /// Allocate enough memory to back a NV12 surface of `size` dimension.
+    pub fn new_nv12(size: Resolution) -> Self {
+        /// Add what is needed to a value in order to make it a multiple of some alignment.
+        macro_rules! align {
+            ($n:expr, $r:expr) => {
+                ($n + ($r - 1)) & !($r - 1)
+            };
+        }
+
+        // Align according to VAAPI constraints.
+        let width = align!(size.width, 16) as usize;
+        let height = align!(size.height, 4) as usize;
+        let stride = align!(width, 64);
+        let uv_start = height * stride;
+        let uv_size = (height / 2) * stride;
+        let buffer_size = align!(uv_start + uv_size, 4096);
+
+        // Safe because the invariants of `Layout` are respected.
+        let layout = unsafe { std::alloc::Layout::from_size_align_unchecked(buffer_size, 4096) };
+        let mem = unsafe { std::alloc::alloc(layout) };
+
+        Self {
+            buffers: vec![mem],
+            mem_layout: layout,
+            layout: SurfaceLayout {
+                format: (Fourcc::from(b"NV12"), 0),
+                size: Resolution::from((width as u32, height as u32)),
+                planes: vec![
+                    PlaneLayout {
+                        buffer_index: 0,
+                        offset: 0,
+                        stride,
+                    },
+                    PlaneLayout {
+                        buffer_index: 0,
+                        offset: uv_start,
+                        stride,
+                    },
+                ],
+            },
+        }
+    }
+}
+
+impl Drop for UserPtrSurface {
+    fn drop(&mut self) {
+        for buffer in std::mem::take(&mut self.buffers).into_iter() {
+            // Safe because we allocated the memory using `std::alloc::alloc`.
+            unsafe { std::alloc::dealloc(buffer, self.mem_layout) }
+        }
+    }
 }

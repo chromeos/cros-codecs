@@ -183,6 +183,34 @@ impl FromStr for DecodedFormat {
     }
 }
 
+/// Describes the layout of a plane within a surface.
+#[derive(Debug)]
+pub struct PlaneLayout {
+    /// Index of the memory buffer the plane belongs to.
+    pub buffer_index: usize,
+    /// Start offset of the plane within its buffer.
+    pub offset: usize,
+    /// Distance in bytes between two lines of data in this plane.
+    pub stride: usize,
+}
+
+/// Unambiguously describes the layout of a surface.
+///
+/// A surface can be made of one or several memory buffers, each containing one or several planes.
+/// For a given surface, this structure defines where each plane can be found.
+#[derive(Debug)]
+pub struct SurfaceLayout {
+    /// `(Fourcc, modifier)` tuple describing the arrangement of the planes.
+    ///
+    /// This member is enough to infer how many planes and buffers the surface has, and which
+    /// buffer each plane belongs into.
+    pub format: (Fourcc, u64),
+    /// Size in pixels of the surface.
+    pub size: Resolution,
+    /// Layout of each individual plane.
+    pub planes: Vec<PlaneLayout>,
+}
+
 /// Copies `src` into `dst` as NV12, removing any extra padding.
 pub fn nv12_copy(
     src: &[u8],

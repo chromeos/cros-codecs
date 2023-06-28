@@ -37,6 +37,7 @@ use crate::decoder::StreamInfo;
 use crate::decoder::SurfacePool;
 use crate::i4xx_copy;
 use crate::nv12_copy;
+use crate::utils::UserPtrSurface;
 use crate::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Fourcc;
@@ -1196,6 +1197,48 @@ fn y412_to_i412(
             LittleEndian::write_u16(dst_y, y.rotate_right(4));
             LittleEndian::write_u16(dst_u, u.rotate_right(4));
             LittleEndian::write_u16(dst_v, v.rotate_right(4));
+        }
+    }
+}
+
+impl libva::ExternalBufferDescriptor for UserPtrSurface {
+    const MEMORY_TYPE: libva::MemoryType = libva::MemoryType::UserPtr;
+    type DescriptorAttribute = libva::VASurfaceAttribExternalBuffers;
+
+    fn va_surface_attribute(&mut self) -> Self::DescriptorAttribute {
+        let pitches = self
+            .layout
+            .planes
+            .iter()
+            .map(|p| p.stride as u32)
+            .chain(std::iter::repeat(0))
+            .take(4)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        let offsets = self
+            .layout
+            .planes
+            .iter()
+            .map(|p| p.offset as u32)
+            .chain(std::iter::repeat(0))
+            .take(4)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+        libva::VASurfaceAttribExternalBuffers {
+            pixel_format: self.layout.format.0.into(),
+            width: self.layout.size.width,
+            height: self.layout.size.height,
+            data_size: self.mem_layout.size() as u32,
+            num_planes: self.layout.planes.len() as u32,
+            pitches,
+            offsets,
+            buffers: self.buffers.as_mut_ptr() as *mut _,
+            num_buffers: self.buffers.len() as u32,
+            flags: 0,
+            private_data: std::ptr::null_mut(),
         }
     }
 }
