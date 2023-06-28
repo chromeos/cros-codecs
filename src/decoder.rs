@@ -47,6 +47,8 @@ pub trait SurfacePool<M> {
 /// reflect the current settings of the decoder.
 #[derive(Clone)]
 pub struct StreamInfo {
+    /// Pixel format for the output frames expected by the decoder.
+    pub format: DecodedFormat,
     /// Coded resolution of the stream, i.e. minimum size of the frames to be decoded into.
     pub coded_resolution: Resolution,
     /// Display resolution of the stream, i.e. the part of the decoded frames we want to display.

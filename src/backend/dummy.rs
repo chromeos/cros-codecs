@@ -82,6 +82,7 @@ impl Backend {
     pub(crate) fn new() -> Self {
         Self {
             stream_info: StreamInfo {
+                format: DecodedFormat::I420,
                 min_num_surfaces: 4,
                 coded_resolution: Resolution::from((320, 200)),
                 display_resolution: Resolution::from((320, 200)),

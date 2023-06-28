@@ -608,6 +608,18 @@ impl StreamMetadataState {
                 context,
                 config,
                 stream_info: StreamInfo {
+                    format: match rt_format {
+                        libva::constants::VA_RT_FORMAT_YUV420 => DecodedFormat::I420,
+                        libva::constants::VA_RT_FORMAT_YUV422 => DecodedFormat::I422,
+                        libva::constants::VA_RT_FORMAT_YUV444 => DecodedFormat::I444,
+                        libva::constants::VA_RT_FORMAT_YUV420_10 => DecodedFormat::I010,
+                        libva::constants::VA_RT_FORMAT_YUV420_12 => DecodedFormat::I012,
+                        libva::constants::VA_RT_FORMAT_YUV422_10 => DecodedFormat::I210,
+                        libva::constants::VA_RT_FORMAT_YUV422_12 => DecodedFormat::I212,
+                        libva::constants::VA_RT_FORMAT_YUV444_10 => DecodedFormat::I410,
+                        libva::constants::VA_RT_FORMAT_YUV444_12 => DecodedFormat::I412,
+                        _ => panic!("unrecognized RT format {}", rt_format),
+                    },
                     coded_resolution,
                     display_resolution,
                     min_num_surfaces,
