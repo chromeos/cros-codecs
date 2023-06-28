@@ -100,8 +100,8 @@ impl From<Fourcc> for u32 {
     }
 }
 
-impl From<[u8; 4]> for Fourcc {
-    fn from(n: [u8; 4]) -> Self {
+impl From<&[u8; 4]> for Fourcc {
+    fn from(n: &[u8; 4]) -> Self {
         Self(n[0] as u32 | (n[1] as u32) << 8 | (n[2] as u32) << 16 | (n[3] as u32) << 24)
     }
 }
