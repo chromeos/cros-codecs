@@ -11,6 +11,8 @@ use std::fs::File;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
+use std::os::fd::AsFd;
+use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -19,14 +21,90 @@ use argh::FromArgs;
 use cros_codecs::decoder::stateless::StatelessVideoDecoder;
 use cros_codecs::decoder::BlockingMode;
 use cros_codecs::decoder::DecodedHandle;
+use cros_codecs::decoder::StreamInfo;
+use cros_codecs::multiple_desc_type;
 use cros_codecs::utils::simple_playback_loop;
 use cros_codecs::utils::simple_playback_loop_owned_surfaces;
+use cros_codecs::utils::simple_playback_loop_userptr_surfaces;
+use cros_codecs::utils::DmabufSurface;
 use cros_codecs::utils::H264FrameIterator;
 use cros_codecs::utils::H265FrameIterator;
 use cros_codecs::utils::IvfIterator;
+use cros_codecs::utils::UserPtrSurface;
 use cros_codecs::DecodedFormat;
+use cros_codecs::Fourcc;
+use cros_codecs::PlaneLayout;
+use cros_codecs::Resolution;
+use cros_codecs::SurfaceLayout;
 use matroska_demuxer::Frame;
 use matroska_demuxer::MatroskaFile;
+
+// Our buffer descriptor type.
+//
+// We support buffers which memory is managed by the backend, or imported from user memory or a
+// PRIME buffer.
+multiple_desc_type! {
+    enum BufferDescriptor {
+        Managed(()),
+        Dmabuf(DmabufSurface),
+        User(UserPtrSurface),
+    }
+}
+
+/// Export a file descriptor from a GBM `BufferObject` and turn it into a `DmabufSurface` suitable
+/// for using as the target of a decoder.
+fn export_gbm_bo<T>(obj: &gbm::BufferObject<T>) -> anyhow::Result<DmabufSurface> {
+    let fd = obj.fd()?;
+    let modifier = obj.modifier()?;
+    let format = obj.format()?;
+    let planes = (0..obj.plane_count()? as i32)
+        .map(|i| PlaneLayout {
+            buffer_index: 0,
+            offset: obj.offset(i).unwrap() as usize,
+            stride: obj.stride_for_plane(i).unwrap() as usize,
+        })
+        .collect();
+    let size = Resolution::from((obj.width().unwrap(), obj.height().unwrap()));
+
+    Ok(DmabufSurface {
+        fds: vec![fd],
+        layout: SurfaceLayout {
+            format: (Fourcc::from(format as u32), modifier.into()),
+            size,
+            planes,
+        },
+    })
+}
+
+/// Buffer allocation callback for `simple_playback_loop` to allocate and export buffers from a GBM
+/// device.
+fn simple_playback_loop_prime_surfaces<D: AsFd>(
+    device: &gbm::Device<D>,
+    stream_info: &StreamInfo,
+    nb_surfaces: usize,
+) -> anyhow::Result<Vec<DmabufSurface>> {
+    let gbm_fourcc = match stream_info.format {
+        DecodedFormat::I420 | DecodedFormat::NV12 => gbm::Format::Nv12,
+        _ => anyhow::bail!(
+            "{:?} format is unsupported with GBM memory",
+            stream_info.format
+        ),
+    };
+
+    (0..nb_surfaces)
+        .map(|_| {
+            device
+                .create_buffer_object::<()>(
+                    stream_info.coded_resolution.width,
+                    stream_info.coded_resolution.height,
+                    gbm_fourcc,
+                    gbm::BufferObjectFlags::SCANOUT,
+                )
+                .map_err(|e| anyhow::anyhow!(e))
+                .and_then(|o| export_gbm_bo(&o))
+        })
+        .collect()
+}
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum EncodedFormat {
@@ -46,6 +124,26 @@ impl FromStr for EncodedFormat {
             "vp8" | "VP8" => Ok(EncodedFormat::VP8),
             "vp9" | "VP9" => Ok(EncodedFormat::VP9),
             _ => Err("unrecognized input format. Valid values: h264, h265, vp8, vp9"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum SurfaceMemoryType {
+    Managed,
+    Prime,
+    User,
+}
+
+impl FromStr for SurfaceMemoryType {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "managed" => Ok(SurfaceMemoryType::Managed),
+            "prime" => Ok(SurfaceMemoryType::Prime),
+            "user" => Ok(SurfaceMemoryType::User),
+            _ => Err("unrecognized memory type. Valid values: managed, prime, user"),
         }
     }
 }
@@ -125,6 +223,14 @@ struct Args {
     #[argh(option, default = "DecodedFormat::I420")]
     output_format: DecodedFormat,
 
+    /// origin of the memory for decoded buffers (managed, prime or user). Default: managed.
+    #[argh(option, default = "SurfaceMemoryType::Managed")]
+    surface_memory: SurfaceMemoryType,
+
+    /// path to the GBM device to use if surface-memory=prime
+    #[argh(option)]
+    gbm_device: Option<PathBuf>,
+
     /// whether to decode frames synchronously
     #[argh(switch)]
     synchronous: bool,
@@ -186,6 +292,41 @@ fn main() {
         BlockingMode::Blocking
     } else {
         BlockingMode::NonBlocking
+    };
+
+    let gbm = match args.surface_memory {
+        SurfaceMemoryType::Managed | SurfaceMemoryType::User => None,
+        SurfaceMemoryType::Prime => {
+            /// A simple wrapper for a GBM device node.
+            pub struct GbmDevice(std::fs::File);
+
+            impl AsFd for GbmDevice {
+                fn as_fd(&self) -> BorrowedFd<'_> {
+                    self.0.as_fd()
+                }
+            }
+            impl drm::Device for GbmDevice {}
+
+            /// Simple helper methods for opening a `Card`.
+            impl GbmDevice {
+                pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+                    std::fs::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(path)
+                        .map(GbmDevice)
+                }
+            }
+
+            let gbm_path = args
+                .gbm_device
+                .unwrap_or(PathBuf::from("/dev/dri/renderD128"));
+            let gbm = GbmDevice::open(gbm_path)
+                .and_then(gbm::Device::new)
+                .expect("failed to create GBM device");
+
+            Some(gbm)
+        }
     };
 
     let display = libva::Display::open().expect("failed to open libva display");
@@ -276,7 +417,30 @@ fn main() {
         decoder.as_mut(),
         frame_iter,
         &mut on_new_frame,
-        &mut simple_playback_loop_owned_surfaces,
+        &mut |stream_info, nb_surfaces| {
+            Ok(match args.surface_memory {
+                SurfaceMemoryType::Managed => {
+                    simple_playback_loop_owned_surfaces(stream_info, nb_surfaces)?
+                        .into_iter()
+                        .map(BufferDescriptor::Managed)
+                        .collect()
+                }
+                SurfaceMemoryType::Prime => simple_playback_loop_prime_surfaces(
+                    gbm.as_ref().unwrap(),
+                    stream_info,
+                    nb_surfaces,
+                )?
+                .into_iter()
+                .map(BufferDescriptor::Dmabuf)
+                .collect(),
+                SurfaceMemoryType::User => {
+                    simple_playback_loop_userptr_surfaces(stream_info, nb_surfaces)?
+                        .into_iter()
+                        .map(BufferDescriptor::User)
+                        .collect()
+                }
+            })
+        },
         args.output_format,
         blocking_mode,
     )

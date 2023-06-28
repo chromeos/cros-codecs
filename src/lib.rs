@@ -211,6 +211,44 @@ pub struct SurfaceLayout {
     pub planes: Vec<PlaneLayout>,
 }
 
+/// Build a surface memory descriptor enum that supports multiple descriptor types.
+///
+/// This is useful for the case where the surfaces' memory backing is not decided at compile-time.
+/// In this case, this macro can be used to list all the potential types supported at run-time, and
+/// the selected one can be built as the program is run.
+///
+/// # Example
+///
+/// ```
+/// use cros_codecs::multiple_desc_type;
+/// use cros_codecs::utils::DmabufSurface;
+///
+/// /// Surfaces' memory can be provided either by the backend, or via PRIME DMABUF handles.
+/// multiple_desc_type! {
+///     enum OwnedOrDmaDescriptor {
+///         Owned(()),
+///         Dmabuf(DmabufSurface),
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! multiple_desc_type {
+    (enum $s:ident { $($v:ident($t:ty),)* } ) => {
+        enum $s {
+            $($v($t),)*
+        }
+
+        #[cfg(feature = "vaapi")]
+        impl libva::SurfaceMemoryDescriptor for $s {
+            fn add_attrs(&mut self, attrs: &mut Vec<libva::VASurfaceAttrib>) -> Option<Box<dyn std::any::Any>> {
+                match self {
+                    $($s::$v(desc) => desc.add_attrs(attrs),)*
+                }
+            }
+        }
+    }
+}
+
 /// Copies `src` into `dst` as NV12, removing any extra padding.
 pub fn nv12_copy(
     src: &[u8],
