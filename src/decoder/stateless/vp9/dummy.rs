@@ -18,7 +18,7 @@ use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
 
-impl<M> StatelessVp9DecoderBackend<M> for Backend {
+impl StatelessVp9DecoderBackend<()> for Backend {
     fn new_sequence(&mut self, _: &Header) -> StatelessBackendResult<()> {
         Ok(())
     }
@@ -32,12 +32,12 @@ impl<M> StatelessVp9DecoderBackend<M> for Backend {
         _: &[Segmentation; MAX_SEGMENTS],
     ) -> StatelessBackendResult<Self::Handle> {
         Ok(Handle {
-            handle: Rc::new(RefCell::new(BackendHandle)),
+            handle: Rc::new(RefCell::new(Default::default())),
         })
     }
 }
 
-impl<M> Decoder<Handle, M> {
+impl Decoder<Handle, ()> {
     // Creates a new instance of the decoder using the dummy backend.
     pub fn new_dummy(blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(Backend::new()), blocking_mode)

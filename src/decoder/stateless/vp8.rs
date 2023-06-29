@@ -51,7 +51,7 @@ trait StatelessVp8DecoderBackend<M>: StatelessDecoderBackend<Header, M> {
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
-pub struct Decoder<T: DecodedHandle, D> {
+pub struct Decoder<T: DecodedHandle<M>, M> {
     /// A parser to extract bitstream data and build frame data in turn
     parser: Parser,
 
@@ -59,7 +59,7 @@ pub struct Decoder<T: DecodedHandle, D> {
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessVp8DecoderBackend<D, Handle = T>>,
+    backend: Box<dyn StatelessVp8DecoderBackend<M, Handle = T>>,
 
     decoding_state: DecodingState<Header>,
 
@@ -76,11 +76,11 @@ pub struct Decoder<T: DecodedHandle, D> {
     alt_ref_picture: Option<T>,
 }
 
-impl<T: DecodedHandle + Clone + 'static, D> Decoder<T, D> {
+impl<T: DecodedHandle<M> + Clone + 'static, M> Decoder<T, M> {
     /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
     fn new(
-        backend: Box<dyn StatelessVp8DecoderBackend<D, Handle = T>>,
+        backend: Box<dyn StatelessVp8DecoderBackend<M, Handle = T>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -215,7 +215,7 @@ impl<T: DecodedHandle + Clone + 'static, D> Decoder<T, D> {
     }
 }
 
-impl<T: DecodedHandle + Clone + 'static, M> StatelessVideoDecoder<M> for Decoder<T, M> {
+impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Decoder<T, M> {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         let frame = self.parser.parse_frame(bitstream)?;
 
@@ -273,7 +273,7 @@ impl<T: DecodedHandle + Clone + 'static, M> StatelessVideoDecoder<M> for Decoder
     }
 }
 
-impl<T: DecodedHandle + Clone + 'static, D> private::StatelessVideoDecoder for Decoder<T, D> {
+impl<T: DecodedHandle<M> + Clone + 'static, M> private::StatelessVideoDecoder for Decoder<T, M> {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),

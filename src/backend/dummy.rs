@@ -17,7 +17,8 @@ use crate::decoder::SurfacePool;
 use crate::DecodedFormat;
 use crate::Resolution;
 
-pub struct BackendHandle;
+#[derive(Default)]
+pub struct BackendHandle(());
 
 impl MappableHandle for BackendHandle {
     fn read(&mut self, _: &mut [u8]) -> anyhow::Result<()> {
@@ -31,7 +32,7 @@ impl MappableHandle for BackendHandle {
 
 impl DynHandle for BackendHandle {
     fn dyn_mappable_handle_mut<'a>(&'a mut self) -> Box<dyn MappableHandle + 'a> {
-        Box::new(BackendHandle)
+        Box::<BackendHandle>::default()
     }
 }
 
@@ -47,7 +48,7 @@ impl Clone for Handle {
     }
 }
 
-impl DecodedHandle for Handle {
+impl DecodedHandle<()> for Handle {
     fn coded_resolution(&self) -> Resolution {
         Default::default()
     }
@@ -70,6 +71,10 @@ impl DecodedHandle for Handle {
 
     fn is_ready(&self) -> bool {
         true
+    }
+
+    fn resource(&self) -> std::cell::Ref<()> {
+        std::cell::Ref::map(self.handle.borrow(), |h| &h.0)
     }
 }
 
@@ -113,10 +118,7 @@ impl<M> SurfacePool<M> for Backend {
     fn clear(&mut self) {}
 }
 
-impl<FormatInfo, M> StatelessDecoderBackend<FormatInfo, M> for Backend
-where
-    Handle: DecodedHandle,
-{
+impl<FormatInfo> StatelessDecoderBackend<FormatInfo, ()> for Backend {
     type Handle = Handle;
 
     fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
@@ -127,7 +129,7 @@ where
         Some(&self.stream_info)
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<()> {
         self
     }
 }

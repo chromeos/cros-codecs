@@ -82,7 +82,7 @@ pub trait DecoderFormatNegotiator<'a, M> {
 /// Events that can be retrieved using the `next_event` method of a decoder.
 pub enum DecoderEvent<'a, M> {
     /// The next frame has been decoded.
-    FrameReady(Box<dyn DecodedHandle>),
+    FrameReady(Box<dyn DecodedHandle<M>>),
     /// The format of the stream has changed and action is required.
     FormatChanged(Box<dyn DecoderFormatNegotiator<'a, M> + 'a>),
 }
@@ -106,7 +106,7 @@ pub trait MappableHandle {
 
 /// The handle type used by the decoder backend. The only requirement from implementors is that
 /// they give access to the underlying handle and that they can be (cheaply) cloned.
-pub trait DecodedHandle {
+pub trait DecodedHandle<M> {
     fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle>;
 
     /// Returns the timestamp of the picture.
@@ -123,6 +123,8 @@ pub trait DecodedHandle {
 
     /// Wait until this handle has been completely rendered.
     fn sync(&self) -> anyhow::Result<()>;
+
+    fn resource(&self) -> std::cell::Ref<M>;
 }
 
 /// Instructs the decoder on whether it should block on the decode operations.
@@ -141,12 +143,12 @@ impl Default for BlockingMode {
 
 /// A queue where decoding jobs wait until they are completed, at which point they can be
 /// retrieved.
-struct ReadyFramesQueue<T: DecodedHandle> {
+struct ReadyFramesQueue<T> {
     /// Queue of all the frames waiting to be sent to the client.
     queue: VecDeque<T>,
 }
 
-impl<T: DecodedHandle> Default for ReadyFramesQueue<T> {
+impl<T> Default for ReadyFramesQueue<T> {
     fn default() -> Self {
         Self {
             queue: Default::default(),
@@ -154,14 +156,14 @@ impl<T: DecodedHandle> Default for ReadyFramesQueue<T> {
     }
 }
 
-impl<T: DecodedHandle> ReadyFramesQueue<T> {
+impl<T> ReadyFramesQueue<T> {
     /// Push `handle` to the back of the queue.
     fn push(&mut self, handle: T) {
         self.queue.push_back(handle)
     }
 }
 
-impl<T: DecodedHandle> Extend<T> for ReadyFramesQueue<T> {
+impl<T> Extend<T> for ReadyFramesQueue<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         self.queue.extend(iter)
     }
@@ -169,7 +171,7 @@ impl<T: DecodedHandle> Extend<T> for ReadyFramesQueue<T> {
 
 /// Allows us to manipulate the frames list like an iterator without consuming it and resetting its
 /// display order counter.
-impl<'a, T: DecodedHandle> Iterator for &'a mut ReadyFramesQueue<T> {
+impl<'a, T> Iterator for &'a mut ReadyFramesQueue<T> {
     type Item = T;
 
     /// Returns the next frame (if any) waiting to be dequeued.

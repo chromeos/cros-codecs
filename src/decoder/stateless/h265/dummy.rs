@@ -9,14 +9,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::backend::dummy::Backend;
-use crate::backend::dummy::BackendHandle;
 use crate::backend::dummy::Handle;
 use crate::decoder::stateless::h265::Decoder;
 use crate::decoder::BlockingMode;
 
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
 
-impl<M> StatelessH265DecoderBackend<M> for Backend {
+impl StatelessH265DecoderBackend<()> for Backend {
     type Picture = ();
 
     fn new_sequence(
@@ -65,11 +64,11 @@ impl<M> StatelessH265DecoderBackend<M> for Backend {
         _: Self::Picture,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Handle> {
         Ok(Handle {
-            handle: Rc::new(RefCell::new(BackendHandle)),
+            handle: Rc::new(RefCell::new(Default::default())),
         })
     }
 }
-impl<M> Decoder<Handle, (), M> {
+impl Decoder<Handle, (), ()> {
     // Creates a new instance of the decoder using the dummy backend.
     pub fn new_dummy(blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(Backend::new()), blocking_mode)

@@ -20,7 +20,7 @@ use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::BlockingMode;
 
-impl<M> StatelessH264DecoderBackend<M> for Backend {
+impl StatelessH264DecoderBackend<()> for Backend {
     type Picture = ();
 
     fn new_sequence(&mut self, _: &Sps) -> StatelessBackendResult<()> {
@@ -63,7 +63,7 @@ impl<M> StatelessH264DecoderBackend<M> for Backend {
 
     fn submit_picture(&mut self, _: Self::Picture) -> StatelessBackendResult<Self::Handle> {
         Ok(Handle {
-            handle: Rc::new(RefCell::new(BackendHandle)),
+            handle: Rc::new(RefCell::new(Default::default())),
         })
     }
 
@@ -72,7 +72,7 @@ impl<M> StatelessH264DecoderBackend<M> for Backend {
     }
 }
 
-impl<M> Decoder<Handle, (), M> {
+impl Decoder<Handle, (), ()> {
     // Creates a new instance of the decoder using the dummy backend.
     pub fn new_dummy(blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(Backend::new()), blocking_mode)

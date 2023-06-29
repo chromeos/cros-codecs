@@ -107,7 +107,7 @@ trait StatelessH265DecoderBackend<M>: StatelessDecoderBackend<Sps, M> {
 /// An entry in the Reference Picture Lists. Unlike H.264, H.265 can use the
 /// current picture itself as a reference.
 #[derive(Clone)]
-pub enum RefPicListEntry<T: crate::decoder::DecodedHandle + Clone> {
+pub enum RefPicListEntry<T: Clone> {
     CurrentPicture(PictureData),
     DpbEntry(DpbEntry<T>),
 }
@@ -145,7 +145,7 @@ impl From<&Sps> for NegotiationInfo {
 
 /// The RefPicSet data, derived once per picture.
 #[derive(Clone, Debug)]
-struct RefPicSet<T: DecodedHandle + Clone> {
+struct RefPicSet<T: Clone> {
     curr_delta_poc_msb_present_flag: [bool; MAX_DPB_SIZE],
     foll_delta_poc_msb_present_flag: [bool; MAX_DPB_SIZE],
 
@@ -168,7 +168,7 @@ struct RefPicSet<T: DecodedHandle + Clone> {
     ref_pic_set_lt_foll: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
 }
 
-impl<T: DecodedHandle + Clone> Default for RefPicSet<T> {
+impl<T: Clone> Default for RefPicSet<T> {
     fn default() -> Self {
         Self {
             curr_delta_poc_msb_present_flag: Default::default(),
@@ -194,7 +194,7 @@ impl<T: DecodedHandle + Clone> Default for RefPicSet<T> {
 
 pub struct Decoder<T, P, M>
 where
-    T: DecodedHandle + Clone,
+    T: Clone,
 {
     /// A parser to extract bitstream metadata
     parser: Parser,
@@ -255,7 +255,7 @@ where
 
 impl<T, P, M> Decoder<T, P, M>
 where
-    T: DecodedHandle + Clone + 'static,
+    T: DecodedHandle<M> + Clone + 'static,
 {
     /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
@@ -985,7 +985,7 @@ where
 
 impl<T, P, M> StatelessVideoDecoder<M> for Decoder<T, P, M>
 where
-    T: DecodedHandle + Clone + 'static,
+    T: DecodedHandle<M> + Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         let sps = Self::peek_sps(&mut self.parser, bitstream)?;
@@ -1044,7 +1044,7 @@ where
 
 impl<T, P, M> private::StatelessVideoDecoder for Decoder<T, P, M>
 where
-    T: DecodedHandle + Clone + 'static,
+    T: DecodedHandle<M> + Clone + 'static,
 {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {

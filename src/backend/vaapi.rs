@@ -173,7 +173,7 @@ fn supported_formats_for_rt_format(
 /// A decoded frame handle.
 pub(crate) type DecodedHandle<M> = Rc<RefCell<GenericBackendHandle<M>>>;
 
-impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
+impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait<M> for DecodedHandle<M> {
     fn coded_resolution(&self) -> Resolution {
         self.borrow().coded_resolution
     }
@@ -198,6 +198,14 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
         self.borrow_mut().sync().context("while syncing picture")?;
 
         Ok(())
+    }
+
+    fn resource(&self) -> std::cell::Ref<M> {
+        std::cell::Ref::map(self.borrow(), |r| match &r.state {
+            PictureState::Ready(p) => p.surface().as_ref(),
+            PictureState::Pending(p) => p.surface().as_ref(),
+            PictureState::Invalid => unreachable!(),
+        })
     }
 }
 
