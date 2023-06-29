@@ -22,9 +22,9 @@ use crate::codec::h264::picture::Reference;
 // The second member is the backend handle of the frame. It can be `None` if the inserted picture
 // is non-existing (i.e. `nonexisting` is true on the `PictureData`).
 #[derive(Clone)]
-pub struct DpbEntry<T: Clone>(pub Rc<RefCell<PictureData>>, pub Option<T>);
+pub struct DpbEntry<T>(pub Rc<RefCell<PictureData>>, pub Option<T>);
 
-pub struct Dpb<T: Clone> {
+pub struct Dpb<T> {
     /// List of `PictureData` and backend handles to decoded pictures.
     entries: Vec<DpbEntry<T>>,
     /// The maximum number of pictures that can be stored.

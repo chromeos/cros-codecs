@@ -107,7 +107,7 @@ trait StatelessH265DecoderBackend<M>: StatelessDecoderBackend<Sps, M> {
 /// An entry in the Reference Picture Lists. Unlike H.264, H.265 can use the
 /// current picture itself as a reference.
 #[derive(Clone)]
-pub enum RefPicListEntry<T: Clone> {
+pub enum RefPicListEntry<T> {
     CurrentPicture(PictureData),
     DpbEntry(DpbEntry<T>),
 }
@@ -145,7 +145,7 @@ impl From<&Sps> for NegotiationInfo {
 
 /// The RefPicSet data, derived once per picture.
 #[derive(Clone, Debug)]
-struct RefPicSet<T: Clone> {
+struct RefPicSet<T> {
     curr_delta_poc_msb_present_flag: [bool; MAX_DPB_SIZE],
     foll_delta_poc_msb_present_flag: [bool; MAX_DPB_SIZE],
 

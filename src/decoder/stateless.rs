@@ -81,7 +81,7 @@ pub(crate) trait StatelessDecoderBackend<FormatInfo, M> {
     /// This will usually be some backend-specific type with a resource and a
     /// resource pool so that said buffer can be reused for another decode
     /// operation when it goes out of scope.
-    type Handle: DecodedHandle<M> + Clone;
+    type Handle: DecodedHandle<M>;
 
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;

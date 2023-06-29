@@ -19,9 +19,9 @@ use crate::codec::h265::picture::Reference;
 //
 // The second member is the backend handle of the frame.
 #[derive(Clone, Debug)]
-pub struct DpbEntry<T: Clone>(pub Rc<RefCell<PictureData>>, pub T);
+pub struct DpbEntry<T>(pub Rc<RefCell<PictureData>>, pub T);
 
-pub struct Dpb<T: Clone> {
+pub struct Dpb<T> {
     /// List of `PictureData` and backend handles to decoded pictures.
     entries: Vec<DpbEntry<T>>,
     /// The maximum number of pictures that can be stored.

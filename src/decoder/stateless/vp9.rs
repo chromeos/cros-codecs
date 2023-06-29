@@ -275,7 +275,7 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Deco
     }
 }
 
-impl<T: DecodedHandle<M> + Clone + 'static, M> private::StatelessVideoDecoder for Decoder<T, M> {
+impl<T: DecodedHandle<M> + 'static, M> private::StatelessVideoDecoder for Decoder<T, M> {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
