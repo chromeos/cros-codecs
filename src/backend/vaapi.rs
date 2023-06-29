@@ -438,6 +438,13 @@ mod surface_pool {
         fn num_managed_surfaces(&self) -> usize {
             (**self).borrow().num_managed_surfaces()
         }
+
+        fn clear(&mut self) {
+            let mut pool = (**self).borrow_mut();
+
+            pool.surfaces.clear();
+            pool.managed_surfaces.clear();
+        }
     }
 }
 

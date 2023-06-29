@@ -109,6 +109,8 @@ impl<M> SurfacePool<M> for Backend {
     fn num_managed_surfaces(&self) -> usize {
         4
     }
+
+    fn clear(&mut self) {}
 }
 
 impl<FormatInfo, M> StatelessDecoderBackend<FormatInfo, M> for Backend

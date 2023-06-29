@@ -39,6 +39,8 @@ pub trait SurfacePool<M> {
     fn num_free_surfaces(&self) -> usize;
     /// Returns the total number of managed surfaces in this pool.
     fn num_managed_surfaces(&self) -> usize;
+    /// Remove all surfaces from this pool.
+    fn clear(&mut self);
 }
 
 /// Information about the current stream.
