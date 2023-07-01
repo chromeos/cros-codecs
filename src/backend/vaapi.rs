@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
-use std::cell::RefMut;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -186,8 +185,8 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait<M> for DecodedHandle<M> {
         self.borrow().timestamp()
     }
 
-    fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle> {
-        self.borrow_mut()
+    fn dyn_picture(&self) -> std::cell::Ref<dyn DynHandle> {
+        self.borrow()
     }
 
     fn is_ready(&self) -> bool {
@@ -701,10 +700,7 @@ impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
     /// wants to access the backend mapping directly for any reason.
     ///
     /// Note that DynMappableHandle is downcastable.
-    fn image(&mut self) -> anyhow::Result<Image> {
-        // Image can only be retrieved in the `Ready` state.
-        self.sync()?;
-
+    fn image(&self) -> anyhow::Result<Image> {
         match &self.state {
             PictureState::Ready(picture) => {
                 // Map the VASurface onto our address space.
@@ -716,8 +712,10 @@ impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
 
                 Ok(image)
             }
-            // Either we are in `Ready` state or `sync` failed and we returned.
-            PictureState::Pending(_) | PictureState::Invalid => unreachable!(),
+            // Either we are in `Ready` state or we didn't call `sync()`.
+            PictureState::Pending(_) | PictureState::Invalid => {
+                Err(anyhow::anyhow!("picture is not in Ready state"))
+            }
         }
     }
 
@@ -761,8 +759,8 @@ impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
 }
 
 impl<M: SurfaceMemoryDescriptor> DynHandle for GenericBackendHandle<M> {
-    fn dyn_mappable_handle_mut<'a>(&'a mut self) -> Box<dyn MappableHandle + 'a> {
-        Box::new(self.image().unwrap())
+    fn dyn_mappable_handle<'a>(&'a self) -> anyhow::Result<Box<dyn MappableHandle + 'a>> {
+        self.image().map(|i| Box::new(i) as Box<dyn MappableHandle>)
     }
 }
 

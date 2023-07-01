@@ -244,8 +244,9 @@ pub(crate) mod tests {
             let (frame_num, expected_crc) = crcs.next().expect("decoded more frames than expected");
 
             if check_crcs || dump_yuv {
-                let mut picture = handle.dyn_picture_mut();
-                let mut backend_handle = picture.dyn_mappable_handle_mut();
+                handle.sync().unwrap();
+                let picture = handle.dyn_picture();
+                let mut backend_handle = picture.dyn_mappable_handle().unwrap();
 
                 let buffer_size = backend_handle.image_size();
                 let mut nv12 = vec![0; buffer_size];

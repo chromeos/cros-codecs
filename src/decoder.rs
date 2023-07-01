@@ -11,7 +11,6 @@
 
 pub mod stateless;
 
-use std::cell::RefMut;
 use std::collections::VecDeque;
 
 use crate::DecodedFormat;
@@ -88,9 +87,9 @@ pub enum DecoderEvent<'a, M> {
 }
 
 pub trait DynHandle {
-    /// Gets an exclusive reference to the backend handle of this picture.
+    /// Gets an CPU mapping to the memory backing the handle.
     /// Assumes that this picture is backed by a handle and panics if not the case.
-    fn dyn_mappable_handle_mut<'a>(&'a mut self) -> Box<dyn MappableHandle + 'a>;
+    fn dyn_mappable_handle<'a>(&'a self) -> anyhow::Result<Box<dyn MappableHandle + 'a>>;
 }
 
 /// A trait for types that can be mapped into the client's address space.
@@ -107,7 +106,8 @@ pub trait MappableHandle {
 /// The handle type used by the decoder backend. The only requirement from implementors is that
 /// they give access to the underlying handle and that they can be (cheaply) cloned.
 pub trait DecodedHandle<M> {
-    fn dyn_picture_mut(&self) -> RefMut<dyn DynHandle>;
+    /// Returns a reference to an object allowing a CPU mapping of the decoded surface.
+    fn dyn_picture(&self) -> std::cell::Ref<dyn DynHandle>;
 
     /// Returns the timestamp of the picture.
     fn timestamp(&self) -> u64;

@@ -380,8 +380,9 @@ fn main() {
 
     let mut on_new_frame = |handle: Box<dyn DecodedHandle<_>>| {
         if args.output.is_some() || args.compute_md5.is_some() {
-            let mut picture = handle.dyn_picture_mut();
-            let mut handle = picture.dyn_mappable_handle_mut();
+            handle.sync().unwrap();
+            let picture = handle.dyn_picture();
+            let mut handle = picture.dyn_mappable_handle().unwrap();
             let buffer_size = handle.image_size();
             let mut frame_data = vec![0; buffer_size];
             handle.read(&mut frame_data).unwrap();
