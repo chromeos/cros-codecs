@@ -1700,13 +1700,15 @@ where
             }
         }
 
-        if !slice.header().field_pic_flag() && prev_field.is_some() {
-            let field = prev_field.as_ref().unwrap().0.borrow().field;
-            return Err(anyhow!(
-                "Expecting complementary field {:?}, got {:?}",
-                field.opposite(),
-                field
-            ));
+        if !slice.header().field_pic_flag() {
+            if let Some(prev_field) = prev_field {
+                let field = prev_field.0.borrow().field;
+                return Err(anyhow!(
+                    "Expecting complementary field {:?}, got {:?}",
+                    field.opposite(),
+                    field
+                ));
+            }
         }
 
         match prev_field {
