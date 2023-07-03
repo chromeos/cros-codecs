@@ -23,6 +23,7 @@ use crate::codec::h264::parser::Parser;
 use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::RefPicListModification;
 use crate::codec::h264::parser::Slice;
+use crate::codec::h264::parser::SliceHeader;
 use crate::codec::h264::parser::SliceType;
 use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
@@ -1945,11 +1946,9 @@ where
 
     fn modify_ref_pic_list(
         &mut self,
-        current_slice: &Slice<impl AsRef<[u8]>>,
+        hdr: &SliceHeader,
         ref_pic_list: RefPicList,
     ) -> anyhow::Result<()> {
-        let hdr = current_slice.header();
-
         let (ref_pic_list_x, ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
             match ref_pic_list {
                 RefPicList::RefPicList0 => (
@@ -2017,14 +2016,16 @@ where
         self.ref_pic_list0.clear();
         self.ref_pic_list1.clear();
 
-        if let SliceType::P | SliceType::Sp = current_slice.header().slice_type() {
+        let hdr = current_slice.header();
+
+        if let SliceType::P | SliceType::Sp = hdr.slice_type() {
             self.ref_pic_list0 = self.ref_pic_list_p0.clone();
-            self.modify_ref_pic_list(current_slice, RefPicList::RefPicList0)
-        } else if let SliceType::B = current_slice.header().slice_type() {
+            self.modify_ref_pic_list(hdr, RefPicList::RefPicList0)
+        } else if let SliceType::B = hdr.slice_type() {
             self.ref_pic_list0 = self.ref_pic_list_b0.clone();
             self.ref_pic_list1 = self.ref_pic_list_b1.clone();
-            self.modify_ref_pic_list(current_slice, RefPicList::RefPicList0)
-                .and(self.modify_ref_pic_list(current_slice, RefPicList::RefPicList1))
+            self.modify_ref_pic_list(hdr, RefPicList::RefPicList0)
+                .and(self.modify_ref_pic_list(hdr, RefPicList::RefPicList1))
         } else {
             Ok(())
         }
