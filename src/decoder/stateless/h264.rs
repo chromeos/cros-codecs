@@ -1331,7 +1331,7 @@ where
                 4 => self.mmco_op_4(pic, i)?,
                 5 => self.mmco_op_5(pic)?,
                 6 => self.mmco_op_6(pic, i)?,
-                other => panic!("Unknown MMCO={}", other),
+                other => anyhow::bail!("unknown MMCO={}", other),
             }
         }
 
@@ -1852,8 +1852,8 @@ where
                 pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num;
             }
         } else {
-            panic!(
-                "Unexpected value for modification_of_pic_nums_idc {:?}",
+            anyhow::bail!(
+                "unexpected value for modification_of_pic_nums_idc {:?}",
                 rplm.modification_of_pic_nums_idc()
             );
         }
@@ -2005,7 +2005,7 @@ where
                     &mut ref_idx_lx,
                 )?,
                 3 => break,
-                _ => panic!("Unexpected modification_of_pic_nums_idc {:?}", idc),
+                _ => anyhow::bail!("unexpected modification_of_pic_nums_idc {:?}", idc),
             }
         }
 
