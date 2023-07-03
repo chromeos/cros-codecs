@@ -1824,10 +1824,13 @@ where
 
     // 8.2.4.3.1 Modification process of reference picture lists for short-term
     // reference pictures
+    #[allow(clippy::too_many_arguments)]
     fn short_term_pic_list_modification(
-        &mut self,
-        current_slice: &Slice<impl AsRef<[u8]>>,
-        ref_pic_list: RefPicList,
+        cur_pic: &PictureData,
+        curr_info: &CurrentPicInfo,
+        dpb: &Dpb<T>,
+        ref_pic_list_x: &mut Vec<DpbEntry<T>>,
+        num_ref_idx_lx_active_minus1: u8,
         rplm: &RefPicListModification,
         pic_num_lx_pred: &mut i32,
         ref_idx_lx: &mut usize,
@@ -1835,19 +1838,16 @@ where
         let pic_num_lx_no_wrap;
         let abs_diff_pic_num = rplm.abs_diff_pic_num_minus1() as i32 + 1;
         let modification_of_pic_nums_idc = rplm.modification_of_pic_nums_idc();
-        let current_pic = self.cur_pic.as_ref().unwrap();
 
         if modification_of_pic_nums_idc == 0 {
             if *pic_num_lx_pred - abs_diff_pic_num < 0 {
-                pic_num_lx_no_wrap =
-                    *pic_num_lx_pred - abs_diff_pic_num + self.curr_info.max_pic_num;
+                pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num + curr_info.max_pic_num;
             } else {
                 pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num;
             }
         } else if modification_of_pic_nums_idc == 1 {
-            if *pic_num_lx_pred + abs_diff_pic_num >= self.curr_info.max_pic_num {
-                pic_num_lx_no_wrap =
-                    *pic_num_lx_pred + abs_diff_pic_num - self.curr_info.max_pic_num;
+            if *pic_num_lx_pred + abs_diff_pic_num >= curr_info.max_pic_num {
+                pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num - curr_info.max_pic_num;
             } else {
                 pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num;
             }
@@ -1860,29 +1860,18 @@ where
 
         *pic_num_lx_pred = pic_num_lx_no_wrap;
 
-        let pic_num_lx = if pic_num_lx_no_wrap > current_pic.pic_num {
-            pic_num_lx_no_wrap - self.curr_info.max_pic_num
+        let pic_num_lx = if pic_num_lx_no_wrap > cur_pic.pic_num {
+            pic_num_lx_no_wrap - curr_info.max_pic_num
         } else {
             pic_num_lx_no_wrap
         };
 
-        let handle = self
-            .dpb
+        let handle = dpb
             .find_short_term_with_pic_num(pic_num_lx)
             .with_context(|| format!("No ShortTerm reference found with pic_num {}", pic_num_lx))?;
 
-        let ref_pic_list_x = match ref_pic_list {
-            RefPicList::RefPicList0 => &mut self.ref_pic_list0,
-            RefPicList::RefPicList1 => &mut self.ref_pic_list1,
-        };
-
         ref_pic_list_x.insert(*ref_idx_lx, handle);
         *ref_idx_lx += 1;
-
-        let num_ref_idx_lx_active_minus1 = match ref_pic_list {
-            RefPicList::RefPicList0 => current_slice.header().num_ref_idx_l0_active_minus1(),
-            RefPicList::RefPicList1 => current_slice.header().num_ref_idx_l1_active_minus1(),
-        };
 
         let mut nidx = *ref_idx_lx;
 
@@ -1892,7 +1881,7 @@ where
             }
 
             let target = &ref_pic_list_x[cidx].0.clone();
-            let max_pic_num = self.curr_info.max_pic_num;
+            let max_pic_num = curr_info.max_pic_num;
 
             if Self::pic_num_f(&target.borrow(), max_pic_num) != pic_num_lx {
                 ref_pic_list_x[nidx] = ref_pic_list_x[cidx].clone();
@@ -1908,16 +1897,16 @@ where
     }
 
     fn long_term_pic_list_modification(
-        &mut self,
-        current_slice: &Slice<impl AsRef<[u8]>>,
-        ref_pic_list: RefPicList,
+        curr_info: &CurrentPicInfo,
+        dpb: &Dpb<T>,
+        ref_pic_list_x: &mut Vec<DpbEntry<T>>,
+        num_ref_idx_lx_active_minus1: u8,
         rplm: &RefPicListModification,
         ref_idx_lx: &mut usize,
     ) -> anyhow::Result<()> {
         let long_term_pic_num = rplm.long_term_pic_num();
 
-        let handle = self
-            .dpb
+        let handle = dpb
             .find_long_term_with_long_term_pic_num(long_term_pic_num as i32)
             .with_context(|| {
                 format!(
@@ -1926,20 +1915,10 @@ where
                 )
             })?;
 
-        let ref_pic_list_x = match ref_pic_list {
-            RefPicList::RefPicList0 => &mut self.ref_pic_list0,
-            RefPicList::RefPicList1 => &mut self.ref_pic_list1,
-        };
-
         ref_pic_list_x.insert(*ref_idx_lx, handle);
         *ref_idx_lx += 1;
 
         let mut nidx = *ref_idx_lx;
-
-        let num_ref_idx_lx_active_minus1 = match ref_pic_list {
-            RefPicList::RefPicList0 => current_slice.header().num_ref_idx_l0_active_minus1(),
-            RefPicList::RefPicList1 => current_slice.header().num_ref_idx_l1_active_minus1(),
-        };
 
         for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) + 1 {
             if cidx == ref_pic_list_x.len() {
@@ -1947,7 +1926,7 @@ where
             }
 
             let target = ref_pic_list_x[cidx].0.clone();
-            let max_long_term_frame_idx = self.curr_info.max_long_term_frame_idx;
+            let max_long_term_frame_idx = curr_info.max_long_term_frame_idx;
 
             if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
                 != long_term_pic_num as i32
@@ -1997,7 +1976,8 @@ where
             return Ok(());
         }
 
-        let mut pic_num_lx_pred = self.cur_pic.as_ref().unwrap().pic_num;
+        let cur_pic = self.cur_pic.as_ref().unwrap();
+        let mut pic_num_lx_pred = cur_pic.pic_num;
         let mut ref_idx_lx = 0;
 
         for modification in rplm {
@@ -2005,17 +1985,22 @@ where
 
             match idc {
                 0 | 1 => {
-                    self.short_term_pic_list_modification(
-                        current_slice,
-                        ref_pic_list,
+                    Self::short_term_pic_list_modification(
+                        cur_pic,
+                        &self.curr_info,
+                        &self.dpb,
+                        ref_pic_list_x,
+                        num_ref_idx_lx_active_minus1,
                         modification,
                         &mut pic_num_lx_pred,
                         &mut ref_idx_lx,
                     )?;
                 }
-                2 => self.long_term_pic_list_modification(
-                    current_slice,
-                    ref_pic_list,
+                2 => Self::long_term_pic_list_modification(
+                    &self.curr_info,
+                    &self.dpb,
+                    ref_pic_list_x,
+                    num_ref_idx_lx_active_minus1,
                     modification,
                     &mut ref_idx_lx,
                 )?,
