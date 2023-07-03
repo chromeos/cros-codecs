@@ -166,6 +166,41 @@ pub struct CurrentPicInfo {
     max_long_term_frame_idx: i32,
 }
 
+/// All the reference picture lists used to decode a stream.
+struct ReferencePicLists<T> {
+    /// Reference picture list for P slices. Retains the same meaning as in the
+    /// specification. Points into the pictures stored in the DPB. Derived once
+    /// per picture.
+    ref_pic_list_p0: Vec<DpbEntry<T>>,
+    /// Reference picture list 0 for B slices. Retains the same meaning as in
+    /// the specification. Points into the pictures stored in the DPB. Derived
+    /// once per picture.
+    ref_pic_list_b0: Vec<DpbEntry<T>>,
+    /// Reference picture list 1 for B slices. Retains the same meaning as in
+    /// the specification. Points into the pictures stored in the DPB. Derived
+    /// once per picture.
+    ref_pic_list_b1: Vec<DpbEntry<T>>,
+
+    /// Equivalent to RefPicList0 in the specification. Computed for every
+    /// slice, points to the pictures in the DPB.
+    ref_pic_list0: Vec<DpbEntry<T>>,
+    /// Equivalent to RefPicList1 in the specification. Computed for every
+    /// slice, points to the pictures in the DPB.
+    ref_pic_list1: Vec<DpbEntry<T>>,
+}
+
+impl<T> Default for ReferencePicLists<T> {
+    fn default() -> Self {
+        Self {
+            ref_pic_list_p0: Default::default(),
+            ref_pic_list_b0: Default::default(),
+            ref_pic_list_b1: Default::default(),
+            ref_pic_list0: Default::default(),
+            ref_pic_list1: Default::default(),
+        }
+    }
+}
+
 pub struct Decoder<T, P, M>
 where
     T: DecodedHandle<M> + Clone,
@@ -224,25 +259,8 @@ where
     /// the handle of this member is always valid.
     last_field: Option<(Rc<RefCell<PictureData>>, T)>,
 
-    /// Reference picture list for P slices. Retains the same meaning as in the
-    /// specification. Points into the pictures stored in the DPB. Derived once
-    /// per picture.
-    ref_pic_list_p0: Vec<DpbEntry<T>>,
-    /// Reference picture list 0 for B slices. Retains the same meaning as in
-    /// the specification. Points into the pictures stored in the DPB. Derived
-    /// once per picture.
-    ref_pic_list_b0: Vec<DpbEntry<T>>,
-    /// Reference picture list 1 for B slices. Retains the same meaning as in
-    /// the specification. Points into the pictures stored in the DPB. Derived
-    /// once per picture.
-    ref_pic_list_b1: Vec<DpbEntry<T>>,
-
-    /// Equivalent to RefPicList0 in the specification. Computed for every
-    /// slice, points to the pictures in the DPB.
-    ref_pic_list0: Vec<DpbEntry<T>>,
-    /// Equivalent to RefPicList1 in the specification. Computed for every
-    /// slice, points to the pictures in the DPB.
-    ref_pic_list1: Vec<DpbEntry<T>>,
+    /// Reference picture lists.
+    ref_pic_lists: ReferencePicLists<T>,
 }
 
 impl<T, P, M> Decoder<T, P, M>
@@ -272,11 +290,7 @@ where
             cur_backend_pic: Default::default(),
             last_field: Default::default(),
             ready_queue: Default::default(),
-            ref_pic_list_p0: Default::default(),
-            ref_pic_list_b0: Default::default(),
-            ref_pic_list_b1: Default::default(),
-            ref_pic_list0: Default::default(),
-            ref_pic_list1: Default::default(),
+            ref_pic_lists: Default::default(),
         })
     }
 
@@ -991,17 +1005,22 @@ where
         // short-term reference" or "used for long-term reference") and is not
         // marked as "non-existing".
         if num_refs == 0 {
-            self.clear_ref_pic_lists();
+            self.ref_pic_lists = Default::default();
             return;
         }
 
         if matches!(cur_pic.field, Field::Frame) {
-            self.ref_pic_list_p0 = Self::init_ref_pic_list_p(dpb);
-            (self.ref_pic_list_b0, self.ref_pic_list_b1) = Self::init_ref_pic_list_b(dpb, cur_pic);
+            self.ref_pic_lists.ref_pic_list_p0 = Self::init_ref_pic_list_p(dpb);
+            (
+                self.ref_pic_lists.ref_pic_list_b0,
+                self.ref_pic_lists.ref_pic_list_b1,
+            ) = Self::init_ref_pic_list_b(dpb, cur_pic);
         } else {
-            self.ref_pic_list_p0 = Self::init_ref_field_pic_list_p(dpb, cur_pic);
-            (self.ref_pic_list_b0, self.ref_pic_list_b1) =
-                Self::init_ref_field_pic_list_b(dpb, cur_pic);
+            self.ref_pic_lists.ref_pic_list_p0 = Self::init_ref_field_pic_list_p(dpb, cur_pic);
+            (
+                self.ref_pic_lists.ref_pic_list_b0,
+                self.ref_pic_lists.ref_pic_list_b1,
+            ) = Self::init_ref_field_pic_list_b(dpb, cur_pic);
         }
     }
 
@@ -1470,7 +1489,7 @@ where
             self.fill_prev_ref_info(&pic);
         }
 
-        self.clear_ref_pic_lists();
+        self.ref_pic_lists = Default::default();
         self.fill_prev_info(&pic);
 
         self.dpb.remove_unused();
@@ -1643,15 +1662,6 @@ where
         pics
     }
 
-    fn clear_ref_pic_lists(&mut self) {
-        self.ref_pic_list_p0.clear();
-        self.ref_pic_list_b0.clear();
-        self.ref_pic_list_b1.clear();
-
-        self.ref_pic_list0.clear();
-        self.ref_pic_list1.clear();
-    }
-
     /// Drain the decoder, processing all pending frames.
     fn drain(&mut self) {
         let pics = self.dpb.drain();
@@ -1659,7 +1669,7 @@ where
         // At this point all pictures will have been decoded, as we don't buffer
         // decode requests, but instead process them immediately, so refs will
         // not be needed.
-        self.clear_ref_pic_lists();
+        self.ref_pic_lists = Default::default();
 
         // Pics in the DPB have undergone `finish_picture` already or are
         // nonexisting frames, we can just mark them as ready.
@@ -1950,13 +1960,13 @@ where
         let (ref_pic_list_x, ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
             match ref_pic_list {
                 RefPicList::RefPicList0 => (
-                    &mut self.ref_pic_list0,
+                    &mut self.ref_pic_lists.ref_pic_list0,
                     hdr.ref_pic_list_modification_flag_l0(),
                     hdr.num_ref_idx_l0_active_minus1(),
                     hdr.ref_pic_list_modification_l0(),
                 ),
                 RefPicList::RefPicList1 => (
-                    &mut self.ref_pic_list1,
+                    &mut self.ref_pic_lists.ref_pic_list1,
                     hdr.ref_pic_list_modification_flag_l1(),
                     hdr.num_ref_idx_l1_active_minus1(),
                     hdr.ref_pic_list_modification_l1(),
@@ -2011,17 +2021,17 @@ where
         &mut self,
         current_slice: &Slice<impl AsRef<[u8]>>,
     ) -> anyhow::Result<()> {
-        self.ref_pic_list0.clear();
-        self.ref_pic_list1.clear();
+        self.ref_pic_lists.ref_pic_list0.clear();
+        self.ref_pic_lists.ref_pic_list1.clear();
 
         let hdr = current_slice.header();
 
         if let SliceType::P | SliceType::Sp = hdr.slice_type() {
-            self.ref_pic_list0 = self.ref_pic_list_p0.clone();
+            self.ref_pic_lists.ref_pic_list0 = self.ref_pic_lists.ref_pic_list_p0.clone();
             self.modify_ref_pic_list(hdr, RefPicList::RefPicList0)
         } else if let SliceType::B = hdr.slice_type() {
-            self.ref_pic_list0 = self.ref_pic_list_b0.clone();
-            self.ref_pic_list1 = self.ref_pic_list_b1.clone();
+            self.ref_pic_lists.ref_pic_list0 = self.ref_pic_lists.ref_pic_list_b0.clone();
+            self.ref_pic_lists.ref_pic_list1 = self.ref_pic_lists.ref_pic_list_b1.clone();
             self.modify_ref_pic_list(hdr, RefPicList::RefPicList0)
                 .and(self.modify_ref_pic_list(hdr, RefPicList::RefPicList1))
         } else {
@@ -2075,8 +2085,8 @@ where
             sps,
             pps,
             &self.dpb,
-            &self.ref_pic_list0,
-            &self.ref_pic_list1,
+            &self.ref_pic_lists.ref_pic_list0,
+            &self.ref_pic_lists.ref_pic_list1,
         )?;
 
         Ok(())
