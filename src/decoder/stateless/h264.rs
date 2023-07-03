@@ -674,35 +674,35 @@ where
 
     /// 8.2.4.2.2 Initialization process for the reference picture list for P
     /// and SP slices in fields
-    fn init_ref_field_pic_list_p(&mut self) {
-        self.ref_pic_list_p0.clear();
+    fn init_ref_field_pic_list_p(dpb: &Dpb<T>, cur_pic: &PictureData) -> Vec<DpbEntry<T>> {
+        let mut ref_pic_list_p0 = vec![];
         let mut ref_frame_list_0_short_term = vec![];
         let mut ref_frame_list_long_term = vec![];
 
-        self.dpb
-            .get_short_term_refs(&mut ref_frame_list_0_short_term);
+        dpb.get_short_term_refs(&mut ref_frame_list_0_short_term);
         Self::sort_frame_num_wrap_descending(&mut ref_frame_list_0_short_term);
 
-        self.dpb.get_long_term_refs(&mut ref_frame_list_long_term);
+        dpb.get_long_term_refs(&mut ref_frame_list_long_term);
         Self::sort_long_term_pic_num_ascending(&mut ref_frame_list_long_term);
 
         // 8.2.4.2.5
-        let field = self.cur_pic.as_ref().unwrap().field;
         Self::init_ref_field_pic_list(
-            field,
+            cur_pic.field,
             Reference::ShortTerm,
             &mut ref_frame_list_0_short_term,
-            &mut self.ref_pic_list_p0,
+            &mut ref_pic_list_p0,
         );
         Self::init_ref_field_pic_list(
-            field,
+            cur_pic.field,
             Reference::LongTerm,
             &mut ref_frame_list_long_term,
-            &mut self.ref_pic_list_p0,
+            &mut ref_pic_list_p0,
         );
 
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_p(&self.ref_pic_list_p0, true);
+        Self::debug_ref_list_p(&ref_pic_list_p0, true);
+
+        ref_pic_list_p0
     }
 
     fn sort_poc_descending(pics: &mut [DpbEntry<T>]) {
@@ -818,9 +818,12 @@ where
 
     /// 8.2.4.2.4 Initialization process for reference picture lists for B
     /// slices in fields
-    fn init_ref_field_pic_list_b(&mut self) {
-        self.ref_pic_list_b0.clear();
-        self.ref_pic_list_b1.clear();
+    fn init_ref_field_pic_list_b(
+        dpb: &Dpb<T>,
+        cur_pic: &PictureData,
+    ) -> (Vec<DpbEntry<T>>, Vec<DpbEntry<T>>) {
+        let mut ref_pic_list_b0 = vec![];
+        let mut ref_pic_list_b1 = vec![];
         let mut ref_frame_list_0_short_term = vec![];
         let mut ref_frame_list_1_short_term = vec![];
         let mut ref_frame_list_long_term = vec![];
@@ -828,9 +831,7 @@ where
         let mut short_term_refs = vec![];
         let mut remaining = vec![];
 
-        self.dpb.get_short_term_refs(&mut short_term_refs);
-
-        let cur_pic = self.cur_pic.as_ref().unwrap();
+        dpb.get_short_term_refs(&mut short_term_refs);
 
         // When pic_order_cnt_type is equal to 0, reference pictures that are
         // marked as "non-existing" as specified in clause 8.2.5.2 are not
@@ -892,7 +893,7 @@ where
         // field is included into the list refFrameListLongTerm. A reference
         // entry in which only one field is marked as "used for long-term
         // reference" is included into the list refFrameListLongTerm
-        self.dpb.get_long_term_refs(&mut ref_frame_list_long_term);
+        dpb.get_long_term_refs(&mut ref_frame_list_long_term);
 
         ref_frame_list_long_term.retain(|h| !h.0.borrow().nonexisting);
 
@@ -906,43 +907,45 @@ where
         Self::debug_ref_list_b(&ref_frame_list_long_term, "ref_frame_list_long_term");
 
         // 8.2.4.2.5
-        let field = self.cur_pic.as_ref().unwrap().field;
+        let field = cur_pic.field;
         Self::init_ref_field_pic_list(
             field,
             Reference::ShortTerm,
             &mut ref_frame_list_0_short_term,
-            &mut self.ref_pic_list_b0,
+            &mut ref_pic_list_b0,
         );
         Self::init_ref_field_pic_list(
             field,
             Reference::LongTerm,
             &mut ref_frame_list_long_term,
-            &mut self.ref_pic_list_b0,
+            &mut ref_pic_list_b0,
         );
 
         Self::init_ref_field_pic_list(
             field,
             Reference::ShortTerm,
             &mut ref_frame_list_1_short_term,
-            &mut self.ref_pic_list_b1,
+            &mut ref_pic_list_b1,
         );
         Self::init_ref_field_pic_list(
             field,
             Reference::LongTerm,
             &mut ref_frame_list_long_term,
-            &mut self.ref_pic_list_b1,
+            &mut ref_pic_list_b1,
         );
 
         // When the reference picture list RefPicList1 has more than one entry
         // and RefPicList1 is identical to the reference picture list
         // RefPicList0, the first two entries RefPicList1[0] and RefPicList1[1]
         // are switched.
-        Self::swap_b1_if_needed(&self.ref_pic_list_b0, &mut self.ref_pic_list_b1);
+        Self::swap_b1_if_needed(&ref_pic_list_b0, &mut ref_pic_list_b1);
 
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_b(&self.ref_pic_list_b0, "ref_pic_list_b0");
+        Self::debug_ref_list_b(&ref_pic_list_b0, "ref_pic_list_b0");
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_b(&self.ref_pic_list_b1, "ref_pic_list_b1");
+        Self::debug_ref_list_b(&ref_pic_list_b1, "ref_pic_list_b1");
+
+        (ref_pic_list_b0, ref_pic_list_b1)
     }
 
     /// Copies from refFrameList(XShort|Long)Term into RefPicListX as per 8.2.4.2.5. Used when
@@ -998,13 +1001,14 @@ where
         }
 
         let cur_pic = self.cur_pic.as_ref().unwrap();
+        let dpb = &self.dpb;
         if matches!(cur_pic.field, Field::Frame) {
-            let dpb = &self.dpb;
             self.ref_pic_list_p0 = Self::init_ref_pic_list_p(dpb);
             (self.ref_pic_list_b0, self.ref_pic_list_b1) = Self::init_ref_pic_list_b(dpb, cur_pic);
         } else {
-            self.init_ref_field_pic_list_p();
-            self.init_ref_field_pic_list_b();
+            self.ref_pic_list_p0 = Self::init_ref_field_pic_list_p(dpb, cur_pic);
+            (self.ref_pic_list_b0, self.ref_pic_list_b1) =
+                Self::init_ref_field_pic_list_b(dpb, cur_pic);
         }
     }
 
