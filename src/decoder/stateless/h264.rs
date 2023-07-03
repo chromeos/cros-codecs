@@ -675,23 +675,23 @@ where
 
     /// 8.2.4.2.1 Initialization process for the reference picture list for P
     /// and SP slices in frames
-    fn init_ref_pic_list_p(&mut self) {
-        self.ref_pic_list_p0.clear();
+    fn init_ref_pic_list_p(dpb: &Dpb<T>) -> Vec<DpbEntry<T>> {
+        let mut ref_pic_list_p0 = vec![];
 
-        let pics = &mut self.ref_pic_list_p0;
+        dpb.get_short_term_refs(&mut ref_pic_list_p0);
+        ref_pic_list_p0.retain(|h| !h.0.borrow().is_second_field());
+        Self::sort_pic_num_descending(&mut ref_pic_list_p0);
 
-        self.dpb.get_short_term_refs(pics);
-        pics.retain(|h| !h.0.borrow().is_second_field());
-        Self::sort_pic_num_descending(pics);
+        let num_short_term_refs = ref_pic_list_p0.len();
 
-        let num_short_term_refs = pics.len();
-
-        self.dpb.get_long_term_refs(pics);
-        pics.retain(|h| !h.0.borrow().is_second_field());
-        Self::sort_long_term_pic_num_ascending(&mut pics[num_short_term_refs..]);
+        dpb.get_long_term_refs(&mut ref_pic_list_p0);
+        ref_pic_list_p0.retain(|h| !h.0.borrow().is_second_field());
+        Self::sort_long_term_pic_num_ascending(&mut ref_pic_list_p0[num_short_term_refs..]);
 
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_p(&self.ref_pic_list_p0, false);
+        Self::debug_ref_list_p(&ref_pic_list_p0, false);
+
+        ref_pic_list_p0
     }
 
     /// 8.2.4.2.2 Initialization process for the reference picture list for P
@@ -733,12 +733,10 @@ where
     // and RefPicList1 is identical to the reference picture list
     // RefPicList0, the first two entries RefPicList1[0] and RefPicList1[1]
     // are switched.
-    fn swap_b1_if_needed(&mut self) {
-        if self.ref_pic_list_b1.len() > 1
-            && self.ref_pic_list_b0.len() == self.ref_pic_list_b1.len()
-        {
+    fn swap_b1_if_needed(b0: &Vec<DpbEntry<T>>, b1: &mut Vec<DpbEntry<T>>) {
+        if b1.len() > 1 && b0.len() == b1.len() {
             let mut equals = true;
-            for (x1, x2) in self.ref_pic_list_b0.iter().zip(self.ref_pic_list_b1.iter()) {
+            for (x1, x2) in b0.iter().zip(b1.iter()) {
                 if !Rc::ptr_eq(&x1.0, &x2.0) {
                     equals = false;
                     break;
@@ -746,24 +744,25 @@ where
             }
 
             if equals {
-                self.ref_pic_list_b1.swap(0, 1);
+                b1.swap(0, 1);
             }
         }
     }
 
     // 8.2.4.2.3 Initialization process for reference picture lists for B slices
     // in frames
-    fn init_ref_pic_list_b(&mut self) {
-        self.ref_pic_list_b0.clear();
-        self.ref_pic_list_b1.clear();
+    fn init_ref_pic_list_b(
+        dpb: &Dpb<T>,
+        cur_pic: &PictureData,
+    ) -> (Vec<DpbEntry<T>>, Vec<DpbEntry<T>>) {
+        let mut ref_pic_list_b0 = vec![];
+        let mut ref_pic_list_b1 = vec![];
 
         let mut short_term_refs = vec![];
         let mut remaining = vec![];
 
-        self.dpb.get_short_term_refs(&mut short_term_refs);
+        dpb.get_short_term_refs(&mut short_term_refs);
         short_term_refs.retain(|h| !h.0.borrow().is_second_field());
-
-        let cur_pic = self.cur_pic.as_ref().unwrap();
 
         // When pic_order_cnt_type is equal to 0, reference pictures that are
         // marked as "non-existing" as specified in clause 8.2.5.2 are not
@@ -780,24 +779,24 @@ where
             let pic = handle.0.borrow();
 
             if pic.pic_order_cnt < cur_pic.pic_order_cnt {
-                self.ref_pic_list_b0.push(handle.clone());
+                ref_pic_list_b0.push(handle.clone());
             } else {
                 remaining.push(handle.clone());
             }
         }
 
-        Self::sort_poc_descending(&mut self.ref_pic_list_b0);
+        Self::sort_poc_descending(&mut ref_pic_list_b0);
         Self::sort_poc_ascending(&mut remaining);
-        self.ref_pic_list_b0.append(&mut remaining);
+        ref_pic_list_b0.append(&mut remaining);
 
         let mut long_term_refs = vec![];
 
-        self.dpb.get_long_term_refs(&mut long_term_refs);
+        dpb.get_long_term_refs(&mut long_term_refs);
         long_term_refs.retain(|h| !h.0.borrow().nonexisting);
         long_term_refs.retain(|h| !h.0.borrow().is_second_field());
         Self::sort_long_term_pic_num_ascending(&mut long_term_refs);
 
-        self.ref_pic_list_b0.extend(long_term_refs.clone());
+        ref_pic_list_b0.extend(long_term_refs.clone());
 
         // b1 contains three inner lists of pictures, i.e. [[0] [1] [2]]
         // [0]: short term pictures with POC > current, sorted by ascending POC.
@@ -807,28 +806,30 @@ where
             let pic = handle.0.borrow();
 
             if pic.pic_order_cnt > cur_pic.pic_order_cnt {
-                self.ref_pic_list_b1.push(handle.clone());
+                ref_pic_list_b1.push(handle.clone());
             } else {
                 remaining.push(handle.clone());
             }
         }
 
-        Self::sort_poc_ascending(&mut self.ref_pic_list_b1);
+        Self::sort_poc_ascending(&mut ref_pic_list_b1);
         Self::sort_poc_descending(&mut remaining);
 
-        self.ref_pic_list_b1.extend(remaining);
-        self.ref_pic_list_b1.extend(long_term_refs);
+        ref_pic_list_b1.extend(remaining);
+        ref_pic_list_b1.extend(long_term_refs);
 
         // When the reference picture list RefPicList1 has more than one entry
         // and RefPicList1 is identical to the reference picture list
         // RefPicList0, the first two entries RefPicList1[0] and RefPicList1[1]
         // are switched.
-        self.swap_b1_if_needed();
+        Self::swap_b1_if_needed(&ref_pic_list_b0, &mut ref_pic_list_b1);
 
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_b(&self.ref_pic_list_b0, "ref_pic_list_b0");
+        Self::debug_ref_list_b(&ref_pic_list_b0, "ref_pic_list_b0");
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_b(&self.ref_pic_list_b1, "ref_pic_list_b1");
+        Self::debug_ref_list_b(&ref_pic_list_b1, "ref_pic_list_b1");
+
+        (ref_pic_list_b0, ref_pic_list_b1)
     }
 
     /// 8.2.4.2.4 Initialization process for reference picture lists for B
@@ -939,7 +940,7 @@ where
         // and RefPicList1 is identical to the reference picture list
         // RefPicList0, the first two entries RefPicList1[0] and RefPicList1[1]
         // are switched.
-        self.swap_b1_if_needed();
+        Self::swap_b1_if_needed(&self.ref_pic_list_b0, &mut self.ref_pic_list_b1);
 
         self.ref_frame_list_0_short_term.clear();
         self.ref_frame_list_1_short_term.clear();
@@ -1060,9 +1061,11 @@ where
             return;
         }
 
-        if matches!(self.cur_pic.as_ref().unwrap().field, Field::Frame) {
-            self.init_ref_pic_list_p();
-            self.init_ref_pic_list_b();
+        let cur_pic = self.cur_pic.as_ref().unwrap();
+        if matches!(cur_pic.field, Field::Frame) {
+            let dpb = &self.dpb;
+            self.ref_pic_list_p0 = Self::init_ref_pic_list_p(dpb);
+            (self.ref_pic_list_b0, self.ref_pic_list_b1) = Self::init_ref_pic_list_b(dpb, cur_pic);
         } else {
             self.init_ref_field_pic_list_p();
             self.init_ref_field_pic_list_b();
