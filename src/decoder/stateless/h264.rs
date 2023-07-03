@@ -1709,36 +1709,37 @@ where
             ));
         }
 
-        if prev_field.is_none() {
-            return Ok(None);
-        }
+        match prev_field {
+            None => Ok(None),
+            Some(prev_field) => {
+                let prev_field_pic = prev_field.0.borrow();
 
-        let prev_field_pic = prev_field.as_ref().unwrap().0.borrow();
-
-        if prev_field_pic.frame_num != i32::from(slice.header().frame_num()) {
-            return Err(anyhow!(
+                if prev_field_pic.frame_num != i32::from(slice.header().frame_num()) {
+                    return Err(anyhow!(
                 "The previous field differs in frame_num value wrt. the current field. {:?} vs {:?}",
                 prev_field_pic.frame_num,
                 slice.header().frame_num()
             ));
-        } else {
-            let cur_field = if slice.header().bottom_field_flag() {
-                Field::Bottom
-            } else {
-                Field::Top
-            };
+                } else {
+                    let cur_field = if slice.header().bottom_field_flag() {
+                        Field::Bottom
+                    } else {
+                        Field::Top
+                    };
 
-            if cur_field == prev_field_pic.field {
-                let field = prev_field_pic.field;
-                return Err(anyhow!(
-                    "Expecting complementary field {:?}, got {:?}",
-                    field.opposite(),
-                    field
-                ));
+                    if cur_field == prev_field_pic.field {
+                        let field = prev_field_pic.field;
+                        return Err(anyhow!(
+                            "Expecting complementary field {:?}, got {:?}",
+                            field.opposite(),
+                            field
+                        ));
+                    }
+                }
+
+                Ok(Some(prev_field.clone()))
             }
         }
-
-        Ok(Some(prev_field.as_ref().unwrap().clone()))
     }
 
     /// Called once per picture to start it.
