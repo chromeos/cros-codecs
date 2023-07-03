@@ -983,9 +983,10 @@ where
         ref_pic_list.append(ref_frame_list);
     }
 
-    fn init_ref_pic_lists(&mut self) {
-        let num_refs = self
-            .dpb
+    fn init_ref_pic_lists(&mut self, cur_pic: &PictureData) {
+        let dpb = &self.dpb;
+
+        let num_refs = dpb
             .pictures()
             .filter(|p| p.is_ref() && !p.nonexisting)
             .count();
@@ -1000,8 +1001,6 @@ where
             return;
         }
 
-        let cur_pic = self.cur_pic.as_ref().unwrap();
-        let dpb = &self.dpb;
         if matches!(cur_pic.field, Field::Frame) {
             self.ref_pic_list_p0 = Self::init_ref_pic_list_p(dpb);
             (self.ref_pic_list_b0, self.ref_pic_list_b1) = Self::init_ref_pic_list_b(dpb, cur_pic);
@@ -1630,9 +1629,9 @@ where
 
         self.update_pic_nums(i32::from(slice.header().frame_num()), &pic)?;
 
-        self.cur_pic = Some(pic);
+        self.init_ref_pic_lists(&pic);
 
-        self.init_ref_pic_lists();
+        self.cur_pic = Some(pic);
 
         Ok(())
     }
