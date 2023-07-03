@@ -130,14 +130,6 @@ enum RefPicList {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[allow(clippy::enum_variant_names)]
-enum RefFrameListName {
-    RefFrameList0ShortTerm,
-    RefFrameList1ShortTerm,
-    RefFrameListLongTerm,
-}
-
-#[derive(Copy, Clone, Debug)]
 enum RefPicListName {
     P0,
     B0,
@@ -711,8 +703,19 @@ where
         Self::sort_long_term_pic_num_ascending(pics);
 
         // 8.2.4.2.5
-        self.init_ref_field_pic_list(RefFrameListName::RefFrameList0ShortTerm, RefPicListName::P0);
-        self.init_ref_field_pic_list(RefFrameListName::RefFrameListLongTerm, RefPicListName::P0);
+        let field = self.cur_pic.as_ref().unwrap().field;
+        Self::init_ref_field_pic_list(
+            field,
+            Reference::ShortTerm,
+            &mut self.ref_frame_list_0_short_term,
+            &mut self.ref_pic_list_p0,
+        );
+        Self::init_ref_field_pic_list(
+            field,
+            Reference::LongTerm,
+            &mut self.ref_frame_list_long_term,
+            &mut self.ref_pic_list_p0,
+        );
 
         self.ref_frame_list_0_short_term.clear();
         self.ref_frame_list_long_term.clear();
@@ -930,11 +933,32 @@ where
         Self::debug_ref_list_b(&self.ref_frame_list_long_term, "ref_frame_list_long_term");
 
         // 8.2.4.2.5
-        self.init_ref_field_pic_list(RefFrameListName::RefFrameList0ShortTerm, RefPicListName::B0);
-        self.init_ref_field_pic_list(RefFrameListName::RefFrameListLongTerm, RefPicListName::B0);
+        let field = self.cur_pic.as_ref().unwrap().field;
+        Self::init_ref_field_pic_list(
+            field,
+            Reference::ShortTerm,
+            &mut self.ref_frame_list_0_short_term,
+            &mut self.ref_pic_list_b0,
+        );
+        Self::init_ref_field_pic_list(
+            field,
+            Reference::LongTerm,
+            &mut self.ref_frame_list_long_term,
+            &mut self.ref_pic_list_b0,
+        );
 
-        self.init_ref_field_pic_list(RefFrameListName::RefFrameList1ShortTerm, RefPicListName::B1);
-        self.init_ref_field_pic_list(RefFrameListName::RefFrameListLongTerm, RefPicListName::B1);
+        Self::init_ref_field_pic_list(
+            field,
+            Reference::ShortTerm,
+            &mut self.ref_frame_list_1_short_term,
+            &mut self.ref_pic_list_b1,
+        );
+        Self::init_ref_field_pic_list(
+            field,
+            Reference::LongTerm,
+            &mut self.ref_frame_list_long_term,
+            &mut self.ref_pic_list_b1,
+        );
 
         // When the reference picture list RefPicList1 has more than one entry
         // and RefPicList1 is identical to the reference picture list
@@ -952,96 +976,39 @@ where
         Self::debug_ref_list_b(&self.ref_pic_list_b1, "ref_pic_list_b1");
     }
 
-    /// Copies from refFrameListXShortTerm and refFrameListLongTerm into
-    /// RefPicListX as per 8.2.4.2.5. Used when building the reference list for
-    /// fields in interlaced decoding.
+    /// Copies from refFrameList(XShort|Long)Term into RefPicListX as per 8.2.4.2.5. Used when
+    /// building the reference list for fields in interlaced decoding.
     fn init_ref_field_pic_list(
-        &mut self,
-        ref_frame_list_name: RefFrameListName,
-        ref_pic_list_name: RefPicListName,
+        mut field: Field,
+        reference_type: Reference,
+        ref_frame_list: &mut Vec<DpbEntry<T>>,
+        ref_pic_list: &mut Vec<DpbEntry<T>>,
     ) {
-        let ref_pic_list_x = match ref_pic_list_name {
-            RefPicListName::P0 => &mut self.ref_pic_list_p0,
-            RefPicListName::B0 => &mut self.ref_pic_list_b0,
-            RefPicListName::B1 => &mut self.ref_pic_list_b1,
-        };
+        // When one field of a reference frame was not decoded or is not marked as "used for
+        // (short|long)-term reference", the missing field is ignored and instead the next
+        // available stored reference field of the chosen parity from the ordered list of frames
+        // refFrameListX(Short|Long)Term is inserted into RefPicListX.
+        ref_frame_list.retain(|h| {
+            let p = h.0.borrow();
+            let skip = p.nonexisting || *p.reference() != reference_type;
+            !skip
+        });
 
-        match ref_frame_list_name {
-            RefFrameListName::RefFrameList0ShortTerm | RefFrameListName::RefFrameList1ShortTerm => {
-                let short_term_list = match ref_frame_list_name {
-                    RefFrameListName::RefFrameList0ShortTerm => {
-                        &mut self.ref_frame_list_0_short_term
-                    }
-                    RefFrameListName::RefFrameList1ShortTerm => {
-                        &mut self.ref_frame_list_1_short_term
-                    }
-                    RefFrameListName::RefFrameListLongTerm => {
-                        panic!("Invalid value for RefFrameListName")
-                    }
-                };
+        while let Some(position) = ref_frame_list.iter().position(|h| {
+            let p = h.0.borrow();
+            let found = p.field == field;
 
-                // When one field of a reference frame was not decoded or is
-                // not marked as "used for short-term reference", the
-                // missing field is ignored and instead the next available
-                // stored reference field of the chosen parity from the
-                // ordered list of frames refFrameListXShortTerm is inserted
-                // into RefPicListX.
-                short_term_list.retain(|h| {
-                    let p = h.0.borrow();
-                    let skip = p.nonexisting || !matches!(p.reference(), Reference::ShortTerm);
-                    !skip
-                });
-
-                let mut field = self.cur_pic.as_ref().unwrap().field;
-                while let Some(position) = short_term_list.iter().position(|h| {
-                    let p = h.0.borrow();
-                    let found = p.field == field;
-
-                    if found {
-                        field = field.opposite().unwrap();
-                    }
-
-                    found
-                }) {
-                    let pic = short_term_list.remove(position);
-                    ref_pic_list_x.push(pic);
-                }
-
-                ref_pic_list_x.append(short_term_list);
+            if found {
+                field = field.opposite().unwrap();
             }
 
-            RefFrameListName::RefFrameListLongTerm => {
-                let long_term_list = &mut self.ref_frame_list_long_term;
-
-                // When one field of a reference frame was not decoded or is
-                // not marked as "used for long-term reference", the missing
-                // field is ignored and instead the next available stored
-                // reference field of the chosen parity from the ordered list
-                // of frames refFrameListLongTerm is inserted into RefPicListX.
-                long_term_list.retain(|h| {
-                    let p = h.0.borrow();
-                    let skip = p.nonexisting || !matches!(p.reference(), Reference::LongTerm);
-                    !skip
-                });
-
-                let mut field = self.cur_pic.as_ref().unwrap().field;
-                while let Some(position) = long_term_list.iter().position(|h| {
-                    let p = h.0.borrow();
-                    let found = p.field == field;
-
-                    if found {
-                        field = field.opposite().unwrap();
-                    }
-
-                    found
-                }) {
-                    let pic = long_term_list.remove(position);
-                    ref_pic_list_x.push(pic);
-                }
-
-                ref_pic_list_x.append(long_term_list);
-            }
+            found
+        }) {
+            let pic = ref_frame_list.remove(position);
+            ref_pic_list.push(pic);
         }
+
+        ref_pic_list.append(ref_frame_list);
     }
 
     fn init_ref_pic_lists(&mut self) {
