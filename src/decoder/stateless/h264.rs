@@ -1802,9 +1802,8 @@ where
         Ok(Some(prev_field.as_ref().unwrap().clone()))
     }
 
-    /// Handle a picture. Called only once. Uses an heuristic to determine when
-    /// a new picture starts in the slice NALUs.
-    fn handle_picture(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
+    /// Called once per picture to start it.
+    fn begin_picture(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
         let nalu_hdr = slice.nalu().header();
 
         if nalu_hdr.idr_pic_flag() {
@@ -2157,7 +2156,7 @@ where
             if new_field_picture {
                 let picture = self.cur_pic.take().unwrap();
                 self.finish_picture(picture)?;
-                self.handle_picture(timestamp, slice)?;
+                self.begin_picture(timestamp, slice)?;
             }
         }
 
@@ -2238,7 +2237,7 @@ where
                 | NaluType::SliceExt => {
                     let slice = self.parser.parse_slice_header(nalu)?;
                     if self.cur_pic.is_none() {
-                        self.handle_picture(timestamp, &slice)?;
+                        self.begin_picture(timestamp, &slice)?;
                     }
 
                     self.handle_slice(timestamp, &slice)?;
