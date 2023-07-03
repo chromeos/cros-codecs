@@ -1523,8 +1523,11 @@ where
         self.ready_queue.extend(bumped);
     }
 
-    fn finish_picture(&mut self, mut pic: PictureData, handle: T) -> anyhow::Result<()> {
+    fn finish_picture(&mut self, mut pic: PictureData) -> anyhow::Result<()> {
         debug!("Finishing picture POC {:?}", pic.pic_order_cnt);
+
+        // Submit the picture to the backend.
+        let handle = self.submit_picture()?;
 
         if matches!(pic.reference(), Reference::ShortTerm | Reference::LongTerm) {
             self.reference_pic_marking(&mut pic)?;
@@ -2152,8 +2155,8 @@ where
             let new_field_picture = cur_field != prev_field;
 
             if new_field_picture {
-                let (picture, handle) = self.submit_picture()?;
-                self.finish_picture(picture, handle)?;
+                let picture = self.cur_pic.take().unwrap();
+                self.finish_picture(picture)?;
                 self.handle_picture(timestamp, slice)?;
             }
         }
@@ -2185,9 +2188,7 @@ where
     }
 
     /// Submits the picture to the accelerator.
-    fn submit_picture(&mut self) -> Result<(PictureData, T), DecodeError> {
-        let picture = self.cur_pic.take().unwrap();
-
+    fn submit_picture(&mut self) -> Result<T, DecodeError> {
         let handle = self
             .backend
             .submit_picture(self.cur_backend_pic.take().unwrap())?;
@@ -2196,7 +2197,7 @@ where
             handle.sync()?;
         }
 
-        Ok((picture, handle))
+        Ok(handle)
     }
 
     fn peek_sps(parser: &mut Parser, bitstream: &[u8]) -> Option<Sps> {
@@ -2249,8 +2250,9 @@ where
             }
         }
 
-        let (picture, handle) = self.submit_picture()?;
-        self.finish_picture(picture, handle)?;
+        if let Some(picture) = self.cur_pic.take() {
+            self.finish_picture(picture)?;
+        }
 
         Ok(())
     }
