@@ -1584,7 +1584,7 @@ where
         slice: &Slice<&[u8]>,
         first_field: Option<Rc<RefCell<PictureData>>>,
         timestamp: u64,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PictureData> {
         let pps = self
             .parser
             .get_pps(slice.header().pic_parameter_set_id())
@@ -1625,9 +1625,7 @@ where
 
         self.init_ref_pic_lists(&pic);
 
-        self.cur_pic = Some(pic);
-
-        Ok(())
+        Ok(pic)
     }
 
     /// Bumps the DPB if needed. DPB bumping is described on C.4.5.3.
@@ -1772,26 +1770,25 @@ where
         }
 
         let first_field = self.find_first_field(slice)?;
-        self.init_current_pic(
+
+        let cur_pic = self.init_current_pic(
             slice,
             first_field.as_ref().map(|f| Rc::clone(&f.0)),
             timestamp,
         )?;
 
-        let cur_pic = self.cur_pic.as_ref().unwrap();
-
         debug!("Decode picture POC {:?}", cur_pic.pic_order_cnt);
 
         let mut current_picture = if let Some(first_field) = first_field {
             self.backend
-                .new_field_picture(cur_pic, timestamp, &first_field.1)?
+                .new_field_picture(&cur_pic, timestamp, &first_field.1)?
         } else {
-            self.backend.new_picture(cur_pic, timestamp)?
+            self.backend.new_picture(&cur_pic, timestamp)?
         };
 
         self.backend.start_picture(
             &mut current_picture,
-            cur_pic,
+            &cur_pic,
             self.parser
                 .get_sps(self.cur_sps_id)
                 .context("Invalid SPS in handle_picture")?,
@@ -1802,6 +1799,7 @@ where
             slice,
         )?;
 
+        self.cur_pic = Some(cur_pic);
         self.cur_backend_pic = Some(current_picture);
 
         Ok(())
