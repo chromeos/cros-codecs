@@ -245,10 +245,6 @@ where
     prev_pic_info: PrevPicInfo,
     /// Cached variables from the current picture.
     curr_info: CurrentPicInfo,
-    /// The current picture being worked on.
-    cur_pic: Option<PictureData>,
-    /// The current picture representation on the backend side.
-    cur_backend_pic: Option<P>,
 
     /// A cached, non-reference first field that did not make it into the DPB
     /// because it was full even after bumping the smaller POC. This field will
@@ -286,8 +282,6 @@ where
             prev_ref_pic_info: Default::default(),
             prev_pic_info: Default::default(),
             curr_info: Default::default(),
-            cur_pic: Default::default(),
-            cur_backend_pic: Default::default(),
             last_field: Default::default(),
             ready_queue: Default::default(),
             ref_pic_lists: Default::default(),
@@ -1478,11 +1472,12 @@ where
         self.ready_queue.extend(bumped);
     }
 
-    fn finish_picture(&mut self, mut pic: PictureData) -> anyhow::Result<()> {
-        debug!("Finishing picture POC {:?}", pic.pic_order_cnt);
+    fn finish_picture(&mut self, pic: (PictureData, P)) -> anyhow::Result<()> {
+        debug!("Finishing picture POC {:?}", pic.0.pic_order_cnt);
 
         // Submit the picture to the backend.
-        let handle = self.submit_picture()?;
+        let handle = self.submit_picture(pic.1)?;
+        let mut pic = pic.0;
 
         if matches!(pic.reference(), Reference::ShortTerm | Reference::LongTerm) {
             self.reference_pic_marking(&mut pic)?;
@@ -1747,7 +1742,11 @@ where
     }
 
     /// Called once per picture to start it.
-    fn begin_picture(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
+    fn begin_picture(
+        &mut self,
+        timestamp: u64,
+        slice: &Slice<&[u8]>,
+    ) -> anyhow::Result<(PictureData, P)> {
         let nalu_hdr = slice.nalu().header();
 
         if nalu_hdr.idr_pic_flag() {
@@ -1809,10 +1808,7 @@ where
             slice,
         )?;
 
-        self.cur_pic = Some(cur_pic);
-        self.cur_backend_pic = Some(cur_backend_pic);
-
-        Ok(())
+        Ok((cur_pic, cur_backend_pic))
     }
 
     fn pic_num_f(pic: &PictureData, max_pic_num: i32) -> i32 {
@@ -1954,6 +1950,7 @@ where
 
     fn modify_ref_pic_list(
         &mut self,
+        cur_pic: &PictureData,
         hdr: &SliceHeader,
         ref_pic_list: RefPicList,
     ) -> anyhow::Result<()> {
@@ -1981,7 +1978,6 @@ where
             return Ok(());
         }
 
-        let cur_pic = self.cur_pic.as_ref().unwrap();
         let mut pic_num_lx_pred = cur_pic.pic_num;
         let mut ref_idx_lx = 0;
 
@@ -2019,6 +2015,7 @@ where
 
     fn modify_ref_pic_lists(
         &mut self,
+        cur_pic: &PictureData,
         current_slice: &Slice<impl AsRef<[u8]>>,
     ) -> anyhow::Result<()> {
         self.ref_pic_lists.ref_pic_list0.clear();
@@ -2028,25 +2025,31 @@ where
 
         if let SliceType::P | SliceType::Sp = hdr.slice_type() {
             self.ref_pic_lists.ref_pic_list0 = self.ref_pic_lists.ref_pic_list_p0.clone();
-            self.modify_ref_pic_list(hdr, RefPicList::RefPicList0)
+            self.modify_ref_pic_list(cur_pic, hdr, RefPicList::RefPicList0)
         } else if let SliceType::B = hdr.slice_type() {
             self.ref_pic_lists.ref_pic_list0 = self.ref_pic_lists.ref_pic_list_b0.clone();
             self.ref_pic_lists.ref_pic_list1 = self.ref_pic_lists.ref_pic_list_b1.clone();
-            self.modify_ref_pic_list(hdr, RefPicList::RefPicList0)
-                .and(self.modify_ref_pic_list(hdr, RefPicList::RefPicList1))
+            self.modify_ref_pic_list(cur_pic, hdr, RefPicList::RefPicList0)
+                .and(self.modify_ref_pic_list(cur_pic, hdr, RefPicList::RefPicList1))
         } else {
             Ok(())
         }
     }
 
     /// Handle a slice. Called once per slice NALU.
-    fn handle_slice(&mut self, timestamp: u64, slice: &Slice<&[u8]>) -> anyhow::Result<()> {
-        let cur_pic = self.cur_pic.as_ref().unwrap();
+    ///
+    /// Returns the passed `cur_pic`, or a new picture if the slice belongs to a new picture.
+    fn handle_slice(
+        &mut self,
+        mut cur_pic: (PictureData, P),
+        timestamp: u64,
+        slice: &Slice<&[u8]>,
+    ) -> anyhow::Result<(PictureData, P)> {
         if self.dpb.interlaced()
-            && matches!(cur_pic.field, Field::Frame)
-            && !cur_pic.is_second_field()
+            && matches!(cur_pic.0.field, Field::Frame)
+            && !cur_pic.0.is_second_field()
         {
-            let prev_field = cur_pic.field;
+            let prev_field = cur_pic.0.field;
             let cur_field = if slice.header().field_pic_flag() {
                 if slice.header().bottom_field_flag() {
                     Field::Bottom
@@ -2060,14 +2063,13 @@ where
             let new_field_picture = cur_field != prev_field;
 
             if new_field_picture {
-                let picture = self.cur_pic.take().unwrap();
-                self.finish_picture(picture)?;
-                self.begin_picture(timestamp, slice)?;
+                self.finish_picture(cur_pic)?;
+                cur_pic = self.begin_picture(timestamp, slice)?;
             }
         }
 
         self.curr_info.max_pic_num = slice.header().max_pic_num() as i32;
-        self.modify_ref_pic_lists(slice)?;
+        self.modify_ref_pic_lists(&cur_pic.0, slice)?;
 
         let sps = self
             .parser
@@ -2080,7 +2082,7 @@ where
             .context("Invalid PPS in handle_slice")?;
 
         self.backend.decode_slice(
-            self.cur_backend_pic.as_mut().unwrap(),
+            &mut cur_pic.1,
             slice,
             sps,
             pps,
@@ -2089,14 +2091,12 @@ where
             &self.ref_pic_lists.ref_pic_list1,
         )?;
 
-        Ok(())
+        Ok(cur_pic)
     }
 
     /// Submits the picture to the accelerator.
-    fn submit_picture(&mut self) -> Result<T, DecodeError> {
-        let handle = self
-            .backend
-            .submit_picture(self.cur_backend_pic.take().unwrap())?;
+    fn submit_picture(&mut self, backend_pic: P) -> Result<T, DecodeError> {
+        let handle = self.backend.submit_picture(backend_pic)?;
 
         if self.blocking_mode == BlockingMode::Blocking {
             handle.sync()?;
@@ -2125,6 +2125,8 @@ where
 
         let mut cursor = Cursor::new(bitstream);
 
+        let mut cur_pic_opt = None;
+
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().nalu_type() {
                 NaluType::Sps => {
@@ -2142,11 +2144,12 @@ where
                 | NaluType::SliceIdr
                 | NaluType::SliceExt => {
                     let slice = self.parser.parse_slice_header(nalu)?;
-                    if self.cur_pic.is_none() {
-                        self.begin_picture(timestamp, &slice)?;
-                    }
+                    let cur_pic = match cur_pic_opt {
+                        None => self.begin_picture(timestamp, &slice)?,
+                        Some(cur_pic) => cur_pic,
+                    };
 
-                    self.handle_slice(timestamp, &slice)?;
+                    cur_pic_opt = Some(self.handle_slice(cur_pic, timestamp, &slice)?);
                 }
 
                 other => {
@@ -2155,8 +2158,8 @@ where
             }
         }
 
-        if let Some(picture) = self.cur_pic.take() {
-            self.finish_picture(picture)?;
+        if let Some(cur_pic) = cur_pic_opt.take() {
+            self.finish_picture(cur_pic)?;
         }
 
         Ok(())
