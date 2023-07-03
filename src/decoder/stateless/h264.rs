@@ -129,13 +129,6 @@ enum RefPicList {
     RefPicList1,
 }
 
-#[derive(Copy, Clone, Debug)]
-enum RefPicListName {
-    P0,
-    B0,
-    B1,
-}
-
 pub struct PrevReferencePicInfo {
     frame_num: i32,
     has_mmco_5: bool,
@@ -1829,27 +1822,6 @@ where
         }
     }
 
-    // Copies from the per-picture lists into the per-slice lists.
-    fn copy_into_ref_pic_list(
-        &mut self,
-        ref_pic_list: RefPicList,
-        ref_pic_list_name: RefPicListName,
-    ) {
-        let src = match ref_pic_list_name {
-            RefPicListName::P0 => &mut self.ref_pic_list_p0,
-            RefPicListName::B0 => &mut self.ref_pic_list_b0,
-            RefPicListName::B1 => &mut self.ref_pic_list_b1,
-        };
-
-        let dst = match ref_pic_list {
-            RefPicList::RefPicList0 => &mut self.ref_pic_list0,
-            RefPicList::RefPicList1 => &mut self.ref_pic_list1,
-        };
-
-        dst.clear();
-        dst.extend(src.iter().cloned());
-    }
-
     // 8.2.4.3.1 Modification process of reference picture lists for short-term
     // reference pictures
     fn short_term_pic_list_modification(
@@ -2063,11 +2035,11 @@ where
         self.ref_pic_list1.clear();
 
         if let SliceType::P | SliceType::Sp = current_slice.header().slice_type() {
-            self.copy_into_ref_pic_list(RefPicList::RefPicList0, RefPicListName::P0);
+            self.ref_pic_list0 = self.ref_pic_list_p0.clone();
             self.modify_ref_pic_list(current_slice, RefPicList::RefPicList0)
         } else if let SliceType::B = current_slice.header().slice_type() {
-            self.copy_into_ref_pic_list(RefPicList::RefPicList0, RefPicListName::B0);
-            self.copy_into_ref_pic_list(RefPicList::RefPicList1, RefPicListName::B1);
+            self.ref_pic_list0 = self.ref_pic_list_b0.clone();
+            self.ref_pic_list1 = self.ref_pic_list_b1.clone();
             self.modify_ref_pic_list(current_slice, RefPicList::RefPicList0)
                 .and(self.modify_ref_pic_list(current_slice, RefPicList::RefPicList1))
         } else {
