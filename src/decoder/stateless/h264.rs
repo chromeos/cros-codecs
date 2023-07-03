@@ -242,17 +242,6 @@ where
     /// the specification. Points into the pictures stored in the DPB. Derived
     /// once per picture.
     ref_pic_list_b1: Vec<DpbEntry<T>>,
-    /// Equivalent to refFrameList0ShortTerm in the spec. Used for building the
-    /// references for P, SP and B slices in fields (8.2.4.2.2, 8.2.4.2.4).
-    /// Derived once per field.
-    ref_frame_list_0_short_term: Vec<DpbEntry<T>>,
-    /// Equivalent to refFrameList1ShortTerm in the spec. Used for building the
-    /// references for B slices in fields (8.2.4.2.4). Derived once per field.
-    ref_frame_list_1_short_term: Vec<DpbEntry<T>>,
-    /// Equivalent to refFrameList0LongTerm in the spec. Used for building the
-    /// references for P, SP and B slices in fields (8.2.4.2.2, 8.2.4.2.4).
-    /// Derived once per field.
-    ref_frame_list_long_term: Vec<DpbEntry<T>>,
 
     /// Equivalent to RefPicList0 in the specification. Computed for every
     /// slice, points to the pictures in the DPB.
@@ -292,9 +281,6 @@ where
             ref_pic_list_p0: Default::default(),
             ref_pic_list_b0: Default::default(),
             ref_pic_list_b1: Default::default(),
-            ref_frame_list_0_short_term: Default::default(),
-            ref_frame_list_long_term: Default::default(),
-            ref_frame_list_1_short_term: Default::default(),
             ref_pic_list0: Default::default(),
             ref_pic_list1: Default::default(),
         })
@@ -690,35 +676,30 @@ where
     /// and SP slices in fields
     fn init_ref_field_pic_list_p(&mut self) {
         self.ref_pic_list_p0.clear();
-        self.ref_frame_list_0_short_term.clear();
-        self.ref_frame_list_long_term.clear();
+        let mut ref_frame_list_0_short_term = vec![];
+        let mut ref_frame_list_long_term = vec![];
 
-        let pics = &mut self.ref_frame_list_0_short_term;
+        self.dpb
+            .get_short_term_refs(&mut ref_frame_list_0_short_term);
+        Self::sort_frame_num_wrap_descending(&mut ref_frame_list_0_short_term);
 
-        self.dpb.get_short_term_refs(pics);
-        Self::sort_frame_num_wrap_descending(pics);
-
-        let pics = &mut self.ref_frame_list_long_term;
-        self.dpb.get_long_term_refs(pics);
-        Self::sort_long_term_pic_num_ascending(pics);
+        self.dpb.get_long_term_refs(&mut ref_frame_list_long_term);
+        Self::sort_long_term_pic_num_ascending(&mut ref_frame_list_long_term);
 
         // 8.2.4.2.5
         let field = self.cur_pic.as_ref().unwrap().field;
         Self::init_ref_field_pic_list(
             field,
             Reference::ShortTerm,
-            &mut self.ref_frame_list_0_short_term,
+            &mut ref_frame_list_0_short_term,
             &mut self.ref_pic_list_p0,
         );
         Self::init_ref_field_pic_list(
             field,
             Reference::LongTerm,
-            &mut self.ref_frame_list_long_term,
+            &mut ref_frame_list_long_term,
             &mut self.ref_pic_list_p0,
         );
-
-        self.ref_frame_list_0_short_term.clear();
-        self.ref_frame_list_long_term.clear();
 
         #[cfg(debug_assertions)]
         Self::debug_ref_list_p(&self.ref_pic_list_p0, true);
@@ -840,9 +821,9 @@ where
     fn init_ref_field_pic_list_b(&mut self) {
         self.ref_pic_list_b0.clear();
         self.ref_pic_list_b1.clear();
-        self.ref_frame_list_0_short_term.clear();
-        self.ref_frame_list_1_short_term.clear();
-        self.ref_frame_list_long_term.clear();
+        let mut ref_frame_list_0_short_term = vec![];
+        let mut ref_frame_list_1_short_term = vec![];
+        let mut ref_frame_list_long_term = vec![];
 
         let mut short_term_refs = vec![];
         let mut remaining = vec![];
@@ -870,15 +851,15 @@ where
             let pic = handle.0.borrow();
 
             if pic.pic_order_cnt <= cur_pic.pic_order_cnt {
-                self.ref_frame_list_0_short_term.push(handle.clone());
+                ref_frame_list_0_short_term.push(handle.clone());
             } else {
                 remaining.push(handle.clone());
             }
         }
 
-        Self::sort_poc_descending(&mut self.ref_frame_list_0_short_term);
+        Self::sort_poc_descending(&mut ref_frame_list_0_short_term);
         Self::sort_poc_ascending(&mut remaining);
-        self.ref_frame_list_0_short_term.append(&mut remaining);
+        ref_frame_list_0_short_term.append(&mut remaining);
 
         // refFrameList1ShortTerm is comprised of two inner lists, [[0] [1]]
         // [0]: short term pictures with POC > current, sorted by ascending POC
@@ -893,15 +874,15 @@ where
             let pic = handle.0.borrow();
 
             if pic.pic_order_cnt > cur_pic.pic_order_cnt {
-                self.ref_frame_list_1_short_term.push(handle.clone());
+                ref_frame_list_1_short_term.push(handle.clone());
             } else {
                 remaining.push(handle.clone());
             }
         }
 
-        Self::sort_poc_ascending(&mut self.ref_frame_list_1_short_term);
+        Self::sort_poc_ascending(&mut ref_frame_list_1_short_term);
         Self::sort_poc_descending(&mut remaining);
-        self.ref_frame_list_1_short_term.append(&mut remaining);
+        ref_frame_list_1_short_term.append(&mut remaining);
 
         // refFrameListLongTerm: long term pictures sorted by ascending
         // LongTermFrameIdx.
@@ -911,52 +892,44 @@ where
         // field is included into the list refFrameListLongTerm. A reference
         // entry in which only one field is marked as "used for long-term
         // reference" is included into the list refFrameListLongTerm
-        self.dpb
-            .get_long_term_refs(&mut self.ref_frame_list_long_term);
+        self.dpb.get_long_term_refs(&mut ref_frame_list_long_term);
 
-        self.ref_frame_list_long_term
-            .retain(|h| !h.0.borrow().nonexisting);
+        ref_frame_list_long_term.retain(|h| !h.0.borrow().nonexisting);
 
-        Self::sort_long_term_frame_idx_ascending(&mut self.ref_frame_list_long_term);
+        Self::sort_long_term_frame_idx_ascending(&mut ref_frame_list_long_term);
 
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_b(
-            &self.ref_frame_list_0_short_term,
-            "ref_frame_list_0_short_term",
-        );
+        Self::debug_ref_list_b(&ref_frame_list_0_short_term, "ref_frame_list_0_short_term");
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_b(
-            &self.ref_frame_list_1_short_term,
-            "ref_frame_list_1_short_term",
-        );
+        Self::debug_ref_list_b(&ref_frame_list_1_short_term, "ref_frame_list_1_short_term");
         #[cfg(debug_assertions)]
-        Self::debug_ref_list_b(&self.ref_frame_list_long_term, "ref_frame_list_long_term");
+        Self::debug_ref_list_b(&ref_frame_list_long_term, "ref_frame_list_long_term");
 
         // 8.2.4.2.5
         let field = self.cur_pic.as_ref().unwrap().field;
         Self::init_ref_field_pic_list(
             field,
             Reference::ShortTerm,
-            &mut self.ref_frame_list_0_short_term,
+            &mut ref_frame_list_0_short_term,
             &mut self.ref_pic_list_b0,
         );
         Self::init_ref_field_pic_list(
             field,
             Reference::LongTerm,
-            &mut self.ref_frame_list_long_term,
+            &mut ref_frame_list_long_term,
             &mut self.ref_pic_list_b0,
         );
 
         Self::init_ref_field_pic_list(
             field,
             Reference::ShortTerm,
-            &mut self.ref_frame_list_1_short_term,
+            &mut ref_frame_list_1_short_term,
             &mut self.ref_pic_list_b1,
         );
         Self::init_ref_field_pic_list(
             field,
             Reference::LongTerm,
-            &mut self.ref_frame_list_long_term,
+            &mut ref_frame_list_long_term,
             &mut self.ref_pic_list_b1,
         );
 
@@ -965,10 +938,6 @@ where
         // RefPicList0, the first two entries RefPicList1[0] and RefPicList1[1]
         // are switched.
         Self::swap_b1_if_needed(&self.ref_pic_list_b0, &mut self.ref_pic_list_b1);
-
-        self.ref_frame_list_0_short_term.clear();
-        self.ref_frame_list_1_short_term.clear();
-        self.ref_frame_list_long_term.clear();
 
         #[cfg(debug_assertions)]
         Self::debug_ref_list_b(&self.ref_pic_list_b0, "ref_pic_list_b0");
