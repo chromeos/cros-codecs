@@ -1779,7 +1779,7 @@ where
 
         debug!("Decode picture POC {:?}", cur_pic.pic_order_cnt);
 
-        let mut current_picture = if let Some(first_field) = first_field {
+        let mut cur_backend_pic = if let Some(first_field) = first_field {
             self.backend
                 .new_field_picture(&cur_pic, timestamp, &first_field.1)?
         } else {
@@ -1787,7 +1787,7 @@ where
         };
 
         self.backend.start_picture(
-            &mut current_picture,
+            &mut cur_backend_pic,
             &cur_pic,
             self.parser
                 .get_sps(self.cur_sps_id)
@@ -1800,7 +1800,7 @@ where
         )?;
 
         self.cur_pic = Some(cur_pic);
-        self.cur_backend_pic = Some(current_picture);
+        self.cur_backend_pic = Some(cur_backend_pic);
 
         Ok(())
     }
