@@ -1950,23 +1950,21 @@ where
     ) -> anyhow::Result<()> {
         let hdr = current_slice.header();
 
-        let ref_pic_list_modification_flag_lx = match ref_pic_list {
-            RefPicList::RefPicList0 => hdr.ref_pic_list_modification_flag_l0(),
-            RefPicList::RefPicList1 => hdr.ref_pic_list_modification_flag_l1(),
-        };
-
-        let (ref_pic_list_x, num_ref_idx_lx_active_minus1, rplm) = match ref_pic_list {
-            RefPicList::RefPicList0 => (
-                &mut self.ref_pic_list0,
-                hdr.num_ref_idx_l0_active_minus1(),
-                hdr.ref_pic_list_modification_l0(),
-            ),
-            RefPicList::RefPicList1 => (
-                &mut self.ref_pic_list1,
-                hdr.num_ref_idx_l1_active_minus1(),
-                hdr.ref_pic_list_modification_l1(),
-            ),
-        };
+        let (ref_pic_list_x, ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
+            match ref_pic_list {
+                RefPicList::RefPicList0 => (
+                    &mut self.ref_pic_list0,
+                    hdr.ref_pic_list_modification_flag_l0(),
+                    hdr.num_ref_idx_l0_active_minus1(),
+                    hdr.ref_pic_list_modification_l0(),
+                ),
+                RefPicList::RefPicList1 => (
+                    &mut self.ref_pic_list1,
+                    hdr.ref_pic_list_modification_flag_l1(),
+                    hdr.num_ref_idx_l1_active_minus1(),
+                    hdr.ref_pic_list_modification_l1(),
+                ),
+            };
 
         while ref_pic_list_x.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
             ref_pic_list_x.pop();
