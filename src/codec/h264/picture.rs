@@ -269,7 +269,6 @@ impl PictureData {
         assert!(matches!(pic_rc.borrow().field, Field::Frame));
         assert!(pic_rc.borrow().other_field.is_none());
 
-        let field;
         let pic_order_cnt;
         let mut pic = pic_rc.borrow_mut();
 
@@ -281,14 +280,10 @@ impl PictureData {
         if pic.top_field_order_cnt < pic.bottom_field_order_cnt {
             pic.field = Field::Top;
             pic.pic_order_cnt = pic.top_field_order_cnt;
-
-            field = Field::Bottom;
             pic_order_cnt = pic.bottom_field_order_cnt;
         } else {
             pic.field = Field::Bottom;
             pic.pic_order_cnt = pic.bottom_field_order_cnt;
-
-            field = Field::Top;
             pic_order_cnt = pic.top_field_order_cnt;
         }
 
@@ -299,7 +294,7 @@ impl PictureData {
             reference: pic.reference,
             nonexisting: pic.nonexisting,
             pic_order_cnt,
-            field,
+            field: pic.field.opposite(),
             ..Default::default()
         };
 
