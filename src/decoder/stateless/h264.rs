@@ -973,7 +973,7 @@ where
             let found = p.field == field;
 
             if found {
-                field = field.opposite().unwrap();
+                field = field.opposite();
             }
 
             found
