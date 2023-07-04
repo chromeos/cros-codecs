@@ -143,27 +143,32 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
                 bottom_field_order_cnt = h264_pic.bottom_field_order_cnt;
             }
             Field::Top => {
-                if merge_other_field && h264_pic.other_field().is_some() {
-                    bottom_field_order_cnt = h264_pic
-                        .other_field_unchecked()
-                        .borrow()
-                        .bottom_field_order_cnt;
-                } else {
-                    flags |= libva::constants::VA_PICTURE_H264_TOP_FIELD;
-                    bottom_field_order_cnt = 0;
+                match (merge_other_field, h264_pic.other_field()) {
+                    (true, Some(other_field)) => {
+                        bottom_field_order_cnt = other_field
+                            .upgrade()
+                            .unwrap()
+                            .borrow()
+                            .bottom_field_order_cnt
+                    }
+                    (_, _) => {
+                        flags |= libva::constants::VA_PICTURE_H264_TOP_FIELD;
+                        bottom_field_order_cnt = 0;
+                    }
                 }
 
                 top_field_order_cnt = h264_pic.top_field_order_cnt;
             }
             Field::Bottom => {
-                if merge_other_field && h264_pic.other_field().is_some() {
-                    top_field_order_cnt = h264_pic
-                        .other_field_unchecked()
-                        .borrow()
-                        .top_field_order_cnt;
-                } else {
-                    flags |= libva::constants::VA_PICTURE_H264_BOTTOM_FIELD;
-                    top_field_order_cnt = 0;
+                match (merge_other_field, h264_pic.other_field()) {
+                    (true, Some(other_field)) => {
+                        top_field_order_cnt =
+                            other_field.upgrade().unwrap().borrow().top_field_order_cnt
+                    }
+                    (_, _) => {
+                        flags |= libva::constants::VA_PICTURE_H264_BOTTOM_FIELD;
+                        top_field_order_cnt = 0;
+                    }
                 }
 
                 bottom_field_order_cnt = h264_pic.bottom_field_order_cnt;
