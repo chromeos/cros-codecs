@@ -24,11 +24,11 @@ pub enum Field {
 
 impl Field {
     /// Returns the field of opposite parity.
-    pub fn opposite(&self) -> Option<Self> {
+    pub fn opposite(&self) -> Self {
         match *self {
-            Field::Frame => None,
-            Field::Top => Some(Field::Bottom),
-            Field::Bottom => Some(Field::Top),
+            Field::Frame => Field::Frame,
+            Field::Top => Field::Bottom,
+            Field::Bottom => Field::Top,
         }
     }
 }
