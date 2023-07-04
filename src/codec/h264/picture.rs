@@ -300,8 +300,6 @@ impl PictureData {
             ..Default::default()
         };
 
-        pic.other_field = Some(Rc::downgrade(pic_rc));
-
         debug!(
             "Split into picture (frame_num, POC) ({:?}, {:?}), field: {:?}",
             pic.frame_num, pic.pic_order_cnt, pic.field
@@ -311,7 +309,11 @@ impl PictureData {
             other_field.frame_num, other_field.pic_order_cnt, other_field.field
         );
 
-        Rc::new(RefCell::new(other_field))
+        let other_field = Rc::new(RefCell::new(other_field));
+
+        pic.other_field = Some(Rc::downgrade(&other_field));
+
+        other_field
     }
 }
 
