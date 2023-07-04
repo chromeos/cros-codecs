@@ -287,7 +287,7 @@ impl PictureData {
             pic_order_cnt = pic.top_field_order_cnt;
         }
 
-        let mut other_field = PictureData {
+        let other_field = PictureData {
             top_field_order_cnt: pic.top_field_order_cnt,
             bottom_field_order_cnt: pic.bottom_field_order_cnt,
             frame_num: pic.frame_num,
@@ -295,11 +295,10 @@ impl PictureData {
             nonexisting: pic.nonexisting,
             pic_order_cnt,
             field: pic.field.opposite(),
+            is_second_field: true,
+            other_field: Some(Rc::downgrade(pic_rc)),
             ..Default::default()
         };
-
-        other_field.is_second_field = true;
-        other_field.other_field = Some(Rc::downgrade(pic_rc));
 
         pic.other_field = Some(Rc::downgrade(pic_rc));
 
