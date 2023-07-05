@@ -38,7 +38,7 @@ pub struct BoolDecoderState {
     pub count: isize,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum BoolDecoderError {
     #[error("end of input reached")]
     EndOfInput,
@@ -232,7 +232,7 @@ mod tests {
         assert!(bd.pos() == 0);
 
         for i in 0..NUM_BITS_TO_TEST {
-            assert!(!bd.read_bool_with_prob(0x80).unwrap());
+            assert_eq!(bd.read_bool_with_prob(0x80), Ok(false));
             assert_eq!(i, bd.pos());
         }
     }
@@ -242,12 +242,12 @@ mod tests {
         // Adapted from:
         // https://chromium.googlesource.com/chromium/src/+/refs/heads/main/media/parsers/vp8_bool_decoder_unittest.cc
         let mut bd = BoolDecoder::new(&DATA_ZEROS_AND_EVEN_PROBABILITIES[..]);
-        assert!(bd.pos() == 0);
+        assert_eq!(bd.pos(), 0);
 
-        assert!(bd.read_literal(1).unwrap() == 0);
-        assert!(bd.read_literal(31).unwrap() == 0);
-        assert!(bd.read_sint::<i32>(1).unwrap() == 0);
-        assert!(bd.read_sint::<i32>(31).unwrap() == 0);
+        assert_eq!(bd.read_literal(1), Ok(0));
+        assert_eq!(bd.read_literal(31), Ok(0));
+        assert_eq!(bd.read_sint::<i32>(1), Ok(0));
+        assert_eq!(bd.read_sint::<i32>(31), Ok(0));
     }
 
     #[test]
@@ -256,7 +256,7 @@ mod tests {
         assert!(bd.pos() == 0);
 
         for i in 0..NUM_BITS_TO_TEST {
-            assert!(bd.read_bool_with_prob(0x80).unwrap());
+            assert_eq!(bd.read_bool_with_prob(0x80), Ok(true));
             assert_eq!(i + 1, bd.pos());
         }
     }
@@ -264,12 +264,12 @@ mod tests {
     #[test]
     fn decode_literals_with_ones_and_even_probabilities() {
         let mut bd = BoolDecoder::new(&DATA_ONES_AND_EVEN_PROBABILITIES[..]);
-        assert!(bd.pos() == 0);
+        assert_eq!(bd.pos(), 0);
 
-        assert!(bd.read_literal(1).unwrap() == 1);
-        assert!(bd.read_literal(31).unwrap() == 0x7fffffff);
-        assert!(bd.read_sint::<i32>(1).unwrap() == -1);
-        assert!(bd.read_sint::<i32>(31).unwrap() == -0x7fffffff);
+        assert_eq!(bd.read_literal(1), Ok(1));
+        assert_eq!(bd.read_literal(31), Ok(0x7fffffff));
+        assert_eq!(bd.read_sint::<i32>(1), Ok(-1));
+        assert_eq!(bd.read_sint::<i32>(31), Ok(-0x7fffffff));
     }
 
     #[test]
