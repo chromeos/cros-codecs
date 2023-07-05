@@ -278,7 +278,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Find the lowest POC in the DPB that can be bumped.
-    fn find_lowest_poc_for_bumping(&self) -> Option<DpbEntry<T>> {
+    fn find_lowest_poc_for_bumping(&self) -> Option<&DpbEntry<T>> {
         let lowest = self
             .pictures()
             .filter(|pic| {
@@ -293,13 +293,9 @@ impl<T: Clone> Dpb<T> {
             })
             .min_by_key(|pic| pic.pic_order_cnt)?;
 
-        let position = self
-            .entries
+        self.entries
             .iter()
-            .position(|handle| handle.0.borrow().pic_order_cnt == lowest.pic_order_cnt)
-            .unwrap();
-
-        Some(self.entries[position].clone())
+            .find(|handle| handle.0.borrow().pic_order_cnt == lowest.pic_order_cnt)
     }
 
     /// Gets the position of `needle` in the DPB, if any.
@@ -312,7 +308,7 @@ impl<T: Clone> Dpb<T> {
     /// Bump the dpb, returning a picture as per the bumping process described in C.4.5.3.
     /// Note that this picture will still be referenced by its pair, if any.
     pub fn bump(&mut self, flush: bool) -> Option<DpbEntry<T>> {
-        let handle = self.find_lowest_poc_for_bumping()?;
+        let handle = self.find_lowest_poc_for_bumping()?.clone();
         let mut pic = handle.0.borrow_mut();
 
         debug!("Bumping picture {:#?} from the dpb", pic);
