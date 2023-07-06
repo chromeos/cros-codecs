@@ -987,19 +987,33 @@ impl<T, P, M> StatelessVideoDecoder<M> for Decoder<T, P, M>
 where
     T: DecodedHandle<M> + Clone + 'static,
 {
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
+    fn decode(&mut self, timestamp: u64, mut bitstream: &[u8]) -> Result<(), DecodeError> {
         let sps = Self::peek_sps(&mut self.parser, bitstream)?;
 
         if let Some(sps) = sps {
             if Self::negotiation_possible(&sps, &self.dpb, &self.negotiation_info) {
                 self.backend.new_sequence(&sps)?;
                 self.decoding_state = DecodingState::AwaitingFormat(sps);
+            } else if matches!(self.decoding_state, DecodingState::Reset) {
+                // We can resume decoding since the decoding parameters have not changed.
+                self.decoding_state = DecodingState::Decoding;
+            }
+        } else if matches!(self.decoding_state, DecodingState::Reset) {
+            let mut cursor = Cursor::new(bitstream);
+
+            while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
+                // In the Reset state we can resume decoding from any key frame.
+                if nalu.header().type_().is_idr() {
+                    bitstream = &bitstream[nalu.sc_offset()..];
+                    self.decoding_state = DecodingState::Decoding;
+                    break;
+                }
             }
         }
 
         match &mut self.decoding_state {
             // Skip input until we get information from the stream.
-            DecodingState::AwaitingStreamInfo => Ok(()),
+            DecodingState::AwaitingStreamInfo | DecodingState::Reset => Ok(()),
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
             DecodingState::Decoding => self.decode_access_unit(timestamp, bitstream),
@@ -1008,7 +1022,7 @@ where
 
     fn flush(&mut self) {
         self.drain();
-        self.decoding_state = DecodingState::AwaitingStreamInfo;
+        self.decoding_state = DecodingState::Reset;
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<M>> {

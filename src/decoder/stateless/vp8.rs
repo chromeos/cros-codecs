@@ -219,14 +219,19 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Deco
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         let frame = self.parser.parse_frame(bitstream)?;
 
-        if frame.header.key_frame && self.negotiation_possible(&frame) {
-            self.backend.new_sequence(&frame.header)?;
-            self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
+        if frame.header.key_frame {
+            if self.negotiation_possible(&frame) {
+                self.backend.new_sequence(&frame.header)?;
+                self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
+            } else if matches!(self.decoding_state, DecodingState::Reset) {
+                // We can resume decoding since the decoding parameters have not changed.
+                self.decoding_state = DecodingState::Decoding;
+            }
         }
 
         match &mut self.decoding_state {
             // Skip input until we get information from the stream.
-            DecodingState::AwaitingStreamInfo => Ok(()),
+            DecodingState::AwaitingStreamInfo | DecodingState::Reset => Ok(()),
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
             DecodingState::Decoding => self.handle_frame(frame, timestamp),
@@ -238,7 +243,7 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Deco
         self.last_picture = Default::default();
         self.golden_ref_picture = Default::default();
         self.alt_ref_picture = Default::default();
-        self.decoding_state = DecodingState::AwaitingStreamInfo;
+        self.decoding_state = DecodingState::Reset;
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<M>> {

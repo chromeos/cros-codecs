@@ -52,6 +52,9 @@ enum DecodingState<F> {
     AwaitingFormat(F),
     /// Decoder is currently decoding input.
     Decoding,
+    /// Decoder has been reset after a flush, and can resume with the current parameters after
+    /// seeing a key frame.
+    Reset,
 }
 
 /// Error returned by the [`StatelessVideoDecoder::decode`] method.

@@ -219,13 +219,16 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Deco
             if self.negotiation_possible(&frame.header) {
                 self.backend.new_sequence(&frame.header)?;
                 self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
+            } else if matches!(self.decoding_state, DecodingState::Reset) {
+                // We can resume decoding since the decoding parameters have not changed.
+                self.decoding_state = DecodingState::Decoding;
             }
         }
 
         for frame in frames {
             match &mut self.decoding_state {
                 // Skip input until we get information from the stream.
-                DecodingState::AwaitingStreamInfo => (),
+                DecodingState::AwaitingStreamInfo | DecodingState::Reset => (),
                 // Ask the client to confirm the format before we can process this.
                 DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
                 DecodingState::Decoding => self.handle_frame(&frame, timestamp)?,
@@ -238,7 +241,7 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Deco
     fn flush(&mut self) {
         // Note: all the submitted frames are already in the ready queue.
         self.reference_frames = Default::default();
-        self.decoding_state = DecodingState::AwaitingStreamInfo;
+        self.decoding_state = DecodingState::Reset;
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<M>> {
