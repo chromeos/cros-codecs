@@ -232,7 +232,9 @@ fn build_slice_param(
     ))
 }
 
-impl<M: SurfaceMemoryDescriptor> StatelessVp9DecoderBackend<M> for VaapiBackend<Header, (), M> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend<M>
+    for VaapiBackend<Header, (), M>
+{
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         self.new_sequence(header)
     }

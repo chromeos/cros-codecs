@@ -263,6 +263,12 @@ mod surface_pool {
         }
     }
 
+    impl<M: SurfaceMemoryDescriptor> AsRef<M> for PooledSurface<M> {
+        fn as_ref(&self) -> &M {
+            <Self as Borrow<Surface<M>>>::borrow(self).as_ref()
+        }
+    }
+
     impl<M: SurfaceMemoryDescriptor> Drop for PooledSurface<M> {
         fn drop(&mut self) {
             // If the surface has not been detached...
@@ -422,7 +428,7 @@ mod surface_pool {
         }
     }
 
-    impl<M: SurfaceMemoryDescriptor> SurfacePool<M> for Rc<RefCell<VaSurfacePool<M>>> {
+    impl<M: SurfaceMemoryDescriptor + 'static> SurfacePool<M> for Rc<RefCell<VaSurfacePool<M>>> {
         fn coded_resolution(&self) -> Resolution {
             (**self).borrow().coded_resolution
         }
@@ -451,6 +457,13 @@ mod surface_pool {
 
             pool.surfaces.clear();
             pool.managed_surfaces.clear();
+        }
+
+        fn take_free_surface(&mut self) -> Option<Box<dyn AsRef<M>>> {
+            (**self)
+                .borrow_mut()
+                .get_surface(self)
+                .map(|s| Box::new(s) as Box<dyn AsRef<M>>)
         }
     }
 }
@@ -904,7 +917,7 @@ impl<StreamData, BackendData, M> VaapiBackend<StreamData, BackendData, M>
 where
     StreamData: Clone,
     for<'a> &'a StreamData: VaStreamInfo,
-    M: SurfaceMemoryDescriptor,
+    M: SurfaceMemoryDescriptor + 'static,
     BackendData: Default,
 {
     pub(crate) fn new(display: Rc<libva::Display>) -> Self {
@@ -981,7 +994,7 @@ where
     StreamData: Clone,
     for<'a> &'a StreamData: VaStreamInfo,
     BackendData: Default,
-    M: SurfaceMemoryDescriptor,
+    M: SurfaceMemoryDescriptor + 'static,
 {
     type Handle = DecodedHandle<M>;
 

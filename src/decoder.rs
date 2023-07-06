@@ -40,6 +40,13 @@ pub trait SurfacePool<M> {
     fn num_managed_surfaces(&self) -> usize;
     /// Remove all surfaces from this pool.
     fn clear(&mut self);
+    /// Returns an object holding one of the available surfaces from this pool. The surface will be
+    /// available for rendering again once the returned object is dropped.
+    ///
+    /// This is useful to prevent decoding from happening by holding all the available surfaces.
+    ///
+    /// Returns `None` if there is no free surface at the time of calling.
+    fn take_free_surface(&mut self) -> Option<Box<dyn AsRef<M>>>;
 }
 
 /// Information about the current stream.

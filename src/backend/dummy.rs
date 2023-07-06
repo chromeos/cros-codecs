@@ -116,6 +116,10 @@ impl<M> SurfacePool<M> for Backend {
     }
 
     fn clear(&mut self) {}
+
+    fn take_free_surface(&mut self) -> Option<Box<dyn AsRef<M>>> {
+        None
+    }
 }
 
 impl<FormatInfo> StatelessDecoderBackend<FormatInfo, ()> for Backend {

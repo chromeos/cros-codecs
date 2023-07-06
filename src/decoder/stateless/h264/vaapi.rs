@@ -463,7 +463,9 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> StatelessH264DecoderBackend<M> for VaapiBackend<Sps, (), M> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend<M>
+    for VaapiBackend<Sps, (), M>
+{
     type Picture = VaPicture<PictureNew, PooledSurface<M>>;
 
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {

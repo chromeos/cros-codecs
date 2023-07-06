@@ -106,7 +106,7 @@ impl VaStreamInfo for &Sps {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, BackendData, M> {
+impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<Sps, BackendData, M> {
     fn build_slice_ref_pic_list(
         ref_pic_list: &[Option<RefPicListEntry<VADecodedHandle<M>>>; 16],
         va_references: &[PictureHEVC; 15],
@@ -518,7 +518,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, BackendData, M> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> StatelessH265DecoderBackend<M>
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend<M>
     for VaapiBackend<Sps, BackendData, M>
 {
     type Picture = VaPicture<PictureNew, PooledSurface<M>>;
