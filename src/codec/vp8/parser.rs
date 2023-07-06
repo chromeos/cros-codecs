@@ -97,288 +97,101 @@ pub struct ModeProbs {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Header {
     /// Indicates if the current frame is a key frame or not.
-    key_frame: bool,
+    pub key_frame: bool,
     /// Determines the bitstream version.
-    version: u8,
+    pub version: u8,
     /// Indicates if the current frame is meant to be displayed or not.
-    show_frame: bool,
+    pub show_frame: bool,
     /// The size in bytes of the Uncompressed Data Chunk
-    data_chunk_size: u8,
+    pub data_chunk_size: u8,
     /// Determines the size of the first partition (control partition) excluding
     /// the size of the Uncompressed Data Chunk
-    first_part_size: u32,
+    pub first_part_size: u32,
 
     /// The frame's width, in pixels.
-    width: u16,
+    pub width: u16,
     /// The frame's height, in pixels.
-    height: u16,
+    pub height: u16,
     /// Horizontal scale code value.
-    horiz_scale_code: u8,
+    pub horiz_scale_code: u8,
     /// Vertical scale code value.
-    vert_scale_code: u8,
+    pub vert_scale_code: u8,
     /// Defines the YUV color space of the sequence.
-    color_space: bool,
+    pub color_space: bool,
     /// Specifies if the decoder is required to clamp the reconstructed pixel
     /// values.
-    clamping_type: bool,
+    pub clamping_type: bool,
     /// Determines whether the normal or the simple loop filter is used.
-    filter_type: bool,
+    pub filter_type: bool,
     /// Controls the deblocking filter.
-    loop_filter_level: u8,
+    pub loop_filter_level: u8,
     /// Controls the deblocking filter.
-    sharpness_level: u8,
+    pub sharpness_level: u8,
     /// Determines the number of separate partitions containing the DCT
     /// coefficients of the macroblocks.
-    log2_nbr_of_dct_partitions: u8,
+    pub log2_nbr_of_dct_partitions: u8,
 
-    partition_size: [u32; 8],
+    pub partition_size: [u32; 8],
 
     /// Dequantizer indices.
-    quant_indices: QuantIndices,
+    pub quant_indices: QuantIndices,
 
     /// Determines whether updated token probabilities are used only for this
     /// frame or until further update
-    refresh_entropy_probs: bool,
+    pub refresh_entropy_probs: bool,
     /// Determines if the current decoded frame refreshes the last frame
     /// reference buffer
-    refresh_last: bool,
+    pub refresh_last: bool,
 
     /// Determines if the current decoded frame refreshes the golden frame.
-    refresh_golden_frame: bool,
+    pub refresh_golden_frame: bool,
     /// Determines if the current decoded frame refreshes the alternate
     /// reference frame.
-    refresh_alternate_frame: bool,
+    pub refresh_alternate_frame: bool,
     /// Determines if the golden reference is replaced by another reference.
-    copy_buffer_to_golden: u8,
+    pub copy_buffer_to_golden: u8,
     /// Determines if the alternate reference is replaced by another reference.
-    copy_buffer_to_alternate: u8,
+    pub copy_buffer_to_alternate: u8,
     /// Controls the sign of motion vectors when the golden frame is referenced.
-    sign_bias_golden: bool,
+    pub sign_bias_golden: bool,
     /// Controls the sign of motion vectors when the alternate frame is
     /// referenced.
-    sign_bias_alternate: bool,
+    pub sign_bias_alternate: bool,
 
     /// The new branch probability for the DCT/WHT tree.
-    coeff_prob: [[[[u8; 11]; 3]; 8]; 4],
+    pub coeff_prob: [[[[u8; 11]; 3]; 8]; 4],
     /// MV decoding probability.
-    mv_prob: [[u8; 19]; 2],
+    pub mv_prob: [[u8; 19]; 2],
 
     /// Enables or disables the skipping of macroblocks containing no non-zero
     /// coefficients.
-    mb_no_coeff_skip: bool,
+    pub mb_no_coeff_skip: bool,
     /// The probability that the macroblock is not skipped (flag indicating
     /// skipped macroblock is false).
-    prob_skip_false: u8,
+    pub prob_skip_false: u8,
     /// The probability of an intra macroblock.
-    prob_intra: u8,
+    pub prob_intra: u8,
     /// The probability that the last reference frame is used for inter
     /// prediction.
-    prob_last: u8,
+    pub prob_last: u8,
     /// The probability that the golden reference frame is used for inter
     /// prediction.
-    prob_golden: u8,
+    pub prob_golden: u8,
     /// Branch probabilities kept live across frames.
-    mode_probs: ModeProbs,
+    pub mode_probs: ModeProbs,
 
     /// Boolean decoder `range` for this frame.
-    bd_range: usize,
+    pub bd_range: usize,
     /// Boolean decoder `value` for this frame.
-    bd_value: usize,
+    pub bd_value: usize,
     /// Boolean decoder `count` for this frame.
-    bd_count: isize,
+    pub bd_count: isize,
 
     /// The size in bits of the Frame Header, thus excluding any Uncompressed
     /// Data Chunk bytes.
-    header_size: u32,
+    pub header_size: u32,
 }
 
-#[allow(dead_code)]
-impl Header {
-    /// Get a reference to the header's key frame.
-    pub fn key_frame(&self) -> bool {
-        self.key_frame
-    }
-
-    /// Get a reference to the header's version.
-    pub fn version(&self) -> u8 {
-        self.version
-    }
-
-    /// Get a reference to the header's show frame.
-    pub fn show_frame(&self) -> bool {
-        self.show_frame
-    }
-
-    /// Get a reference to the header's data chunk size.
-    pub fn data_chunk_size(&self) -> u8 {
-        self.data_chunk_size
-    }
-
-    /// Get a reference to the header's first part size.
-    pub fn first_part_size(&self) -> u32 {
-        self.first_part_size
-    }
-
-    /// Get a reference to the header's width.
-    pub fn width(&self) -> u16 {
-        self.width
-    }
-
-    /// Get a reference to the header's height.
-    pub fn height(&self) -> u16 {
-        self.height
-    }
-
-    /// Get a reference to the header's horiz scale code.
-    pub fn horiz_scale_code(&self) -> u8 {
-        self.horiz_scale_code
-    }
-
-    /// Get a reference to the header's vert scale code.
-    pub fn vert_scale_code(&self) -> u8 {
-        self.vert_scale_code
-    }
-
-    /// Get a reference to the header's color space.
-    pub fn color_space(&self) -> bool {
-        self.color_space
-    }
-
-    /// Get a reference to the header's clamping type.
-    pub fn clamping_type(&self) -> bool {
-        self.clamping_type
-    }
-
-    /// Get a reference to the header's filter type.
-    pub fn filter_type(&self) -> bool {
-        self.filter_type
-    }
-
-    /// Get a reference to the header's loop filter level.
-    pub fn loop_filter_level(&self) -> u8 {
-        self.loop_filter_level
-    }
-
-    /// Get a reference to the header's sharpness level.
-    pub fn sharpness_level(&self) -> u8 {
-        self.sharpness_level
-    }
-
-    /// Get a reference to the header's log2 nbr of dct partitions.
-    pub fn log2_nbr_of_dct_partitions(&self) -> u8 {
-        self.log2_nbr_of_dct_partitions
-    }
-
-    /// Get a reference to the header's partition size.
-    pub fn partition_size(&self) -> [u32; 8] {
-        self.partition_size
-    }
-
-    /// Get a reference to the header's quant indices.
-    pub fn quant_indices(&self) -> &QuantIndices {
-        &self.quant_indices
-    }
-
-    /// Get a reference to the header's refresh entropy probs.
-    pub fn refresh_entropy_probs(&self) -> bool {
-        self.refresh_entropy_probs
-    }
-
-    /// Get a reference to the header's refresh last.
-    pub fn refresh_last(&self) -> bool {
-        self.refresh_last
-    }
-
-    /// Get a reference to the header's refresh golden frame.
-    pub fn refresh_golden_frame(&self) -> bool {
-        self.refresh_golden_frame
-    }
-
-    /// Get a reference to the header's refresh alternate frame.
-    pub fn refresh_alternate_frame(&self) -> bool {
-        self.refresh_alternate_frame
-    }
-
-    /// Get a reference to the header's copy buffer to golden.
-    pub fn copy_buffer_to_golden(&self) -> u8 {
-        self.copy_buffer_to_golden
-    }
-
-    /// Get a reference to the header's copy buffer to alternate.
-    pub fn copy_buffer_to_alternate(&self) -> u8 {
-        self.copy_buffer_to_alternate
-    }
-
-    /// Get a reference to the header's sign bias golden.
-    pub fn sign_bias_golden(&self) -> bool {
-        self.sign_bias_golden
-    }
-
-    /// Get a reference to the header's sign bias alternate.
-    pub fn sign_bias_alternate(&self) -> bool {
-        self.sign_bias_alternate
-    }
-
-    /// Get a reference to the header's coeff prob.
-    pub fn coeff_prob(&self) -> [[[[u8; 11]; 3]; 8]; 4] {
-        self.coeff_prob
-    }
-
-    /// Get a reference to the header's mv prob.
-    pub fn mv_prob(&self) -> [[u8; 19]; 2] {
-        self.mv_prob
-    }
-
-    /// Get a reference to the header's mb no coeff skip.
-    pub fn mb_no_coeff_skip(&self) -> bool {
-        self.mb_no_coeff_skip
-    }
-
-    /// Get a reference to the header's prob skip false.
-    pub fn prob_skip_false(&self) -> u8 {
-        self.prob_skip_false
-    }
-
-    /// Get a reference to the header's prob intra.
-    pub fn prob_intra(&self) -> u8 {
-        self.prob_intra
-    }
-
-    /// Get a reference to the header's prob last.
-    pub fn prob_last(&self) -> u8 {
-        self.prob_last
-    }
-
-    /// Get a reference to the header's prob golden.
-    pub fn prob_golden(&self) -> u8 {
-        self.prob_golden
-    }
-
-    /// Get a reference to the header's mode probs.
-    pub fn mode_probs(&self) -> &ModeProbs {
-        &self.mode_probs
-    }
-
-    /// Get a reference to the header's bd range.
-    pub fn bd_range(&self) -> usize {
-        self.bd_range
-    }
-
-    /// Get a reference to the header's bd value.
-    pub fn bd_value(&self) -> usize {
-        self.bd_value
-    }
-
-    /// Get a reference to the header's bd count.
-    pub fn bd_count(&self) -> isize {
-        self.bd_count
-    }
-
-    /// Get a reference to the header's header size.
-    pub fn header_size(&self) -> u32 {
-        self.header_size
-    }
-}
 /// A VP8 frame.
 pub struct Frame<T: AsRef<[u8]>> {
     /// The abstraction for the raw memory for this frame.

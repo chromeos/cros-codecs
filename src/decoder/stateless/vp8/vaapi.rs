@@ -44,7 +44,7 @@ impl VaStreamInfo for &Header {
     }
 
     fn coded_size(&self) -> (u32, u32) {
-        (self.width() as u32, self.height() as u32)
+        (self.width as u32, self.height as u32)
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
@@ -75,23 +75,23 @@ fn build_iq_matrix(
         if segmentation.segmentation_enabled {
             qi_base = i16::from(segmentation.quantizer_update_value[i]);
             if !segmentation.segment_feature_mode {
-                qi_base += i16::from(frame_hdr.quant_indices().y_ac_qi);
+                qi_base += i16::from(frame_hdr.quant_indices.y_ac_qi);
             }
         } else {
-            qi_base = i16::from(frame_hdr.quant_indices().y_ac_qi);
+            qi_base = i16::from(frame_hdr.quant_indices.y_ac_qi);
         }
 
         let mut qi = qi_base;
         quantization_index[0] = u16::try_from(clamp(qi, 0, 127))?;
-        qi = qi_base + i16::from(frame_hdr.quant_indices().y_dc_delta);
+        qi = qi_base + i16::from(frame_hdr.quant_indices.y_dc_delta);
         quantization_index[1] = u16::try_from(clamp(qi, 0, 127))?;
-        qi = qi_base + i16::from(frame_hdr.quant_indices().y2_dc_delta);
+        qi = qi_base + i16::from(frame_hdr.quant_indices.y2_dc_delta);
         quantization_index[2] = u16::try_from(clamp(qi, 0, 127))?;
-        qi = qi_base + i16::from(frame_hdr.quant_indices().y2_ac_delta);
+        qi = qi_base + i16::from(frame_hdr.quant_indices.y2_ac_delta);
         quantization_index[3] = u16::try_from(clamp(qi, 0, 127))?;
-        qi = qi_base + i16::from(frame_hdr.quant_indices().uv_dc_delta);
+        qi = qi_base + i16::from(frame_hdr.quant_indices.uv_dc_delta);
         quantization_index[4] = u16::try_from(clamp(qi, 0, 127))?;
-        qi = qi_base + i16::from(frame_hdr.quant_indices().uv_ac_delta);
+        qi = qi_base + i16::from(frame_hdr.quant_indices.uv_ac_delta);
         quantization_index[5] = u16::try_from(clamp(qi, 0, 127))?;
     }
 
@@ -101,7 +101,7 @@ fn build_iq_matrix(
 }
 
 fn build_probability_table(frame_hdr: &Header) -> libva::BufferType {
-    BufferType::Probability(ProbabilityDataBufferVP8::new(frame_hdr.coeff_prob()))
+    BufferType::Probability(ProbabilityDataBufferVP8::new(frame_hdr.coeff_prob))
 }
 
 fn build_pic_param(
@@ -122,10 +122,10 @@ fn build_pic_param(
         if seg.segmentation_enabled {
             level = seg.lf_update_value[i];
             if !seg.segment_feature_mode {
-                level += i8::try_from(frame_hdr.loop_filter_level())?;
+                level += i8::try_from(frame_hdr.loop_filter_level)?;
             }
         } else {
-            level = i8::try_from(frame_hdr.loop_filter_level())?;
+            level = i8::try_from(frame_hdr.loop_filter_level)?;
         }
 
         loop_filter_level[i] = clamp(u8::try_from(level)?, 0, 63);
@@ -134,25 +134,25 @@ fn build_pic_param(
     }
 
     let pic_fields = libva::VP8PicFields::new(
-        u32::from(!frame_hdr.key_frame()),
-        u32::from(frame_hdr.version()),
+        u32::from(!frame_hdr.key_frame),
+        u32::from(frame_hdr.version),
         u32::from(seg.segmentation_enabled),
         u32::from(seg.update_mb_segmentation_map),
         u32::from(seg.update_segment_feature_data),
-        u32::from(frame_hdr.filter_type()),
-        u32::from(frame_hdr.sharpness_level()),
+        u32::from(frame_hdr.filter_type),
+        u32::from(frame_hdr.sharpness_level),
         u32::from(adj.loop_filter_adj_enable),
         u32::from(adj.mode_ref_lf_delta_update),
-        u32::from(frame_hdr.sign_bias_golden()),
-        u32::from(frame_hdr.sign_bias_alternate()),
-        u32::from(frame_hdr.mb_no_coeff_skip()),
-        u32::from(frame_hdr.loop_filter_level() == 0),
+        u32::from(frame_hdr.sign_bias_golden),
+        u32::from(frame_hdr.sign_bias_alternate),
+        u32::from(frame_hdr.mb_no_coeff_skip),
+        u32::from(frame_hdr.loop_filter_level == 0),
     );
 
     let bool_coder_ctx = libva::BoolCoderContextVPX::new(
-        u8::try_from(frame_hdr.bd_range())?,
-        u8::try_from(frame_hdr.bd_value())?,
-        u8::try_from(frame_hdr.bd_count())?,
+        u8::try_from(frame_hdr.bd_range)?,
+        u8::try_from(frame_hdr.bd_value)?,
+        u8::try_from(frame_hdr.bd_count)?,
     );
 
     let pic_param = libva::PictureParameterBufferVP8::new(
@@ -166,13 +166,13 @@ fn build_pic_param(
         loop_filter_level,
         loop_filter_deltas_ref_frame,
         loop_filter_deltas_mode,
-        frame_hdr.prob_skip_false(),
-        frame_hdr.prob_intra(),
-        frame_hdr.prob_last(),
-        frame_hdr.prob_golden(),
-        frame_hdr.mode_probs().intra_16x16_prob,
-        frame_hdr.mode_probs().intra_chroma_prob,
-        frame_hdr.mv_prob(),
+        frame_hdr.prob_skip_false,
+        frame_hdr.prob_intra,
+        frame_hdr.prob_last,
+        frame_hdr.prob_golden,
+        frame_hdr.mode_probs.intra_16x16_prob,
+        frame_hdr.mode_probs.intra_chroma_prob,
+        frame_hdr.mv_prob,
         &bool_coder_ctx,
     );
 
@@ -183,19 +183,19 @@ fn build_pic_param(
 
 fn build_slice_param(frame_hdr: &Header, slice_size: usize) -> anyhow::Result<libva::BufferType> {
     let mut partition_size: [u32; 9] = Default::default();
-    let num_of_partitions = (1 << frame_hdr.log2_nbr_of_dct_partitions()) + 1;
+    let num_of_partitions = (1 << frame_hdr.log2_nbr_of_dct_partitions) + 1;
 
-    partition_size[0] = frame_hdr.first_part_size() - ((frame_hdr.header_size() + 7) >> 3);
+    partition_size[0] = frame_hdr.first_part_size - ((frame_hdr.header_size + 7) >> 3);
 
     partition_size[1..num_of_partitions]
-        .clone_from_slice(&frame_hdr.partition_size()[..(num_of_partitions - 1)]);
+        .clone_from_slice(&frame_hdr.partition_size[..(num_of_partitions - 1)]);
 
     Ok(libva::BufferType::SliceParameter(
         libva::SliceParameter::VP8(libva::SliceParameterBufferVP8::new(
             u32::try_from(slice_size)?,
-            u32::from(frame_hdr.data_chunk_size()),
+            u32::from(frame_hdr.data_chunk_size),
             0,
-            frame_hdr.header_size(),
+            frame_hdr.header_size,
             u8::try_from(num_of_partitions)?,
             partition_size,
         )),
@@ -395,8 +395,8 @@ mod tests {
         assert_eq!(frame.size(), 14788);
 
         let resolution = Resolution {
-            width: frame.header.width() as u32,
-            height: frame.header.height() as u32,
+            width: frame.header.width as u32,
+            height: frame.header.height as u32,
         };
 
         let pic_param = build_pic_param(

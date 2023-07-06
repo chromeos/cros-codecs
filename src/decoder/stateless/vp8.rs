@@ -109,15 +109,15 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> Decoder<T, M> {
         golden_ref_picture: &mut Option<T>,
         alt_ref_picture: &mut Option<T>,
     ) -> anyhow::Result<()> {
-        if header.key_frame() {
+        if header.key_frame {
             Self::replace_reference(last_picture, decoded_handle);
             Self::replace_reference(golden_ref_picture, decoded_handle);
             Self::replace_reference(alt_ref_picture, decoded_handle);
         } else {
-            if header.refresh_alternate_frame() {
+            if header.refresh_alternate_frame {
                 Self::replace_reference(alt_ref_picture, decoded_handle);
             } else {
-                match header.copy_buffer_to_alternate() {
+                match header.copy_buffer_to_alternate {
                     0 => { /* do nothing */ }
 
                     1 => {
@@ -136,10 +136,10 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> Decoder<T, M> {
                 }
             }
 
-            if header.refresh_golden_frame() {
+            if header.refresh_golden_frame {
                 Self::replace_reference(golden_ref_picture, decoded_handle);
             } else {
-                match header.copy_buffer_to_golden() {
+                match header.copy_buffer_to_golden {
                     0 => { /* do nothing */ }
 
                     1 => {
@@ -158,7 +158,7 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> Decoder<T, M> {
                 }
             }
 
-            if header.refresh_last() {
+            if header.refresh_last {
                 Self::replace_reference(last_picture, decoded_handle);
             }
         }
@@ -172,7 +172,7 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> Decoder<T, M> {
             return Err(DecodeError::CheckEvents);
         }
 
-        let show_frame = frame.header.show_frame();
+        let show_frame = frame.header.show_frame;
 
         let decoded_handle = self.backend.submit_picture(
             &frame.header,
@@ -208,8 +208,8 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> Decoder<T, M> {
     fn negotiation_possible(&self, frame: &Frame<impl AsRef<[u8]>>) -> bool {
         let coded_resolution = self.coded_resolution;
         let hdr = &frame.header;
-        let width = u32::from(hdr.width());
-        let height = u32::from(hdr.height());
+        let width = u32::from(hdr.width);
+        let height = u32::from(hdr.height);
 
         width != coded_resolution.width || height != coded_resolution.height
     }
@@ -219,7 +219,7 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Deco
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         let frame = self.parser.parse_frame(bitstream)?;
 
-        if frame.header.key_frame() && self.negotiation_possible(&frame) {
+        if frame.header.key_frame && self.negotiation_possible(&frame) {
             self.backend.new_sequence(&frame.header)?;
             self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
         }
@@ -252,8 +252,8 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Deco
                     Some(DecoderEvent::FormatChanged(Box::new(
                         StatelessDecoderFormatNegotiator::new(self, hdr.clone(), |decoder, hdr| {
                             decoder.coded_resolution = Resolution {
-                                width: hdr.width() as u32,
-                                height: hdr.height() as u32,
+                                width: hdr.width as u32,
+                                height: hdr.height as u32,
                             };
                             decoder.decoding_state = DecodingState::Decoding;
                         }),
