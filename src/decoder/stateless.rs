@@ -40,13 +40,16 @@ pub enum StatelessBackendError {
 pub type StatelessBackendResult<T> = std::result::Result<T, StatelessBackendError>;
 
 /// Decoder implementations can use this struct to represent their decoding state.
+///
+/// `F` is a type containing the parsed stream format, that the decoder will use for format
+/// negotiation with the client.
 #[derive(Default)]
-enum DecodingState<T> {
+enum DecodingState<F> {
     /// Decoder will ignore all input until format and resolution information passes by.
     #[default]
     AwaitingStreamInfo,
     /// Decoder is stopped until the client has confirmed the output format.
-    AwaitingFormat(T),
+    AwaitingFormat(F),
     /// Decoder is currently decoding input.
     Decoding,
 }
