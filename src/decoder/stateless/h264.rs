@@ -290,10 +290,10 @@ where
 
     fn negotiation_possible(sps: &Sps, dpb: &Dpb<T>, current_resolution: Resolution) -> bool {
         let max_dpb_frames = sps.max_dpb_frames();
+        let interlaced = !sps.frame_mbs_only_flag();
 
         let prev_max_dpb_frames = dpb.max_num_pics();
         let prev_interlaced = dpb.interlaced();
-        let interlaced = !sps.frame_mbs_only_flag();
 
         let resolution = Resolution {
             width: sps.width(),
