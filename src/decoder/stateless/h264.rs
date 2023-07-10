@@ -1411,18 +1411,22 @@ where
 
             self.dpb.store_picture(pic, handle)?;
         } else {
-            if self.last_field.is_some()
-                && pic.borrow().other_field().is_some()
-                && Rc::ptr_eq(
-                    &pic.borrow().other_field_unchecked(),
-                    &self.last_field.as_ref().unwrap().0,
+            // If we have a cached field for this picture, we must combine
+            // them before insertion.
+            if pic
+                .borrow()
+                .other_field()
+                .and_then(|other_field| other_field.upgrade())
+                .zip(self.last_field.as_ref().map(|f| &f.0))
+                .map_or_else(
+                    || false,
+                    |(other_field, last_field)| Rc::ptr_eq(&other_field, last_field),
                 )
             {
-                // If we have a cached field for this picture, we must combine
-                // them before insertion.
-                let (last_field, last_field_handle) = self.last_field.take().unwrap();
-                self.dpb
-                    .store_picture(last_field, Some(last_field_handle))?;
+                if let Some((last_field, last_field_handle)) = self.last_field.take() {
+                    self.dpb
+                        .store_picture(last_field, Some(last_field_handle))?;
+                }
             }
 
             self.dpb.store_picture(pic, handle)?;
