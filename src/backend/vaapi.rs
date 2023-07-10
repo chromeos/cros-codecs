@@ -185,8 +185,8 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait<M> for DecodedHandle<M> {
         self.borrow().timestamp()
     }
 
-    fn dyn_picture(&self) -> std::cell::Ref<dyn DynHandle> {
-        self.borrow()
+    fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a> {
+        Box::new(self.borrow())
     }
 
     fn is_ready(&self) -> bool {
@@ -758,8 +758,8 @@ impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> DynHandle for GenericBackendHandle<M> {
-    fn dyn_mappable_handle<'a>(&'a self) -> anyhow::Result<Box<dyn MappableHandle + 'a>> {
+impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::Ref<'a, GenericBackendHandle<M>> {
+    fn dyn_mappable_handle<'b>(&'b self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
         self.image().map(|i| Box::new(i) as Box<dyn MappableHandle>)
     }
 }

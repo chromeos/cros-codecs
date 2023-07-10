@@ -107,7 +107,7 @@ pub trait MappableHandle {
 /// they give access to the underlying handle and that they can be (cheaply) cloned.
 pub trait DecodedHandle<M> {
     /// Returns a reference to an object allowing a CPU mapping of the decoded surface.
-    fn dyn_picture(&self) -> std::cell::Ref<dyn DynHandle>;
+    fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a>;
 
     /// Returns the timestamp of the picture.
     fn timestamp(&self) -> u64;

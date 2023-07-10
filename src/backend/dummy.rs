@@ -30,8 +30,8 @@ impl MappableHandle for BackendHandle {
     }
 }
 
-impl DynHandle for BackendHandle {
-    fn dyn_mappable_handle<'a>(&'a self) -> anyhow::Result<Box<dyn MappableHandle + 'a>> {
+impl<'a> DynHandle for std::cell::Ref<'a, BackendHandle> {
+    fn dyn_mappable_handle<'b>(&'b self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
         Ok(Box::<BackendHandle>::default())
     }
 }
@@ -61,8 +61,8 @@ impl DecodedHandle<()> for Handle {
         0
     }
 
-    fn dyn_picture(&self) -> std::cell::Ref<dyn DynHandle> {
-        self.handle.borrow()
+    fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a> {
+        Box::new(self.handle.borrow())
     }
 
     fn sync(&self) -> anyhow::Result<()> {
