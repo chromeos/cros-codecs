@@ -1443,27 +1443,30 @@ where
             assert!(self.last_field.is_none());
 
             self.ready_queue.push(handle);
-        } else if self.last_field.is_none() {
-            assert!(!pic.is_second_field());
-            drop(pic);
-
-            // Cache the field, wait for its pair.
-            self.last_field = Some((pic_rc, handle));
-        } else if pic.is_second_field()
-            && pic.other_field().is_some()
-            && Rc::ptr_eq(
-                &pic.other_field_unchecked(),
-                &self.last_field.as_ref().unwrap().0,
-            )
-        {
-            let (field_pic, field_handle) = self.last_field.take().unwrap();
-
-            field_pic.borrow_mut().set_second_field_to(&pic_rc);
-
-            self.ready_queue.push(field_handle);
         } else {
-            // Somehow, the last field is not paired with the current field.
-            self.last_field = None;
+            match &self.last_field {
+                None => {
+                    assert!(!pic.is_second_field());
+                    drop(pic);
+
+                    // Cache the field, wait for its pair.
+                    self.last_field = Some((pic_rc, handle));
+                }
+                Some(last_field)
+                    if pic.is_second_field()
+                        && pic.other_field().is_some()
+                        && Rc::ptr_eq(&pic.other_field_unchecked(), &last_field.0) =>
+                {
+                    if let Some((field_pic, field_handle)) = self.last_field.take() {
+                        field_pic.borrow_mut().set_second_field_to(&pic_rc);
+                        self.ready_queue.push(field_handle);
+                    }
+                }
+                _ => {
+                    // Somehow, the last field is not paired with the current field.
+                    self.last_field = None;
+                }
+            }
         }
     }
 
