@@ -1686,9 +1686,8 @@ where
         if self.dpb.interlaced() {
             if self.last_field.is_some() {
                 prev_field = self.last_field.clone();
-            } else if !self.dpb.is_empty() {
+            } else if let Some(last_handle) = self.dpb.entries().last() {
                 // Use the last entry in the DPB
-                let last_handle = self.dpb.entries().last().unwrap();
                 let prev_pic = last_handle.0.borrow();
 
                 if !matches!(prev_pic.field, Field::Frame) && prev_pic.other_field().is_none() {
