@@ -1195,8 +1195,11 @@ where
             .set_reference(Reference::LongTerm, is_frame);
         to_mark_as_long.borrow_mut().long_term_frame_idx = long_term_frame_idx;
 
-        if let Some(other_field) = to_mark_as_long.borrow().other_field() {
-            let other_field = other_field.upgrade().unwrap();
+        if let Some(other_field) = to_mark_as_long
+            .borrow()
+            .other_field()
+            .and_then(|f| f.upgrade())
+        {
             let mut other_field = other_field.borrow_mut();
             if matches!(other_field.reference(), Reference::LongTerm) {
                 other_field.long_term_frame_idx = long_term_frame_idx;
