@@ -1596,7 +1596,7 @@ where
     fn init_current_pic(
         &mut self,
         slice: &Slice<&[u8]>,
-        first_field: Option<Rc<RefCell<PictureData>>>,
+        first_field: Option<&Rc<RefCell<PictureData>>>,
         timestamp: u64,
     ) -> anyhow::Result<PictureData> {
         let pps = self
@@ -1612,7 +1612,7 @@ where
         let mut pic = PictureData::new_from_slice(slice, sps, timestamp);
 
         if let Some(first_field) = first_field {
-            pic.set_first_field_to(&first_field);
+            pic.set_first_field_to(first_field);
         }
 
         self.compute_pic_order_count(&mut pic)?;
@@ -1783,11 +1783,8 @@ where
 
         let first_field = self.find_first_field(slice)?;
 
-        let cur_pic = self.init_current_pic(
-            slice,
-            first_field.as_ref().map(|f| Rc::clone(&f.0)),
-            timestamp,
-        )?;
+        let cur_pic =
+            self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
 
         debug!("Decode picture POC {:?}", cur_pic.pic_order_cnt);
 
