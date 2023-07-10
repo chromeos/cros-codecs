@@ -120,14 +120,14 @@ impl PictureData {
 
         let is_idr = if nalu_hdr.idr_pic_flag() {
             IsIdr::Yes {
-                idr_pic_id: hdr.idr_pic_id(),
+                idr_pic_id: hdr.idr_pic_id,
             }
         } else {
             IsIdr::No
         };
 
-        let field = if hdr.field_pic_flag() {
-            if hdr.bottom_field_flag() {
+        let field = if hdr.field_pic_flag {
+            if hdr.bottom_field_flag {
                 Field::Bottom
             } else {
                 Field::Top
@@ -142,10 +142,10 @@ impl PictureData {
             Reference::None
         };
 
-        let pic_num = if !hdr.field_pic_flag() {
-            hdr.frame_num()
+        let pic_num = if !hdr.field_pic_flag {
+            hdr.frame_num
         } else {
-            2 * hdr.frame_num() + 1
+            2 * hdr.frame_num + 1
         };
 
         let (
@@ -155,16 +155,16 @@ impl PictureData {
             delta_pic_order_cnt1,
         ) = match sps.pic_order_cnt_type() {
             0 => (
-                hdr.pic_order_cnt_lsb(),
-                hdr.delta_pic_order_cnt_bottom(),
+                hdr.pic_order_cnt_lsb,
+                hdr.delta_pic_order_cnt_bottom,
                 Default::default(),
                 Default::default(),
             ),
             1 => (
                 Default::default(),
                 Default::default(),
-                hdr.delta_pic_order_cnt()[0],
-                hdr.delta_pic_order_cnt()[1],
+                hdr.delta_pic_order_cnt[0],
+                hdr.delta_pic_order_cnt[1],
             ),
             _ => (
                 Default::default(),
@@ -192,12 +192,12 @@ impl PictureData {
             delta_pic_order_cnt0,
             delta_pic_order_cnt1,
             pic_num: i32::from(pic_num),
-            frame_num: i32::from(hdr.frame_num()),
+            frame_num: i32::from(hdr.frame_num),
             nal_ref_idc: nalu_hdr.ref_idc(),
             is_idr,
             reference,
             field,
-            ref_pic_marking: hdr.dec_ref_pic_marking().clone(),
+            ref_pic_marking: hdr.dec_ref_pic_marking.clone(),
             coded_resolution,
             display_resolution,
             timestamp,

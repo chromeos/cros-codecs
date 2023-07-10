@@ -278,7 +278,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
             pps.weighted_pred_flag() as u32,
             pps.weighted_bipred_idc() as u32,
             pps.transform_8x8_mode_flag() as u32,
-            slice.header().field_pic_flag() as u32,
+            slice.header().field_pic_flag as u32,
             pps.constrained_intra_pred_flag() as u32,
             pps.bottom_field_pic_order_in_frame_present_flag() as u32,
             pps.deblocking_filter_control_present_flag() as u32,
@@ -311,7 +311,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
             pps.chroma_qp_index_offset(),
             pps.second_chroma_qp_index_offset(),
             &pic_fields,
-            slice.header().frame_num(),
+            slice.header().frame_num,
         );
 
         Ok(BufferType::PictureParameter(PictureParameter::H264(
@@ -358,7 +358,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
 
         let ref_list_0 = Self::fill_ref_pic_list(ref_list_0);
         let ref_list_1 = Self::fill_ref_pic_list(ref_list_1);
-        let pwt = hdr.pred_weight_table();
+        let pwt = &hdr.pred_weight_table;
 
         let mut luma_weight_l0_flag = false;
         let mut chroma_weight_l0_flag = false;
@@ -377,9 +377,9 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
         let mut fill_l0 = false;
         let mut fill_l1 = false;
 
-        if pps.weighted_pred_flag() && (hdr.slice_type().is_p() || hdr.slice_type().is_sp()) {
+        if pps.weighted_pred_flag() && (hdr.slice_type.is_p() || hdr.slice_type.is_sp()) {
             fill_l0 = true;
-        } else if pps.weighted_bipred_idc() == 1 && hdr.slice_type().is_b() {
+        } else if pps.weighted_bipred_idc() == 1 && hdr.slice_type.is_b() {
             fill_l0 = true;
             fill_l1 = true;
         }
@@ -387,14 +387,14 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
         if fill_l0 {
             luma_weight_l0_flag = true;
 
-            for i in 0..=hdr.num_ref_idx_l0_active_minus1() as usize {
+            for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
                 luma_weight_l0[i] = pwt.luma_weight_l0()[i];
                 luma_offset_l0[i] = i16::from(pwt.luma_offset_l0()[i]);
             }
 
             chroma_weight_l0_flag = sps.chroma_array_type() != 0;
             if chroma_weight_l0_flag {
-                for i in 0..=hdr.num_ref_idx_l0_active_minus1() as usize {
+                for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
                     for j in 0..2 {
                         chroma_weight_l0[i][j] = pwt.chroma_weight_l0()[i][j];
                         chroma_offset_l0[i][j] = i16::from(pwt.chroma_offset_l0()[i][j]);
@@ -406,16 +406,16 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
         if fill_l1 {
             luma_weight_l1_flag = true;
 
-            luma_weight_l1[..(hdr.num_ref_idx_l1_active_minus1() as usize + 1)].clone_from_slice(
-                &pwt.luma_weight_l1()[..(hdr.num_ref_idx_l1_active_minus1() as usize + 1)],
+            luma_weight_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)].clone_from_slice(
+                &pwt.luma_weight_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
             );
-            luma_offset_l1[..(hdr.num_ref_idx_l1_active_minus1() as usize + 1)].clone_from_slice(
-                &pwt.luma_offset_l1()[..(hdr.num_ref_idx_l1_active_minus1() as usize + 1)],
+            luma_offset_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)].clone_from_slice(
+                &pwt.luma_offset_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
             );
 
             chroma_weight_l1_flag = sps.chroma_array_type() != 0;
             if chroma_weight_l1_flag {
-                for i in 0..=hdr.num_ref_idx_l1_active_minus1() as usize {
+                for i in 0..=hdr.num_ref_idx_l1_active_minus1 as usize {
                     for j in 0..2 {
                         chroma_weight_l1[i][j] = pwt.chroma_weight_l1()[i][j];
                         chroma_offset_l1[i][j] = i16::from(pwt.chroma_offset_l1()[i][j]);
@@ -428,17 +428,17 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
             nalu.size() as u32,
             0,
             libva::constants::VA_SLICE_DATA_FLAG_ALL,
-            hdr.header_bit_size() as u16,
-            hdr.first_mb_in_slice() as u16,
-            *hdr.slice_type() as u8,
-            hdr.direct_spatial_mv_pred_flag() as u8,
-            hdr.num_ref_idx_l0_active_minus1(),
-            hdr.num_ref_idx_l1_active_minus1(),
-            hdr.cabac_init_idc(),
-            hdr.slice_qp_delta(),
-            hdr.disable_deblocking_filter_idc(),
-            hdr.slice_alpha_c0_offset_div2(),
-            hdr.slice_beta_offset_div2(),
+            hdr.header_bit_size as u16,
+            hdr.first_mb_in_slice as u16,
+            hdr.slice_type as u8,
+            hdr.direct_spatial_mv_pred_flag as u8,
+            hdr.num_ref_idx_l0_active_minus1,
+            hdr.num_ref_idx_l1_active_minus1,
+            hdr.cabac_init_idc,
+            hdr.slice_qp_delta,
+            hdr.disable_deblocking_filter_idc,
+            hdr.slice_alpha_c0_offset_div2,
+            hdr.slice_beta_offset_div2,
             ref_list_0,
             ref_list_1,
             pwt.luma_log2_weight_denom(),

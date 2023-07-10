@@ -248,245 +248,146 @@ impl RefPicMarking {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SliceHeader {
     /// Specifies the address of the first macroblock in the slice.
-    first_mb_in_slice: u32,
+    pub first_mb_in_slice: u32,
 
     /// Specifies the coding type of the slice according to Table 7-6.
-    slice_type: SliceType,
+    pub slice_type: SliceType,
 
     // Specifies the picture parameter set in use
-    pic_parameter_set_id: u8,
+    pub pic_parameter_set_id: u8,
 
     /// Specifies the colour plane associated with the current slice RBSP when
     /// `separate_colour_plane_flag` is set.
-    colour_plane_id: u8,
+    pub colour_plane_id: u8,
 
     /// Used as an identifier for pictures and shall be represented by
     /// `log2_max_frame_num_minus4 + 4` bits in the bitstream.
-    frame_num: u16,
+    pub frame_num: u16,
 
     /// If set, specifies that the slice is a slice of a coded field. If not
     /// set, specifies that the slice is a slice of a coded frame.
-    field_pic_flag: bool,
+    pub field_pic_flag: bool,
 
     /// If set, specifies that the slice is part of a coded bottom field. If not
     /// set, specifies that the picture is a coded top field.
-    bottom_field_flag: bool,
+    pub bottom_field_flag: bool,
 
     /// Identifies an IDR picture. The values of `idr_pic_id` in all the slices
     /// of an IDR picture shall remain unchanged. When two consecutive access
     /// units in decoding order are both IDR access units, the value of
     /// `idr_pic_id` in the slices of the first such IDR access unit shall
     /// differ from the `idr_pic_id` in the second such IDR access unit
-    idr_pic_id: u16,
+    pub idr_pic_id: u16,
 
     /// Specifies the picture order count modulo `MaxPicOrderCntLsb` for the top
     /// field of a coded frame or for a coded field. The length of the
     /// `pic_order_cnt_lsb` syntax element is
     /// `log2_max_pic_order_cnt_lsb_minus4` + 4 bits.
-    pic_order_cnt_lsb: u16,
+    pub pic_order_cnt_lsb: u16,
 
     ///  Specifies the picture order count difference between the bottom field
     ///  and the top field of a coded frame as follows
-    delta_pic_order_cnt_bottom: i32,
+    pub delta_pic_order_cnt_bottom: i32,
 
     /// The first entry specifies the picture order count difference from the
     /// expected picture order count for the top field of a coded frame or for a
     /// coded field as specified in clause 8.2.1 The second entry  specifies the
     /// picture order count difference from the expected picture order count for
     /// the bottom field of a coded frame specified in clause 8.2.1.
-    delta_pic_order_cnt: [i32; 2],
+    pub delta_pic_order_cnt: [i32; 2],
 
     /// Shall be equal to 0 for slices and slice data partitions belonging to
     /// the primary coded picture. The value of `redundant_pic_cnt shall` be
     /// greater than 0 for coded slices or coded slice data partitions of a
     /// redundant coded picture
-    redundant_pic_cnt: u8,
+    pub redundant_pic_cnt: u8,
 
     /// Specifies the method used in the decoding process to derive motion
     /// vectors and reference indices for inter prediction >
-    direct_spatial_mv_pred_flag: bool,
+    pub direct_spatial_mv_pred_flag: bool,
 
     /// If set, specifies that the syntax element `num_ref_idx_l0_active_minus1`
     /// is present for P, SP, and B slices and that the syntax element
     /// `num_ref_idx_l1_active_minus1` is present for B slices. If not set,
     /// specifies that the syntax elements `num_ref_idx_l0_active_minus1` and
     /// `num_ref_idx_l1_active_minus1` are not present.
-    num_ref_idx_active_override_flag: bool,
+    pub num_ref_idx_active_override_flag: bool,
 
     /// Specifies the maximum reference index for reference picture list 0 that
     /// shall be used to decode the slice.
-    num_ref_idx_l0_active_minus1: u8,
+    pub num_ref_idx_l0_active_minus1: u8,
 
     /// Specifies the maximum reference index for reference picture list 1 that
     /// shall be used to decode the slice.
-    num_ref_idx_l1_active_minus1: u8,
+    pub num_ref_idx_l1_active_minus1: u8,
 
     /// If set, specifies that the syntax element `modification_of_pic_nums_idc`
     /// is present for specifying reference picture list 0. If not set,
     /// specifies that this syntax element is not present.
-    ref_pic_list_modification_flag_l0: bool,
+    pub ref_pic_list_modification_flag_l0: bool,
 
     /// Reference picture list 0 modification as parsed with the
     /// `ref_pic_list_modification()` process.
-    ref_pic_list_modification_l0: Vec<RefPicListModification>,
+    pub ref_pic_list_modification_l0: Vec<RefPicListModification>,
 
     /// If set, specifies that the syntax element `modification_of_pic_nums_idc`
     /// is present for specifying reference picture list 1. If not set,
     /// specifies that this syntax element is not present.
-    ref_pic_list_modification_flag_l1: bool,
+    pub ref_pic_list_modification_flag_l1: bool,
 
     /// Reference picture list 1 modification as parsed with the
     /// `ref_pic_list_modification()` process.
-    ref_pic_list_modification_l1: Vec<RefPicListModification>,
+    pub ref_pic_list_modification_l1: Vec<RefPicListModification>,
 
     /// Prediction weight table as parsed using 7.3.3.2
-    pred_weight_table: PredWeightTable,
+    pub pred_weight_table: PredWeightTable,
 
     /// Decoded reference picture marking parsed using 7.3.3.3
-    dec_ref_pic_marking: RefPicMarking,
+    pub dec_ref_pic_marking: RefPicMarking,
 
     /// Specifies the index for determining the initialization table used in the
     /// initialization process for context variables.
-    cabac_init_idc: u8,
+    pub cabac_init_idc: u8,
 
     /// Specifies the initial value of QP Y to be used for all the macroblocks
     /// in the slice until modified by the value of `mb_qp_delta` in the
     /// macroblock layer. The initial QPY quantization parameter for the slice
     /// is computed using 7-30.
-    slice_qp_delta: i8,
+    pub slice_qp_delta: i8,
 
     /// Specifies the decoding process to be used to decode P macroblocks in an
     /// SP slice.
-    sp_for_switch_flag: bool,
+    pub sp_for_switch_flag: bool,
 
     /// Specifies the value of QSY for all the macroblocks in SP and SI slices.
     /// The QSY quantization parameter for the slice is computed using 7-31.
-    slice_qs_delta: i8,
+    pub slice_qs_delta: i8,
 
     /// Specifies whether the operation of the deblocking filter shall be
     /// disabled across some block edges of the slice and specifies for which
     /// edges the filtering is disabled.
-    disable_deblocking_filter_idc: u8,
+    pub disable_deblocking_filter_idc: u8,
 
     /// Specifies the offset used in accessing the α and tC0 deblocking filter
     /// tables for filtering operations controlled by the macroblocks within the
     /// slice. From this value, the offset that shall be applied when addressing
     /// these tables shall be computed using 7-32.
-    slice_alpha_c0_offset_div2: i8,
+    pub slice_alpha_c0_offset_div2: i8,
 
     /// Specifies the offset used in accessing the β deblocking filter table for
     /// filtering operations controlled by the macroblocks within the slice.
     /// From this value, the offset that is applied when addressing the β table
     /// of the deblocking filter shall be computed using 7-33.
-    slice_beta_offset_div2: i8,
+    pub slice_beta_offset_div2: i8,
 
     /// Same as `MaxPicNum` in the specification.
-    max_pic_num: u32,
+    pub max_pic_num: u32,
 
     /// Size of the slice_header() in bits
-    header_bit_size: usize,
+    pub header_bit_size: usize,
 
     /// Number of emulation prevention bytes (EPB) in this slice_header()
-    n_emulation_prevention_bytes: usize,
-}
-
-impl SliceHeader {
-    pub fn first_mb_in_slice(&self) -> u32 {
-        self.first_mb_in_slice
-    }
-    pub fn slice_type(&self) -> &SliceType {
-        &self.slice_type
-    }
-    pub fn pic_parameter_set_id(&self) -> u8 {
-        self.pic_parameter_set_id
-    }
-    pub fn colour_plane_id(&self) -> u8 {
-        self.colour_plane_id
-    }
-    pub fn frame_num(&self) -> u16 {
-        self.frame_num
-    }
-    pub fn field_pic_flag(&self) -> bool {
-        self.field_pic_flag
-    }
-    pub fn bottom_field_flag(&self) -> bool {
-        self.bottom_field_flag
-    }
-    pub fn idr_pic_id(&self) -> u16 {
-        self.idr_pic_id
-    }
-    pub fn pic_order_cnt_lsb(&self) -> u16 {
-        self.pic_order_cnt_lsb
-    }
-    pub fn delta_pic_order_cnt_bottom(&self) -> i32 {
-        self.delta_pic_order_cnt_bottom
-    }
-    pub fn delta_pic_order_cnt(&self) -> [i32; 2] {
-        self.delta_pic_order_cnt
-    }
-    pub fn redundant_pic_cnt(&self) -> u8 {
-        self.redundant_pic_cnt
-    }
-    pub fn direct_spatial_mv_pred_flag(&self) -> bool {
-        self.direct_spatial_mv_pred_flag
-    }
-    pub fn num_ref_idx_active_override_flag(&self) -> bool {
-        self.num_ref_idx_active_override_flag
-    }
-    pub fn num_ref_idx_l0_active_minus1(&self) -> u8 {
-        self.num_ref_idx_l0_active_minus1
-    }
-    pub fn num_ref_idx_l1_active_minus1(&self) -> u8 {
-        self.num_ref_idx_l1_active_minus1
-    }
-    pub fn ref_pic_list_modification_flag_l0(&self) -> bool {
-        self.ref_pic_list_modification_flag_l0
-    }
-    pub fn ref_pic_list_modification_l0(&self) -> &Vec<RefPicListModification> {
-        &self.ref_pic_list_modification_l0
-    }
-    pub fn ref_pic_list_modification_flag_l1(&self) -> bool {
-        self.ref_pic_list_modification_flag_l1
-    }
-    pub fn ref_pic_list_modification_l1(&self) -> &Vec<RefPicListModification> {
-        &self.ref_pic_list_modification_l1
-    }
-    pub fn pred_weight_table(&self) -> &PredWeightTable {
-        &self.pred_weight_table
-    }
-    pub fn dec_ref_pic_marking(&self) -> &RefPicMarking {
-        &self.dec_ref_pic_marking
-    }
-    pub fn cabac_init_idc(&self) -> u8 {
-        self.cabac_init_idc
-    }
-    pub fn slice_qp_delta(&self) -> i8 {
-        self.slice_qp_delta
-    }
-    pub fn sp_for_switch_flag(&self) -> bool {
-        self.sp_for_switch_flag
-    }
-    pub fn slice_qs_delta(&self) -> i8 {
-        self.slice_qs_delta
-    }
-    pub fn disable_deblocking_filter_idc(&self) -> u8 {
-        self.disable_deblocking_filter_idc
-    }
-    pub fn slice_alpha_c0_offset_div2(&self) -> i8 {
-        self.slice_alpha_c0_offset_div2
-    }
-    pub fn slice_beta_offset_div2(&self) -> i8 {
-        self.slice_beta_offset_div2
-    }
-    pub fn max_pic_num(&self) -> u32 {
-        self.max_pic_num
-    }
-    pub fn header_bit_size(&self) -> usize {
-        self.header_bit_size
-    }
-    pub fn n_emulation_prevention_bytes(&self) -> usize {
-        self.n_emulation_prevention_bytes
-    }
+    pub n_emulation_prevention_bytes: usize,
 }
 
 /// A H264 slice. An integer number of macroblocks or macroblock pairs ordered

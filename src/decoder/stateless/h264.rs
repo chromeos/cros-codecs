@@ -1601,7 +1601,7 @@ where
     ) -> anyhow::Result<PictureData> {
         let pps = self
             .parser
-            .get_pps(slice.header().pic_parameter_set_id())
+            .get_pps(slice.header().pic_parameter_set_id)
             .context("Invalid SPS in init_current_pic")?;
 
         let sps = self
@@ -1635,7 +1635,7 @@ where
             }
         }
 
-        self.update_pic_nums(i32::from(slice.header().frame_num()), &pic)?;
+        self.update_pic_nums(i32::from(slice.header().frame_num), &pic)?;
 
         self.init_ref_pic_lists(&pic);
 
@@ -1700,7 +1700,7 @@ where
             }
         }
 
-        if !slice.header().field_pic_flag() {
+        if !slice.header().field_pic_flag {
             if let Some(prev_field) = prev_field {
                 let field = prev_field.0.borrow().field;
                 return Err(anyhow!(
@@ -1716,14 +1716,14 @@ where
             Some(prev_field) => {
                 let prev_field_pic = prev_field.0.borrow();
 
-                if prev_field_pic.frame_num != i32::from(slice.header().frame_num()) {
+                if prev_field_pic.frame_num != i32::from(slice.header().frame_num) {
                     return Err(anyhow!(
                 "The previous field differs in frame_num value wrt. the current field. {:?} vs {:?}",
                 prev_field_pic.frame_num,
-                slice.header().frame_num()
+                slice.header().frame_num
             ));
                 } else {
-                    let cur_field = if slice.header().bottom_field_flag() {
+                    let cur_field = if slice.header().bottom_field_flag {
                         Field::Bottom
                     } else {
                         Field::Top
@@ -1757,9 +1757,9 @@ where
         }
 
         let hdr = slice.header();
-        let frame_num = i32::from(hdr.frame_num());
+        let frame_num = i32::from(hdr.frame_num);
 
-        self.cur_pps_id = hdr.pic_parameter_set_id();
+        self.cur_pps_id = hdr.pic_parameter_set_id;
 
         let pps = self
             .parser
@@ -1961,15 +1961,15 @@ where
             match ref_pic_list {
                 RefPicList::RefPicList0 => (
                     &mut self.ref_pic_lists.ref_pic_list0,
-                    hdr.ref_pic_list_modification_flag_l0(),
-                    hdr.num_ref_idx_l0_active_minus1(),
-                    hdr.ref_pic_list_modification_l0(),
+                    hdr.ref_pic_list_modification_flag_l0,
+                    hdr.num_ref_idx_l0_active_minus1,
+                    &hdr.ref_pic_list_modification_l0,
                 ),
                 RefPicList::RefPicList1 => (
                     &mut self.ref_pic_lists.ref_pic_list1,
-                    hdr.ref_pic_list_modification_flag_l1(),
-                    hdr.num_ref_idx_l1_active_minus1(),
-                    hdr.ref_pic_list_modification_l1(),
+                    hdr.ref_pic_list_modification_flag_l1,
+                    hdr.num_ref_idx_l1_active_minus1,
+                    &hdr.ref_pic_list_modification_l1,
                 ),
             };
 
@@ -2026,10 +2026,10 @@ where
 
         let hdr = current_slice.header();
 
-        if let SliceType::P | SliceType::Sp = hdr.slice_type() {
+        if let SliceType::P | SliceType::Sp = hdr.slice_type {
             self.ref_pic_lists.ref_pic_list0 = self.ref_pic_lists.ref_pic_list_p0.clone();
             self.modify_ref_pic_list(cur_pic, hdr, RefPicList::RefPicList0)
-        } else if let SliceType::B = hdr.slice_type() {
+        } else if let SliceType::B = hdr.slice_type {
             self.ref_pic_lists.ref_pic_list0 = self.ref_pic_lists.ref_pic_list_b0.clone();
             self.ref_pic_lists.ref_pic_list1 = self.ref_pic_lists.ref_pic_list_b1.clone();
             self.modify_ref_pic_list(cur_pic, hdr, RefPicList::RefPicList0)
@@ -2053,8 +2053,8 @@ where
             && !cur_pic.0.is_second_field()
         {
             let prev_field = cur_pic.0.field;
-            let cur_field = if slice.header().field_pic_flag() {
-                if slice.header().bottom_field_flag() {
+            let cur_field = if slice.header().field_pic_flag {
+                if slice.header().bottom_field_flag {
                     Field::Bottom
                 } else {
                     Field::Top
@@ -2071,7 +2071,7 @@ where
             }
         }
 
-        self.curr_info.max_pic_num = slice.header().max_pic_num() as i32;
+        self.curr_info.max_pic_num = slice.header().max_pic_num as i32;
         self.modify_ref_pic_lists(&cur_pic.0, slice)?;
 
         let sps = self
