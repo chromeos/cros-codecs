@@ -7,9 +7,8 @@ use std::cell::RefCell;
 use std::cell::RefMut;
 use std::rc::Rc;
 
-use anyhow::anyhow;
-use anyhow::Context;
 use log::debug;
+use thiserror::Error;
 
 use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::IsIdr;
@@ -36,6 +35,22 @@ pub struct Dpb<T> {
     /// fields to the same surface, and this surface with both fields is
     /// outputted only once.
     interlaced: bool,
+}
+
+#[derive(Debug, Error)]
+pub enum StorePictureError {
+    #[error("DPB is full")]
+    DpbIsFull,
+}
+
+#[derive(Debug, Error)]
+pub enum MmcoError {
+    #[error("could not find a ShortTerm picture to mark in the DPB")]
+    NoShortTermPic,
+    #[error("a ShortTerm picture was expected to be marked for MMCO=3")]
+    ExpectedMarked,
+    #[error("picture cannot be marked as nonexisting for MMCO=3")]
+    ExpectedExisting,
 }
 
 impl<T: Clone> Dpb<T> {
@@ -174,7 +189,7 @@ impl<T: Clone> Dpb<T> {
         &mut self,
         picture: Rc<RefCell<PictureData>>,
         handle: Option<T>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), StorePictureError> {
         let max_pics = if self.interlaced {
             self.max_num_pics * 2
         } else {
@@ -182,7 +197,7 @@ impl<T: Clone> Dpb<T> {
         };
 
         if self.entries.len() >= max_pics {
-            return Err(anyhow!("Can't add a picture to the DPB: DPB is full."));
+            return Err(StorePictureError::DpbIsFull);
         }
 
         let mut pic_mut = picture.borrow_mut();
@@ -438,7 +453,7 @@ impl<T: Clone> Dpb<T> {
         pics
     }
 
-    pub fn mmco_op_1(&self, pic: &PictureData, marking: usize) -> anyhow::Result<()> {
+    pub fn mmco_op_1(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
         let marking = &pic.ref_pic_marking.inner()[marking];
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1()).unwrap() + 1);
@@ -448,7 +463,7 @@ impl<T: Clone> Dpb<T> {
 
         let to_mark = self
             .find_short_term_with_pic_num(pic_num_x)
-            .context("Could not find a ShortTerm picture to mark in the DPB")?
+            .ok_or(MmcoError::NoShortTermPic)?
             .0;
 
         to_mark
@@ -458,7 +473,7 @@ impl<T: Clone> Dpb<T> {
         Ok(())
     }
 
-    pub fn mmco_op_2(&self, pic: &PictureData, marking: usize) -> anyhow::Result<()> {
+    pub fn mmco_op_2(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
         let marking = &pic.ref_pic_marking.inner()[marking];
 
         log::debug!(
@@ -472,7 +487,7 @@ impl<T: Clone> Dpb<T> {
             .find_long_term_with_long_term_pic_num(
                 i32::try_from(marking.long_term_pic_num()).unwrap(),
             )
-            .context("Could not find a LongTerm picture to mark in the DPB")?
+            .ok_or(MmcoError::NoShortTermPic)?
             .0;
 
         to_mark
@@ -482,7 +497,7 @@ impl<T: Clone> Dpb<T> {
         Ok(())
     }
 
-    pub fn mmco_op_3(&self, pic: &PictureData, marking: usize) -> anyhow::Result<()> {
+    pub fn mmco_op_3(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
         let marking = &pic.ref_pic_marking.inner()[marking];
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1()).unwrap() + 1);
@@ -492,19 +507,15 @@ impl<T: Clone> Dpb<T> {
 
         let to_mark_as_long = self
             .find_short_term_with_pic_num(pic_num_x)
-            .context("Could not find a ShortTerm picture to mark in the DPB")?
+            .ok_or(MmcoError::NoShortTermPic)?
             .0;
 
         if !matches!(to_mark_as_long.borrow().reference(), Reference::ShortTerm) {
-            return Err(anyhow!(
-                "A ShortTerm picture was expected to be marked for MMCO=3"
-            ));
+            return Err(MmcoError::ExpectedMarked);
         }
 
         if to_mark_as_long.borrow().nonexisting {
-            return Err(anyhow!(
-                "Picture cannot be marked as nonexisting for MMCO=3"
-            ));
+            return Err(MmcoError::ExpectedExisting);
         }
 
         let long_term_frame_idx = i32::try_from(marking.long_term_frame_idx()).unwrap();
@@ -590,7 +601,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Returns the new `max_long_term_frame_idx`.
-    pub fn mmco_op_4(&mut self, pic: &PictureData, marking: usize) -> anyhow::Result<i32> {
+    pub fn mmco_op_4(&mut self, pic: &PictureData, marking: usize) -> i32 {
         let marking = &pic.ref_pic_marking.inner()[marking];
         let max_long_term_frame_idx = marking.max_long_term_frame_idx_plus1() - 1;
 
@@ -609,11 +620,11 @@ impl<T: Clone> Dpb<T> {
             }
         }
 
-        Ok(max_long_term_frame_idx)
+        max_long_term_frame_idx
     }
 
     /// Returns the new `max_long_term_frame_idx`.
-    pub fn mmco_op_5(&mut self, pic: &mut PictureData) -> anyhow::Result<i32> {
+    pub fn mmco_op_5(&mut self, pic: &mut PictureData) -> i32 {
         log::debug!("MMCO op 5, marking all pictures in the DPB as unused for reference");
         log::trace!("Dpb state before MMCO=5: {:#?}", self);
 
@@ -653,10 +664,10 @@ impl<T: Clone> Dpb<T> {
             }
         }
 
-        Ok(-1)
+        -1
     }
 
-    pub fn mmco_op_6(&mut self, pic: &mut PictureData, marking: usize) -> anyhow::Result<()> {
+    pub fn mmco_op_6(&mut self, pic: &mut PictureData, marking: usize) {
         let marking = &pic.ref_pic_marking.inner()[marking];
         let long_term_frame_idx = i32::try_from(marking.long_term_frame_idx()).unwrap();
 
@@ -705,8 +716,6 @@ impl<T: Clone> Dpb<T> {
         if is_second_ref_field {
             pic.other_field_unchecked().borrow_mut().long_term_frame_idx = long_term_frame_idx;
         }
-
-        Ok(())
     }
 }
 

@@ -1034,9 +1034,9 @@ where
                 1 => self.dpb.mmco_op_1(pic, i)?,
                 2 => self.dpb.mmco_op_2(pic, i)?,
                 3 => self.dpb.mmco_op_3(pic, i)?,
-                4 => self.curr_info.max_long_term_frame_idx = self.dpb.mmco_op_4(pic, i)?,
-                5 => self.curr_info.max_long_term_frame_idx = self.dpb.mmco_op_5(pic)?,
-                6 => self.dpb.mmco_op_6(pic, i)?,
+                4 => self.curr_info.max_long_term_frame_idx = self.dpb.mmco_op_4(pic, i),
+                5 => self.curr_info.max_long_term_frame_idx = self.dpb.mmco_op_5(pic),
+                6 => self.dpb.mmco_op_6(pic, i),
                 other => anyhow::bail!("unknown MMCO={}", other),
             }
         }
