@@ -180,12 +180,12 @@ struct ReferencePicLists<T> {
     /// the specification. Points into the pictures stored in the DPB. Derived
     /// once per picture.
     ref_pic_list_b1: Vec<DpbEntry<T>>,
+}
 
-    /// Equivalent to RefPicList0 in the specification. Computed for every
-    /// slice, points to the pictures in the DPB.
+/// Corresponds to RefPicList0 and RefPicList1 in the specification. Computed for every slice,
+/// points to the pictures in the DPB.
+struct RefPicLists<T> {
     ref_pic_list0: Vec<DpbEntry<T>>,
-    /// Equivalent to RefPicList1 in the specification. Computed for every
-    /// slice, points to the pictures in the DPB.
     ref_pic_list1: Vec<DpbEntry<T>>,
 }
 
@@ -195,8 +195,6 @@ impl<T> Default for ReferencePicLists<T> {
             ref_pic_list_p0: Default::default(),
             ref_pic_list_b0: Default::default(),
             ref_pic_list_b1: Default::default(),
-            ref_pic_list0: Default::default(),
-            ref_pic_list1: Default::default(),
         }
     }
 }
@@ -1962,17 +1960,16 @@ where
         cur_pic: &PictureData,
         hdr: &SliceHeader,
         ref_pic_list: RefPicList,
-    ) -> anyhow::Result<()> {
-        let (ref_pic_list_x, ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
+        mut ref_pic_list_x: Vec<DpbEntry<T>>,
+    ) -> anyhow::Result<Vec<DpbEntry<T>>> {
+        let (ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
             match ref_pic_list {
                 RefPicList::RefPicList0 => (
-                    &mut self.ref_pic_lists.ref_pic_list0,
                     hdr.ref_pic_list_modification_flag_l0,
                     hdr.num_ref_idx_l0_active_minus1,
                     &hdr.ref_pic_list_modification_l0,
                 ),
                 RefPicList::RefPicList1 => (
-                    &mut self.ref_pic_lists.ref_pic_list1,
                     hdr.ref_pic_list_modification_flag_l1,
                     hdr.num_ref_idx_l1_active_minus1,
                     &hdr.ref_pic_list_modification_l1,
@@ -1984,7 +1981,7 @@ where
         }
 
         if !ref_pic_list_modification_flag_lx {
-            return Ok(());
+            return Ok(ref_pic_list_x);
         }
 
         let mut pic_num_lx_pred = cur_pic.pic_num;
@@ -1999,7 +1996,7 @@ where
                         cur_pic,
                         &self.curr_info,
                         &self.dpb,
-                        ref_pic_list_x,
+                        &mut ref_pic_list_x,
                         num_ref_idx_lx_active_minus1,
                         modification,
                         &mut pic_num_lx_pred,
@@ -2009,7 +2006,7 @@ where
                 2 => Self::long_term_pic_list_modification(
                     &self.curr_info,
                     &self.dpb,
-                    ref_pic_list_x,
+                    &mut ref_pic_list_x,
                     num_ref_idx_lx_active_minus1,
                     modification,
                     &mut ref_idx_lx,
@@ -2019,30 +2016,47 @@ where
             }
         }
 
-        Ok(())
+        Ok(ref_pic_list_x)
     }
 
-    fn modify_ref_pic_lists(
+    /// Generate RefPicList0 and RefPicList1 in the specification. Computed for every slice, points
+    /// to the pictures in the DPB.
+    fn create_ref_pic_lists(
         &mut self,
         cur_pic: &PictureData,
         current_slice: &Slice<impl AsRef<[u8]>>,
-    ) -> anyhow::Result<()> {
-        self.ref_pic_lists.ref_pic_list0.clear();
-        self.ref_pic_lists.ref_pic_list1.clear();
+    ) -> anyhow::Result<RefPicLists<T>> {
+        let mut ref_pic_list0 = Vec::new();
+        let mut ref_pic_list1 = Vec::new();
 
         let hdr = current_slice.header();
 
         if let SliceType::P | SliceType::Sp = hdr.slice_type {
-            self.ref_pic_lists.ref_pic_list0 = self.ref_pic_lists.ref_pic_list_p0.clone();
-            self.modify_ref_pic_list(cur_pic, hdr, RefPicList::RefPicList0)
+            ref_pic_list0 = self.modify_ref_pic_list(
+                cur_pic,
+                hdr,
+                RefPicList::RefPicList0,
+                self.ref_pic_lists.ref_pic_list_p0.clone(),
+            )?;
         } else if let SliceType::B = hdr.slice_type {
-            self.ref_pic_lists.ref_pic_list0 = self.ref_pic_lists.ref_pic_list_b0.clone();
-            self.ref_pic_lists.ref_pic_list1 = self.ref_pic_lists.ref_pic_list_b1.clone();
-            self.modify_ref_pic_list(cur_pic, hdr, RefPicList::RefPicList0)
-                .and(self.modify_ref_pic_list(cur_pic, hdr, RefPicList::RefPicList1))
-        } else {
-            Ok(())
+            ref_pic_list0 = self.modify_ref_pic_list(
+                cur_pic,
+                hdr,
+                RefPicList::RefPicList0,
+                self.ref_pic_lists.ref_pic_list_b0.clone(),
+            )?;
+            ref_pic_list1 = self.modify_ref_pic_list(
+                cur_pic,
+                hdr,
+                RefPicList::RefPicList1,
+                self.ref_pic_lists.ref_pic_list_b1.clone(),
+            )?;
         }
+
+        Ok(RefPicLists {
+            ref_pic_list0,
+            ref_pic_list1,
+        })
     }
 
     /// Handle a slice. Called once per slice NALU.
@@ -2078,7 +2092,10 @@ where
         }
 
         self.curr_info.max_pic_num = slice.header().max_pic_num as i32;
-        self.modify_ref_pic_lists(&cur_pic.0, slice)?;
+        let RefPicLists {
+            ref_pic_list0,
+            ref_pic_list1,
+        } = self.create_ref_pic_lists(&cur_pic.0, slice)?;
 
         let sps = self
             .parser
@@ -2096,8 +2113,8 @@ where
             sps,
             pps,
             &self.dpb,
-            &self.ref_pic_lists.ref_pic_list0,
-            &self.ref_pic_lists.ref_pic_list1,
+            &ref_pic_list0,
+            &ref_pic_list1,
         )?;
 
         Ok(cur_pic)
