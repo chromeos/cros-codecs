@@ -530,40 +530,6 @@ where
         Ok(())
     }
 
-    fn update_pic_nums(&mut self, frame_num: i32, current_pic: &PictureData) -> anyhow::Result<()> {
-        for mut pic in self.dpb.pictures_mut() {
-            if !pic.is_ref() {
-                continue;
-            }
-
-            if matches!(pic.reference(), Reference::LongTerm) {
-                if matches!(current_pic.field, Field::Frame) {
-                    pic.long_term_pic_num = pic.long_term_frame_idx;
-                } else if current_pic.field == pic.field {
-                    pic.long_term_pic_num = 2 * pic.long_term_frame_idx + 1;
-                } else {
-                    pic.long_term_pic_num = 2 * pic.long_term_frame_idx;
-                }
-            } else {
-                if pic.frame_num > frame_num {
-                    pic.frame_num_wrap = pic.frame_num - self.curr_info.max_frame_num;
-                } else {
-                    pic.frame_num_wrap = pic.frame_num;
-                }
-
-                if matches!(current_pic.field, Field::Frame) {
-                    pic.pic_num = pic.frame_num_wrap;
-                } else if pic.field == current_pic.field {
-                    pic.pic_num = 2 * pic.frame_num_wrap + 1;
-                } else {
-                    pic.pic_num = 2 * pic.frame_num_wrap;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     fn sort_pic_num_descending(pics: &mut [DpbEntry<T>]) {
         pics.sort_by_key(|h| std::cmp::Reverse(h.0.borrow().pic_num));
     }
@@ -1574,7 +1540,11 @@ where
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
             self.compute_pic_order_count(&mut pic)?;
 
-            self.update_pic_nums(unused_short_term_frame_num, &pic)?;
+            self.dpb.update_pic_nums(
+                unused_short_term_frame_num,
+                self.curr_info.max_frame_num,
+                &pic,
+            );
 
             self.sliding_window_marking(&mut pic)?;
 
@@ -1642,7 +1612,11 @@ where
             }
         }
 
-        self.update_pic_nums(i32::from(slice.header().frame_num), &pic)?;
+        self.dpb.update_pic_nums(
+            i32::from(slice.header().frame_num),
+            self.curr_info.max_frame_num,
+            &pic,
+        );
 
         self.init_ref_pic_lists(&pic);
 
