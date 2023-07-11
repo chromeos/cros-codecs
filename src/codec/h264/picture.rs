@@ -237,14 +237,10 @@ impl PictureData {
         }
     }
 
-    /// Returns the other field when we know it must be there.
-    pub fn other_field_unchecked(&self) -> Rc<RefCell<Self>> {
-        self.other_field.as_ref().unwrap().upgrade().unwrap()
-    }
-
-    /// Get a reference to the picture's other field, if any.
-    pub fn other_field(&self) -> Option<&Weak<RefCell<PictureData>>> {
-        self.other_field.as_ref()
+    /// Get a reference to the picture's other field, if there is any
+    /// and its reference is still valid.
+    pub fn other_field(&self) -> Option<Rc<RefCell<PictureData>>> {
+        self.other_field.as_ref().and_then(Weak::upgrade)
     }
 
     /// Set this picture's second field.
@@ -255,7 +251,7 @@ impl PictureData {
 
     /// Whether the current picture is the second field of a complementary ref pair.
     pub fn is_second_field_of_complementary_ref_pair(&self) -> bool {
-        self.is_ref() && self.is_second_field && self.other_field_unchecked().borrow().is_ref()
+        self.is_ref() && self.is_second_field && self.other_field().unwrap().borrow().is_ref()
     }
 
     /// Set this picture's first field.

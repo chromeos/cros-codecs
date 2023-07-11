@@ -990,7 +990,7 @@ where
         // "used for short-term reference".
         if pic.is_second_field()
             && matches!(
-                pic.other_field_unchecked().borrow().reference(),
+                pic.other_field().unwrap().borrow().reference(),
                 Reference::ShortTerm
             )
         {
@@ -1108,7 +1108,6 @@ where
             if pic
                 .borrow()
                 .other_field()
-                .and_then(|other_field| other_field.upgrade())
                 .zip(self.last_field.as_ref().map(|f| &f.0))
                 .map_or_else(
                     || false,
@@ -1147,7 +1146,7 @@ where
                 Some(last_field)
                     if pic.is_second_field()
                         && pic.other_field().is_some()
-                        && Rc::ptr_eq(&pic.other_field_unchecked(), &last_field.0) =>
+                        && Rc::ptr_eq(&pic.other_field().unwrap(), &last_field.0) =>
                 {
                     if let Some((field_pic, field_handle)) = self.last_field.take() {
                         field_pic.borrow_mut().set_second_field_to(&pic_rc);

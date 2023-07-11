@@ -211,7 +211,7 @@ impl<T: Clone> Dpb<T> {
         }
 
         if pic_mut.is_second_field() {
-            let first_field_rc = pic_mut.other_field_unchecked();
+            let first_field_rc = pic_mut.other_field().unwrap();
             drop(pic_mut);
             let mut first_field = first_field_rc.borrow_mut();
             first_field.set_second_field_to(&picture);
@@ -338,7 +338,7 @@ impl<T: Clone> Dpb<T> {
         }
 
         if pic.other_field().is_some() {
-            let other_field_rc = pic.other_field_unchecked();
+            let other_field_rc = pic.other_field().unwrap();
             let mut other_field = other_field_rc.borrow_mut();
             other_field.needed_for_output = false;
 
@@ -531,10 +531,10 @@ impl<T: Clone> Dpb<T> {
 
                 let is_complementary_field_pair = dpb_pic.other_field().is_some()
                     && matches!(
-                        dpb_pic.other_field_unchecked().borrow().reference(),
+                        dpb_pic.other_field().unwrap().borrow().reference(),
                         Reference::LongTerm
                     )
-                    && dpb_pic.other_field_unchecked().borrow().long_term_frame_idx
+                    && dpb_pic.other_field().unwrap().borrow().long_term_frame_idx
                         == long_term_frame_idx;
 
                 // When LongTermFrameIdx equal to
@@ -557,10 +557,10 @@ impl<T: Clone> Dpb<T> {
                     true
                 } else {
                     let fields_do_not_reference_each_other =
-                        !Rc::ptr_eq(&dpb_pic.other_field_unchecked(), &to_mark_as_long)
+                        !Rc::ptr_eq(&dpb_pic.other_field().unwrap(), &to_mark_as_long)
                             && (to_mark_as_long.borrow().other_field().is_none()
                                 || !Rc::ptr_eq(
-                                    &to_mark_as_long.borrow().other_field_unchecked(),
+                                    &to_mark_as_long.borrow().other_field().unwrap(),
                                     &handle.0,
                                 ));
 
@@ -580,11 +580,7 @@ impl<T: Clone> Dpb<T> {
             .set_reference(Reference::LongTerm, is_frame);
         to_mark_as_long.borrow_mut().long_term_frame_idx = long_term_frame_idx;
 
-        if let Some(other_field) = to_mark_as_long
-            .borrow()
-            .other_field()
-            .and_then(|f| f.upgrade())
-        {
+        if let Some(other_field) = to_mark_as_long.borrow().other_field() {
             let mut other_field = other_field.borrow_mut();
             if matches!(other_field.reference(), Reference::LongTerm) {
                 other_field.long_term_frame_idx = long_term_frame_idx;
@@ -690,10 +686,10 @@ impl<T: Clone> Dpb<T> {
 
                 let is_complementary_ref_field_pair = dpb_pic.other_field().is_some()
                     && matches!(
-                        dpb_pic.other_field_unchecked().borrow().reference(),
+                        dpb_pic.other_field().unwrap().borrow().reference(),
                         Reference::LongTerm
                     )
-                    && dpb_pic.other_field_unchecked().borrow().long_term_frame_idx
+                    && dpb_pic.other_field().unwrap().borrow().long_term_frame_idx
                         == long_term_frame_idx;
 
                 dpb_pic.set_reference(Reference::None, is_frame || is_complementary_ref_field_pair);
@@ -706,7 +702,7 @@ impl<T: Clone> Dpb<T> {
 
         let is_second_ref_field = pic.is_second_field()
             && matches!(
-                pic.other_field_unchecked().borrow().reference(),
+                pic.other_field().unwrap().borrow().reference(),
                 Reference::LongTerm
             );
 
@@ -714,7 +710,7 @@ impl<T: Clone> Dpb<T> {
         pic.long_term_frame_idx = long_term_frame_idx;
 
         if is_second_ref_field {
-            pic.other_field_unchecked().borrow_mut().long_term_frame_idx = long_term_frame_idx;
+            pic.other_field().unwrap().borrow_mut().long_term_frame_idx = long_term_frame_idx;
         }
     }
 }

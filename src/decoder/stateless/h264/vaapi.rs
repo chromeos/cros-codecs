@@ -145,11 +145,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
             Field::Top => {
                 match (merge_other_field, h264_pic.other_field()) {
                     (true, Some(other_field)) => {
-                        bottom_field_order_cnt = other_field
-                            .upgrade()
-                            .unwrap()
-                            .borrow()
-                            .bottom_field_order_cnt
+                        bottom_field_order_cnt = other_field.borrow().bottom_field_order_cnt
                     }
                     (_, _) => {
                         flags |= libva::constants::VA_PICTURE_H264_TOP_FIELD;
@@ -162,8 +158,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
             Field::Bottom => {
                 match (merge_other_field, h264_pic.other_field()) {
                     (true, Some(other_field)) => {
-                        top_field_order_cnt =
-                            other_field.upgrade().unwrap().borrow().top_field_order_cnt
+                        top_field_order_cnt = other_field.borrow().top_field_order_cnt
                     }
                     (_, _) => {
                         flags |= libva::constants::VA_PICTURE_H264_BOTTOM_FIELD;
