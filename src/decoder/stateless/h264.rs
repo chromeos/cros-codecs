@@ -1061,33 +1061,33 @@ where
     }
 
     fn add_to_dpb(
-        &mut self,
+        dpb: &mut Dpb<T>,
         pic: Rc<RefCell<PictureData>>,
         handle: Option<T>,
+        last_field: &mut Option<(Rc<RefCell<PictureData>>, T)>,
     ) -> anyhow::Result<()> {
-        if !self.dpb.interlaced() {
-            assert!(self.last_field.is_none());
+        if !dpb.interlaced() {
+            assert!(last_field.is_none());
 
-            self.dpb.store_picture(pic, handle)?;
+            dpb.store_picture(pic, handle)?;
         } else {
             // If we have a cached field for this picture, we must combine
             // them before insertion.
             if pic
                 .borrow()
                 .other_field()
-                .zip(self.last_field.as_ref().map(|f| &f.0))
+                .zip(last_field.as_ref().map(|f| &f.0))
                 .map_or_else(
                     || false,
                     |(other_field, last_field)| Rc::ptr_eq(&other_field, last_field),
                 )
             {
-                if let Some((last_field, last_field_handle)) = self.last_field.take() {
-                    self.dpb
-                        .store_picture(last_field, Some(last_field_handle))?;
+                if let Some((last_field, last_field_handle)) = last_field.take() {
+                    dpb.store_picture(last_field, Some(last_field_handle))?;
                 }
             }
 
-            self.dpb.store_picture(pic, handle)?;
+            dpb.store_picture(pic, handle)?;
         }
 
         Ok(())
@@ -1192,11 +1192,16 @@ where
                 let other_field = PictureData::split_frame(&pic_rc);
                 let other_field_handle = handle.clone();
 
-                self.add_to_dpb(pic_rc, Some(handle))?;
-                self.add_to_dpb(other_field, Some(other_field_handle))?;
+                Self::add_to_dpb(&mut self.dpb, pic_rc, Some(handle), &mut self.last_field)?;
+                Self::add_to_dpb(
+                    &mut self.dpb,
+                    other_field,
+                    Some(other_field_handle),
+                    &mut self.last_field,
+                )?;
             } else {
                 drop(pic);
-                self.add_to_dpb(pic_rc, Some(handle))?;
+                Self::add_to_dpb(&mut self.dpb, pic_rc, Some(handle), &mut self.last_field)?;
             }
         } else {
             drop(pic);
@@ -1250,10 +1255,10 @@ where
             if self.dpb.interlaced() {
                 let other_field = PictureData::split_frame(&pic_rc);
 
-                self.add_to_dpb(pic_rc, None)?;
-                self.add_to_dpb(other_field, None)?;
+                Self::add_to_dpb(&mut self.dpb, pic_rc, None, &mut self.last_field)?;
+                Self::add_to_dpb(&mut self.dpb, other_field, None, &mut self.last_field)?;
             } else {
-                self.add_to_dpb(pic_rc, None)?;
+                Self::add_to_dpb(&mut self.dpb, pic_rc, None, &mut self.last_field)?;
             }
 
             unused_short_term_frame_num += 1;
