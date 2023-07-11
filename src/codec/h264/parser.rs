@@ -940,6 +940,29 @@ impl Sps {
 
         max_dpb_frames
     }
+
+    pub fn max_num_order_frames(&self) -> u32 {
+        let vui = self.vui_parameters();
+        let present = self.vui_parameters_present_flag() && vui.bitstream_restriction_flag();
+
+        if present {
+            vui.max_num_reorder_frames()
+        } else {
+            let profile = self.profile_idc();
+            if (profile == 44
+                || profile == 86
+                || profile == 100
+                || profile == 110
+                || profile == 122
+                || profile == 244)
+                && self.constraint_set3_flag()
+            {
+                0
+            } else {
+                self.max_dpb_frames() as u32
+            }
+        }
+    }
 }
 
 impl Default for Sps {

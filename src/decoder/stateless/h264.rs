@@ -303,29 +303,6 @@ where
             || prev_interlaced != interlaced
     }
 
-    fn get_max_num_order_frames(sps: &Sps, max_dpb_frames: usize) -> u32 {
-        let vui = sps.vui_parameters();
-        let present = sps.vui_parameters_present_flag() && vui.bitstream_restriction_flag();
-
-        if present {
-            vui.max_num_reorder_frames()
-        } else {
-            let profile = sps.profile_idc();
-            if (profile == 44
-                || profile == 86
-                || profile == 100
-                || profile == 110
-                || profile == 122
-                || profile == 244)
-                && sps.constraint_set3_flag()
-            {
-                0
-            } else {
-                max_dpb_frames as u32
-            }
-        }
-    }
-
     // Apply the parameters of `sps` to the decoder.
     fn apply_sps(&mut self, sps: &Sps) {
         let max_dpb_frames = sps.max_dpb_frames();
@@ -335,13 +312,12 @@ where
             height: sps.height(),
         };
 
-        let max_num_reorder_frames = Self::get_max_num_order_frames(sps, max_dpb_frames);
-
-        if max_num_reorder_frames > max_dpb_frames as u32 {
-            self.max_num_reorder_frames = 0;
+        let max_num_reorder_frames = sps.max_num_order_frames();
+        self.max_num_reorder_frames = if max_num_reorder_frames > max_dpb_frames as u32 {
+            0
         } else {
-            self.max_num_reorder_frames = max_num_reorder_frames;
-        }
+            max_num_reorder_frames
+        };
 
         self.drain();
 
