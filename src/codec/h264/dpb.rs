@@ -382,6 +382,43 @@ impl<T: Clone> Dpb<T> {
                 .cloned(),
         )
     }
+
+    pub fn update_pic_nums(
+        &mut self,
+        frame_num: i32,
+        max_frame_num: i32,
+        current_pic: &PictureData,
+    ) {
+        for mut pic in self.pictures_mut() {
+            if !pic.is_ref() {
+                continue;
+            }
+
+            if *pic.reference() == Reference::LongTerm {
+                pic.long_term_pic_num = if current_pic.field == Field::Frame {
+                    pic.long_term_frame_idx
+                } else if current_pic.field == pic.field {
+                    2 * pic.long_term_frame_idx + 1
+                } else {
+                    2 * pic.long_term_frame_idx
+                };
+            } else {
+                pic.frame_num_wrap = if pic.frame_num > frame_num {
+                    pic.frame_num - max_frame_num
+                } else {
+                    pic.frame_num
+                };
+
+                pic.pic_num = if current_pic.field == Field::Frame {
+                    pic.frame_num_wrap
+                } else if pic.field == current_pic.field {
+                    2 * pic.frame_num_wrap + 1
+                } else {
+                    2 * pic.frame_num_wrap
+                };
+            }
+        }
+    }
 }
 
 impl<T: Clone> Default for Dpb<T> {
