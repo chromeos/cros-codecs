@@ -593,7 +593,7 @@ where
 
     /// 8.2.4.2.1 Initialization process for the reference picture list for P
     /// and SP slices in frames
-    fn init_ref_pic_list_p(dpb: &Dpb<T>) -> Vec<DpbEntry<T>> {
+    fn build_ref_pic_list_p(dpb: &Dpb<T>) -> Vec<DpbEntry<T>> {
         let mut ref_pic_list_p0 = vec![];
 
         dpb.get_short_term_refs(&mut ref_pic_list_p0);
@@ -614,7 +614,7 @@ where
 
     /// 8.2.4.2.2 Initialization process for the reference picture list for P
     /// and SP slices in fields
-    fn init_ref_field_pic_list_p(dpb: &Dpb<T>, cur_pic: &PictureData) -> Vec<DpbEntry<T>> {
+    fn build_ref_field_pic_list_p(dpb: &Dpb<T>, cur_pic: &PictureData) -> Vec<DpbEntry<T>> {
         let mut ref_pic_list_p0 = vec![];
         let mut ref_frame_list_0_short_term = vec![];
         let mut ref_frame_list_long_term = vec![];
@@ -675,7 +675,7 @@ where
 
     // 8.2.4.2.3 Initialization process for reference picture lists for B slices
     // in frames
-    fn init_ref_pic_list_b(
+    fn build_ref_pic_list_b(
         dpb: &Dpb<T>,
         cur_pic: &PictureData,
     ) -> (Vec<DpbEntry<T>>, Vec<DpbEntry<T>>) {
@@ -758,7 +758,7 @@ where
 
     /// 8.2.4.2.4 Initialization process for reference picture lists for B
     /// slices in fields
-    fn init_ref_field_pic_list_b(
+    fn build_ref_field_pic_list_b(
         dpb: &Dpb<T>,
         cur_pic: &PictureData,
     ) -> (Vec<DpbEntry<T>>, Vec<DpbEntry<T>>) {
@@ -923,9 +923,7 @@ where
         ref_pic_list.append(ref_frame_list);
     }
 
-    fn init_ref_pic_lists(&mut self, cur_pic: &PictureData) {
-        let dpb = &self.dpb;
-
+    fn build_ref_pic_lists(dpb: &Dpb<T>, cur_pic: &PictureData) -> ReferencePicLists<T> {
         let num_refs = dpb
             .pictures()
             .filter(|p| p.is_ref() && !p.nonexisting)
@@ -937,22 +935,26 @@ where
         // short-term reference" or "used for long-term reference") and is not
         // marked as "non-existing".
         if num_refs == 0 {
-            self.ref_pic_lists = Default::default();
-            return;
+            return Default::default();
         }
 
-        if matches!(cur_pic.field, Field::Frame) {
-            self.ref_pic_lists.ref_pic_list_p0 = Self::init_ref_pic_list_p(dpb);
-            (
-                self.ref_pic_lists.ref_pic_list_b0,
-                self.ref_pic_lists.ref_pic_list_b1,
-            ) = Self::init_ref_pic_list_b(dpb, cur_pic);
-        } else {
-            self.ref_pic_lists.ref_pic_list_p0 = Self::init_ref_field_pic_list_p(dpb, cur_pic);
-            (
-                self.ref_pic_lists.ref_pic_list_b0,
-                self.ref_pic_lists.ref_pic_list_b1,
-            ) = Self::init_ref_field_pic_list_b(dpb, cur_pic);
+        let (ref_pic_list_p0, (ref_pic_list_b0, ref_pic_list_b1)) =
+            if matches!(cur_pic.field, Field::Frame) {
+                (
+                    Self::build_ref_pic_list_p(dpb),
+                    Self::build_ref_pic_list_b(dpb, cur_pic),
+                )
+            } else {
+                (
+                    Self::build_ref_field_pic_list_p(dpb, cur_pic),
+                    Self::build_ref_field_pic_list_b(dpb, cur_pic),
+                )
+            };
+
+        ReferencePicLists {
+            ref_pic_list_p0,
+            ref_pic_list_b0,
+            ref_pic_list_b1,
         }
     }
 
@@ -1317,8 +1319,6 @@ where
         self.dpb
             .update_pic_nums(i32::from(slice.header().frame_num), max_frame_num, &pic);
 
-        self.init_ref_pic_lists(&pic);
-
         Ok(pic)
     }
 
@@ -1447,6 +1447,7 @@ where
 
         let cur_pic =
             self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
+        self.ref_pic_lists = Self::build_ref_pic_lists(&self.dpb, &cur_pic);
 
         debug!("Decode picture POC {:?}", cur_pic.pic_order_cnt);
 
