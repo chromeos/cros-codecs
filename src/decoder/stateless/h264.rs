@@ -2083,9 +2083,7 @@ where
                 Field::Frame
             };
 
-            let new_field_picture = cur_field != prev_field;
-
-            if new_field_picture {
+            if cur_field != prev_field {
                 self.finish_picture(cur_pic)?;
                 cur_pic = self.begin_picture(timestamp, slice)?;
             }
