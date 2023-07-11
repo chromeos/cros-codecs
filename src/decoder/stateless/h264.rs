@@ -1475,8 +1475,7 @@ where
         let bumped = self
             .bump_as_needed(current_pic)
             .into_iter()
-            .filter_map(|p| p.1)
-            .collect::<Vec<_>>();
+            .filter_map(|p| p.1);
         self.ready_queue.extend(bumped);
     }
 
