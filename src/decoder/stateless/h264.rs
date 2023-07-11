@@ -2060,27 +2060,11 @@ where
     }
 
     /// Handle a slice. Called once per slice NALU.
-    ///
-    /// Returns the passed `cur_pic`, or a new picture if the slice belongs to a new picture.
     fn handle_slice(
         &mut self,
-        mut cur_pic: (PictureData, P),
-        timestamp: u64,
+        cur_pic: &mut (PictureData, P),
         slice: &Slice<&[u8]>,
-    ) -> anyhow::Result<(PictureData, P)> {
-        if self.dpb.interlaced()
-            && matches!(cur_pic.0.field, Field::Frame)
-            && !cur_pic.0.is_second_field()
-        {
-            let prev_field = cur_pic.0.field;
-            let cur_field = slice.header().field();
-
-            if cur_field != prev_field {
-                self.finish_picture(cur_pic)?;
-                cur_pic = self.begin_picture(timestamp, slice)?;
-            }
-        }
-
+    ) -> anyhow::Result<()> {
         self.curr_info.max_pic_num = slice.header().max_pic_num as i32;
         let RefPicLists {
             ref_pic_list0,
@@ -2107,7 +2091,7 @@ where
             &ref_pic_list1,
         )?;
 
-        Ok(cur_pic)
+        Ok(())
     }
 
     /// Submits the picture to the accelerator.
@@ -2141,7 +2125,7 @@ where
 
         let mut cursor = Cursor::new(bitstream);
 
-        let mut cur_pic_opt = None;
+        let mut cur_pic_opt: Option<(PictureData, P)> = None;
 
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().nalu_type() {
@@ -2160,12 +2144,26 @@ where
                 | NaluType::SliceIdr
                 | NaluType::SliceExt => {
                     let slice = self.parser.parse_slice_header(nalu)?;
-                    let cur_pic = match cur_pic_opt {
+                    let mut cur_pic = match cur_pic_opt {
+                        // No current picture, start a new one.
                         None => self.begin_picture(timestamp, &slice)?,
+                        // We have a current picture but are starting a new field: finish it and
+                        // start a new one.
+                        Some(cur_pic)
+                            if self.dpb.interlaced()
+                                && matches!(cur_pic.0.field, Field::Frame)
+                                && !cur_pic.0.is_second_field()
+                                && cur_pic.0.field != slice.header().field() =>
+                        {
+                            self.finish_picture(cur_pic)?;
+                            self.begin_picture(timestamp, &slice)?
+                        }
+                        // This slice is part of the current picture.
                         Some(cur_pic) => cur_pic,
                     };
 
-                    cur_pic_opt = Some(self.handle_slice(cur_pic, timestamp, &slice)?);
+                    self.handle_slice(&mut cur_pic, &slice)?;
+                    cur_pic_opt = Some(cur_pic);
                 }
 
                 other => {
