@@ -1439,7 +1439,8 @@ where
 
     fn bump_as_needed_into_ready_queue(&mut self, current_pic: &PictureData) {
         let bumped = self
-            .bump_as_needed(current_pic)
+            .dpb
+            .bump_as_needed(self.max_num_reorder_frames, current_pic)
             .into_iter()
             .filter_map(|p| p.1);
         self.ready_queue.extend(bumped);
@@ -1621,21 +1622,6 @@ where
         self.init_ref_pic_lists(&pic);
 
         Ok(pic)
-    }
-
-    /// Bumps the DPB if needed. DPB bumping is described on C.4.5.3.
-    fn bump_as_needed(&mut self, current_pic: &PictureData) -> Vec<DpbEntry<T>> {
-        let mut pics = vec![];
-        while self.dpb.needs_bumping(current_pic)
-            && self.dpb.len() >= self.max_num_reorder_frames as usize
-        {
-            match self.dpb.bump(false) {
-                Some(pic) => pics.push(pic),
-                None => return pics,
-            }
-        }
-
-        pics
     }
 
     /// Drain the decoder, processing all pending frames.
