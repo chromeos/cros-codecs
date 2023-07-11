@@ -419,6 +419,23 @@ impl<T: Clone> Dpb<T> {
             }
         }
     }
+
+    /// Bumps the DPB if needed. DPB bumping is described on C.4.5.3.
+    pub fn bump_as_needed(
+        &mut self,
+        max_num_reorder_frames: u32,
+        current_pic: &PictureData,
+    ) -> Vec<DpbEntry<T>> {
+        let mut pics = vec![];
+        while self.needs_bumping(current_pic) && self.len() >= max_num_reorder_frames as usize {
+            match self.bump(false) {
+                Some(pic) => pics.push(pic),
+                None => return pics,
+            }
+        }
+
+        pics
+    }
 }
 
 impl<T: Clone> Default for Dpb<T> {
