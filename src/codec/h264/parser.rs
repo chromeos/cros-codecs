@@ -16,6 +16,7 @@ use enumn::N;
 use crate::codec::h264::nalu;
 use crate::codec::h264::nalu::Header;
 use crate::codec::h264::nalu_reader::NaluReader;
+use crate::codec::h264::picture::Field;
 
 pub type Nalu<T> = nalu::Nalu<T, NaluHeader>;
 
@@ -388,6 +389,21 @@ pub struct SliceHeader {
 
     /// Number of emulation prevention bytes (EPB) in this slice_header()
     pub n_emulation_prevention_bytes: usize,
+}
+
+impl SliceHeader {
+    /// Returns the field that is coded by this header.
+    pub fn field(&self) -> Field {
+        if self.field_pic_flag {
+            if self.bottom_field_flag {
+                Field::Bottom
+            } else {
+                Field::Top
+            }
+        } else {
+            Field::Frame
+        }
+    }
 }
 
 /// A H264 slice. An integer number of macroblocks or macroblock pairs ordered

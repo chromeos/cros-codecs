@@ -2073,15 +2073,7 @@ where
             && !cur_pic.0.is_second_field()
         {
             let prev_field = cur_pic.0.field;
-            let cur_field = if slice.header().field_pic_flag {
-                if slice.header().bottom_field_flag {
-                    Field::Bottom
-                } else {
-                    Field::Top
-                }
-            } else {
-                Field::Frame
-            };
+            let cur_field = slice.header().field();
 
             if cur_field != prev_field {
                 self.finish_picture(cur_pic)?;
