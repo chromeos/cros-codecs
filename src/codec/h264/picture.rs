@@ -226,13 +226,13 @@ impl PictureData {
         self.reference = reference;
 
         if apply_to_other_field {
-            if let Some(other_field) = self.other_field.as_mut() {
+            if let Some(other_field) = self.other_field() {
                 log::debug!(
                     "other_field: Set reference of {:#?} to {:?}",
-                    &other_field.upgrade().unwrap().borrow_mut(),
+                    &other_field.borrow(),
                     reference
                 );
-                other_field.upgrade().unwrap().borrow_mut().reference = reference;
+                other_field.borrow_mut().reference = reference;
             }
         }
     }
@@ -251,7 +251,12 @@ impl PictureData {
 
     /// Whether the current picture is the second field of a complementary ref pair.
     pub fn is_second_field_of_complementary_ref_pair(&self) -> bool {
-        self.is_ref() && self.is_second_field && self.other_field().unwrap().borrow().is_ref()
+        self.is_ref()
+            && self.is_second_field
+            && self
+                .other_field()
+                .map(|f| f.borrow().is_ref())
+                .unwrap_or(false)
     }
 
     /// Set this picture's first field.
