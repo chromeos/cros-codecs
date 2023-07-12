@@ -161,7 +161,6 @@ pub struct PrevPicInfo {
 
 #[derive(Default)]
 pub struct CurrentPicInfo {
-    max_frame_num: i32,
     max_pic_num: i32,
     max_long_term_frame_idx: i32,
 }
@@ -392,7 +391,7 @@ where
                     pic.frame_num_offset = 0;
                 } else if self.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.prev_pic_info.frame_num_offset + self.curr_info.max_frame_num;
+                        self.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
                 } else {
                     pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
@@ -457,7 +456,7 @@ where
                     pic.frame_num_offset = 0;
                 } else if self.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.prev_pic_info.frame_num_offset + self.curr_info.max_frame_num;
+                        self.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
                 } else {
                     pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
@@ -1235,16 +1234,19 @@ where
         }
 
         let mut unused_short_term_frame_num =
-            (self.prev_ref_pic_info.frame_num + 1) % self.curr_info.max_frame_num;
+            (self.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32;
         while unused_short_term_frame_num != frame_num {
+            let sps = self
+                .parser
+                .get_sps(self.cur_sps_id)
+                .context("Invalid SPS while handling a frame_num gap")?;
+            let max_frame_num = sps.max_frame_num() as i32;
+
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
             self.compute_pic_order_count(&mut pic)?;
 
-            self.dpb.update_pic_nums(
-                unused_short_term_frame_num,
-                self.curr_info.max_frame_num,
-                &pic,
-            );
+            self.dpb
+                .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
             self.sliding_window_marking(&mut pic)?;
 
@@ -1263,7 +1265,7 @@ where
             }
 
             unused_short_term_frame_num += 1;
-            unused_short_term_frame_num %= self.curr_info.max_frame_num;
+            unused_short_term_frame_num %= max_frame_num;
         }
 
         Ok(())
@@ -1285,6 +1287,7 @@ where
             .parser
             .get_sps(pps.seq_parameter_set_id())
             .context("Invalid PPS in init_current_pic")?;
+        let max_frame_num = sps.max_frame_num() as i32;
 
         let mut pic = PictureData::new_from_slice(slice, sps, timestamp);
 
@@ -1312,11 +1315,8 @@ where
             }
         }
 
-        self.dpb.update_pic_nums(
-            i32::from(slice.header().frame_num),
-            self.curr_info.max_frame_num,
-            &pic,
-        );
+        self.dpb
+            .update_pic_nums(i32::from(slice.header().frame_num), max_frame_num, &pic);
 
         self.init_ref_pic_lists(&pic);
 
@@ -1438,10 +1438,8 @@ where
             .get_sps(self.cur_sps_id)
             .context("Invalid SPS in handle_picture")?;
 
-        self.curr_info.max_frame_num = 1 << (sps.log2_max_frame_num_minus4 + 4);
-
         if frame_num != self.prev_ref_pic_info.frame_num
-            && frame_num != (self.prev_ref_pic_info.frame_num + 1) % self.curr_info.max_frame_num
+            && frame_num != (self.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32
         {
             self.handle_frame_num_gap(frame_num, timestamp)?;
         }
