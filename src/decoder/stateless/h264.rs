@@ -159,11 +159,6 @@ pub struct PrevPicInfo {
     has_mmco_5: bool,
 }
 
-#[derive(Default)]
-pub struct CurrentPicInfo {
-    max_long_term_frame_idx: i32,
-}
-
 /// All the reference picture lists used to decode a stream.
 struct ReferencePicLists<T> {
     /// Reference picture list for P slices. Retains the same meaning as in the
@@ -239,8 +234,8 @@ where
     prev_ref_pic_info: PrevReferencePicInfo,
     /// Cached variables from the previous picture.
     prev_pic_info: PrevPicInfo,
-    /// Cached variables from the current picture.
-    curr_info: CurrentPicInfo,
+    /// Maximum index of the long-term frame.
+    max_long_term_frame_idx: i32,
 
     /// A cached, non-reference first field that did not make it into the DPB
     /// because it was full even after bumping the smaller POC. This field will
@@ -277,7 +272,7 @@ where
             cur_pps_id: Default::default(),
             prev_ref_pic_info: Default::default(),
             prev_pic_info: Default::default(),
-            curr_info: Default::default(),
+            max_long_term_frame_idx: Default::default(),
             last_field: Default::default(),
             ready_queue: Default::default(),
             ref_pic_lists: Default::default(),
@@ -1009,8 +1004,8 @@ where
                 1 => self.dpb.mmco_op_1(pic, i)?,
                 2 => self.dpb.mmco_op_2(pic, i)?,
                 3 => self.dpb.mmco_op_3(pic, i)?,
-                4 => self.curr_info.max_long_term_frame_idx = self.dpb.mmco_op_4(pic, i),
-                5 => self.curr_info.max_long_term_frame_idx = self.dpb.mmco_op_5(pic),
+                4 => self.max_long_term_frame_idx = self.dpb.mmco_op_4(pic, i),
+                5 => self.max_long_term_frame_idx = self.dpb.mmco_op_5(pic),
                 6 => self.dpb.mmco_op_6(pic, i),
                 other => anyhow::bail!("unknown MMCO={}", other),
             }
@@ -1050,10 +1045,10 @@ where
             if pic.ref_pic_marking.long_term_reference_flag() {
                 pic.set_reference(Reference::LongTerm, false);
                 pic.long_term_frame_idx = 0;
-                self.curr_info.max_long_term_frame_idx = 0;
+                self.max_long_term_frame_idx = 0;
             } else {
                 pic.set_reference(Reference::ShortTerm, false);
-                self.curr_info.max_long_term_frame_idx = -1;
+                self.max_long_term_frame_idx = -1;
             }
 
             return Ok(());
@@ -1660,7 +1655,7 @@ where
                     &self.dpb,
                     &mut ref_pic_list_x,
                     num_ref_idx_lx_active_minus1,
-                    self.curr_info.max_long_term_frame_idx,
+                    self.max_long_term_frame_idx,
                     modification,
                     &mut ref_idx_lx,
                 )?,
