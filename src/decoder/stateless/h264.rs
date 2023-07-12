@@ -192,6 +192,18 @@ impl<T> Default for ReferencePicLists<T> {
     }
 }
 
+/// State of the picture being currently decoded.
+///
+/// Stored between calls to [`Decoder::handle_slice`] that belong to the same picture.
+struct CurrentPicState<T, P> {
+    /// Data for the current picture as extracted from the stream.
+    pic: PictureData,
+    /// Backend-specific data for that picture.
+    backend_pic: P,
+    /// List of reference pictures, used once per slice.
+    ref_pic_lists: ReferencePicLists<T>,
+}
+
 pub struct Decoder<T, P, M>
 where
     T: DecodedHandle<M> + Clone,
@@ -235,9 +247,6 @@ where
     /// We are not using `DbpEntry<T>` as the type because contrary to a DPB entry,
     /// the handle of this member is always valid.
     last_field: Option<(Rc<RefCell<PictureData>>, T)>,
-
-    /// Reference picture lists.
-    ref_pic_lists: ReferencePicLists<T>,
 }
 
 impl<T, P, M> Decoder<T, P, M>
@@ -264,7 +273,6 @@ where
             max_long_term_frame_idx: Default::default(),
             last_field: Default::default(),
             ready_queue: Default::default(),
-            ref_pic_lists: Default::default(),
         })
     }
 
@@ -1129,19 +1137,18 @@ where
         self.ready_queue.extend(bumped);
     }
 
-    fn finish_picture(&mut self, pic: (PictureData, P)) -> anyhow::Result<()> {
-        debug!("Finishing picture POC {:?}", pic.0.pic_order_cnt);
+    fn finish_picture(&mut self, pic: CurrentPicState<T, P>) -> anyhow::Result<()> {
+        debug!("Finishing picture POC {:?}", pic.pic.pic_order_cnt);
 
         // Submit the picture to the backend.
-        let handle = self.submit_picture(pic.1)?;
-        let mut pic = pic.0;
+        let handle = self.submit_picture(pic.backend_pic)?;
+        let mut pic = pic.pic;
 
         if matches!(pic.reference(), Reference::ShortTerm | Reference::LongTerm) {
             self.reference_pic_marking(&mut pic)?;
             self.fill_prev_ref_info(&pic);
         }
 
-        self.ref_pic_lists = Default::default();
         self.fill_prev_info(&pic);
 
         self.dpb.remove_unused();
@@ -1310,11 +1317,6 @@ where
     fn drain(&mut self) {
         let pics = self.dpb.drain();
 
-        // At this point all pictures will have been decoded, as we don't buffer
-        // decode requests, but instead process them immediately, so refs will
-        // not be needed.
-        self.ref_pic_lists = Default::default();
-
         // Pics in the DPB have undergone `finish_picture` already or are
         // nonexisting frames, we can just mark them as ready.
         self.ready_queue
@@ -1397,7 +1399,7 @@ where
         &mut self,
         timestamp: u64,
         slice: &Slice<&[u8]>,
-    ) -> anyhow::Result<(PictureData, P)> {
+    ) -> anyhow::Result<CurrentPicState<T, P>> {
         let nalu_hdr = slice.nalu().header();
 
         if nalu_hdr.idr_pic_flag() {
@@ -1429,22 +1431,21 @@ where
 
         let first_field = self.find_first_field(slice)?;
 
-        let cur_pic =
-            self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
-        self.ref_pic_lists = Self::build_ref_pic_lists(&self.dpb, &cur_pic);
+        let pic = self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
+        let ref_pic_lists = Self::build_ref_pic_lists(&self.dpb, &pic);
 
-        debug!("Decode picture POC {:?}", cur_pic.pic_order_cnt);
+        debug!("Decode picture POC {:?}", pic.pic_order_cnt);
 
-        let mut cur_backend_pic = if let Some(first_field) = first_field {
+        let mut backend_pic = if let Some(first_field) = first_field {
             self.backend
-                .new_field_picture(&cur_pic, timestamp, &first_field.1)?
+                .new_field_picture(&pic, timestamp, &first_field.1)?
         } else {
-            self.backend.new_picture(&cur_pic, timestamp)?
+            self.backend.new_picture(&pic, timestamp)?
         };
 
         self.backend.start_picture(
-            &mut cur_backend_pic,
-            &cur_pic,
+            &mut backend_pic,
+            &pic,
             self.parser
                 .get_sps(self.cur_sps_id)
                 .context("Invalid SPS in handle_picture")?,
@@ -1455,7 +1456,11 @@ where
             slice,
         )?;
 
-        Ok((cur_pic, cur_backend_pic))
+        Ok(CurrentPicState {
+            pic,
+            backend_pic,
+            ref_pic_lists,
+        })
     }
 
     fn pic_num_f(pic: &PictureData, max_pic_num: i32) -> i32 {
@@ -1662,6 +1667,7 @@ where
         &mut self,
         cur_pic: &PictureData,
         hdr: &SliceHeader,
+        ref_pic_lists: &ReferencePicLists<T>,
     ) -> anyhow::Result<RefPicLists<T>> {
         let mut ref_pic_list0 = Vec::new();
         let mut ref_pic_list1 = Vec::new();
@@ -1671,20 +1677,20 @@ where
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList0,
-                self.ref_pic_lists.ref_pic_list_p0.clone(),
+                ref_pic_lists.ref_pic_list_p0.clone(),
             )?;
         } else if let SliceType::B = hdr.slice_type {
             ref_pic_list0 = self.modify_ref_pic_list(
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList0,
-                self.ref_pic_lists.ref_pic_list_b0.clone(),
+                ref_pic_lists.ref_pic_list_b0.clone(),
             )?;
             ref_pic_list1 = self.modify_ref_pic_list(
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList1,
-                self.ref_pic_lists.ref_pic_list_b1.clone(),
+                ref_pic_lists.ref_pic_list_b1.clone(),
             )?;
         }
 
@@ -1697,13 +1703,13 @@ where
     /// Handle a slice. Called once per slice NALU.
     fn handle_slice(
         &mut self,
-        cur_pic: &mut (PictureData, P),
+        cur_pic: &mut CurrentPicState<T, P>,
         slice: &Slice<&[u8]>,
     ) -> anyhow::Result<()> {
         let RefPicLists {
             ref_pic_list0,
             ref_pic_list1,
-        } = self.create_ref_pic_lists(&cur_pic.0, slice.header())?;
+        } = self.create_ref_pic_lists(&cur_pic.pic, slice.header(), &cur_pic.ref_pic_lists)?;
 
         let sps = self
             .parser
@@ -1716,7 +1722,7 @@ where
             .context("Invalid PPS in handle_slice")?;
 
         self.backend.decode_slice(
-            &mut cur_pic.1,
+            &mut cur_pic.backend_pic,
             slice,
             sps,
             pps,
@@ -1759,7 +1765,7 @@ where
 
         let mut cursor = Cursor::new(bitstream);
 
-        let mut cur_pic_opt: Option<(PictureData, P)> = None;
+        let mut cur_pic_opt: Option<CurrentPicState<T, P>> = None;
 
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().nalu_type() {
@@ -1785,9 +1791,9 @@ where
                         // start a new one.
                         Some(cur_pic)
                             if self.dpb.interlaced()
-                                && matches!(cur_pic.0.field, Field::Frame)
-                                && !cur_pic.0.is_second_field()
-                                && cur_pic.0.field != slice.header().field() =>
+                                && matches!(cur_pic.pic.field, Field::Frame)
+                                && !cur_pic.pic.is_second_field()
+                                && cur_pic.pic.field != slice.header().field() =>
                         {
                             self.finish_picture(cur_pic)?;
                             self.begin_picture(timestamp, &slice)?
