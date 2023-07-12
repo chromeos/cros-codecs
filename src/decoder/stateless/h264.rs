@@ -1495,10 +1495,10 @@ where
     #[allow(clippy::too_many_arguments)]
     fn short_term_pic_list_modification(
         cur_pic: &PictureData,
-        curr_info: &CurrentPicInfo,
         dpb: &Dpb<T>,
         ref_pic_list_x: &mut Vec<DpbEntry<T>>,
         num_ref_idx_lx_active_minus1: u8,
+        max_pic_num: i32,
         rplm: &RefPicListModification,
         pic_num_lx_pred: &mut i32,
         ref_idx_lx: &mut usize,
@@ -1509,13 +1509,13 @@ where
 
         if modification_of_pic_nums_idc == 0 {
             if *pic_num_lx_pred - abs_diff_pic_num < 0 {
-                pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num + curr_info.max_pic_num;
+                pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num + max_pic_num;
             } else {
                 pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num;
             }
         } else if modification_of_pic_nums_idc == 1 {
-            if *pic_num_lx_pred + abs_diff_pic_num >= curr_info.max_pic_num {
-                pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num - curr_info.max_pic_num;
+            if *pic_num_lx_pred + abs_diff_pic_num >= max_pic_num {
+                pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num - max_pic_num;
             } else {
                 pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num;
             }
@@ -1529,7 +1529,7 @@ where
         *pic_num_lx_pred = pic_num_lx_no_wrap;
 
         let pic_num_lx = if pic_num_lx_no_wrap > cur_pic.pic_num {
-            pic_num_lx_no_wrap - curr_info.max_pic_num
+            pic_num_lx_no_wrap - max_pic_num
         } else {
             pic_num_lx_no_wrap
         };
@@ -1549,7 +1549,6 @@ where
             }
 
             let target = &ref_pic_list_x[cidx].0.clone();
-            let max_pic_num = curr_info.max_pic_num;
 
             if Self::pic_num_f(&target.borrow(), max_pic_num) != pic_num_lx {
                 ref_pic_list_x[nidx] = ref_pic_list_x[cidx].clone();
@@ -1565,10 +1564,10 @@ where
     }
 
     fn long_term_pic_list_modification(
-        curr_info: &CurrentPicInfo,
         dpb: &Dpb<T>,
         ref_pic_list_x: &mut Vec<DpbEntry<T>>,
         num_ref_idx_lx_active_minus1: u8,
+        max_long_term_frame_idx: i32,
         rplm: &RefPicListModification,
         ref_idx_lx: &mut usize,
     ) -> anyhow::Result<()> {
@@ -1594,8 +1593,6 @@ where
             }
 
             let target = ref_pic_list_x[cidx].0.clone();
-            let max_long_term_frame_idx = curr_info.max_long_term_frame_idx;
-
             if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
                 != long_term_pic_num as i32
             {
@@ -1650,20 +1647,20 @@ where
                 0 | 1 => {
                     Self::short_term_pic_list_modification(
                         cur_pic,
-                        &self.curr_info,
                         &self.dpb,
                         &mut ref_pic_list_x,
                         num_ref_idx_lx_active_minus1,
+                        self.curr_info.max_pic_num,
                         modification,
                         &mut pic_num_lx_pred,
                         &mut ref_idx_lx,
                     )?;
                 }
                 2 => Self::long_term_pic_list_modification(
-                    &self.curr_info,
                     &self.dpb,
                     &mut ref_pic_list_x,
                     num_ref_idx_lx_active_minus1,
+                    self.curr_info.max_long_term_frame_idx,
                     modification,
                     &mut ref_idx_lx,
                 )?,
