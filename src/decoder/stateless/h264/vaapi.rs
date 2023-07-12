@@ -40,13 +40,13 @@ use crate::decoder::DecodedHandle;
 
 impl VaStreamInfo for &Sps {
     fn va_profile(&self) -> anyhow::Result<i32> {
-        let profile_idc = self.profile_idc();
+        let profile_idc = self.profile_idc;
         let profile = Profile::n(profile_idc)
             .with_context(|| format!("Invalid profile_idc {:?}", profile_idc))?;
 
         match profile {
             Profile::Baseline => {
-                if self.constraint_set0_flag() {
+                if self.constraint_set0_flag {
                     Ok(libva::VAProfile::VAProfileH264ConstrainedBaseline)
                 } else {
                     Err(anyhow!(
@@ -56,7 +56,7 @@ impl VaStreamInfo for &Sps {
             }
             Profile::Main => Ok(libva::VAProfile::VAProfileH264Main),
             Profile::Extended => {
-                if self.constraint_set1_flag() {
+                if self.constraint_set1_flag {
                     Ok(libva::VAProfile::VAProfileH264Main)
                 } else {
                     Err(anyhow!(
@@ -71,8 +71,8 @@ impl VaStreamInfo for &Sps {
     }
 
     fn rt_format(&self) -> anyhow::Result<u32> {
-        let bit_depth_luma = self.bit_depth_chroma_minus8() + 8;
-        let chroma_format_idc = self.chroma_format_idc();
+        let bit_depth_luma = self.bit_depth_chroma_minus8 + 8;
+        let chroma_format_idc = self.chroma_format_idc;
 
         match (bit_depth_luma, chroma_format_idc) {
             (8, 0) | (8, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420),
@@ -97,7 +97,7 @@ impl VaStreamInfo for &Sps {
     }
 
     fn coded_size(&self) -> (u32, u32) {
-        (self.width(), self.height())
+        (self.width, self.height)
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
@@ -257,21 +257,21 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
         refs.clear();
 
         let seq_fields = libva::H264SeqFields::new(
-            sps.chroma_format_idc() as u32,
-            sps.separate_colour_plane_flag() as u32,
-            sps.gaps_in_frame_num_value_allowed_flag() as u32,
-            sps.frame_mbs_only_flag() as u32,
-            sps.mb_adaptive_frame_field_flag() as u32,
-            sps.direct_8x8_inference_flag() as u32,
-            (sps.level_idc() >= Level::L3_1) as u32, /* see A.3.3.2 */
-            sps.log2_max_frame_num_minus4() as u32,
-            sps.pic_order_cnt_type() as u32,
-            sps.log2_max_pic_order_cnt_lsb_minus4() as u32,
-            sps.delta_pic_order_always_zero_flag() as u32,
+            sps.chroma_format_idc as u32,
+            sps.separate_colour_plane_flag as u32,
+            sps.gaps_in_frame_num_value_allowed_flag as u32,
+            sps.frame_mbs_only_flag as u32,
+            sps.mb_adaptive_frame_field_flag as u32,
+            sps.direct_8x8_inference_flag as u32,
+            (sps.level_idc >= Level::L3_1) as u32, /* see A.3.3.2 */
+            sps.log2_max_frame_num_minus4 as u32,
+            sps.pic_order_cnt_type as u32,
+            sps.log2_max_pic_order_cnt_lsb_minus4 as u32,
+            sps.delta_pic_order_always_zero_flag as u32,
         );
-        let interlaced = !sps.frame_mbs_only_flag() as u32;
+        let interlaced = !sps.frame_mbs_only_flag as u32;
         let picture_height_in_mbs_minus1 =
-            ((sps.pic_height_in_map_units_minus1() + 1) << interlaced) - 1;
+            ((sps.pic_height_in_map_units_minus1 + 1) << interlaced) - 1;
 
         let pic_fields = libva::H264PicFields::new(
             pps.entropy_coding_mode_flag() as u32,
@@ -297,11 +297,11 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
         let pic_param = PictureParameterBufferH264::new(
             curr_pic,
             va_refs,
-            u16::try_from(sps.pic_width_in_mbs_minus1())?,
+            u16::try_from(sps.pic_width_in_mbs_minus1)?,
             u16::try_from(picture_height_in_mbs_minus1)?,
-            sps.bit_depth_luma_minus8(),
-            sps.bit_depth_chroma_minus8(),
-            u8::try_from(sps.max_num_ref_frames())?,
+            sps.bit_depth_luma_minus8,
+            sps.bit_depth_chroma_minus8,
+            u8::try_from(sps.max_num_ref_frames)?,
             &seq_fields,
             0, /* FMO not supported by VA */
             0, /* FMO not supported by VA */
@@ -392,7 +392,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
                 luma_offset_l0[i] = i16::from(pwt.luma_offset_l0()[i]);
             }
 
-            chroma_weight_l0_flag = sps.chroma_array_type() != 0;
+            chroma_weight_l0_flag = sps.chroma_array_type != 0;
             if chroma_weight_l0_flag {
                 for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
                     for j in 0..2 {
@@ -413,7 +413,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
                 &pwt.luma_offset_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
             );
 
-            chroma_weight_l1_flag = sps.chroma_array_type() != 0;
+            chroma_weight_l1_flag = sps.chroma_array_type != 0;
             if chroma_weight_l1_flag {
                 for i in 0..=hdr.num_ref_idx_l1_active_minus1 as usize {
                     for j in 0..2 {

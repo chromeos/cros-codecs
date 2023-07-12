@@ -288,14 +288,14 @@ where
 
     fn negotiation_possible(sps: &Sps, dpb: &Dpb<T>, current_resolution: Resolution) -> bool {
         let max_dpb_frames = sps.max_dpb_frames();
-        let interlaced = !sps.frame_mbs_only_flag();
+        let interlaced = !sps.frame_mbs_only_flag;
 
         let prev_max_dpb_frames = dpb.max_num_pics();
         let prev_interlaced = dpb.interlaced();
 
         let resolution = Resolution {
-            width: sps.width(),
-            height: sps.height(),
+            width: sps.width,
+            height: sps.height,
         };
 
         current_resolution != resolution
@@ -306,10 +306,10 @@ where
     // Apply the parameters of `sps` to the decoder.
     fn apply_sps(&mut self, sps: &Sps) {
         let max_dpb_frames = sps.max_dpb_frames();
-        let interlaced = !sps.frame_mbs_only_flag();
+        let interlaced = !sps.frame_mbs_only_flag;
         let resolution = Resolution {
-            width: sps.width(),
-            height: sps.height(),
+            width: sps.width,
+            height: sps.height,
         };
 
         let max_num_reorder_frames = sps.max_num_order_frames();
@@ -355,7 +355,7 @@ where
                     prev_pic_order_cnt_lsb = self.prev_ref_pic_info.pic_order_cnt_lsb;
                 }
 
-                let max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4() + 4);
+                let max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
 
                 if (pic.pic_order_cnt_lsb < self.prev_ref_pic_info.pic_order_cnt_lsb)
                     && (prev_pic_order_cnt_lsb - pic.pic_order_cnt_lsb >= max_pic_order_cnt_lsb / 2)
@@ -397,7 +397,7 @@ where
                     pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
 
-                let mut abs_frame_num = if sps.num_ref_frames_in_pic_order_cnt_cycle() != 0 {
+                let mut abs_frame_num = if sps.num_ref_frames_in_pic_order_cnt_cycle != 0 {
                     pic.frame_num_offset + pic.frame_num
                 } else {
                     0
@@ -410,39 +410,39 @@ where
                 let mut expected_pic_order_cnt = 0;
 
                 if abs_frame_num > 0 {
-                    if sps.num_ref_frames_in_pic_order_cnt_cycle() == 0 {
+                    if sps.num_ref_frames_in_pic_order_cnt_cycle == 0 {
                         return Err(anyhow!("Invalid num_ref_frames_in_pic_order_cnt_cycle"));
                     }
 
                     let pic_order_cnt_cycle_cnt =
-                        (abs_frame_num - 1) / sps.num_ref_frames_in_pic_order_cnt_cycle() as i32;
+                        (abs_frame_num - 1) / sps.num_ref_frames_in_pic_order_cnt_cycle as i32;
                     let frame_num_in_pic_order_cnt_cycle =
-                        (abs_frame_num - 1) % sps.num_ref_frames_in_pic_order_cnt_cycle() as i32;
+                        (abs_frame_num - 1) % sps.num_ref_frames_in_pic_order_cnt_cycle as i32;
                     expected_pic_order_cnt =
-                        pic_order_cnt_cycle_cnt * sps.expected_delta_per_pic_order_cnt_cycle();
+                        pic_order_cnt_cycle_cnt * sps.expected_delta_per_pic_order_cnt_cycle;
 
                     assert!(frame_num_in_pic_order_cnt_cycle < 255);
 
-                    for i in 0..sps.num_ref_frames_in_pic_order_cnt_cycle() {
-                        expected_pic_order_cnt += sps.offset_for_ref_frame()[i as usize];
+                    for i in 0..sps.num_ref_frames_in_pic_order_cnt_cycle {
+                        expected_pic_order_cnt += sps.offset_for_ref_frame[i as usize];
                     }
                 }
 
                 if pic.nal_ref_idc == 0 {
-                    expected_pic_order_cnt += sps.offset_for_non_ref_pic();
+                    expected_pic_order_cnt += sps.offset_for_non_ref_pic;
                 }
 
                 if matches!(pic.field, Field::Frame) {
                     pic.top_field_order_cnt = expected_pic_order_cnt + pic.delta_pic_order_cnt0;
 
                     pic.bottom_field_order_cnt = pic.top_field_order_cnt
-                        + sps.offset_for_top_to_bottom_field()
+                        + sps.offset_for_top_to_bottom_field
                         + pic.delta_pic_order_cnt1;
                 } else if !matches!(pic.field, Field::Bottom) {
                     pic.top_field_order_cnt = expected_pic_order_cnt + pic.delta_pic_order_cnt0;
                 } else {
                     pic.bottom_field_order_cnt = expected_pic_order_cnt
-                        + sps.offset_for_top_to_bottom_field()
+                        + sps.offset_for_top_to_bottom_field
                         + pic.delta_pic_order_cnt0;
                 }
             }
@@ -485,7 +485,7 @@ where
             _ => {
                 return Err(anyhow!(
                     "Invalid pic_order_cnt_type: {}",
-                    sps.pic_order_cnt_type()
+                    sps.pic_order_cnt_type
                 ))
             }
         }
@@ -980,8 +980,7 @@ where
             .context("Invalid SPS during the sliding window marking process")?;
 
         let mut num_ref_pics = self.dpb.num_ref_frames();
-        let max_num_ref_frames =
-            usize::try_from(std::cmp::max(1, sps.max_num_ref_frames())).unwrap();
+        let max_num_ref_frames = usize::try_from(std::cmp::max(1, sps.max_num_ref_frames)).unwrap();
 
         if num_ref_pics < max_num_ref_frames {
             return Ok(());
@@ -1228,7 +1227,7 @@ where
             .get_sps(self.cur_sps_id)
             .context("Invalid SPS while handling a frame_num gap")?;
 
-        if !sps.gaps_in_frame_num_value_allowed_flag() {
+        if !sps.gaps_in_frame_num_value_allowed_flag {
             return Err(anyhow!(
                 "Invalid frame_num: {}. Assuming unintentional loss of pictures",
                 frame_num
@@ -1439,7 +1438,7 @@ where
             .get_sps(self.cur_sps_id)
             .context("Invalid SPS in handle_picture")?;
 
-        self.curr_info.max_frame_num = 1 << (sps.log2_max_frame_num_minus4() + 4);
+        self.curr_info.max_frame_num = 1 << (sps.log2_max_frame_num_minus4 + 4);
 
         if frame_num != self.prev_ref_pic_info.frame_num
             && frame_num != (self.prev_ref_pic_info.frame_num + 1) % self.curr_info.max_frame_num

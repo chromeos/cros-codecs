@@ -515,44 +515,44 @@ pub enum Level {
 pub struct Sps {
     /// Identifies the sequence parameter set that is referred to by the picture
     /// parameter set
-    seq_parameter_set_id: u8,
+    pub seq_parameter_set_id: u8,
 
     /// Profile to which the coded video sequence conforms
-    profile_idc: u8,
+    pub profile_idc: u8,
 
     /// Retains the same meaning as in the specification. See 7.4.2.1.1
-    constraint_set0_flag: bool,
+    pub constraint_set0_flag: bool,
     /// Retains the same meaning as in the specification. See 7.4.2.1.1
-    constraint_set1_flag: bool,
+    pub constraint_set1_flag: bool,
     /// Retains the same meaning as in the specification. See 7.4.2.1.1
-    constraint_set2_flag: bool,
+    pub constraint_set2_flag: bool,
     /// Retains the same meaning as in the specification. See 7.4.2.1.1
-    constraint_set3_flag: bool,
+    pub constraint_set3_flag: bool,
     /// Retains the same meaning as in the specification. See 7.4.2.1.1
-    constraint_set4_flag: bool,
+    pub constraint_set4_flag: bool,
     /// Retains the same meaning as in the specification. See 7.4.2.1.1
-    constraint_set5_flag: bool,
+    pub constraint_set5_flag: bool,
 
     /// Level to which the coded video sequence conforms
-    level_idc: Level,
+    pub level_idc: Level,
 
     /// Specifies the chroma sampling relative to the luma sampling as specified
     /// in clause 6.2.
-    chroma_format_idc: u8,
+    pub chroma_format_idc: u8,
 
     /// Specifies whether the three colour components of the 4:4:4 chroma format
     /// are coded separately.
-    separate_colour_plane_flag: bool,
+    pub separate_colour_plane_flag: bool,
 
     /// Specifies the bit depth of the samples of the luma array and the value
     /// of the luma quantization parameter range offset QpBdOffsetY. See 7-3 and
     /// 7-4.
-    bit_depth_luma_minus8: u8,
+    pub bit_depth_luma_minus8: u8,
 
     /// Specifies the bit depth of the samples of the chroma arrays and the
     /// value of the chroma quantization parameter range offset QpBdOffsetC. See
     /// 7-5 and 7-6.
-    bit_depth_chroma_minus8: u8,
+    pub bit_depth_chroma_minus8: u8,
 
     /// qpprime_y_zero_transform_bypass_flag equal to 1 specifies that, when
     /// QP′Y is equal to 0, a transform bypass operation for the transform
@@ -563,32 +563,32 @@ pub struct Sps {
     /// prior to deblocking filter process shall not use the transform bypass
     /// operation
     /// QP′Y is defined in 7-38 as QP′Y = QPY + QpBdOffsetY
-    qpprime_y_zero_transform_bypass_flag: bool,
+    pub qpprime_y_zero_transform_bypass_flag: bool,
 
     /// Whether `seq_scaling_list_present_flag[i]` for i = 0..7 or i = 0..11 is
     /// present or whether the sequence level scaling list shall be specified by
     /// Flat_4x4_16 for i = 0..5 and flat_8x8_16 for i = 6..11
-    seq_scaling_matrix_present_flag: bool,
+    pub seq_scaling_matrix_present_flag: bool,
 
     /// 4x4 Scaling list as read with 7.3.2.1.1.1
-    scaling_lists_4x4: [[u8; 16]; 6],
+    pub scaling_lists_4x4: [[u8; 16]; 6],
     /// 8x8 Scaling list as read with 7.3.2.1.1.1
-    scaling_lists_8x8: [[u8; 64]; 6],
+    pub scaling_lists_8x8: [[u8; 64]; 6],
 
     /// Specifies the value of the variable MaxFrameNum that is used in
     /// frame_num related derivations as follows: MaxFrameNum = 2 ^
     /// (log2_max_frame_num_minus4 + 4 )
-    log2_max_frame_num_minus4: u8,
+    pub log2_max_frame_num_minus4: u8,
 
     /// Specifies the method to decode picture order count (as specified in
     /// clause 8.2.1)
-    pic_order_cnt_type: u8,
+    pub pic_order_cnt_type: u8,
 
     /// Specifies the value of the variable MaxPicOrderCntLsb that is used in
     /// the decoding process for picture order count as specified in clause
     /// 8.2.1 as follows: MaxPicOrderCntLsb = 2 ^ (
     /// log2_max_pic_order_cnt_lsb_minus4 + 4 ).
-    log2_max_pic_order_cnt_lsb_minus4: u8,
+    pub log2_max_pic_order_cnt_lsb_minus4: u8,
 
     /// If true, specifies that `delta_pic_order_cnt[0]` and
     /// `delta_pic_order_cnt[1]` are not present in the slice headers of the
@@ -596,24 +596,24 @@ pub struct Sps {
     /// If false, specifies that `delta_pic_order_cnt[0]` is present in the
     /// slice headers of the sequence and `delta_pic_order_cnt[1]` may be
     /// present in the slice headers of the sequence.
-    delta_pic_order_always_zero_flag: bool,
+    pub delta_pic_order_always_zero_flag: bool,
 
     /// Used to calculate the picture order count of a non-reference picture as
     /// specified in clause 8.2.1.
-    offset_for_non_ref_pic: i32,
+    pub offset_for_non_ref_pic: i32,
 
     /// Used to calculate the picture order count of a bottom field as specified
     /// in clause 8.2.1.
-    offset_for_top_to_bottom_field: i32,
+    pub offset_for_top_to_bottom_field: i32,
 
     /// Used in the decoding process for picture order count as specified in
     /// clause 8.2.1
-    num_ref_frames_in_pic_order_cnt_cycle: u8,
+    pub num_ref_frames_in_pic_order_cnt_cycle: u8,
 
     /// An element of a list of num_ref_frames_in_pic_order_cnt_cycle values
     /// used in the decoding process for picture order count as specified in
     /// clause 8.2.
-    offset_for_ref_frame: [i32; 255],
+    pub offset_for_ref_frame: [i32; 255],
 
     /// Specifies the maximum number of short-term and long-term reference
     /// frames, complementary reference field pairs, and non-paired reference
@@ -621,232 +621,87 @@ pub struct Sps {
     /// any picture in the coded video sequence. Also
     /// determines the size of the sliding window operation as specified in
     /// clause 8.2.5.3.
-    max_num_ref_frames: u32,
+    pub max_num_ref_frames: u32,
 
     /// Specifies the allowed values of frame_num as specified in clause 7.4.3
     /// and the decoding process in case of an inferred gap between values of
     /// frame_num as specified in clause 8.2.5.2
-    gaps_in_frame_num_value_allowed_flag: bool,
+    pub gaps_in_frame_num_value_allowed_flag: bool,
 
     /// Plus 1 specifies the width of each decoded picture in units of
     /// macroblocks.
-    pic_width_in_mbs_minus1: u32,
+    pub pic_width_in_mbs_minus1: u32,
     /// Plus 1 specifies the height in slice group map units of a decoded frame
     /// or field.
-    pic_height_in_map_units_minus1: u32,
+    pub pic_height_in_map_units_minus1: u32,
 
     /// If true,  specifies that every coded picture of the coded video sequence
     /// is a coded frame containing only frame macroblocks, else specifies that
     /// coded pictures of the coded video sequence may either be coded fields or
     /// coded frames.
-    frame_mbs_only_flag: bool,
+    pub frame_mbs_only_flag: bool,
 
     /// If true, specifies the possible use of switching between frame and field
     /// macroblocks within frames, else, specifies no switching between frame
     /// and field macroblocks within a picture.
-    mb_adaptive_frame_field_flag: bool,
+    pub mb_adaptive_frame_field_flag: bool,
 
     /// Specifies the method used in the derivation process for luma motion
     /// vectors for B_Skip, B_Direct_16x16 and B_Direct_8x8 as specified in
     /// clause 8.4.1.2.
-    direct_8x8_inference_flag: bool,
+    pub direct_8x8_inference_flag: bool,
 
     /// If true, specifies that the frame cropping offset parameters follow next
     /// in the sequence parameter, else specifies that the frame cropping offset
     /// parameters are not present
-    frame_cropping_flag: bool,
+    pub frame_cropping_flag: bool,
 
     /// Specify the samples of the pictures in the coded video sequence that are
     /// output from the decoding process, in terms of a rectangular region
     /// specified in frame coordinates for output.
-    frame_crop_left_offset: u32,
+    pub frame_crop_left_offset: u32,
     /// Specify the samples of the pictures in the coded video sequence that are
     /// output from the decoding process, in terms of a rectangular region
     /// specified in frame coordinates for output.
-    frame_crop_right_offset: u32,
+    pub frame_crop_right_offset: u32,
     /// Specify the samples of the pictures in the coded video sequence that are
     /// output from the decoding process, in terms of a rectangular region
     /// specified in frame coordinates for output.
-    frame_crop_top_offset: u32,
+    pub frame_crop_top_offset: u32,
     /// Specify the samples of the pictures in the coded video sequence that are
     /// output from the decoding process, in terms of a rectangular region
     /// specified in frame coordinates for output.
-    frame_crop_bottom_offset: u32,
+    pub frame_crop_bottom_offset: u32,
 
     // Calculated
     /// Same as ChromaArrayType. See the definition in the specification.
-    chroma_array_type: u8,
+    pub chroma_array_type: u8,
     /// Same as MaxFrameNum. See 7-10 in the specification.
-    max_frame_num: u32,
+    pub max_frame_num: u32,
     /// See 7-13 through 7-17 in the specification.
-    width: u32,
+    pub width: u32,
     /// See 7-13 through 7-17 in the specification.
-    height: u32,
+    pub height: u32,
     /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
     /// the specification
-    crop_rect_width: u32,
+    pub crop_rect_width: u32,
     /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
     /// the specification
-    crop_rect_height: u32,
+    pub crop_rect_height: u32,
     /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
     /// the specification
-    crop_rect_x: u32,
+    pub crop_rect_x: u32,
     /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
     /// the specification
-    crop_rect_y: u32,
+    pub crop_rect_y: u32,
     /// Same as ExpectedDeltaPerPicOrderCntCycle, see 7-12 in the specification.
-    expected_delta_per_pic_order_cnt_cycle: i32,
+    pub expected_delta_per_pic_order_cnt_cycle: i32,
 
-    vui_parameters_present_flag: bool,
-    vui_parameters: VuiParams,
+    pub vui_parameters_present_flag: bool,
+    pub vui_parameters: VuiParams,
 }
 
 impl Sps {
-    pub fn seq_parameter_set_id(&self) -> u8 {
-        self.seq_parameter_set_id
-    }
-    pub fn profile_idc(&self) -> u8 {
-        self.profile_idc
-    }
-    pub fn constraint_set0_flag(&self) -> bool {
-        self.constraint_set0_flag
-    }
-    pub fn constraint_set1_flag(&self) -> bool {
-        self.constraint_set1_flag
-    }
-    pub fn constraint_set2_flag(&self) -> bool {
-        self.constraint_set2_flag
-    }
-    pub fn constraint_set3_flag(&self) -> bool {
-        self.constraint_set3_flag
-    }
-    pub fn constraint_set4_flag(&self) -> bool {
-        self.constraint_set4_flag
-    }
-    pub fn constraint_set5_flag(&self) -> bool {
-        self.constraint_set5_flag
-    }
-    pub fn level_idc(&self) -> Level {
-        self.level_idc
-    }
-    pub fn chroma_format_idc(&self) -> u8 {
-        self.chroma_format_idc
-    }
-    pub fn separate_colour_plane_flag(&self) -> bool {
-        self.separate_colour_plane_flag
-    }
-    pub fn bit_depth_luma_minus8(&self) -> u8 {
-        self.bit_depth_luma_minus8
-    }
-    pub fn bit_depth_chroma_minus8(&self) -> u8 {
-        self.bit_depth_chroma_minus8
-    }
-    pub fn qpprime_y_zero_transform_bypass_flag(&self) -> bool {
-        self.qpprime_y_zero_transform_bypass_flag
-    }
-    pub fn seq_scaling_matrix_present_flag(&self) -> bool {
-        self.seq_scaling_matrix_present_flag
-    }
-    pub fn scaling_lists_4x4(&self) -> [[u8; 16]; 6] {
-        self.scaling_lists_4x4
-    }
-    pub fn scaling_lists_8x8(&self) -> [[u8; 64]; 6] {
-        self.scaling_lists_8x8
-    }
-    pub fn log2_max_frame_num_minus4(&self) -> u8 {
-        self.log2_max_frame_num_minus4
-    }
-    pub fn pic_order_cnt_type(&self) -> u8 {
-        self.pic_order_cnt_type
-    }
-    pub fn log2_max_pic_order_cnt_lsb_minus4(&self) -> u8 {
-        self.log2_max_pic_order_cnt_lsb_minus4
-    }
-    pub fn delta_pic_order_always_zero_flag(&self) -> bool {
-        self.delta_pic_order_always_zero_flag
-    }
-    pub fn offset_for_non_ref_pic(&self) -> i32 {
-        self.offset_for_non_ref_pic
-    }
-    pub fn offset_for_top_to_bottom_field(&self) -> i32 {
-        self.offset_for_top_to_bottom_field
-    }
-    pub fn num_ref_frames_in_pic_order_cnt_cycle(&self) -> u8 {
-        self.num_ref_frames_in_pic_order_cnt_cycle
-    }
-    pub fn offset_for_ref_frame(&self) -> [i32; 255] {
-        self.offset_for_ref_frame
-    }
-    pub fn max_num_ref_frames(&self) -> u32 {
-        self.max_num_ref_frames
-    }
-    pub fn gaps_in_frame_num_value_allowed_flag(&self) -> bool {
-        self.gaps_in_frame_num_value_allowed_flag
-    }
-    pub fn pic_width_in_mbs_minus1(&self) -> u32 {
-        self.pic_width_in_mbs_minus1
-    }
-    pub fn pic_height_in_map_units_minus1(&self) -> u32 {
-        self.pic_height_in_map_units_minus1
-    }
-    pub fn frame_mbs_only_flag(&self) -> bool {
-        self.frame_mbs_only_flag
-    }
-    pub fn mb_adaptive_frame_field_flag(&self) -> bool {
-        self.mb_adaptive_frame_field_flag
-    }
-    pub fn direct_8x8_inference_flag(&self) -> bool {
-        self.direct_8x8_inference_flag
-    }
-    pub fn frame_cropping_flag(&self) -> bool {
-        self.frame_cropping_flag
-    }
-    pub fn frame_crop_left_offset(&self) -> u32 {
-        self.frame_crop_left_offset
-    }
-    pub fn frame_crop_right_offset(&self) -> u32 {
-        self.frame_crop_right_offset
-    }
-    pub fn frame_crop_top_offset(&self) -> u32 {
-        self.frame_crop_top_offset
-    }
-    pub fn frame_crop_bottom_offset(&self) -> u32 {
-        self.frame_crop_bottom_offset
-    }
-    pub fn chroma_array_type(&self) -> u8 {
-        self.chroma_array_type
-    }
-    pub fn max_frame_num(&self) -> u32 {
-        self.max_frame_num
-    }
-    pub fn width(&self) -> u32 {
-        self.width
-    }
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-    pub fn crop_rect_width(&self) -> u32 {
-        self.crop_rect_width
-    }
-    pub fn crop_rect_height(&self) -> u32 {
-        self.crop_rect_height
-    }
-    pub fn crop_rect_x(&self) -> u32 {
-        self.crop_rect_x
-    }
-    pub fn crop_rect_y(&self) -> u32 {
-        self.crop_rect_y
-    }
-    pub fn expected_delta_per_pic_order_cnt_cycle(&self) -> i32 {
-        self.expected_delta_per_pic_order_cnt_cycle
-    }
-    pub fn vui_parameters_present_flag(&self) -> bool {
-        self.vui_parameters_present_flag
-    }
-    pub fn vui_parameters(&self) -> &VuiParams {
-        &self.vui_parameters
-    }
-
     pub fn visible_rectangle(&self) -> Rect<u32> {
         if !self.frame_cropping_flag {
             return Rect {
@@ -888,14 +743,14 @@ impl Sps {
     }
 
     pub fn max_dpb_frames(&self) -> usize {
-        let profile = self.profile_idc();
-        let mut level = self.level_idc();
+        let profile = self.profile_idc;
+        let mut level = self.level_idc;
 
         // A.3.1 and A.3.2: Level 1b for Baseline, Constrained Baseline and Main
         // profile if level_idc == 11 and constraint_set3_flag == 1
         if matches!(level, Level::L1_1)
             && (profile == Profile::Baseline as u8 || profile == Profile::Main as u8)
-            && self.constraint_set3_flag()
+            && self.constraint_set3_flag
         {
             level = Level::L1B;
         };
@@ -924,38 +779,37 @@ impl Sps {
             Level::L6_2 => 696320,
         };
 
-        let width_mb = self.width() / 16;
-        let height_mb = self.height() / 16;
+        let width_mb = self.width / 16;
+        let height_mb = self.height / 16;
 
         let max_dpb_frames =
             std::cmp::min(max_dpb_mbs / (width_mb * height_mb), DPB_MAX_SIZE as u32) as usize;
 
-        let mut max_dpb_frames = std::cmp::max(max_dpb_frames, self.max_num_ref_frames() as usize);
+        let mut max_dpb_frames = std::cmp::max(max_dpb_frames, self.max_num_ref_frames as usize);
 
-        if self.vui_parameters_present_flag() && self.vui_parameters().bitstream_restriction_flag()
-        {
+        if self.vui_parameters_present_flag && self.vui_parameters.bitstream_restriction_flag() {
             max_dpb_frames =
-                std::cmp::max(1, self.vui_parameters().max_dec_frame_buffering() as usize);
+                std::cmp::max(1, self.vui_parameters.max_dec_frame_buffering() as usize);
         }
 
         max_dpb_frames
     }
 
     pub fn max_num_order_frames(&self) -> u32 {
-        let vui = self.vui_parameters();
-        let present = self.vui_parameters_present_flag() && vui.bitstream_restriction_flag();
+        let vui = &self.vui_parameters;
+        let present = self.vui_parameters_present_flag && vui.bitstream_restriction_flag();
 
         if present {
             vui.max_num_reorder_frames()
         } else {
-            let profile = self.profile_idc();
+            let profile = self.profile_idc;
             if (profile == 44
                 || profile == 86
                 || profile == 100
                 || profile == 110
                 || profile == 122
                 || profile == 244)
-                && self.constraint_set3_flag()
+                && self.constraint_set3_flag
             {
                 0
             } else {

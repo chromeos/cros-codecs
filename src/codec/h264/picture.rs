@@ -153,7 +153,7 @@ impl PictureData {
             delta_pic_order_cnt_bottom,
             delta_pic_order_cnt0,
             delta_pic_order_cnt1,
-        ) = match sps.pic_order_cnt_type() {
+        ) = match sps.pic_order_cnt_type {
             0 => (
                 hdr.pic_order_cnt_lsb,
                 hdr.delta_pic_order_cnt_bottom,
@@ -174,8 +174,8 @@ impl PictureData {
             ),
         };
 
-        let width = sps.width();
-        let height = sps.height();
+        let width = sps.width;
+        let height = sps.height;
         let coded_resolution = Resolution { width, height };
 
         let visible_rect = sps.visible_rectangle();
@@ -186,7 +186,7 @@ impl PictureData {
         };
 
         PictureData {
-            pic_order_cnt_type: sps.pic_order_cnt_type(),
+            pic_order_cnt_type: sps.pic_order_cnt_type,
             pic_order_cnt_lsb: i32::from(pic_order_cnt_lsb),
             delta_pic_order_cnt_bottom,
             delta_pic_order_cnt0,
