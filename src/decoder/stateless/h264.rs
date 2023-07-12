@@ -161,7 +161,6 @@ pub struct PrevPicInfo {
 
 #[derive(Default)]
 pub struct CurrentPicInfo {
-    max_pic_num: i32,
     max_long_term_frame_idx: i32,
 }
 
@@ -1650,7 +1649,7 @@ where
                         &self.dpb,
                         &mut ref_pic_list_x,
                         num_ref_idx_lx_active_minus1,
-                        self.curr_info.max_pic_num,
+                        hdr.max_pic_num as i32,
                         modification,
                         &mut pic_num_lx_pred,
                         &mut ref_idx_lx,
@@ -1718,7 +1717,6 @@ where
         cur_pic: &mut (PictureData, P),
         slice: &Slice<&[u8]>,
     ) -> anyhow::Result<()> {
-        self.curr_info.max_pic_num = slice.header().max_pic_num as i32;
         let RefPicLists {
             ref_pic_list0,
             ref_pic_list1,
