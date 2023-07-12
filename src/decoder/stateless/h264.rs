@@ -1677,12 +1677,10 @@ where
     fn create_ref_pic_lists(
         &mut self,
         cur_pic: &PictureData,
-        current_slice: &Slice<impl AsRef<[u8]>>,
+        hdr: &SliceHeader,
     ) -> anyhow::Result<RefPicLists<T>> {
         let mut ref_pic_list0 = Vec::new();
         let mut ref_pic_list1 = Vec::new();
-
-        let hdr = current_slice.header();
 
         if let SliceType::P | SliceType::Sp = hdr.slice_type {
             ref_pic_list0 = self.modify_ref_pic_list(
@@ -1721,7 +1719,7 @@ where
         let RefPicLists {
             ref_pic_list0,
             ref_pic_list1,
-        } = self.create_ref_pic_lists(&cur_pic.0, slice)?;
+        } = self.create_ref_pic_lists(&cur_pic.0, slice.header())?;
 
         let sps = self
             .parser
