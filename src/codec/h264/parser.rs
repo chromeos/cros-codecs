@@ -676,8 +676,6 @@ pub struct Sps {
     // Calculated
     /// Same as ChromaArrayType. See the definition in the specification.
     pub chroma_array_type: u8,
-    /// Same as MaxFrameNum. See 7-10 in the specification.
-    pub max_frame_num: u32,
     /// See 7-13 through 7-17 in the specification.
     pub width: u32,
     /// See 7-13 through 7-17 in the specification.
@@ -702,6 +700,11 @@ pub struct Sps {
 }
 
 impl Sps {
+    /// Same as MaxFrameNum. See 7-10 in the specification.
+    pub fn max_frame_num(&self) -> u32 {
+        1 << (self.log2_max_frame_num_minus4 + 4)
+    }
+
     pub fn visible_rectangle(&self) -> Rect<u32> {
         if !self.frame_cropping_flag {
             return Rect {
@@ -860,7 +863,6 @@ impl Default for Sps {
             frame_crop_top_offset: Default::default(),
             frame_crop_bottom_offset: Default::default(),
             chroma_array_type: Default::default(),
-            max_frame_num: Default::default(),
             width: Default::default(),
             height: Default::default(),
             crop_rect_width: Default::default(),
@@ -1889,7 +1891,6 @@ impl Parser {
         }
 
         sps.log2_max_frame_num_minus4 = r.read_ue_max(12)?;
-        sps.max_frame_num = 1 << (sps.log2_max_frame_num_minus4 + 4);
 
         sps.pic_order_cnt_type = r.read_ue_max(2)?;
 
@@ -2317,9 +2318,9 @@ impl Parser {
         }
 
         if header.field_pic_flag {
-            header.max_pic_num = 2 * sps.max_frame_num;
+            header.max_pic_num = 2 * sps.max_frame_num();
         } else {
-            header.max_pic_num = sps.max_frame_num;
+            header.max_pic_num = sps.max_frame_num();
         }
 
         if nalu.header().idr_pic_flag {
@@ -2620,7 +2621,7 @@ mod tests {
             assert_eq!(sps.frame_crop_top_offset, 0);
             assert_eq!(sps.frame_crop_bottom_offset, 0);
             assert_eq!(sps.chroma_array_type, 1);
-            assert_eq!(sps.max_frame_num, 32);
+            assert_eq!(sps.max_frame_num(), 32);
             assert_eq!(sps.width, 320);
             assert_eq!(sps.height, 240);
             assert_eq!(sps.crop_rect_width, 0);
