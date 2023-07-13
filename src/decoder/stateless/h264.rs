@@ -1823,6 +1823,8 @@ where
 
         if let Some(sps) = sps {
             if Self::negotiation_possible(&sps, &self.dpb, self.coded_resolution) {
+                // Make sure all the frames we decoded so far are in the ready queue.
+                self.drain();
                 self.backend.new_sequence(&sps)?;
                 self.decoding_state = DecodingState::AwaitingFormat(sps);
             } else if matches!(self.decoding_state, DecodingState::Reset) {
