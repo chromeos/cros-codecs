@@ -29,6 +29,15 @@ pub struct Dpb<T> {
     entries: Vec<DpbEntry<T>>,
     /// The maximum number of pictures that can be stored.
     max_num_pics: usize,
+    /// Indicates an upper bound for the number of frames buffers, in the
+    /// decoded picture buffer (DPB), that are required for storing frames,
+    /// complementary field pairs, and non-paired fields before output. It is a
+    /// requirement of bitstream conformance that the maximum number of frames,
+    /// complementary field pairs, or non-paired fields that precede any frame,
+    /// complementary field pair, or non-paired field in the coded video
+    /// sequence in decoding order and follow it in output order shall be less
+    /// than or equal to max_num_reorder_frames.
+    max_num_reorder_frames: usize,
     /// Whether we're decoding in interlaced mode. Interlaced support is
     /// inspired by the GStreamer implementation, in which frames are split if
     /// interlaced=1. This makes reference marking easier. We also decode both
@@ -80,9 +89,10 @@ impl<T: Clone> Dpb<T> {
         &self.entries
     }
 
-    /// Set the dpb's max num pics.
-    pub fn set_max_num_pics(&mut self, max_num_pics: usize) {
+    /// Set the DPB's limits in terms of maximum number or pictures.
+    pub fn set_limits(&mut self, max_num_pics: usize, max_num_reorder_frames: usize) {
         self.max_num_pics = max_num_pics;
+        self.max_num_reorder_frames = max_num_reorder_frames;
     }
 
     /// Get a reference to the dpb's max num pics.
@@ -437,13 +447,9 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Bumps the DPB if needed. DPB bumping is described on C.4.5.3.
-    pub fn bump_as_needed(
-        &mut self,
-        max_num_reorder_frames: u32,
-        current_pic: &PictureData,
-    ) -> Vec<DpbEntry<T>> {
+    pub fn bump_as_needed(&mut self, current_pic: &PictureData) -> Vec<DpbEntry<T>> {
         let mut pics = vec![];
-        while self.needs_bumping(current_pic) && self.len() >= max_num_reorder_frames as usize {
+        while self.needs_bumping(current_pic) && self.len() >= self.max_num_reorder_frames {
             match self.bump(false) {
                 Some(pic) => pics.push(pic),
                 None => return pics,
@@ -722,6 +728,7 @@ impl<T: Clone> Default for Dpb<T> {
         Self {
             entries: Default::default(),
             max_num_pics: Default::default(),
+            max_num_reorder_frames: Default::default(),
             interlaced: Default::default(),
         }
     }

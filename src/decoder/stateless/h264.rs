@@ -215,16 +215,6 @@ where
     /// The decoded picture buffer
     dpb: Dpb<T>,
 
-    /// Indicates an upper bound for the number of frames buffers, in the
-    /// decoded picture buffer (DPB), that are required for storing frames,
-    /// complementary field pairs, and non-paired fields before output. It is a
-    /// requirement of bitstream conformance that the maximum number of frames,
-    /// complementary field pairs, or non-paired fields that precede any frame,
-    /// complementary field pair, or non-paired field in the coded video
-    /// sequence in decoding order and follow it in output order shall be less
-    /// than or equal to max_num_reorder_frames.
-    max_num_reorder_frames: u32,
-
     /// The current active SPS id.
     cur_sps_id: u8,
     /// The current active PPS id.
@@ -267,7 +257,6 @@ where
             coded_resolution: Default::default(),
             decoding_state: Default::default(),
             dpb: Default::default(),
-            max_num_reorder_frames: Default::default(),
             cur_sps_id: Default::default(),
             cur_pps_id: Default::default(),
             prev_ref_pic_info: Default::default(),
@@ -305,18 +294,18 @@ where
             height: sps.height,
         };
 
-        let max_num_reorder_frames = sps.max_num_order_frames();
-        self.max_num_reorder_frames = if max_num_reorder_frames > max_dpb_frames as u32 {
+        let max_num_order_frames = sps.max_num_order_frames() as usize;
+        let max_num_reorder_frames = if max_num_order_frames > max_dpb_frames {
             0
         } else {
-            max_num_reorder_frames
+            max_num_order_frames
         };
 
         self.drain();
 
         self.coded_resolution = resolution;
 
-        self.dpb.set_max_num_pics(max_dpb_frames);
+        self.dpb.set_limits(max_dpb_frames, max_num_reorder_frames);
         self.dpb.set_interlaced(interlaced);
     }
 
@@ -1134,7 +1123,7 @@ where
     fn bump_as_needed_into_ready_queue(&mut self, current_pic: &PictureData) {
         let bumped = self
             .dpb
-            .bump_as_needed(self.max_num_reorder_frames, current_pic)
+            .bump_as_needed(current_pic)
             .into_iter()
             .filter_map(|p| p.1);
         self.ready_queue.extend(bumped);
