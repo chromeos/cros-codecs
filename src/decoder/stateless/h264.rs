@@ -206,7 +206,7 @@ struct CurrentPicState<T, P> {
 
 pub struct Decoder<T, P, M>
 where
-    T: DecodedHandle<M> + Clone,
+    T: DecodedHandle<M>,
 {
     /// A parser to extract bitstream metadata
     parser: Parser,
@@ -251,7 +251,7 @@ where
 
 impl<T, P, M> Decoder<T, P, M>
 where
-    T: DecodedHandle<M> + Clone + 'static,
+    T: DecodedHandle<M> + Clone,
 {
     /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
@@ -1897,7 +1897,7 @@ where
 
 impl<T, P, M> private::StatelessVideoDecoder for Decoder<T, P, M>
 where
-    T: DecodedHandle<M> + Clone + 'static,
+    T: DecodedHandle<M>,
 {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {

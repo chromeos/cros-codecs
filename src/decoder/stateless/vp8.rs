@@ -76,7 +76,7 @@ pub struct Decoder<T: DecodedHandle<M>, M> {
     alt_ref_picture: Option<T>,
 }
 
-impl<T: DecodedHandle<M> + Clone + 'static, M> Decoder<T, M> {
+impl<T: DecodedHandle<M> + Clone, M> Decoder<T, M> {
     /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
     fn new(
@@ -278,7 +278,7 @@ impl<T: DecodedHandle<M> + Clone + 'static, M> StatelessVideoDecoder<M> for Deco
     }
 }
 
-impl<T: DecodedHandle<M> + Clone + 'static, M> private::StatelessVideoDecoder for Decoder<T, M> {
+impl<T: DecodedHandle<M>, M> private::StatelessVideoDecoder for Decoder<T, M> {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
