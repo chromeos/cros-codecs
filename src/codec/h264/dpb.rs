@@ -214,11 +214,7 @@ impl<T: Clone> Dpb<T> {
 
         // C.4.2. Decoding of gaps in frame_num and storage of "non-existing"
         // pictures
-        if !pic_mut.nonexisting {
-            pic_mut.needed_for_output = true;
-        } else {
-            pic_mut.needed_for_output = false;
-        }
+        pic_mut.needed_for_output = !pic_mut.nonexisting;
 
         if pic_mut.is_second_field() {
             let first_field_rc = pic_mut.other_field().unwrap();
