@@ -106,7 +106,7 @@ impl VaStreamInfo for &Sps {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<Sps, BackendData, M> {
+impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
     fn build_slice_ref_pic_list(
         ref_pic_list: &[Option<RefPicListEntry<VADecodedHandle<M>>>; 16],
         va_references: &[PictureHEVC; 15],
@@ -519,7 +519,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<Sps, BackendData, M> {
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
-    for VaapiBackend<Sps, BackendData, M>
+    for VaapiBackend<BackendData, M>
 {
     type Picture = VaPicture<PictureNew, PooledSurface<M>>;
 
@@ -761,7 +761,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         mut picture: Self::Picture,
     ) -> StatelessBackendResult<Self::Handle> {
         self.submit_last_slice(&mut picture, true)?;
-        self.process_picture(picture)
+        self.process_picture::<Sps>(picture)
     }
 }
 
@@ -771,7 +771,7 @@ impl<M: SurfaceMemoryDescriptor + 'static>
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(
-            Box::new(VaapiBackend::<Sps, BackendData, M>::new(display)),
+            Box::new(VaapiBackend::<BackendData, M>::new(display)),
             blocking_mode,
         )
     }

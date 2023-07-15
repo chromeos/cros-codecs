@@ -5,7 +5,6 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::os::fd::AsRawFd;
 use std::rc::Rc;
 
@@ -897,9 +896,8 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
     }
 }
 
-pub(crate) struct VaapiBackend<StreamData, BackendData, M>
+pub(crate) struct VaapiBackend<BackendData, M>
 where
-    for<'a> &'a StreamData: VaStreamInfo,
     BackendData: Default,
     M: SurfaceMemoryDescriptor,
 {
@@ -911,14 +909,10 @@ where
     pub(crate) metadata_state: StreamMetadataState,
     /// Any extra data that the backend might need to keep track of for a given codec.
     pub(crate) backend_data: BackendData,
-    /// Make sure the backend is typed by stream information provider.
-    _stream_data: PhantomData<StreamData>,
 }
 
-impl<StreamData, BackendData, M> VaapiBackend<StreamData, BackendData, M>
+impl<BackendData, M> VaapiBackend<BackendData, M>
 where
-    StreamData: Clone,
-    for<'a> &'a StreamData: VaStreamInfo,
     M: SurfaceMemoryDescriptor + 'static,
     BackendData: Default,
 {
@@ -936,14 +930,16 @@ where
             surface_pool,
             metadata_state: StreamMetadataState::Unparsed,
             backend_data: Default::default(),
-            _stream_data: PhantomData,
         }
     }
 
-    pub(crate) fn new_sequence(
+    pub(crate) fn new_sequence<StreamData>(
         &mut self,
         stream_params: &StreamData,
-    ) -> StatelessBackendResult<()> {
+    ) -> StatelessBackendResult<()>
+    where
+        for<'a> &'a StreamData: VaStreamInfo,
+    {
         let old_metadata_state =
             std::mem::replace(&mut self.metadata_state, StreamMetadataState::Unparsed);
 
@@ -958,10 +954,13 @@ where
         Ok(())
     }
 
-    pub(crate) fn process_picture(
+    pub(crate) fn process_picture<StreamData>(
         &mut self,
         picture: Picture<PictureNew, PooledSurface<M>>,
-    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle> {
+    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle>
+    where
+        for<'a> &'a StreamData: VaStreamInfo,
+    {
         let metadata = self.metadata_state.get_parsed()?;
 
         Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
@@ -991,9 +990,8 @@ where
 }
 
 impl<StreamData, BackendData, M> StatelessDecoderBackend<StreamData>
-    for VaapiBackend<StreamData, BackendData, M>
+    for VaapiBackend<BackendData, M>
 where
-    StreamData: Clone,
     for<'a> &'a StreamData: VaStreamInfo,
     BackendData: Default,
     M: SurfaceMemoryDescriptor + 'static,
