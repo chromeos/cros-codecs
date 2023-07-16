@@ -82,18 +82,19 @@ mod private {
 
 /// Common trait shared by all stateless video decoder backends, providing codec-independent
 /// methods.
-pub(crate) trait StatelessDecoderBackend<FormatInfo, M> {
+pub(crate) trait StatelessDecoderBackend<FormatInfo> {
     /// The type that the backend returns as a result of a decode operation.
     /// This will usually be some backend-specific type with a resource and a
     /// resource pool so that said buffer can be reused for another decode
     /// operation when it goes out of scope.
-    type Handle: DecodedHandle<M>;
+    type Handle: DecodedHandle;
 
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the surface pool currently in use by the backend.
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M>;
+    fn surface_pool(&mut self)
+        -> &mut dyn SurfacePool<<Self::Handle as DecodedHandle>::Descriptor>;
 
     /// Try altering the decoded format.
     fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat)
@@ -239,7 +240,11 @@ pub(crate) mod tests {
         dump_yuv: bool,
     ) where
         D: StatelessVideoDecoder<M>,
-        L: Fn(&mut D, &[u8], &mut dyn FnMut(Box<dyn DecodedHandle<M>>)) -> anyhow::Result<()>,
+        L: Fn(
+            &mut D,
+            &[u8],
+            &mut dyn FnMut(Box<dyn DecodedHandle<Descriptor = M>>),
+        ) -> anyhow::Result<()>,
     {
         let mut crcs = test.crcs.lines().enumerate();
 

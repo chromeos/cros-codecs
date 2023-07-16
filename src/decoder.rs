@@ -88,7 +88,7 @@ pub trait DecoderFormatNegotiator<'a, M> {
 /// Events that can be retrieved using the `next_event` method of a decoder.
 pub enum DecoderEvent<'a, M> {
     /// The next frame has been decoded.
-    FrameReady(Box<dyn DecodedHandle<M>>),
+    FrameReady(Box<dyn DecodedHandle<Descriptor = M>>),
     /// The format of the stream has changed and action is required.
     FormatChanged(Box<dyn DecoderFormatNegotiator<'a, M> + 'a>),
 }
@@ -112,7 +112,12 @@ pub trait MappableHandle {
 
 /// The handle type used by the decoder backend. The only requirement from implementors is that
 /// they give access to the underlying handle and that they can be (cheaply) cloned.
-pub trait DecodedHandle<M> {
+pub trait DecodedHandle {
+    /// Memory descriptor type - the type that provides the backend memory for the decoded frame.
+    /// `()` is a special type meaning that the backend is responsible for allocating and managing
+    /// the memory itself.
+    type Descriptor;
+
     /// Returns a reference to an object allowing a CPU mapping of the decoded surface.
     fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a>;
 
@@ -131,7 +136,7 @@ pub trait DecodedHandle<M> {
     /// Wait until this handle has been completely rendered.
     fn sync(&self) -> anyhow::Result<()>;
 
-    fn resource(&self) -> std::cell::Ref<M>;
+    fn resource(&self) -> std::cell::Ref<Self::Descriptor>;
 }
 
 /// Instructs the decoder on whether it should block on the decode operations.

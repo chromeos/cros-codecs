@@ -172,7 +172,9 @@ fn supported_formats_for_rt_format(
 /// A decoded frame handle.
 pub(crate) type DecodedHandle<M> = Rc<RefCell<GenericBackendHandle<M>>>;
 
-impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait<M> for DecodedHandle<M> {
+impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
+    type Descriptor = M;
+
     fn coded_resolution(&self) -> Resolution {
         self.borrow().coded_resolution
     }
@@ -959,7 +961,7 @@ where
     pub(crate) fn process_picture(
         &mut self,
         picture: Picture<PictureNew, PooledSurface<M>>,
-    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData, M>>::Handle> {
+    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle> {
         let metadata = self.metadata_state.get_parsed()?;
 
         Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
@@ -988,7 +990,7 @@ where
     }
 }
 
-impl<StreamData, BackendData, M> StatelessDecoderBackend<StreamData, M>
+impl<StreamData, BackendData, M> StatelessDecoderBackend<StreamData>
     for VaapiBackend<StreamData, BackendData, M>
 where
     StreamData: Clone,

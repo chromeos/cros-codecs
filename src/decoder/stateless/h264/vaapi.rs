@@ -463,7 +463,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<Sps, (), M> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend<M>
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend
     for VaapiBackend<Sps, (), M>
 {
     type Picture = VaPicture<PictureNew, PooledSurface<M>>;
@@ -579,7 +579,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend<M>
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static>
-    Decoder<VADecodedHandle<M>, VaPicture<PictureNew, PooledSurface<M>>, M>
+    Decoder<VADecodedHandle<M>, VaPicture<PictureNew, PooledSurface<M>>>
 {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self>

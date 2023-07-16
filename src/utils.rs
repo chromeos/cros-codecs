@@ -372,7 +372,7 @@ impl<'a> Iterator for H265FrameIterator<'a> {
 pub fn simple_playback_loop<D, R, I, M>(
     decoder: &mut D,
     stream_iter: I,
-    on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle<M>>),
+    on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle<Descriptor = M>>),
     allocate_new_surfaces: &mut dyn FnMut(&StreamInfo, usize) -> anyhow::Result<Vec<M>>,
     output_format: DecodedFormat,
     blocking_mode: BlockingMode,

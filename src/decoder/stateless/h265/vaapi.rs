@@ -141,7 +141,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<Sps, BackendData, M> {
 
     fn submit_last_slice(
         &mut self,
-        picture: &mut <Self as StatelessH265DecoderBackend<M>>::Picture,
+        picture: &mut <Self as StatelessH265DecoderBackend>::Picture,
         is_last_slice: bool,
     ) -> anyhow::Result<()> {
         if let Some(mut last_slice) = self.backend_data.last_slice.take() {
@@ -518,7 +518,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<Sps, BackendData, M> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend<M>
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
     for VaapiBackend<Sps, BackendData, M>
 {
     type Picture = VaPicture<PictureNew, PooledSurface<M>>;
@@ -766,7 +766,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend<M>
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static>
-    Decoder<VADecodedHandle<M>, VaPicture<PictureNew, PooledSurface<M>>, M>
+    Decoder<VADecodedHandle<M>, VaPicture<PictureNew, PooledSurface<M>>>
 {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {

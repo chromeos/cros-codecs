@@ -378,7 +378,7 @@ fn main() {
     let mut md5_context = md5::Context::new();
     let mut output_filename_idx = 0;
 
-    let mut on_new_frame = |handle: Box<dyn DecodedHandle<_>>| {
+    let mut on_new_frame = |handle: Box<dyn DecodedHandle<Descriptor = _>>| {
         if args.output.is_some() || args.compute_md5.is_some() {
             handle.sync().unwrap();
             let picture = handle.dyn_picture();

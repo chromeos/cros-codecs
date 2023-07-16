@@ -15,7 +15,7 @@ use crate::decoder::BlockingMode;
 
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
 
-impl StatelessH265DecoderBackend<()> for Backend {
+impl StatelessH265DecoderBackend for Backend {
     type Picture = ();
 
     fn new_sequence(
@@ -68,7 +68,7 @@ impl StatelessH265DecoderBackend<()> for Backend {
         })
     }
 }
-impl Decoder<Handle, (), ()> {
+impl Decoder<Handle, ()> {
     // Creates a new instance of the decoder using the dummy backend.
     pub fn new_dummy(blocking_mode: BlockingMode) -> anyhow::Result<Self> {
         Self::new(Box::new(Backend::new()), blocking_mode)

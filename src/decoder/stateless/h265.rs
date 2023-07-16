@@ -55,7 +55,7 @@ pub(crate) fn clip3(x: i32, y: i32, z: i32) -> i32 {
 }
 
 /// Stateless backend methods specific to H.265.
-trait StatelessH265DecoderBackend<M>: StatelessDecoderBackend<Sps, M> {
+trait StatelessH265DecoderBackend: StatelessDecoderBackend<Sps> {
     /// Type used by the backend to represent a picture in the process of being decoded.
     type Picture;
 
@@ -192,7 +192,7 @@ impl<T: Clone> Default for RefPicSet<T> {
     }
 }
 
-pub struct Decoder<T, P, M>
+pub struct Decoder<T, P>
 where
     T: Clone,
 {
@@ -203,7 +203,7 @@ where
     blocking_mode: BlockingMode,
 
     /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessH265DecoderBackend<M, Handle = T, Picture = P>>,
+    backend: Box<dyn StatelessH265DecoderBackend<Handle = T, Picture = P>>,
 
     /// The backend used for hardware acceleration.
     // backend: Box<dyn StatelessDecoderBackend<Handle = T, Picture = P>>,
@@ -253,15 +253,15 @@ where
     last_independent_slice_header: Option<SliceHeader>,
 }
 
-impl<T, P, M> Decoder<T, P, M>
+impl<T, P> Decoder<T, P>
 where
-    T: DecodedHandle<M> + Clone,
+    T: DecodedHandle + Clone,
 {
     /// Create a new decoder using the given `backend`.
     #[cfg(any(feature = "vaapi", test))]
     #[allow(dead_code)]
     fn new(
-        backend: Box<dyn StatelessH265DecoderBackend<M, Handle = T, Picture = P>>,
+        backend: Box<dyn StatelessH265DecoderBackend<Handle = T, Picture = P>>,
         blocking_mode: BlockingMode,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -983,9 +983,9 @@ where
     }
 }
 
-impl<T, P, M> StatelessVideoDecoder<M> for Decoder<T, P, M>
+impl<T, P> StatelessVideoDecoder<T::Descriptor> for Decoder<T, P>
 where
-    T: DecodedHandle<M> + Clone + 'static,
+    T: DecodedHandle + Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, mut bitstream: &[u8]) -> Result<(), DecodeError> {
         let sps = Self::peek_sps(&mut self.parser, bitstream)?;
@@ -1025,7 +1025,7 @@ where
         self.decoding_state = DecodingState::Reset;
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<M>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<T::Descriptor>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
@@ -1047,7 +1047,7 @@ where
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<T::Descriptor> {
         self.backend.surface_pool()
     }
 
@@ -1056,9 +1056,9 @@ where
     }
 }
 
-impl<T, P, M> private::StatelessVideoDecoder for Decoder<T, P, M>
+impl<T, P> private::StatelessVideoDecoder for Decoder<T, P>
 where
-    T: DecodedHandle<M> + Clone,
+    T: DecodedHandle + Clone,
 {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {
