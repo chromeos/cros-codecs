@@ -31,10 +31,11 @@ use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::Reference;
-use crate::decoder::stateless::h264::Decoder;
 use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
+use crate::decoder::stateless::h264::H264;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 
@@ -576,16 +577,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static>
-    Decoder<VADecodedHandle<M>, VaPicture<PictureNew, PooledSurface<M>>>
-{
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H264, VaapiBackend<(), M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self>
+    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
     where
         M: From<S>,
         S: From<M>,
     {
-        Self::new(Box::new(VaapiBackend::<(), M>::new(display)), blocking_mode)
+        Self::new(VaapiBackend::<(), M>::new(display), blocking_mode)
     }
 }
 
@@ -593,9 +592,10 @@ impl<M: SurfaceMemoryDescriptor + 'static>
 mod tests {
     use libva::Display;
 
-    use crate::decoder::stateless::h264::Decoder;
+    use crate::decoder::stateless::h264::H264;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
+    use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_surfaces;
@@ -609,7 +609,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = Decoder::new_vaapi::<()>(display, blocking_mode).unwrap();
+        let decoder = StatelessDecoder::<H264, _>::new_vaapi::<()>(display, blocking_mode);
 
         test_decode_stream(
             |d, s, f| {

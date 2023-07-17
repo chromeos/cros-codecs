@@ -18,6 +18,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use argh::FromArgs;
+use cros_codecs::decoder::stateless::h264::H264;
+use cros_codecs::decoder::stateless::StatelessDecoder;
 use cros_codecs::decoder::stateless::StatelessVideoDecoder;
 use cros_codecs::decoder::BlockingMode;
 use cros_codecs::decoder::DecodedHandle;
@@ -335,10 +337,10 @@ fn main() {
             let frame_iter = Box::new(H264FrameIterator::new(&input).map(Cow::Borrowed))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
-            let decoder = Box::new(
-                cros_codecs::decoder::stateless::h264::Decoder::new_vaapi(display, blocking_mode)
-                    .expect("failed to create decoder"),
-            ) as Box<dyn StatelessVideoDecoder<_>>;
+            let decoder = Box::new(StatelessDecoder::<H264, _>::new_vaapi(
+                display,
+                blocking_mode,
+            )) as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }

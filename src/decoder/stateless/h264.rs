@@ -30,20 +30,22 @@ use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::Reference;
-use crate::decoder::stateless::private;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessCodec;
+use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
 use crate::decoder::SurfacePool;
 use crate::Resolution;
+
+type DpbPicList<H> = Vec<DpbEntry<H>>;
 
 fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
     const ZIGZAG_8X8: [usize; 64] = [
@@ -66,7 +68,7 @@ fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
 }
 
 /// Stateless backend methods specific to H.264.
-trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
+pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
     /// Type used by the backend to represent a picture in the process of being decoded.
     type Picture;
 
@@ -164,22 +166,22 @@ struct ReferencePicLists<T> {
     /// Reference picture list for P slices. Retains the same meaning as in the
     /// specification. Points into the pictures stored in the DPB. Derived once
     /// per picture.
-    ref_pic_list_p0: Vec<DpbEntry<T>>,
+    ref_pic_list_p0: DpbPicList<T>,
     /// Reference picture list 0 for B slices. Retains the same meaning as in
     /// the specification. Points into the pictures stored in the DPB. Derived
     /// once per picture.
-    ref_pic_list_b0: Vec<DpbEntry<T>>,
+    ref_pic_list_b0: DpbPicList<T>,
     /// Reference picture list 1 for B slices. Retains the same meaning as in
     /// the specification. Points into the pictures stored in the DPB. Derived
     /// once per picture.
-    ref_pic_list_b1: Vec<DpbEntry<T>>,
+    ref_pic_list_b1: DpbPicList<T>,
 }
 
 /// Corresponds to RefPicList0 and RefPicList1 in the specification. Computed for every slice,
 /// points to the pictures in the DPB.
 struct RefPicLists<T> {
-    ref_pic_list0: Vec<DpbEntry<T>>,
-    ref_pic_list1: Vec<DpbEntry<T>>,
+    ref_pic_list0: DpbPicList<T>,
+    ref_pic_list1: DpbPicList<T>,
 }
 
 impl<T> Default for ReferencePicLists<T> {
@@ -194,38 +196,26 @@ impl<T> Default for ReferencePicLists<T> {
 
 /// State of the picture being currently decoded.
 ///
-/// Stored between calls to [`Decoder::handle_slice`] that belong to the same picture.
-struct CurrentPicState<T, P> {
+/// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
+struct CurrentPicState<B: StatelessH264DecoderBackend> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
     /// Backend-specific data for that picture.
-    backend_pic: P,
+    backend_pic: B::Picture,
     /// List of reference pictures, used once per slice.
-    ref_pic_lists: ReferencePicLists<T>,
+    ref_pic_lists: ReferencePicLists<B::Handle>,
 }
 
-pub struct Decoder<T, P>
-where
-    T: DecodedHandle,
-{
-    /// A parser to extract bitstream metadata
+/// State of the H.264 decoder.
+///
+/// `H` is the [`DecodedHandle`] type produced by the backend, used to keep reference frames and
+/// pass them to the backend again when needed.
+pub struct H264DecoderState<H> {
+    /// H.264 bitstream parser.
     parser: Parser,
 
-    /// Whether the decoder should block on decode operations.
-    blocking_mode: BlockingMode,
-
-    /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessH264DecoderBackend<Handle = T, Picture = P>>,
-
-    decoding_state: DecodingState<Sps>,
-
-    /// The current coded resolution
-    coded_resolution: Resolution,
-
-    ready_queue: ReadyFramesQueue<T>,
-
-    /// The decoded picture buffer
-    dpb: Dpb<T>,
+    /// The decoded picture buffer.
+    dpb: Dpb<H>,
 
     /// The current active SPS id.
     cur_sps_id: u8,
@@ -246,25 +236,13 @@ where
     ///
     /// We are not using `DbpEntry<T>` as the type because contrary to a DPB entry,
     /// the handle of this member is always valid.
-    last_field: Option<(Rc<RefCell<PictureData>>, T)>,
+    last_field: Option<(Rc<RefCell<PictureData>>, H)>,
 }
 
-impl<T, P> Decoder<T, P>
-where
-    T: DecodedHandle + Clone,
-{
-    /// Create a new decoder using the given `backend`.
-    #[cfg(any(feature = "vaapi", test))]
-    fn new(
-        backend: Box<dyn StatelessH264DecoderBackend<Handle = T, Picture = P>>,
-        blocking_mode: BlockingMode,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
-            backend,
-            blocking_mode,
+impl<H: Clone> Default for H264DecoderState<H> {
+    fn default() -> Self {
+        H264DecoderState {
             parser: Default::default(),
-            coded_resolution: Default::default(),
-            decoding_state: Default::default(),
             dpb: Default::default(),
             cur_sps_id: Default::default(),
             cur_pps_id: Default::default(),
@@ -272,11 +250,27 @@ where
             prev_pic_info: Default::default(),
             max_long_term_frame_idx: Default::default(),
             last_field: Default::default(),
-            ready_queue: Default::default(),
-        })
+        }
     }
+}
 
-    fn negotiation_possible(sps: &Sps, dpb: &Dpb<T>, current_resolution: Resolution) -> bool {
+pub struct H264;
+
+impl StatelessCodec for H264 {
+    type FormatInfo = Sps;
+    type DecoderState<H> = H264DecoderState<H>;
+}
+
+impl<B> StatelessDecoder<H264, B>
+where
+    B: StatelessH264DecoderBackend,
+    B::Handle: Clone,
+{
+    fn negotiation_possible(
+        sps: &Sps,
+        dpb: &Dpb<B::Handle>,
+        current_resolution: Resolution,
+    ) -> bool {
         let max_dpb_frames = sps.max_dpb_frames();
         let interlaced = !sps.frame_mbs_only_flag;
 
@@ -313,14 +307,17 @@ where
 
         self.coded_resolution = resolution;
 
-        self.dpb.set_limits(max_dpb_frames, max_num_reorder_frames);
-        self.dpb.set_interlaced(interlaced);
+        self.codec
+            .dpb
+            .set_limits(max_dpb_frames, max_num_reorder_frames);
+        self.codec.dpb.set_interlaced(interlaced);
     }
 
     fn compute_pic_order_count(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         let sps = self
+            .codec
             .parser
-            .get_sps(self.cur_sps_id)
+            .get_sps(self.codec.cur_sps_id)
             .context("Invalid SPS while computing the value of POC for the current picture")?;
 
         match pic.pic_order_cnt_type {
@@ -332,22 +329,22 @@ where
                 if matches!(pic.is_idr, IsIdr::Yes { .. }) {
                     prev_pic_order_cnt_lsb = 0;
                     prev_pic_order_cnt_msb = 0;
-                } else if self.prev_ref_pic_info.has_mmco_5 {
-                    if !matches!(self.prev_ref_pic_info.field, Field::Bottom) {
+                } else if self.codec.prev_ref_pic_info.has_mmco_5 {
+                    if !matches!(self.codec.prev_ref_pic_info.field, Field::Bottom) {
                         prev_pic_order_cnt_msb = 0;
-                        prev_pic_order_cnt_lsb = self.prev_ref_pic_info.top_field_order_cnt;
+                        prev_pic_order_cnt_lsb = self.codec.prev_ref_pic_info.top_field_order_cnt;
                     } else {
                         prev_pic_order_cnt_msb = 0;
                         prev_pic_order_cnt_lsb = 0;
                     }
                 } else {
-                    prev_pic_order_cnt_msb = self.prev_ref_pic_info.pic_order_cnt_msb;
-                    prev_pic_order_cnt_lsb = self.prev_ref_pic_info.pic_order_cnt_lsb;
+                    prev_pic_order_cnt_msb = self.codec.prev_ref_pic_info.pic_order_cnt_msb;
+                    prev_pic_order_cnt_lsb = self.codec.prev_ref_pic_info.pic_order_cnt_lsb;
                 }
 
                 let max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
 
-                if (pic.pic_order_cnt_lsb < self.prev_ref_pic_info.pic_order_cnt_lsb)
+                if (pic.pic_order_cnt_lsb < self.codec.prev_ref_pic_info.pic_order_cnt_lsb)
                     && (prev_pic_order_cnt_lsb - pic.pic_order_cnt_lsb >= max_pic_order_cnt_lsb / 2)
                 {
                     pic.pic_order_cnt_msb = prev_pic_order_cnt_msb + max_pic_order_cnt_lsb;
@@ -374,17 +371,17 @@ where
             }
 
             1 => {
-                if self.prev_pic_info.has_mmco_5 {
-                    self.prev_pic_info.frame_num_offset = 0;
+                if self.codec.prev_pic_info.has_mmco_5 {
+                    self.codec.prev_pic_info.frame_num_offset = 0;
                 }
 
                 if matches!(pic.is_idr, IsIdr::Yes { .. }) {
                     pic.frame_num_offset = 0;
-                } else if self.prev_pic_info.frame_num > pic.frame_num {
+                } else if self.codec.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
+                        self.codec.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
                 } else {
-                    pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
+                    pic.frame_num_offset = self.codec.prev_pic_info.frame_num_offset;
                 }
 
                 let mut abs_frame_num = if sps.num_ref_frames_in_pic_order_cnt_cycle != 0 {
@@ -439,17 +436,17 @@ where
 
             2 => {
                 // Spec 8.2.1.3
-                if self.prev_pic_info.has_mmco_5 {
-                    self.prev_pic_info.frame_num_offset = 0;
+                if self.codec.prev_pic_info.has_mmco_5 {
+                    self.codec.prev_pic_info.frame_num_offset = 0;
                 }
 
                 if matches!(pic.is_idr, IsIdr::Yes { .. }) {
                     pic.frame_num_offset = 0;
-                } else if self.prev_pic_info.frame_num > pic.frame_num {
+                } else if self.codec.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
+                        self.codec.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
                 } else {
-                    pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
+                    pic.frame_num_offset = self.codec.prev_pic_info.frame_num_offset;
                 }
 
                 let temp_pic_order_cnt;
@@ -496,24 +493,24 @@ where
         Ok(())
     }
 
-    fn sort_pic_num_descending(pics: &mut [DpbEntry<T>]) {
+    fn sort_pic_num_descending(pics: &mut [DpbEntry<B::Handle>]) {
         pics.sort_by_key(|h| std::cmp::Reverse(h.0.borrow().pic_num));
     }
 
-    fn sort_long_term_pic_num_ascending(pics: &mut [DpbEntry<T>]) {
+    fn sort_long_term_pic_num_ascending(pics: &mut [DpbEntry<B::Handle>]) {
         pics.sort_by_key(|h| h.0.borrow().long_term_pic_num);
     }
 
-    fn sort_frame_num_wrap_descending(pics: &mut [DpbEntry<T>]) {
+    fn sort_frame_num_wrap_descending(pics: &mut [DpbEntry<B::Handle>]) {
         pics.sort_by_key(|h| std::cmp::Reverse(h.0.borrow().frame_num_wrap));
     }
 
-    fn sort_long_term_frame_idx_ascending(pics: &mut [DpbEntry<T>]) {
+    fn sort_long_term_frame_idx_ascending(pics: &mut [DpbEntry<B::Handle>]) {
         pics.sort_by_key(|h| h.0.borrow().long_term_frame_idx);
     }
 
     #[cfg(debug_assertions)]
-    fn debug_ref_list_p(ref_pic_list: &[DpbEntry<T>], field_pic: bool) {
+    fn debug_ref_list_p(ref_pic_list: &[DpbEntry<B::Handle>], field_pic: bool) {
         debug!(
             "ref_list_p0: (ShortTerm|LongTerm, pic_num) {:?}",
             ref_pic_list
@@ -550,7 +547,7 @@ where
     }
 
     #[cfg(debug_assertions)]
-    fn debug_ref_list_b(ref_pic_list: &[DpbEntry<T>], ref_pic_list_name: &str) {
+    fn debug_ref_list_b(ref_pic_list: &[DpbEntry<B::Handle>], ref_pic_list_name: &str) {
         debug!(
             "{:?}: (ShortTerm|LongTerm, (POC|LongTermPicNum)) {:?}",
             ref_pic_list_name,
@@ -585,7 +582,7 @@ where
 
     /// 8.2.4.2.1 Initialization process for the reference picture list for P
     /// and SP slices in frames
-    fn build_ref_pic_list_p(dpb: &Dpb<T>) -> Vec<DpbEntry<T>> {
+    fn build_ref_pic_list_p(dpb: &Dpb<B::Handle>) -> DpbPicList<B::Handle> {
         let mut ref_pic_list_p0 = vec![];
 
         dpb.get_short_term_refs(&mut ref_pic_list_p0);
@@ -606,7 +603,10 @@ where
 
     /// 8.2.4.2.2 Initialization process for the reference picture list for P
     /// and SP slices in fields
-    fn build_ref_field_pic_list_p(dpb: &Dpb<T>, cur_pic: &PictureData) -> Vec<DpbEntry<T>> {
+    fn build_ref_field_pic_list_p(
+        dpb: &Dpb<B::Handle>,
+        cur_pic: &PictureData,
+    ) -> DpbPicList<B::Handle> {
         let mut ref_pic_list_p0 = vec![];
         let mut ref_frame_list_0_short_term = vec![];
         let mut ref_frame_list_long_term = vec![];
@@ -637,11 +637,11 @@ where
         ref_pic_list_p0
     }
 
-    fn sort_poc_descending(pics: &mut [DpbEntry<T>]) {
+    fn sort_poc_descending(pics: &mut [DpbEntry<B::Handle>]) {
         pics.sort_by_key(|h| std::cmp::Reverse(h.0.borrow().pic_order_cnt));
     }
 
-    fn sort_poc_ascending(pics: &mut [DpbEntry<T>]) {
+    fn sort_poc_ascending(pics: &mut [DpbEntry<B::Handle>]) {
         pics.sort_by_key(|h| h.0.borrow().pic_order_cnt);
     }
 
@@ -649,7 +649,7 @@ where
     // and RefPicList1 is identical to the reference picture list
     // RefPicList0, the first two entries RefPicList1[0] and RefPicList1[1]
     // are switched.
-    fn swap_b1_if_needed(b0: &Vec<DpbEntry<T>>, b1: &mut Vec<DpbEntry<T>>) {
+    fn swap_b1_if_needed(b0: &DpbPicList<B::Handle>, b1: &mut DpbPicList<B::Handle>) {
         if b1.len() > 1 && b0.len() == b1.len() {
             let mut equals = true;
             for (x1, x2) in b0.iter().zip(b1.iter()) {
@@ -668,9 +668,9 @@ where
     // 8.2.4.2.3 Initialization process for reference picture lists for B slices
     // in frames
     fn build_ref_pic_list_b(
-        dpb: &Dpb<T>,
+        dpb: &Dpb<B::Handle>,
         cur_pic: &PictureData,
-    ) -> (Vec<DpbEntry<T>>, Vec<DpbEntry<T>>) {
+    ) -> (DpbPicList<B::Handle>, DpbPicList<B::Handle>) {
         let mut ref_pic_list_b0 = vec![];
         let mut ref_pic_list_b1 = vec![];
 
@@ -751,9 +751,9 @@ where
     /// 8.2.4.2.4 Initialization process for reference picture lists for B
     /// slices in fields
     fn build_ref_field_pic_list_b(
-        dpb: &Dpb<T>,
+        dpb: &Dpb<B::Handle>,
         cur_pic: &PictureData,
-    ) -> (Vec<DpbEntry<T>>, Vec<DpbEntry<T>>) {
+    ) -> (DpbPicList<B::Handle>, DpbPicList<B::Handle>) {
         let mut ref_pic_list_b0 = vec![];
         let mut ref_pic_list_b1 = vec![];
         let mut ref_frame_list_0_short_term = vec![];
@@ -885,8 +885,8 @@ where
     fn init_ref_field_pic_list(
         mut field: Field,
         reference_type: Reference,
-        ref_frame_list: &mut Vec<DpbEntry<T>>,
-        ref_pic_list: &mut Vec<DpbEntry<T>>,
+        ref_frame_list: &mut DpbPicList<B::Handle>,
+        ref_pic_list: &mut DpbPicList<B::Handle>,
     ) {
         // When one field of a reference frame was not decoded or is not marked as "used for
         // (short|long)-term reference", the missing field is ignored and instead the next
@@ -915,7 +915,10 @@ where
         ref_pic_list.append(ref_frame_list);
     }
 
-    fn build_ref_pic_lists(dpb: &Dpb<T>, cur_pic: &PictureData) -> ReferencePicLists<T> {
+    fn build_ref_pic_lists(
+        dpb: &Dpb<B::Handle>,
+        cur_pic: &PictureData,
+    ) -> ReferencePicLists<B::Handle> {
         let num_refs = dpb
             .pictures()
             .filter(|p| p.is_ref() && !p.nonexisting)
@@ -967,11 +970,12 @@ where
         }
 
         let sps = self
+            .codec
             .parser
-            .get_sps(self.cur_sps_id)
+            .get_sps(self.codec.cur_sps_id)
             .context("Invalid SPS during the sliding window marking process")?;
 
-        let mut num_ref_pics = self.dpb.num_ref_frames();
+        let mut num_ref_pics = self.codec.dpb.num_ref_frames();
         let max_num_ref_frames = usize::try_from(std::cmp::max(1, sps.max_num_ref_frames)).unwrap();
 
         if num_ref_pics < max_num_ref_frames {
@@ -981,6 +985,7 @@ where
         /* 8.2.5.3 */
         while num_ref_pics >= max_num_ref_frames {
             let to_unmark = self
+                .codec
                 .dpb
                 .find_short_term_lowest_frame_num_wrap()
                 .context("Could not find a ShortTerm picture to unmark in the DPB")?;
@@ -998,12 +1003,12 @@ where
         for (i, marking) in markings.inner().iter().enumerate() {
             match marking.memory_management_control_operation() {
                 0 => break,
-                1 => self.dpb.mmco_op_1(pic, i)?,
-                2 => self.dpb.mmco_op_2(pic, i)?,
-                3 => self.dpb.mmco_op_3(pic, i)?,
-                4 => self.max_long_term_frame_idx = self.dpb.mmco_op_4(pic, i),
-                5 => self.max_long_term_frame_idx = self.dpb.mmco_op_5(pic),
-                6 => self.dpb.mmco_op_6(pic, i),
+                1 => self.codec.dpb.mmco_op_1(pic, i)?,
+                2 => self.codec.dpb.mmco_op_2(pic, i)?,
+                3 => self.codec.dpb.mmco_op_3(pic, i)?,
+                4 => self.codec.max_long_term_frame_idx = self.codec.dpb.mmco_op_4(pic, i),
+                5 => self.codec.max_long_term_frame_idx = self.codec.dpb.mmco_op_5(pic),
+                6 => self.codec.dpb.mmco_op_6(pic, i),
                 other => anyhow::bail!("unknown MMCO={}", other),
             }
         }
@@ -1014,7 +1019,7 @@ where
     /// Store some variables related to the previous reference picture. These
     /// will be used in the decoding of future pictures.
     fn fill_prev_ref_info(&mut self, pic: &PictureData) {
-        let prev = &mut self.prev_ref_pic_info;
+        let prev = &mut self.codec.prev_ref_pic_info;
 
         prev.has_mmco_5 = pic.has_mmco_5;
         prev.top_field_order_cnt = pic.top_field_order_cnt;
@@ -1027,7 +1032,7 @@ where
     /// Store some variables related to the previous picture. These will be used
     /// in the decoding of future pictures.
     fn fill_prev_info(&mut self, pic: &PictureData) {
-        let prev = &mut self.prev_pic_info;
+        let prev = &mut self.codec.prev_pic_info;
 
         prev.frame_num = pic.frame_num;
         prev.has_mmco_5 = pic.has_mmco_5;
@@ -1037,15 +1042,15 @@ where
     fn reference_pic_marking(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         /* 8.2.5.1 */
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
-            self.dpb.mark_all_as_unused_for_ref();
+            self.codec.dpb.mark_all_as_unused_for_ref();
 
             if pic.ref_pic_marking.long_term_reference_flag() {
                 pic.set_reference(Reference::LongTerm, false);
                 pic.long_term_frame_idx = 0;
-                self.max_long_term_frame_idx = 0;
+                self.codec.max_long_term_frame_idx = 0;
             } else {
                 pic.set_reference(Reference::ShortTerm, false);
-                self.max_long_term_frame_idx = -1;
+                self.codec.max_long_term_frame_idx = -1;
             }
 
             return Ok(());
@@ -1061,10 +1066,10 @@ where
     }
 
     fn add_to_dpb(
-        dpb: &mut Dpb<T>,
+        dpb: &mut Dpb<B::Handle>,
         pic: Rc<RefCell<PictureData>>,
-        handle: Option<T>,
-        last_field: &mut Option<(Rc<RefCell<PictureData>>, T)>,
+        handle: Option<B::Handle>,
+        last_field: &mut Option<(Rc<RefCell<PictureData>>, B::Handle)>,
     ) -> anyhow::Result<()> {
         if !dpb.interlaced() {
             assert!(last_field.is_none());
@@ -1094,35 +1099,35 @@ where
     }
 
     /// Adds picture to the ready queue if it could not be added to the DPB.
-    fn add_to_ready_queue(&mut self, pic_rc: Rc<RefCell<PictureData>>, handle: T) {
+    fn add_to_ready_queue(&mut self, pic_rc: Rc<RefCell<PictureData>>, handle: B::Handle) {
         let pic = pic_rc.borrow();
 
         if matches!(pic.field, Field::Frame) {
-            assert!(self.last_field.is_none());
+            assert!(self.codec.last_field.is_none());
 
             self.ready_queue.push(handle);
         } else {
-            match &self.last_field {
+            match &self.codec.last_field {
                 None => {
                     assert!(!pic.is_second_field());
                     drop(pic);
 
                     // Cache the field, wait for its pair.
-                    self.last_field = Some((pic_rc, handle));
+                    self.codec.last_field = Some((pic_rc, handle));
                 }
                 Some(last_field)
                     if pic.is_second_field()
                         && pic.other_field().is_some()
                         && Rc::ptr_eq(&pic.other_field().unwrap(), &last_field.0) =>
                 {
-                    if let Some((field_pic, field_handle)) = self.last_field.take() {
+                    if let Some((field_pic, field_handle)) = self.codec.last_field.take() {
                         field_pic.borrow_mut().set_second_field_to(&pic_rc);
                         self.ready_queue.push(field_handle);
                     }
                 }
                 _ => {
                     // Somehow, the last field is not paired with the current field.
-                    self.last_field = None;
+                    self.codec.last_field = None;
                 }
             }
         }
@@ -1130,6 +1135,7 @@ where
 
     fn bump_as_needed_into_ready_queue(&mut self, current_pic: &PictureData) {
         let bumped = self
+            .codec
             .dpb
             .bump_as_needed(current_pic)
             .into_iter()
@@ -1137,7 +1143,7 @@ where
         self.ready_queue.extend(bumped);
     }
 
-    fn finish_picture(&mut self, pic: CurrentPicState<T, P>) -> anyhow::Result<()> {
+    fn finish_picture(&mut self, pic: CurrentPicState<B>) -> anyhow::Result<()> {
         debug!("Finishing picture POC {:?}", pic.pic.pic_order_cnt);
 
         // Submit the picture to the backend.
@@ -1151,7 +1157,7 @@ where
 
         self.fill_prev_info(&pic);
 
-        self.dpb.remove_unused();
+        self.codec.dpb.remove_unused();
 
         if pic.has_mmco_5 {
             // C.4.5.3 "Bumping process"
@@ -1182,9 +1188,9 @@ where
         // ready queue.
         if pic.is_second_field_of_complementary_ref_pair()
             || pic.is_ref()
-            || self.dpb.has_empty_frame_buffer()
+            || self.codec.dpb.has_empty_frame_buffer()
         {
-            if self.dpb.interlaced() && matches!(pic.field, Field::Frame) {
+            if self.codec.dpb.interlaced() && matches!(pic.field, Field::Frame) {
                 drop(pic);
 
                 // Split the Frame into two complementary fields so reference
@@ -1192,16 +1198,26 @@ where
                 let other_field = PictureData::split_frame(&pic_rc);
                 let other_field_handle = handle.clone();
 
-                Self::add_to_dpb(&mut self.dpb, pic_rc, Some(handle), &mut self.last_field)?;
                 Self::add_to_dpb(
-                    &mut self.dpb,
+                    &mut self.codec.dpb,
+                    pic_rc,
+                    Some(handle),
+                    &mut self.codec.last_field,
+                )?;
+                Self::add_to_dpb(
+                    &mut self.codec.dpb,
                     other_field,
                     Some(other_field_handle),
-                    &mut self.last_field,
+                    &mut self.codec.last_field,
                 )?;
             } else {
                 drop(pic);
-                Self::add_to_dpb(&mut self.dpb, pic_rc, Some(handle), &mut self.last_field)?;
+                Self::add_to_dpb(
+                    &mut self.codec.dpb,
+                    pic_rc,
+                    Some(handle),
+                    &mut self.codec.last_field,
+                )?;
             }
         } else {
             drop(pic);
@@ -1212,15 +1228,16 @@ where
     }
 
     fn handle_frame_num_gap(&mut self, frame_num: i32, timestamp: u64) -> anyhow::Result<()> {
-        if self.dpb.is_empty() {
+        if self.codec.dpb.is_empty() {
             return Ok(());
         }
 
         debug!("frame_num gap detected.");
 
         let sps = self
+            .codec
             .parser
-            .get_sps(self.cur_sps_id)
+            .get_sps(self.codec.cur_sps_id)
             .context("Invalid SPS while handling a frame_num gap")?;
 
         if !sps.gaps_in_frame_num_value_allowed_flag {
@@ -1231,34 +1248,51 @@ where
         }
 
         let mut unused_short_term_frame_num =
-            (self.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32;
+            (self.codec.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32;
         while unused_short_term_frame_num != frame_num {
             let sps = self
+                .codec
                 .parser
-                .get_sps(self.cur_sps_id)
+                .get_sps(self.codec.cur_sps_id)
                 .context("Invalid SPS while handling a frame_num gap")?;
             let max_frame_num = sps.max_frame_num() as i32;
 
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
             self.compute_pic_order_count(&mut pic)?;
 
-            self.dpb
+            self.codec
+                .dpb
                 .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
             self.sliding_window_marking(&mut pic)?;
 
-            self.dpb.remove_unused();
+            self.codec.dpb.remove_unused();
             self.bump_as_needed_into_ready_queue(&pic);
 
             let pic_rc = Rc::new(RefCell::new(pic));
 
-            if self.dpb.interlaced() {
+            if self.codec.dpb.interlaced() {
                 let other_field = PictureData::split_frame(&pic_rc);
 
-                Self::add_to_dpb(&mut self.dpb, pic_rc, None, &mut self.last_field)?;
-                Self::add_to_dpb(&mut self.dpb, other_field, None, &mut self.last_field)?;
+                Self::add_to_dpb(
+                    &mut self.codec.dpb,
+                    pic_rc,
+                    None,
+                    &mut self.codec.last_field,
+                )?;
+                Self::add_to_dpb(
+                    &mut self.codec.dpb,
+                    other_field,
+                    None,
+                    &mut self.codec.last_field,
+                )?;
             } else {
-                Self::add_to_dpb(&mut self.dpb, pic_rc, None, &mut self.last_field)?;
+                Self::add_to_dpb(
+                    &mut self.codec.dpb,
+                    pic_rc,
+                    None,
+                    &mut self.codec.last_field,
+                )?;
             }
 
             unused_short_term_frame_num += 1;
@@ -1276,11 +1310,13 @@ where
         timestamp: u64,
     ) -> anyhow::Result<PictureData> {
         let pps = self
+            .codec
             .parser
             .get_pps(slice.header().pic_parameter_set_id)
             .context("Invalid SPS in init_current_pic")?;
 
         let sps = self
+            .codec
             .parser
             .get_sps(pps.seq_parameter_set_id())
             .context("Invalid PPS in init_current_pic")?;
@@ -1308,11 +1344,12 @@ where
                 // inferred to be equal to 1, all frame buffers in the DPB are
                 // emptied without output of the pictures they contain, and DPB
                 // fullness is set to 0.
-                self.dpb.clear();
+                self.codec.dpb.clear();
             }
         }
 
-        self.dpb
+        self.codec
+            .dpb
             .update_pic_nums(i32::from(slice.header().frame_num), max_frame_num, &pic);
 
         Ok(pic)
@@ -1320,29 +1357,30 @@ where
 
     /// Drain the decoder, processing all pending frames.
     fn drain(&mut self) {
-        let pics = self.dpb.drain();
+        let pics = self.codec.dpb.drain();
 
         // Pics in the DPB have undergone `finish_picture` already or are
         // nonexisting frames, we can just mark them as ready.
         self.ready_queue
             .extend(pics.into_iter().filter_map(|h| h.1));
 
-        self.dpb.clear();
+        self.codec.dpb.clear();
 
-        self.last_field = None;
+        self.codec.last_field = None;
     }
 
     /// Find the first field for the picture started by `slice`, if any.
+    #[allow(clippy::type_complexity)]
     fn find_first_field(
         &self,
         slice: &Slice<impl AsRef<[u8]>>,
-    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, T)>> {
+    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, B::Handle)>> {
         let mut prev_field = None;
 
-        if self.dpb.interlaced() {
-            if self.last_field.is_some() {
-                prev_field = self.last_field.clone();
-            } else if let Some(last_handle) = self.dpb.entries().last() {
+        if self.codec.dpb.interlaced() {
+            if self.codec.last_field.is_some() {
+                prev_field = self.codec.last_field.clone();
+            } else if let Some(last_handle) = self.codec.dpb.entries().last() {
                 // Use the last entry in the DPB
                 let prev_pic = last_handle.0.borrow();
 
@@ -1404,32 +1442,35 @@ where
         &mut self,
         timestamp: u64,
         slice: &Slice<&[u8]>,
-    ) -> anyhow::Result<CurrentPicState<T, P>> {
+    ) -> anyhow::Result<CurrentPicState<B>> {
         let nalu_hdr = slice.nalu().header();
 
         if nalu_hdr.idr_pic_flag() {
-            self.prev_ref_pic_info.frame_num = 0;
+            self.codec.prev_ref_pic_info.frame_num = 0;
         }
 
         let hdr = slice.header();
         let frame_num = i32::from(hdr.frame_num);
 
-        self.cur_pps_id = hdr.pic_parameter_set_id;
+        self.codec.cur_pps_id = hdr.pic_parameter_set_id;
 
         let pps = self
+            .codec
             .parser
-            .get_pps(self.cur_pps_id)
+            .get_pps(self.codec.cur_pps_id)
             .context("Invalid PPS in handle_picture")?;
 
-        self.cur_sps_id = pps.seq_parameter_set_id();
+        self.codec.cur_sps_id = pps.seq_parameter_set_id();
 
         let sps = self
+            .codec
             .parser
-            .get_sps(self.cur_sps_id)
+            .get_sps(self.codec.cur_sps_id)
             .context("Invalid SPS in handle_picture")?;
 
-        if frame_num != self.prev_ref_pic_info.frame_num
-            && frame_num != (self.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32
+        if frame_num != self.codec.prev_ref_pic_info.frame_num
+            && frame_num
+                != (self.codec.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32
         {
             self.handle_frame_num_gap(frame_num, timestamp)?;
         }
@@ -1437,7 +1478,7 @@ where
         let first_field = self.find_first_field(slice)?;
 
         let pic = self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
-        let ref_pic_lists = Self::build_ref_pic_lists(&self.dpb, &pic);
+        let ref_pic_lists = Self::build_ref_pic_lists(&self.codec.dpb, &pic);
 
         debug!("Decode picture POC {:?}", pic.pic_order_cnt);
 
@@ -1451,13 +1492,15 @@ where
         self.backend.start_picture(
             &mut backend_pic,
             &pic,
-            self.parser
-                .get_sps(self.cur_sps_id)
+            self.codec
+                .parser
+                .get_sps(self.codec.cur_sps_id)
                 .context("Invalid SPS in handle_picture")?,
-            self.parser
-                .get_pps(self.cur_pps_id)
+            self.codec
+                .parser
+                .get_pps(self.codec.cur_pps_id)
                 .context("invalid PPS in handle_picture")?,
-            &self.dpb,
+            &self.codec.dpb,
             slice,
         )?;
 
@@ -1489,8 +1532,8 @@ where
     #[allow(clippy::too_many_arguments)]
     fn short_term_pic_list_modification(
         cur_pic: &PictureData,
-        dpb: &Dpb<T>,
-        ref_pic_list_x: &mut Vec<DpbEntry<T>>,
+        dpb: &Dpb<B::Handle>,
+        ref_pic_list_x: &mut DpbPicList<B::Handle>,
         num_ref_idx_lx_active_minus1: u8,
         max_pic_num: i32,
         rplm: &RefPicListModification,
@@ -1558,8 +1601,8 @@ where
     }
 
     fn long_term_pic_list_modification(
-        dpb: &Dpb<T>,
-        ref_pic_list_x: &mut Vec<DpbEntry<T>>,
+        dpb: &Dpb<B::Handle>,
+        ref_pic_list_x: &mut DpbPicList<B::Handle>,
         num_ref_idx_lx_active_minus1: u8,
         max_long_term_frame_idx: i32,
         rplm: &RefPicListModification,
@@ -1607,8 +1650,8 @@ where
         cur_pic: &PictureData,
         hdr: &SliceHeader,
         ref_pic_list: RefPicList,
-        mut ref_pic_list_x: Vec<DpbEntry<T>>,
-    ) -> anyhow::Result<Vec<DpbEntry<T>>> {
+        mut ref_pic_list_x: DpbPicList<B::Handle>,
+    ) -> anyhow::Result<DpbPicList<B::Handle>> {
         let (ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
             match ref_pic_list {
                 RefPicList::RefPicList0 => (
@@ -1641,7 +1684,7 @@ where
                 0 | 1 => {
                     Self::short_term_pic_list_modification(
                         cur_pic,
-                        &self.dpb,
+                        &self.codec.dpb,
                         &mut ref_pic_list_x,
                         num_ref_idx_lx_active_minus1,
                         hdr.max_pic_num as i32,
@@ -1651,10 +1694,10 @@ where
                     )?;
                 }
                 2 => Self::long_term_pic_list_modification(
-                    &self.dpb,
+                    &self.codec.dpb,
                     &mut ref_pic_list_x,
                     num_ref_idx_lx_active_minus1,
-                    self.max_long_term_frame_idx,
+                    self.codec.max_long_term_frame_idx,
                     modification,
                     &mut ref_idx_lx,
                 )?,
@@ -1672,8 +1715,8 @@ where
         &mut self,
         cur_pic: &PictureData,
         hdr: &SliceHeader,
-        ref_pic_lists: &ReferencePicLists<T>,
-    ) -> anyhow::Result<RefPicLists<T>> {
+        ref_pic_lists: &ReferencePicLists<B::Handle>,
+    ) -> anyhow::Result<RefPicLists<B::Handle>> {
         let mut ref_pic_list0 = Vec::new();
         let mut ref_pic_list1 = Vec::new();
 
@@ -1708,7 +1751,7 @@ where
     /// Handle a slice. Called once per slice NALU.
     fn handle_slice(
         &mut self,
-        cur_pic: &mut CurrentPicState<T, P>,
+        cur_pic: &mut CurrentPicState<B>,
         slice: &Slice<&[u8]>,
     ) -> anyhow::Result<()> {
         let RefPicLists {
@@ -1717,13 +1760,15 @@ where
         } = self.create_ref_pic_lists(&cur_pic.pic, slice.header(), &cur_pic.ref_pic_lists)?;
 
         let sps = self
+            .codec
             .parser
-            .get_sps(self.cur_sps_id)
+            .get_sps(self.codec.cur_sps_id)
             .context("Invalid SPS in handle_slice")?;
 
         let pps = self
+            .codec
             .parser
-            .get_pps(self.cur_pps_id)
+            .get_pps(self.codec.cur_pps_id)
             .context("Invalid PPS in handle_slice")?;
 
         self.backend.decode_slice(
@@ -1731,7 +1776,7 @@ where
             slice,
             sps,
             pps,
-            &self.dpb,
+            &self.codec.dpb,
             &ref_pic_list0,
             &ref_pic_list1,
         )?;
@@ -1740,7 +1785,7 @@ where
     }
 
     /// Submits the picture to the accelerator.
-    fn submit_picture(&mut self, backend_pic: P) -> Result<T, DecodeError> {
+    fn submit_picture(&mut self, backend_pic: B::Picture) -> Result<B::Handle, DecodeError> {
         let handle = self.backend.submit_picture(backend_pic)?;
 
         if self.blocking_mode == BlockingMode::Blocking {
@@ -1770,16 +1815,16 @@ where
 
         let mut cursor = Cursor::new(bitstream);
 
-        let mut cur_pic_opt: Option<CurrentPicState<T, P>> = None;
+        let mut cur_pic_opt: Option<CurrentPicState<B>> = None;
 
         while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
             match nalu.header().nalu_type() {
                 NaluType::Sps => {
-                    self.parser.parse_sps(&nalu)?;
+                    self.codec.parser.parse_sps(&nalu)?;
                 }
 
                 NaluType::Pps => {
-                    self.parser.parse_pps(&nalu)?;
+                    self.codec.parser.parse_pps(&nalu)?;
                 }
 
                 NaluType::Slice
@@ -1788,14 +1833,14 @@ where
                 | NaluType::SliceDpc
                 | NaluType::SliceIdr
                 | NaluType::SliceExt => {
-                    let slice = self.parser.parse_slice_header(nalu)?;
+                    let slice = self.codec.parser.parse_slice_header(nalu)?;
                     let mut cur_pic = match cur_pic_opt {
                         // No current picture, start a new one.
                         None => self.begin_picture(timestamp, &slice)?,
                         // We have a current picture but are starting a new field: finish it and
                         // start a new one.
                         Some(cur_pic)
-                            if self.dpb.interlaced()
+                            if self.codec.dpb.interlaced()
                                 && matches!(cur_pic.pic.field, Field::Frame)
                                 && !cur_pic.pic.is_second_field()
                                 && cur_pic.pic.field != slice.header().field() =>
@@ -1825,15 +1870,17 @@ where
     }
 }
 
-impl<T, P> StatelessVideoDecoder<T::Descriptor> for Decoder<T, P>
+impl<B> StatelessVideoDecoder<<B::Handle as DecodedHandle>::Descriptor>
+    for StatelessDecoder<H264, B>
 where
-    T: DecodedHandle + Clone + 'static,
+    B: StatelessH264DecoderBackend,
+    B::Handle: Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, mut bitstream: &[u8]) -> Result<(), DecodeError> {
-        let sps = Self::peek_sps(&mut self.parser, bitstream);
+        let sps = Self::peek_sps(&mut self.codec.parser, bitstream);
 
         if let Some(sps) = sps {
-            if Self::negotiation_possible(&sps, &self.dpb, self.coded_resolution) {
+            if Self::negotiation_possible(&sps, &self.codec.dpb, self.coded_resolution) {
                 // Make sure all the frames we decoded so far are in the ready queue.
                 self.drain();
                 self.backend.new_sequence(&sps)?;
@@ -1869,7 +1916,7 @@ where
         self.decoding_state = DecodingState::Reset;
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<T::Descriptor>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<<B::Handle as DecodedHandle>::Descriptor>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
@@ -1891,34 +1938,21 @@ where
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<T::Descriptor> {
-        self.backend.surface_pool()
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<<B::Handle as DecodedHandle>::Descriptor> {
+        self.surface_pool()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {
-        self.backend.stream_info()
-    }
-}
-
-impl<T, P> private::StatelessVideoDecoder for Decoder<T, P>
-where
-    T: DecodedHandle,
-{
-    fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
-        match &self.decoding_state {
-            DecodingState::AwaitingFormat(sps) => self.backend.try_format(sps, format),
-            _ => Err(anyhow!(
-                "current decoder state does not allow format change"
-            )),
-        }
+        self.stream_info()
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::decoder::stateless::h264::Decoder;
+    use crate::decoder::stateless::h264::H264;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
+    use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_surfaces;
@@ -1927,7 +1961,7 @@ pub mod tests {
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
-        let decoder = Decoder::new_dummy(blocking_mode).unwrap();
+        let decoder = StatelessDecoder::<H264, _>::new_dummy(blocking_mode);
 
         test_decode_stream(
             |d, s, f| {

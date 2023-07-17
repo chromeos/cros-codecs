@@ -15,9 +15,10 @@ use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::Slice;
 use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::PictureData;
-use crate::decoder::stateless::h264::Decoder;
 use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
+use crate::decoder::stateless::h264::H264;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::BlockingMode;
 
 impl StatelessH264DecoderBackend for Backend {
@@ -72,9 +73,9 @@ impl StatelessH264DecoderBackend for Backend {
     }
 }
 
-impl Decoder<Handle, ()> {
+impl StatelessDecoder<H264, Backend> {
     // Creates a new instance of the decoder using the dummy backend.
-    pub fn new_dummy(blocking_mode: BlockingMode) -> anyhow::Result<Self> {
-        Self::new(Box::new(Backend::new()), blocking_mode)
+    pub fn new_dummy(blocking_mode: BlockingMode) -> Self {
+        Self::new(Backend::new(), blocking_mode)
     }
 }
