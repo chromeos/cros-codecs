@@ -19,6 +19,7 @@ use std::str::FromStr;
 
 use argh::FromArgs;
 use cros_codecs::decoder::stateless::h264::H264;
+use cros_codecs::decoder::stateless::vp8::Vp8;
 use cros_codecs::decoder::stateless::StatelessDecoder;
 use cros_codecs::decoder::stateless::StatelessVideoDecoder;
 use cros_codecs::decoder::BlockingMode;
@@ -347,10 +348,10 @@ fn main() {
         EncodedFormat::VP8 => {
             let frame_iter = create_vpx_frame_iterator(&input);
 
-            let decoder = Box::new(
-                cros_codecs::decoder::stateless::vp8::Decoder::new_vaapi(display, blocking_mode)
-                    .expect("failed to create decoder"),
-            ) as Box<dyn StatelessVideoDecoder<_>>;
+            let decoder = Box::new(StatelessDecoder::<Vp8, _>::new_vaapi(
+                display,
+                blocking_mode,
+            )) as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }

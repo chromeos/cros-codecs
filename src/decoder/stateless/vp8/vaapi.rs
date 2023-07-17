@@ -14,16 +14,16 @@ use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 use libva::SurfaceMemoryDescriptor;
 
-use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
-use crate::decoder::stateless::vp8::Decoder;
 use crate::decoder::stateless::vp8::StatelessVp8DecoderBackend;
+use crate::decoder::stateless::vp8::Vp8;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::BlockingMode;
 use crate::Resolution;
 
@@ -287,14 +287,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> Decoder<VADecodedHandle<M>> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Vp8, VaapiBackend<(), M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self>
+    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
     where
         M: From<S>,
         S: From<M>,
     {
-        Self::new(Box::new(VaapiBackend::<(), M>::new(display)), blocking_mode)
+        Self::new(VaapiBackend::<(), M>::new(display), blocking_mode)
     }
 }
 
@@ -309,7 +309,7 @@ mod tests {
     use crate::codec::vp8::parser::Parser;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::vp8::Decoder;
+    use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_surfaces;
@@ -326,7 +326,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = Decoder::new_vaapi::<()>(display, blocking_mode).unwrap();
+        let decoder = StatelessDecoder::<Vp8, _>::new_vaapi::<()>(display, blocking_mode);
 
         test_decode_stream(
             |d, s, c| {

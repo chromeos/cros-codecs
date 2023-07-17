@@ -12,23 +12,23 @@ use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Parser;
 use crate::codec::vp8::parser::Segmentation;
-use crate::decoder::stateless::private;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessCodec;
+use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
 use crate::decoder::SurfacePool;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP8.
-trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Header> {
+pub trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Header> {
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
@@ -51,63 +51,52 @@ trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Header> {
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
-pub struct Decoder<T: DecodedHandle> {
-    /// A parser to extract bitstream data and build frame data in turn
+pub struct Vp8DecoderState<H> {
+    /// VP8 bitstream parser.
     parser: Parser,
 
-    /// Whether the decoder should block on decode operations.
-    blocking_mode: BlockingMode,
-
-    /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessVp8DecoderBackend<Handle = T>>,
-
-    decoding_state: DecodingState<Header>,
-
-    /// The current resolution
-    coded_resolution: Resolution,
-
-    ready_queue: ReadyFramesQueue<T>,
-
     /// The picture used as the last reference picture.
-    last_picture: Option<T>,
+    last_picture: Option<H>,
     /// The picture used as the golden reference picture.
-    golden_ref_picture: Option<T>,
+    golden_ref_picture: Option<H>,
     /// The picture used as the alternate reference picture.
-    alt_ref_picture: Option<T>,
+    alt_ref_picture: Option<H>,
 }
 
-impl<T: DecodedHandle + Clone> Decoder<T> {
-    /// Create a new decoder using the given `backend`.
-    #[cfg(any(feature = "vaapi", test))]
-    fn new(
-        backend: Box<dyn StatelessVp8DecoderBackend<Handle = T>>,
-        blocking_mode: BlockingMode,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
-            backend,
-            blocking_mode,
-            // wait_keyframe: true,
+impl<H> Default for Vp8DecoderState<H> {
+    fn default() -> Self {
+        Self {
             parser: Default::default(),
-            decoding_state: Default::default(),
             last_picture: Default::default(),
             golden_ref_picture: Default::default(),
             alt_ref_picture: Default::default(),
-            coded_resolution: Default::default(),
-            ready_queue: Default::default(),
-        })
+        }
     }
+}
 
+pub struct Vp8;
+
+impl StatelessCodec for Vp8 {
+    type FormatInfo = Header;
+    type DecoderState<H> = Vp8DecoderState<H>;
+}
+
+impl<B> StatelessDecoder<Vp8, B>
+where
+    B: StatelessVp8DecoderBackend,
+    B::Handle: Clone,
+{
     /// Replace a reference frame with `handle`.
-    fn replace_reference(reference: &mut Option<T>, handle: &T) {
+    fn replace_reference(reference: &mut Option<B::Handle>, handle: &B::Handle) {
         *reference = Some(handle.clone());
     }
 
     pub(crate) fn update_references(
         header: &Header,
-        decoded_handle: &T,
-        last_picture: &mut Option<T>,
-        golden_ref_picture: &mut Option<T>,
-        alt_ref_picture: &mut Option<T>,
+        decoded_handle: &B::Handle,
+        last_picture: &mut Option<B::Handle>,
+        golden_ref_picture: &mut Option<B::Handle>,
+        alt_ref_picture: &mut Option<B::Handle>,
     ) -> anyhow::Result<()> {
         if header.key_frame {
             Self::replace_reference(last_picture, decoded_handle);
@@ -176,12 +165,12 @@ impl<T: DecodedHandle + Clone> Decoder<T> {
 
         let decoded_handle = self.backend.submit_picture(
             &frame.header,
-            self.last_picture.as_ref(),
-            self.golden_ref_picture.as_ref(),
-            self.alt_ref_picture.as_ref(),
+            self.codec.last_picture.as_ref(),
+            self.codec.golden_ref_picture.as_ref(),
+            self.codec.alt_ref_picture.as_ref(),
             frame.bitstream,
-            self.parser.segmentation(),
-            self.parser.mb_lf_adjust(),
+            self.codec.parser.segmentation(),
+            self.codec.parser.mb_lf_adjust(),
             timestamp,
         )?;
 
@@ -193,9 +182,9 @@ impl<T: DecodedHandle + Clone> Decoder<T> {
         Self::update_references(
             &frame.header,
             &decoded_handle,
-            &mut self.last_picture,
-            &mut self.golden_ref_picture,
-            &mut self.alt_ref_picture,
+            &mut self.codec.last_picture,
+            &mut self.codec.golden_ref_picture,
+            &mut self.codec.alt_ref_picture,
         )?;
 
         if show_frame {
@@ -215,9 +204,13 @@ impl<T: DecodedHandle + Clone> Decoder<T> {
     }
 }
 
-impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> for Decoder<T> {
+impl<B> StatelessVideoDecoder<<B::Handle as DecodedHandle>::Descriptor> for StatelessDecoder<Vp8, B>
+where
+    B: StatelessVp8DecoderBackend,
+    B::Handle: Clone + 'static,
+{
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
-        let frame = self.parser.parse_frame(bitstream)?;
+        let frame = self.codec.parser.parse_frame(bitstream)?;
 
         if frame.header.key_frame {
             if self.negotiation_possible(&frame) {
@@ -240,13 +233,13 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> fo
 
     fn flush(&mut self) {
         // Note: all the submitted frames are already in the ready queue.
-        self.last_picture = Default::default();
-        self.golden_ref_picture = Default::default();
-        self.alt_ref_picture = Default::default();
+        self.codec.last_picture = Default::default();
+        self.codec.golden_ref_picture = Default::default();
+        self.codec.alt_ref_picture = Default::default();
         self.decoding_state = DecodingState::Reset;
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<T::Descriptor>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<<B::Handle as DecodedHandle>::Descriptor>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
@@ -269,7 +262,7 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> fo
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<T::Descriptor> {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<<B::Handle as DecodedHandle>::Descriptor> {
         self.backend.surface_pool()
     }
 
@@ -278,22 +271,12 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> fo
     }
 }
 
-impl<T: DecodedHandle> private::StatelessVideoDecoder for Decoder<T> {
-    fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
-        match &self.decoding_state {
-            DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
-            _ => Err(anyhow::anyhow!(
-                "current decoder state does not allow format change"
-            )),
-        }
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::vp8::Decoder;
+    use crate::decoder::stateless::vp8::Vp8;
+    use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_surfaces;
@@ -302,7 +285,7 @@ pub mod tests {
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
-        let decoder = Decoder::new_dummy(blocking_mode).unwrap();
+        let decoder = StatelessDecoder::<Vp8, _>::new_dummy(blocking_mode);
 
         test_decode_stream(
             |d, s, c| {
