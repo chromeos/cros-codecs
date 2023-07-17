@@ -896,7 +896,7 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
     }
 }
 
-pub(crate) struct VaapiBackend<BackendData, M>
+pub struct VaapiBackend<BackendData, M>
 where
     BackendData: Default,
     M: SurfaceMemoryDescriptor,

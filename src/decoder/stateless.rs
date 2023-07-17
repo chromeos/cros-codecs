@@ -14,12 +14,15 @@ pub mod vp9;
 
 use thiserror::Error;
 
+use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::DecoderFormatNegotiator;
+use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
 use crate::decoder::SurfacePool;
 use crate::DecodedFormat;
+use crate::Resolution;
 
 /// Error returned by stateless backend methods.
 #[derive(Error, Debug)]
@@ -82,7 +85,7 @@ mod private {
 
 /// Common trait shared by all stateless video decoder backends, providing codec-independent
 /// methods.
-pub(crate) trait StatelessDecoderBackend<FormatInfo> {
+pub trait StatelessDecoderBackend<FormatInfo> {
     /// The type that the backend returns as a result of a decode operation.
     /// This will usually be some backend-specific type with a resource and a
     /// resource pool so that said buffer can be reused for another decode
@@ -208,6 +211,101 @@ pub trait StatelessVideoDecoder<M> {
 
     /// Returns the next event, if there is any pending.
     fn next_event(&mut self) -> Option<DecoderEvent<M>>;
+}
+
+pub trait StatelessCodec {
+    /// Type providing current format information for the codec: resolution, color format, etc.
+    ///
+    /// For H.264 this would be the Sps, for VP8 or VP9 the frame header.
+    type FormatInfo;
+    /// State that needs to be kept during a decoding operation, typed by backend handle.
+    type DecoderState<H>;
+}
+
+/// A struct that serves as a basis to implement a stateless decoder.
+///
+/// A stateless decoder is defined by three generic parameters:
+///
+/// * A codec, represented by a type that implements [`StatelessCodec`]. This type defines the
+/// codec-specific decoder state and other codec properties.
+/// * A backend, i.e. an interface to talk to the hardware that accelerates decoding. An example is
+/// the VAAPI backend that uses VAAPI for acceleration. The backend will typically itself be typed
+/// against a memory decriptor, defining how memory is provided for decoded frames.
+///
+/// So for instance, a decoder for the H264 codec, using VAAPI for acceleration with self-managed
+/// memory, will have the following type:
+///
+/// ```text
+/// let decoder: StatelessDecoder<H264, VaapiBackend<()>>;
+/// ```
+///
+/// This struct just manages the high-level decoder state as well as the queue of decoded frames.
+/// All the rest is left to codec-specific code.
+pub struct StatelessDecoder<C, B>
+where
+    C: StatelessCodec,
+    B: StatelessDecoderBackend<C::FormatInfo>,
+{
+    /// The current coded resolution
+    coded_resolution: Resolution,
+
+    /// Whether the decoder should block on decode operations.
+    blocking_mode: BlockingMode,
+
+    ready_queue: ReadyFramesQueue<B::Handle>,
+
+    decoding_state: DecodingState<C::FormatInfo>,
+
+    /// The backend used for hardware acceleration.
+    backend: B,
+
+    /// Codec-specific state.
+    codec: C::DecoderState<B::Handle>,
+}
+
+impl<C, B> StatelessDecoder<C, B>
+where
+    C: StatelessCodec,
+    C::DecoderState<B::Handle>: Default,
+    B: StatelessDecoderBackend<C::FormatInfo>,
+{
+    pub fn new(backend: B, blocking_mode: BlockingMode) -> Self {
+        Self {
+            backend,
+            blocking_mode,
+            coded_resolution: Default::default(),
+            decoding_state: Default::default(),
+            ready_queue: Default::default(),
+            codec: Default::default(),
+        }
+    }
+}
+
+impl<C, B> StatelessDecoder<C, B>
+where
+    C: StatelessCodec,
+    B: StatelessDecoderBackend<C::FormatInfo>,
+{
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<<B::Handle as DecodedHandle>::Descriptor> {
+        self.backend.surface_pool()
+    }
+
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        self.backend.stream_info()
+    }
+}
+
+impl<C: StatelessCodec, B: StatelessDecoderBackend<C::FormatInfo>> private::StatelessVideoDecoder
+    for StatelessDecoder<C, B>
+{
+    fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
+        match &self.decoding_state {
+            DecodingState::AwaitingFormat(sps) => self.backend.try_format(sps, format),
+            _ => Err(anyhow::anyhow!(
+                "current decoder state does not allow format change"
+            )),
+        }
+    }
 }
 
 #[cfg(test)]
