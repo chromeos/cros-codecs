@@ -81,43 +81,37 @@ impl StatelessCodec for Vp8 {
     type DecoderState<H> = Vp8DecoderState<H>;
 }
 
-impl<B> StatelessDecoder<Vp8, B>
-where
-    B: StatelessVp8DecoderBackend,
-    B::Handle: Clone,
-{
+impl<H: Clone> Vp8DecoderState<H> {
     /// Replace a reference frame with `handle`.
-    fn replace_reference(reference: &mut Option<B::Handle>, handle: &B::Handle) {
+    fn replace_reference(reference: &mut Option<H>, handle: &H) {
         *reference = Some(handle.clone());
     }
 
     pub(crate) fn update_references(
+        &mut self,
         header: &Header,
-        decoded_handle: &B::Handle,
-        last_picture: &mut Option<B::Handle>,
-        golden_ref_picture: &mut Option<B::Handle>,
-        alt_ref_picture: &mut Option<B::Handle>,
+        decoded_handle: &H,
     ) -> anyhow::Result<()> {
         if header.key_frame {
-            Self::replace_reference(last_picture, decoded_handle);
-            Self::replace_reference(golden_ref_picture, decoded_handle);
-            Self::replace_reference(alt_ref_picture, decoded_handle);
+            Self::replace_reference(&mut self.last_picture, decoded_handle);
+            Self::replace_reference(&mut self.golden_ref_picture, decoded_handle);
+            Self::replace_reference(&mut self.alt_ref_picture, decoded_handle);
         } else {
             if header.refresh_alternate_frame {
-                Self::replace_reference(alt_ref_picture, decoded_handle);
+                Self::replace_reference(&mut self.alt_ref_picture, decoded_handle);
             } else {
                 match header.copy_buffer_to_alternate {
                     0 => { /* do nothing */ }
 
                     1 => {
-                        if let Some(last_picture) = last_picture {
-                            Self::replace_reference(alt_ref_picture, last_picture);
+                        if let Some(last_picture) = &self.last_picture {
+                            Self::replace_reference(&mut self.alt_ref_picture, last_picture);
                         }
                     }
 
                     2 => {
-                        if let Some(golden_ref) = golden_ref_picture {
-                            Self::replace_reference(alt_ref_picture, golden_ref);
+                        if let Some(golden_ref) = &self.golden_ref_picture {
+                            Self::replace_reference(&mut self.alt_ref_picture, golden_ref);
                         }
                     }
 
@@ -126,20 +120,20 @@ where
             }
 
             if header.refresh_golden_frame {
-                Self::replace_reference(golden_ref_picture, decoded_handle);
+                Self::replace_reference(&mut self.golden_ref_picture, decoded_handle);
             } else {
                 match header.copy_buffer_to_golden {
                     0 => { /* do nothing */ }
 
                     1 => {
-                        if let Some(last_picture) = last_picture {
-                            Self::replace_reference(golden_ref_picture, last_picture);
+                        if let Some(last_picture) = &self.last_picture {
+                            Self::replace_reference(&mut self.golden_ref_picture, last_picture);
                         }
                     }
 
                     2 => {
-                        if let Some(alt_ref) = alt_ref_picture {
-                            Self::replace_reference(golden_ref_picture, alt_ref);
+                        if let Some(alt_ref) = &self.alt_ref_picture {
+                            Self::replace_reference(&mut self.golden_ref_picture, alt_ref);
                         }
                     }
 
@@ -148,13 +142,19 @@ where
             }
 
             if header.refresh_last {
-                Self::replace_reference(last_picture, decoded_handle);
+                Self::replace_reference(&mut self.last_picture, decoded_handle);
             }
         }
 
         Ok(())
     }
+}
 
+impl<B> StatelessDecoder<Vp8, B>
+where
+    B: StatelessVp8DecoderBackend,
+    B::Handle: Clone,
+{
     /// Handle a single frame.
     fn handle_frame(&mut self, frame: Frame<&[u8]>, timestamp: u64) -> Result<(), DecodeError> {
         if self.backend.surface_pool().num_free_surfaces() == 0 {
@@ -179,13 +179,8 @@ where
         }
 
         // Do DPB management
-        Self::update_references(
-            &frame.header,
-            &decoded_handle,
-            &mut self.codec.last_picture,
-            &mut self.codec.golden_ref_picture,
-            &mut self.codec.alt_ref_picture,
-        )?;
+        self.codec
+            .update_references(&frame.header, &decoded_handle)?;
 
         if show_frame {
             self.ready_queue.push(decoded_handle);
