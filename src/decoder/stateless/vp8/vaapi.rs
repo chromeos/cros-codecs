@@ -183,7 +183,7 @@ fn build_pic_param(
 
 fn build_slice_param(frame_hdr: &Header, slice_size: usize) -> anyhow::Result<libva::BufferType> {
     let mut partition_size: [u32; 9] = Default::default();
-    let num_of_partitions = (1 << frame_hdr.log2_nbr_of_dct_partitions) + 1;
+    let num_of_partitions = frame_hdr.num_dct_partitions() + 1;
 
     partition_size[0] = frame_hdr.first_part_size - ((frame_hdr.header_size + 7) >> 3);
 

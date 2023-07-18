@@ -130,7 +130,7 @@ pub struct Header {
     pub sharpness_level: u8,
     /// Determines the number of separate partitions containing the DCT
     /// coefficients of the macroblocks.
-    pub log2_nbr_of_dct_partitions: u8,
+    log2_nbr_of_dct_partitions: u8,
 
     pub partition_size: [u32; 8],
 
@@ -191,6 +191,34 @@ pub struct Header {
     /// The size in bits of the Frame Header, thus excluding any Uncompressed
     /// Data Chunk bytes.
     pub header_size: u32,
+}
+
+impl Header {
+    /// Returns the number of separate partitions containing the DCT coefficients of the
+    /// macroblocks.
+    pub fn num_dct_partitions(&self) -> usize {
+        1 << self.log2_nbr_of_dct_partitions
+    }
+
+    /// Returns the total size of the encoded frame in bytes, as computed from the header.
+    pub fn frame_len(&self) -> usize {
+        // Uncompressed chunk size.
+        std::iter::once(self.data_chunk_size as usize)
+            // Size of first partition.
+            .chain(std::iter::once(self.first_part_size as usize))
+            // Size of the partitions description area.
+            .chain(std::iter::once(
+                self.num_dct_partitions().saturating_sub(1) * 3,
+            ))
+            // Size of other DCT partitions.
+            .chain(
+                self.partition_size
+                    .iter()
+                    .take(self.num_dct_partitions())
+                    .map(|s| *s as usize),
+            )
+            .sum()
+    }
 }
 
 /// A VP8 frame.
@@ -573,7 +601,7 @@ impl Parser {
     }
 
     fn compute_partition_sizes(frame: &mut Header, data: &[u8]) -> anyhow::Result<()> {
-        let num_partitions = 1usize << frame.log2_nbr_of_dct_partitions;
+        let num_partitions = frame.num_dct_partitions();
         let mut part_size_ofs = frame.first_part_size as usize;
         let mut ofs = part_size_ofs + 3 * (num_partitions - 1);
 
