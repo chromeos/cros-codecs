@@ -17,23 +17,23 @@ use crate::codec::vp9::parser::Profile;
 use crate::codec::vp9::parser::Segmentation;
 use crate::codec::vp9::parser::MAX_SEGMENTS;
 use crate::codec::vp9::parser::NUM_REF_FRAMES;
-use crate::decoder::stateless::private;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessCodec;
+use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
 use crate::decoder::SurfacePool;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP9.
-trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
+pub trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
@@ -52,25 +52,12 @@ trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
-pub struct Decoder<T: DecodedHandle> {
-    /// A parser to extract bitstream data and build frame data in turn
+pub struct Vp9DecoderState<H> {
+    /// VP9 bitstream parser.
     parser: Parser,
 
-    /// Whether the decoder should block on decode operations.
-    blocking_mode: BlockingMode,
-
-    /// The backend used for hardware acceleration.
-    backend: Box<dyn StatelessVp9DecoderBackend<Handle = T>>,
-
-    decoding_state: DecodingState<Header>,
-
-    /// The current resolution
-    coded_resolution: Resolution,
-
-    ready_queue: ReadyFramesQueue<T>,
-
     /// The reference frames in use.
-    reference_frames: [Option<T>; NUM_REF_FRAMES],
+    reference_frames: [Option<H>; NUM_REF_FRAMES],
 
     /// Per-segment data.
     segmentation: [Segmentation; MAX_SEGMENTS],
@@ -81,30 +68,33 @@ pub struct Decoder<T: DecodedHandle> {
     profile: Profile,
 }
 
-impl<T: DecodedHandle + Clone> Decoder<T> {
-    /// Create a new decoder using the given `backend`.
-    #[cfg(any(feature = "vaapi", test))]
-    fn new(
-        backend: Box<dyn StatelessVp9DecoderBackend<Handle = T>>,
-        blocking_mode: BlockingMode,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
-            backend,
-            blocking_mode,
+impl<H> Default for Vp9DecoderState<H> {
+    fn default() -> Self {
+        Self {
             parser: Default::default(),
-            decoding_state: Default::default(),
             reference_frames: Default::default(),
             segmentation: Default::default(),
-            coded_resolution: Default::default(),
-            ready_queue: Default::default(),
             bit_depth: Default::default(),
             profile: Default::default(),
-        })
+        }
     }
+}
 
+pub struct Vp9;
+
+impl StatelessCodec for Vp9 {
+    type FormatInfo = Header;
+    type DecoderState<H> = Vp9DecoderState<H>;
+}
+
+impl<B> StatelessDecoder<Vp9, B>
+where
+    B: StatelessVp9DecoderBackend,
+    B::Handle: Clone,
+{
     fn update_references(
-        reference_frames: &mut [Option<T>; NUM_REF_FRAMES],
-        picture: &T,
+        reference_frames: &mut [Option<B::Handle>; NUM_REF_FRAMES],
+        picture: &B::Handle,
         mut refresh_frame_flags: u8,
     ) -> anyhow::Result<()> {
         #[allow(clippy::needless_range_loop)]
@@ -127,7 +117,7 @@ impl<T: DecodedHandle + Clone> Decoder<T> {
             // spec mandates frame_to_show_map_idx references a valid entry in
             // the DPB
             let idx = usize::from(frame.header.frame_to_show_map_idx);
-            let ref_frame = self.reference_frames[idx].as_ref().unwrap();
+            let ref_frame = self.codec.reference_frames[idx].as_ref().unwrap();
 
             // We are done, no further processing needed.
             ref_frame.clone()
@@ -135,13 +125,13 @@ impl<T: DecodedHandle + Clone> Decoder<T> {
             // Otherwise, we must actually arrange to decode a frame
             let refresh_frame_flags = frame.header.refresh_frame_flags;
 
-            Segmentation::update_segmentation(&mut self.segmentation, &frame.header)?;
+            Segmentation::update_segmentation(&mut self.codec.segmentation, &frame.header)?;
             let decoded_handle = self.backend.submit_picture(
                 &frame.header,
-                &self.reference_frames,
+                &self.codec.reference_frames,
                 frame.as_ref(),
                 timestamp,
-                &self.segmentation,
+                &self.codec.segmentation,
             )?;
 
             if self.blocking_mode == BlockingMode::Blocking {
@@ -150,7 +140,7 @@ impl<T: DecodedHandle + Clone> Decoder<T> {
 
             // Do DPB management
             Self::update_references(
-                &mut self.reference_frames,
+                &mut self.codec.reference_frames,
                 &decoded_handle,
                 refresh_frame_flags,
             )?;
@@ -179,14 +169,18 @@ impl<T: DecodedHandle + Clone> Decoder<T> {
 
         width != coded_resolution.width
             || height != coded_resolution.height
-            || bit_depth != self.bit_depth
-            || profile != self.profile
+            || bit_depth != self.codec.bit_depth
+            || profile != self.codec.profile
     }
 }
 
-impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> for Decoder<T> {
+impl<B> StatelessVideoDecoder<<B::Handle as DecodedHandle>::Descriptor> for StatelessDecoder<Vp9, B>
+where
+    B: StatelessVp9DecoderBackend,
+    B::Handle: Clone + 'static,
+{
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
-        let frames = self.parser.parse_chunk(bitstream)?;
+        let frames = self.codec.parser.parse_chunk(bitstream)?;
 
         if matches!(self.decoding_state, DecodingState::Decoding)
             && self.backend.surface_pool().num_free_surfaces() < frames.len()
@@ -240,11 +234,11 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> fo
 
     fn flush(&mut self) {
         // Note: all the submitted frames are already in the ready queue.
-        self.reference_frames = Default::default();
+        self.codec.reference_frames = Default::default();
         self.decoding_state = DecodingState::Reset;
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<T::Descriptor>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<<B::Handle as DecodedHandle>::Descriptor>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
@@ -254,8 +248,8 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> fo
                 if let DecodingState::AwaitingFormat(hdr) = &self.decoding_state {
                     Some(DecoderEvent::FormatChanged(Box::new(
                         StatelessDecoderFormatNegotiator::new(self, hdr.clone(), |decoder, hdr| {
-                            decoder.profile = hdr.profile;
-                            decoder.bit_depth = hdr.bit_depth;
+                            decoder.codec.profile = hdr.profile;
+                            decoder.codec.bit_depth = hdr.bit_depth;
                             decoder.coded_resolution = Resolution {
                                 width: hdr.width,
                                 height: hdr.height,
@@ -269,7 +263,7 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> fo
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<T::Descriptor> {
+    fn surface_pool(&mut self) -> &mut dyn SurfacePool<<B::Handle as DecodedHandle>::Descriptor> {
         self.backend.surface_pool()
     }
 
@@ -278,22 +272,12 @@ impl<T: DecodedHandle + Clone + 'static> StatelessVideoDecoder<T::Descriptor> fo
     }
 }
 
-impl<T: DecodedHandle> private::StatelessVideoDecoder for Decoder<T> {
-    fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
-        match &self.decoding_state {
-            DecodingState::AwaitingFormat(header) => self.backend.try_format(header, format),
-            _ => Err(anyhow::anyhow!(
-                "current decoder state does not allow format change"
-            )),
-        }
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
-    use crate::decoder::stateless::vp9::Decoder;
+    use crate::decoder::stateless::vp9::Vp9;
+    use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_surfaces;
@@ -302,7 +286,7 @@ pub mod tests {
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
-        let decoder = Decoder::new_dummy(blocking_mode).unwrap();
+        let decoder = StatelessDecoder::<Vp9, _>::new_dummy(blocking_mode);
 
         test_decode_stream(
             |d, s, c| {
