@@ -573,8 +573,8 @@ impl Parser {
     }
 
     fn compute_partition_sizes(frame: &mut Header, data: &[u8]) -> anyhow::Result<()> {
-        let num_partitions = usize::try_from(1 << frame.log2_nbr_of_dct_partitions)?;
-        let mut part_size_ofs = usize::try_from(frame.first_part_size)?;
+        let num_partitions = 1usize << frame.log2_nbr_of_dct_partitions;
+        let mut part_size_ofs = frame.first_part_size as usize;
         let mut ofs = part_size_ofs + 3 * (num_partitions - 1);
 
         if ofs > data.len() {
@@ -586,11 +586,11 @@ impl Parser {
             let b1 = u32::from(data[part_size_ofs + 1]) << 8;
             let b2 = u32::from(data[part_size_ofs + 2]) << 16;
 
-            let part_size = usize::try_from(b0 | b1 | b2)?;
+            let part_size = b0 | b1 | b2;
             part_size_ofs += 3;
 
-            frame.partition_size[i] = u32::try_from(part_size)?;
-            ofs += part_size;
+            frame.partition_size[i] = part_size;
+            ofs += part_size as usize;
         }
 
         if ofs > data.len() {
