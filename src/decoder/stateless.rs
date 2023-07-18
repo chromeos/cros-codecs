@@ -6,6 +6,10 @@
 //!
 //! Stateless here refers to the backend API targeted by these decoders. The decoders themselves do
 //! hold the decoding state so the backend doesn't need to.
+//!
+//! The [`StatelessDecoder`] struct is the basis of all stateless decoders. It is created by
+//! combining a codec codec to a [backend](crate::backend), after which bitstream units can be
+//! submitted through the [`StatelessDecoder::decode`] method.
 
 pub mod h264;
 pub mod h265;
