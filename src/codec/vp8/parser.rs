@@ -244,10 +244,6 @@ impl Parser {
         &self.mb_lf_adjust
     }
 
-    pub fn reset(&mut self) {
-        *self = Default::default();
-    }
-
     fn mode_probs_init_defaults(mode_probs: &mut ModeProbs, key_frame: bool) {
         if key_frame {
             mode_probs.intra_16x16_prob = KF_Y_MODE_PROBS;
@@ -288,7 +284,7 @@ impl Parser {
             frame.height = size_code & 0x3fff;
 
             // Reset on every key frame.
-            self.reset();
+            *self = Default::default();
         }
 
         frame.data_chunk_size = reader.position() as u8;
