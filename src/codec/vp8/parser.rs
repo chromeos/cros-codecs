@@ -10,6 +10,7 @@ use bytes::Buf;
 use log::debug;
 
 use crate::codec::vp8::bool_decoder::BoolDecoder;
+use crate::codec::vp8::bool_decoder::BoolDecoderResult;
 use crate::codec::vp8::bool_decoder::BoolDecoderState;
 use crate::codec::vp8::probs::COEFF_DEFAULT_PROBS;
 use crate::codec::vp8::probs::COEFF_UPDATE_PROBS;
@@ -294,7 +295,7 @@ impl Parser {
     fn update_segmentation<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         seg: &mut Segmentation,
-    ) -> anyhow::Result<()> {
+    ) -> BoolDecoderResult<()> {
         seg.update_mb_segmentation_map = false;
         seg.update_segment_feature_data = false;
 
@@ -351,7 +352,7 @@ impl Parser {
     fn parse_mb_lf_adjustments<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         adj: &mut MbLfAdjustments,
-    ) -> anyhow::Result<()> {
+    ) -> BoolDecoderResult<()> {
         adj.mode_ref_lf_delta_update = false;
 
         adj.loop_filter_adj_enable = bd.read_bool()?;
@@ -384,7 +385,7 @@ impl Parser {
     fn parse_quant_indices<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         q: &mut QuantIndices,
-    ) -> anyhow::Result<()> {
+    ) -> BoolDecoderResult<()> {
         q.y_ac_qi = bd.read_uint(7)?;
 
         let y_dc_delta_present = bd.read_bool()?;
@@ -429,7 +430,7 @@ impl Parser {
     fn parse_token_prob_update<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         coeff_probs: &mut [[[[u8; 11]; 3]; 8]; 4],
-    ) -> anyhow::Result<()> {
+    ) -> BoolDecoderResult<()> {
         for (i, vi) in coeff_probs.iter_mut().enumerate() {
             for (j, vj) in vi.iter_mut().enumerate() {
                 for (k, vk) in vj.iter_mut().enumerate() {
@@ -449,7 +450,7 @@ impl Parser {
     fn parse_mv_prob_update<T: AsRef<[u8]>>(
         bd: &mut BoolDecoder<T>,
         mv_probs: &mut [[u8; 19]; 2],
-    ) -> anyhow::Result<()> {
+    ) -> BoolDecoderResult<()> {
         for (i, vi) in mv_probs.iter_mut().enumerate() {
             for (j, prob) in vi.iter_mut().enumerate() {
                 let update = bd.read_bool_with_prob(MV_UPDATE_PROBS[i][j])?;
@@ -468,7 +469,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_frame_header(&mut self, data: &[u8], frame: &mut Header) -> anyhow::Result<()> {
+    fn parse_frame_header(&mut self, data: &[u8], frame: &mut Header) -> BoolDecoderResult<()> {
         debug!("Parsing VP8 frame header.");
         let mut bd = BoolDecoder::new(data);
 
