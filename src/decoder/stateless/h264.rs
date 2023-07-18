@@ -1804,7 +1804,7 @@ where
 
     fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         if self.backend.surface_pool().num_free_surfaces() == 0 {
-            return Err(DecodeError::CheckEvents);
+            return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
         let mut cursor = Cursor::new(bitstream);

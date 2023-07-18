@@ -182,10 +182,13 @@ where
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         let frames = self.codec.parser.parse_chunk(bitstream)?;
 
+        let num_free_surfaces = self.backend.surface_pool().num_free_surfaces();
         if matches!(self.decoding_state, DecodingState::Decoding)
-            && self.backend.surface_pool().num_free_surfaces() < frames.len()
+            && num_free_surfaces < frames.len()
         {
-            return Err(DecodeError::CheckEvents);
+            return Err(DecodeError::NotEnoughOutputBuffers(
+                frames.len() - num_free_surfaces,
+            ));
         }
 
         // With SVC, the first frame will usually be a key-frame, with

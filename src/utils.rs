@@ -421,7 +421,9 @@ where
                     // successfully.
                     break;
                 }
-                Err(DecodeError::CheckEvents) => check_events(decoder)?,
+                Err(DecodeError::CheckEvents) | Err(DecodeError::NotEnoughOutputBuffers(_)) => {
+                    check_events(decoder)?
+                }
                 Err(e) => panic!("{:#}", e),
             }
         }

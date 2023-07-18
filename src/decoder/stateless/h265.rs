@@ -850,7 +850,7 @@ where
 
     fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         if self.backend.surface_pool().num_free_surfaces() == 0 {
-            return Err(DecodeError::CheckEvents);
+            return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
         let mut cursor = Cursor::new(bitstream);
@@ -923,7 +923,7 @@ where
 
                     if self.cur_pic.is_none() {
                         if self.backend.surface_pool().num_free_surfaces() == 0 {
-                            return Err(DecodeError::CheckEvents);
+                            return Err(DecodeError::NotEnoughOutputBuffers(1));
                         }
 
                         self.handle_picture(timestamp, &slice)?;
@@ -943,7 +943,7 @@ where
                         // but rather "OutOfResources" from the backend, which
                         // will abort ccdec.
                         if self.backend.surface_pool().num_free_surfaces() == 0 {
-                            return Err(DecodeError::CheckEvents);
+                            return Err(DecodeError::NotEnoughOutputBuffers(1));
                         }
 
                         self.handle_picture(timestamp, &slice)?;

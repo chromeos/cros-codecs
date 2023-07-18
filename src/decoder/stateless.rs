@@ -67,6 +67,8 @@ enum DecodingState<F> {
 /// Error returned by the [`StatelessVideoDecoder::decode`] method.
 #[derive(Debug, Error)]
 pub enum DecodeError {
+    #[error("not enough output buffers available to continue, need {0} more")]
+    NotEnoughOutputBuffers(usize),
     #[error("cannot accept more input until pending events are processed")]
     CheckEvents,
     #[error("decoder error: {0}")]

@@ -158,7 +158,7 @@ where
     /// Handle a single frame.
     fn handle_frame(&mut self, frame: Frame<&[u8]>, timestamp: u64) -> Result<(), DecodeError> {
         if self.backend.surface_pool().num_free_surfaces() == 0 {
-            return Err(DecodeError::CheckEvents);
+            return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
         let show_frame = frame.header.show_frame;
