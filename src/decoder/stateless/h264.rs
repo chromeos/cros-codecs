@@ -261,63 +261,11 @@ impl StatelessCodec for H264 {
     type DecoderState<H> = H264DecoderState<H>;
 }
 
-impl<B> StatelessDecoder<H264, B>
-where
-    B: StatelessH264DecoderBackend,
-    B::Handle: Clone,
-{
-    fn negotiation_possible(
-        sps: &Sps,
-        dpb: &Dpb<B::Handle>,
-        current_resolution: Resolution,
-    ) -> bool {
-        let max_dpb_frames = sps.max_dpb_frames();
-        let interlaced = !sps.frame_mbs_only_flag;
-
-        let prev_max_dpb_frames = dpb.max_num_pics();
-        let prev_interlaced = dpb.interlaced();
-
-        let resolution = Resolution {
-            width: sps.width,
-            height: sps.height,
-        };
-
-        current_resolution != resolution
-            || prev_max_dpb_frames != max_dpb_frames
-            || prev_interlaced != interlaced
-    }
-
-    // Apply the parameters of `sps` to the decoder.
-    fn apply_sps(&mut self, sps: &Sps) {
-        let max_dpb_frames = sps.max_dpb_frames();
-        let interlaced = !sps.frame_mbs_only_flag;
-        let resolution = Resolution {
-            width: sps.width,
-            height: sps.height,
-        };
-
-        let max_num_order_frames = sps.max_num_order_frames() as usize;
-        let max_num_reorder_frames = if max_num_order_frames > max_dpb_frames {
-            0
-        } else {
-            max_num_order_frames
-        };
-
-        self.drain();
-
-        self.coded_resolution = resolution;
-
-        self.codec
-            .dpb
-            .set_limits(max_dpb_frames, max_num_reorder_frames);
-        self.codec.dpb.set_interlaced(interlaced);
-    }
-
+impl<H: Clone> H264DecoderState<H> {
     fn compute_pic_order_count(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         let sps = self
-            .codec
             .parser
-            .get_sps(self.codec.cur_sps_id)
+            .get_sps(self.cur_sps_id)
             .context("Invalid SPS while computing the value of POC for the current picture")?;
 
         match pic.pic_order_cnt_type {
@@ -329,22 +277,22 @@ where
                 if matches!(pic.is_idr, IsIdr::Yes { .. }) {
                     prev_pic_order_cnt_lsb = 0;
                     prev_pic_order_cnt_msb = 0;
-                } else if self.codec.prev_ref_pic_info.has_mmco_5 {
-                    if !matches!(self.codec.prev_ref_pic_info.field, Field::Bottom) {
+                } else if self.prev_ref_pic_info.has_mmco_5 {
+                    if !matches!(self.prev_ref_pic_info.field, Field::Bottom) {
                         prev_pic_order_cnt_msb = 0;
-                        prev_pic_order_cnt_lsb = self.codec.prev_ref_pic_info.top_field_order_cnt;
+                        prev_pic_order_cnt_lsb = self.prev_ref_pic_info.top_field_order_cnt;
                     } else {
                         prev_pic_order_cnt_msb = 0;
                         prev_pic_order_cnt_lsb = 0;
                     }
                 } else {
-                    prev_pic_order_cnt_msb = self.codec.prev_ref_pic_info.pic_order_cnt_msb;
-                    prev_pic_order_cnt_lsb = self.codec.prev_ref_pic_info.pic_order_cnt_lsb;
+                    prev_pic_order_cnt_msb = self.prev_ref_pic_info.pic_order_cnt_msb;
+                    prev_pic_order_cnt_lsb = self.prev_ref_pic_info.pic_order_cnt_lsb;
                 }
 
                 let max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
 
-                if (pic.pic_order_cnt_lsb < self.codec.prev_ref_pic_info.pic_order_cnt_lsb)
+                if (pic.pic_order_cnt_lsb < self.prev_ref_pic_info.pic_order_cnt_lsb)
                     && (prev_pic_order_cnt_lsb - pic.pic_order_cnt_lsb >= max_pic_order_cnt_lsb / 2)
                 {
                     pic.pic_order_cnt_msb = prev_pic_order_cnt_msb + max_pic_order_cnt_lsb;
@@ -371,17 +319,17 @@ where
             }
 
             1 => {
-                if self.codec.prev_pic_info.has_mmco_5 {
-                    self.codec.prev_pic_info.frame_num_offset = 0;
+                if self.prev_pic_info.has_mmco_5 {
+                    self.prev_pic_info.frame_num_offset = 0;
                 }
 
                 if matches!(pic.is_idr, IsIdr::Yes { .. }) {
                     pic.frame_num_offset = 0;
-                } else if self.codec.prev_pic_info.frame_num > pic.frame_num {
+                } else if self.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.codec.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
+                        self.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
                 } else {
-                    pic.frame_num_offset = self.codec.prev_pic_info.frame_num_offset;
+                    pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
 
                 let mut abs_frame_num = if sps.num_ref_frames_in_pic_order_cnt_cycle != 0 {
@@ -436,17 +384,17 @@ where
 
             2 => {
                 // Spec 8.2.1.3
-                if self.codec.prev_pic_info.has_mmco_5 {
-                    self.codec.prev_pic_info.frame_num_offset = 0;
+                if self.prev_pic_info.has_mmco_5 {
+                    self.prev_pic_info.frame_num_offset = 0;
                 }
 
                 if matches!(pic.is_idr, IsIdr::Yes { .. }) {
                     pic.frame_num_offset = 0;
-                } else if self.codec.prev_pic_info.frame_num > pic.frame_num {
+                } else if self.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.codec.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
+                        self.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
                 } else {
-                    pic.frame_num_offset = self.codec.prev_pic_info.frame_num_offset;
+                    pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
 
                 let temp_pic_order_cnt;
@@ -491,6 +439,188 @@ where
         }
 
         Ok(())
+    }
+
+    fn sliding_window_marking(&self, pic: &mut PictureData) -> anyhow::Result<()> {
+        // If the current picture is a coded field that is the second field in
+        // decoding order of a complementary reference field pair, and the first
+        // field has been marked as "used for short-term reference", the current
+        // picture and the complementary reference field pair are also marked as
+        // "used for short-term reference".
+        if pic.is_second_field()
+            && matches!(
+                pic.other_field().unwrap().borrow().reference(),
+                Reference::ShortTerm
+            )
+        {
+            pic.set_reference(Reference::ShortTerm, false);
+            return Ok(());
+        }
+
+        let sps = self
+            .parser
+            .get_sps(self.cur_sps_id)
+            .context("Invalid SPS during the sliding window marking process")?;
+
+        let mut num_ref_pics = self.dpb.num_ref_frames();
+        let max_num_ref_frames = usize::try_from(std::cmp::max(1, sps.max_num_ref_frames)).unwrap();
+
+        if num_ref_pics < max_num_ref_frames {
+            return Ok(());
+        }
+
+        /* 8.2.5.3 */
+        while num_ref_pics >= max_num_ref_frames {
+            let to_unmark = self
+                .dpb
+                .find_short_term_lowest_frame_num_wrap()
+                .context("Could not find a ShortTerm picture to unmark in the DPB")?;
+
+            to_unmark.borrow_mut().set_reference(Reference::None, true);
+            num_ref_pics -= 1;
+        }
+
+        Ok(())
+    }
+
+    /// Returns an iterator of the handles of the frames that need to be bumped into the ready
+    /// queue.
+    fn bump_as_needed(&mut self, current_pic: &PictureData) -> impl Iterator<Item = H> {
+        self.dpb
+            .bump_as_needed(current_pic)
+            .into_iter()
+            .filter_map(|p| p.1)
+    }
+
+    /// Returns an iterator of the handles of all the frames still present in the DPB.
+    fn drain(&mut self) -> impl Iterator<Item = H> {
+        let pics = self.dpb.drain();
+
+        self.dpb.clear();
+        self.last_field = None;
+
+        pics.into_iter().filter_map(|h| h.1)
+    }
+
+    /// Find the first field for the picture started by `slice`, if any.
+    #[allow(clippy::type_complexity)]
+    fn find_first_field(
+        &self,
+        slice: &Slice<impl AsRef<[u8]>>,
+    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, H)>> {
+        let mut prev_field = None;
+
+        if self.dpb.interlaced() {
+            if self.last_field.is_some() {
+                prev_field = self.last_field.clone();
+            } else if let Some(last_handle) = self.dpb.entries().last() {
+                // Use the last entry in the DPB
+                let prev_pic = last_handle.0.borrow();
+
+                if !matches!(prev_pic.field, Field::Frame) && prev_pic.other_field().is_none() {
+                    if let Some(handle) = &last_handle.1 {
+                        // Still waiting for the second field
+                        prev_field = Some((last_handle.0.clone(), handle.clone()));
+                    }
+                }
+            }
+        }
+
+        if !slice.header().field_pic_flag {
+            if let Some(prev_field) = prev_field {
+                let field = prev_field.0.borrow().field;
+                return Err(anyhow!(
+                    "Expecting complementary field {:?}, got {:?}",
+                    field.opposite(),
+                    field
+                ));
+            }
+        }
+
+        match prev_field {
+            None => Ok(None),
+            Some(prev_field) => {
+                let prev_field_pic = prev_field.0.borrow();
+
+                if prev_field_pic.frame_num != i32::from(slice.header().frame_num) {
+                    return Err(anyhow!(
+                "The previous field differs in frame_num value wrt. the current field. {:?} vs {:?}",
+                prev_field_pic.frame_num,
+                slice.header().frame_num
+            ));
+                } else {
+                    let cur_field = if slice.header().bottom_field_flag {
+                        Field::Bottom
+                    } else {
+                        Field::Top
+                    };
+
+                    if cur_field == prev_field_pic.field {
+                        let field = prev_field_pic.field;
+                        return Err(anyhow!(
+                            "Expecting complementary field {:?}, got {:?}",
+                            field.opposite(),
+                            field
+                        ));
+                    }
+                }
+
+                Ok(Some(prev_field.clone()))
+            }
+        }
+    }
+}
+
+impl<B> StatelessDecoder<H264, B>
+where
+    B: StatelessH264DecoderBackend,
+    B::Handle: Clone,
+{
+    fn negotiation_possible(
+        sps: &Sps,
+        dpb: &Dpb<B::Handle>,
+        current_resolution: Resolution,
+    ) -> bool {
+        let max_dpb_frames = sps.max_dpb_frames();
+        let interlaced = !sps.frame_mbs_only_flag;
+
+        let prev_max_dpb_frames = dpb.max_num_pics();
+        let prev_interlaced = dpb.interlaced();
+
+        let resolution = Resolution {
+            width: sps.width,
+            height: sps.height,
+        };
+
+        current_resolution != resolution
+            || prev_max_dpb_frames != max_dpb_frames
+            || prev_interlaced != interlaced
+    }
+
+    // Apply the parameters of `sps` to the decoder.
+    fn apply_sps(&mut self, sps: &Sps) {
+        let max_dpb_frames = sps.max_dpb_frames();
+        let interlaced = !sps.frame_mbs_only_flag;
+        let resolution = Resolution {
+            width: sps.width,
+            height: sps.height,
+        };
+
+        let max_num_order_frames = sps.max_num_order_frames() as usize;
+        let max_num_reorder_frames = if max_num_order_frames > max_dpb_frames {
+            0
+        } else {
+            max_num_order_frames
+        };
+
+        self.ready_queue.extend(self.codec.drain());
+
+        self.coded_resolution = resolution;
+
+        self.codec
+            .dpb
+            .set_limits(max_dpb_frames, max_num_reorder_frames);
+        self.codec.dpb.set_interlaced(interlaced);
     }
 
     fn sort_pic_num_descending(pics: &mut [DpbEntry<B::Handle>]) {
@@ -953,50 +1083,6 @@ where
         }
     }
 
-    fn sliding_window_marking(&self, pic: &mut PictureData) -> anyhow::Result<()> {
-        // If the current picture is a coded field that is the second field in
-        // decoding order of a complementary reference field pair, and the first
-        // field has been marked as "used for short-term reference", the current
-        // picture and the complementary reference field pair are also marked as
-        // "used for short-term reference".
-        if pic.is_second_field()
-            && matches!(
-                pic.other_field().unwrap().borrow().reference(),
-                Reference::ShortTerm
-            )
-        {
-            pic.set_reference(Reference::ShortTerm, false);
-            return Ok(());
-        }
-
-        let sps = self
-            .codec
-            .parser
-            .get_sps(self.codec.cur_sps_id)
-            .context("Invalid SPS during the sliding window marking process")?;
-
-        let mut num_ref_pics = self.codec.dpb.num_ref_frames();
-        let max_num_ref_frames = usize::try_from(std::cmp::max(1, sps.max_num_ref_frames)).unwrap();
-
-        if num_ref_pics < max_num_ref_frames {
-            return Ok(());
-        }
-
-        /* 8.2.5.3 */
-        while num_ref_pics >= max_num_ref_frames {
-            let to_unmark = self
-                .codec
-                .dpb
-                .find_short_term_lowest_frame_num_wrap()
-                .context("Could not find a ShortTerm picture to unmark in the DPB")?;
-
-            to_unmark.borrow_mut().set_reference(Reference::None, true);
-            num_ref_pics -= 1;
-        }
-
-        Ok(())
-    }
-
     fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         let markings = pic.ref_pic_marking.clone();
 
@@ -1059,7 +1145,7 @@ where
         if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag() {
             self.handle_memory_management_ops(pic)?;
         } else {
-            self.sliding_window_marking(pic)?;
+            self.codec.sliding_window_marking(pic)?;
         }
 
         Ok(())
@@ -1133,16 +1219,6 @@ where
         }
     }
 
-    fn bump_as_needed_into_ready_queue(&mut self, current_pic: &PictureData) {
-        let bumped = self
-            .codec
-            .dpb
-            .bump_as_needed(current_pic)
-            .into_iter()
-            .filter_map(|p| p.1);
-        self.ready_queue.extend(bumped);
-    }
-
     fn finish_picture(&mut self, pic: CurrentPicState<B>) -> anyhow::Result<()> {
         debug!("Finishing picture POC {:?}", pic.pic.pic_order_cnt);
 
@@ -1165,11 +1241,11 @@ where
             // Clause 3:
             // The current picture has memory_management_control_operation equal
             // to 5, as specified in clause C.4.4.
-            self.drain();
+            self.ready_queue.extend(self.codec.drain());
         }
 
         // Bump the DPB as per C.4.5.3 to cover clauses 1, 4, 5 and 6.
-        self.bump_as_needed_into_ready_queue(&pic);
+        self.ready_queue.extend(self.codec.bump_as_needed(&pic));
 
         let pic_rc = Rc::new(RefCell::new(pic));
         let pic = pic_rc.borrow();
@@ -1258,16 +1334,16 @@ where
             let max_frame_num = sps.max_frame_num() as i32;
 
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
-            self.compute_pic_order_count(&mut pic)?;
+            self.codec.compute_pic_order_count(&mut pic)?;
 
             self.codec
                 .dpb
                 .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
-            self.sliding_window_marking(&mut pic)?;
+            self.codec.sliding_window_marking(&mut pic)?;
 
             self.codec.dpb.remove_unused();
-            self.bump_as_needed_into_ready_queue(&pic);
+            self.ready_queue.extend(self.codec.bump_as_needed(&pic));
 
             let pic_rc = Rc::new(RefCell::new(pic));
 
@@ -1328,7 +1404,7 @@ where
             pic.set_first_field_to(first_field);
         }
 
-        self.compute_pic_order_count(&mut pic)?;
+        self.codec.compute_pic_order_count(&mut pic)?;
 
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             // C.4.5.3 "Bumping process"
@@ -1338,7 +1414,7 @@ where
             // no_output_of_prior_pics_flag is not equal to 1 and is not
             // inferred to be equal to 1, as specified in clause C.4.4.
             if !pic.ref_pic_marking.no_output_of_prior_pics_flag() {
-                self.drain();
+                self.ready_queue.extend(self.codec.drain());
             } else {
                 // C.4.4 When no_output_of_prior_pics_flag is equal to 1 or is
                 // inferred to be equal to 1, all frame buffers in the DPB are
@@ -1353,88 +1429,6 @@ where
             .update_pic_nums(i32::from(slice.header().frame_num), max_frame_num, &pic);
 
         Ok(pic)
-    }
-
-    /// Drain the decoder, processing all pending frames.
-    fn drain(&mut self) {
-        let pics = self.codec.dpb.drain();
-
-        // Pics in the DPB have undergone `finish_picture` already or are
-        // nonexisting frames, we can just mark them as ready.
-        self.ready_queue
-            .extend(pics.into_iter().filter_map(|h| h.1));
-
-        self.codec.dpb.clear();
-
-        self.codec.last_field = None;
-    }
-
-    /// Find the first field for the picture started by `slice`, if any.
-    #[allow(clippy::type_complexity)]
-    fn find_first_field(
-        &self,
-        slice: &Slice<impl AsRef<[u8]>>,
-    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, B::Handle)>> {
-        let mut prev_field = None;
-
-        if self.codec.dpb.interlaced() {
-            if self.codec.last_field.is_some() {
-                prev_field = self.codec.last_field.clone();
-            } else if let Some(last_handle) = self.codec.dpb.entries().last() {
-                // Use the last entry in the DPB
-                let prev_pic = last_handle.0.borrow();
-
-                if !matches!(prev_pic.field, Field::Frame) && prev_pic.other_field().is_none() {
-                    if let Some(handle) = &last_handle.1 {
-                        // Still waiting for the second field
-                        prev_field = Some((last_handle.0.clone(), handle.clone()));
-                    }
-                }
-            }
-        }
-
-        if !slice.header().field_pic_flag {
-            if let Some(prev_field) = prev_field {
-                let field = prev_field.0.borrow().field;
-                return Err(anyhow!(
-                    "Expecting complementary field {:?}, got {:?}",
-                    field.opposite(),
-                    field
-                ));
-            }
-        }
-
-        match prev_field {
-            None => Ok(None),
-            Some(prev_field) => {
-                let prev_field_pic = prev_field.0.borrow();
-
-                if prev_field_pic.frame_num != i32::from(slice.header().frame_num) {
-                    return Err(anyhow!(
-                "The previous field differs in frame_num value wrt. the current field. {:?} vs {:?}",
-                prev_field_pic.frame_num,
-                slice.header().frame_num
-            ));
-                } else {
-                    let cur_field = if slice.header().bottom_field_flag {
-                        Field::Bottom
-                    } else {
-                        Field::Top
-                    };
-
-                    if cur_field == prev_field_pic.field {
-                        let field = prev_field_pic.field;
-                        return Err(anyhow!(
-                            "Expecting complementary field {:?}, got {:?}",
-                            field.opposite(),
-                            field
-                        ));
-                    }
-                }
-
-                Ok(Some(prev_field.clone()))
-            }
-        }
     }
 
     /// Called once per picture to start it.
@@ -1475,7 +1469,7 @@ where
             self.handle_frame_num_gap(frame_num, timestamp)?;
         }
 
-        let first_field = self.find_first_field(slice)?;
+        let first_field = self.codec.find_first_field(slice)?;
 
         let pic = self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
         let ref_pic_lists = Self::build_ref_pic_lists(&self.codec.dpb, &pic);
@@ -1882,7 +1876,7 @@ where
         if let Some(sps) = sps {
             if Self::negotiation_possible(&sps, &self.codec.dpb, self.coded_resolution) {
                 // Make sure all the frames we decoded so far are in the ready queue.
-                self.drain();
+                self.ready_queue.extend(self.codec.drain());
                 self.backend.new_sequence(&sps)?;
                 self.decoding_state = DecodingState::AwaitingFormat(sps);
             } else if matches!(self.decoding_state, DecodingState::Reset) {
@@ -1912,7 +1906,7 @@ where
     }
 
     fn flush(&mut self) {
-        self.drain();
+        self.ready_queue.extend(self.codec.drain());
         self.decoding_state = DecodingState::Reset;
     }
 
