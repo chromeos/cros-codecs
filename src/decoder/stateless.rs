@@ -33,12 +33,8 @@ use crate::Resolution;
 pub enum StatelessBackendError {
     #[error("not enough resources to proceed with the operation now")]
     OutOfResources,
-    #[error("this resource is not ready")]
-    ResourceNotReady,
     #[error("this format is not supported")]
     UnsupportedFormat,
-    #[error("negotiation failed")]
-    NegotiationFailed(anyhow::Error),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
