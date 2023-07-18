@@ -236,7 +236,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
             libva::constants::VA_INVALID_SURFACE
         };
 
-        let metadata = self.metadata_state.get_parsed_mut()?;
+        let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
         let coded_resolution = self.surface_pool.borrow().coded_resolution();
 

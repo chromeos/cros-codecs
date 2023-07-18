@@ -258,7 +258,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
             .try_into()
             .unwrap();
 
-        let metadata = self.metadata_state.get_parsed_mut()?;
+        let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
         let pic_param = context

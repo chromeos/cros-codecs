@@ -526,15 +526,6 @@ impl StreamMetadataState {
         }
     }
 
-    /// Returns a mutable reference to the parsed metadata state or an error if we haven't reached
-    /// that state yet.
-    pub(crate) fn get_parsed_mut(&mut self) -> anyhow::Result<&mut ParsedStreamMetadata> {
-        match self {
-            StreamMetadataState::Unparsed { .. } => Err(anyhow!("Stream metadata not parsed yet")),
-            StreamMetadataState::Parsed(parsed_metadata) => Ok(parsed_metadata),
-        }
-    }
-
     /// Initializes or reinitializes the codec state.
     fn open<S: VaStreamInfo, M: SurfaceMemoryDescriptor>(
         display: &Rc<Display>,

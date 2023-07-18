@@ -544,7 +544,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         _: &PictureData,
         timestamp: u64,
     ) -> StatelessBackendResult<Self::Picture> {
-        let metadata = self.metadata_state.get_parsed_mut()?;
+        let metadata = self.metadata_state.get_parsed()?;
         let surface = self
             .surface_pool
             .borrow_mut()
