@@ -195,7 +195,17 @@ pub trait StatelessVideoDecoder<M> {
     /// been detected that the client should acknowledge, or because there are no available output
     /// resources and dequeueing and returning pending frames will fix that. After the cause has
     /// been addressed, the client is responsible for calling this method again with the same data.
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> std::result::Result<(), DecodeError>;
+    ///
+    /// The return value is the number of bytes in `bitstream` that have been processed. Usually
+    /// this will be equal to the length of `bitstream`, but some codecs may only do partial
+    /// processing if e.g. several units are sent at the same time. It is the responsibility of the
+    /// caller to check that all submitted input has been processed, and to resubmit the
+    /// unprocessed part if it hasn't. See the documentation of each codec for their expectations.
+    fn decode(
+        &mut self,
+        timestamp: u64,
+        bitstream: &[u8],
+    ) -> std::result::Result<usize, DecodeError>;
 
     /// Flush the decoder i.e. finish processing all pending decode requests and make sure the
     /// resulting frames are ready to be retrieved via [`next_event`].

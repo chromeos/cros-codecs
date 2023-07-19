@@ -848,7 +848,11 @@ where
         Ok(())
     }
 
-    fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
+    fn decode_access_unit(
+        &mut self,
+        timestamp: u64,
+        bitstream: &[u8],
+    ) -> Result<usize, DecodeError> {
         if self.backend.surface_pool().num_free_surfaces() == 0 {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
@@ -964,7 +968,7 @@ where
         let (picture, handle) = self.submit_picture()?;
         self.finish_picture(picture, handle)?;
 
-        Ok(())
+        Ok(bitstream.len())
     }
 
     /// Submits the picture to the accelerator.
@@ -987,7 +991,7 @@ impl<T, P> StatelessVideoDecoder<T::Descriptor> for Decoder<T, P>
 where
     T: DecodedHandle + Clone + 'static,
 {
-    fn decode(&mut self, timestamp: u64, mut bitstream: &[u8]) -> Result<(), DecodeError> {
+    fn decode(&mut self, timestamp: u64, mut bitstream: &[u8]) -> Result<usize, DecodeError> {
         let sps = Self::peek_sps(&mut self.parser, bitstream)?;
 
         if let Some(sps) = sps {
@@ -1013,7 +1017,7 @@ where
 
         match &mut self.decoding_state {
             // Skip input until we get information from the stream.
-            DecodingState::AwaitingStreamInfo | DecodingState::Reset => Ok(()),
+            DecodingState::AwaitingStreamInfo | DecodingState::Reset => Ok(bitstream.len()),
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
             DecodingState::Decoding => self.decode_access_unit(timestamp, bitstream),

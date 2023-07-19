@@ -1802,7 +1802,11 @@ where
         None
     }
 
-    fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
+    fn decode_access_unit(
+        &mut self,
+        timestamp: u64,
+        bitstream: &[u8],
+    ) -> Result<(), DecodeError> {
         if self.backend.surface_pool().num_free_surfaces() == 0 {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
@@ -1870,7 +1874,7 @@ where
     B: StatelessH264DecoderBackend,
     B::Handle: Clone + 'static,
 {
-    fn decode(&mut self, timestamp: u64, mut bitstream: &[u8]) -> Result<(), DecodeError> {
+    fn decode(&mut self, timestamp: u64, mut bitstream: &[u8]) -> Result<usize, DecodeError> {
         let sps = Self::peek_sps(&mut self.codec.parser, bitstream);
 
         if let Some(sps) = sps {
@@ -1896,13 +1900,17 @@ where
             }
         }
 
+        let frame_len = bitstream.len();
+
         match &mut self.decoding_state {
             // Skip input until we get information from the stream.
-            DecodingState::AwaitingStreamInfo | DecodingState::Reset => Ok(()),
+            DecodingState::AwaitingStreamInfo | DecodingState::Reset => (),
             // Ask the client to confirm the format before we can process this.
-            DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
-            DecodingState::Decoding => self.decode_access_unit(timestamp, bitstream),
-        }
+            DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
+            DecodingState::Decoding => self.decode_access_unit(timestamp, bitstream)?,
+        };
+
+        Ok(frame_len)
     }
 
     fn flush(&mut self) {

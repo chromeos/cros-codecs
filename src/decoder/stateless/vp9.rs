@@ -179,7 +179,7 @@ where
     B: StatelessVp9DecoderBackend,
     B::Handle: Clone + 'static,
 {
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let frames = self.codec.parser.parse_chunk(bitstream)?;
 
         let num_free_surfaces = self.backend.surface_pool().num_free_surfaces();
@@ -232,7 +232,7 @@ where
             }
         }
 
-        Ok(())
+        Ok(bitstream.len())
     }
 
     fn flush(&mut self) {

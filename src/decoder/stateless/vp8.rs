@@ -204,7 +204,7 @@ where
     B: StatelessVp8DecoderBackend,
     B::Handle: Clone + 'static,
 {
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let frame = self.codec.parser.parse_frame(bitstream)?;
 
         if frame.header.key_frame {
@@ -219,10 +219,14 @@ where
 
         match &mut self.decoding_state {
             // Skip input until we get information from the stream.
-            DecodingState::AwaitingStreamInfo | DecodingState::Reset => Ok(()),
+            DecodingState::AwaitingStreamInfo | DecodingState::Reset => Ok(bitstream.len()),
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
-            DecodingState::Decoding => self.handle_frame(frame, timestamp),
+            DecodingState::Decoding => {
+                let len = frame.bitstream.len();
+                self.handle_frame(frame, timestamp)?;
+                Ok(len)
+            }
         }
     }
 

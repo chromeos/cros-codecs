@@ -413,7 +413,7 @@ where
     for (frame_num, packet) in stream_iter.enumerate() {
         loop {
             match decoder.decode(frame_num as u64, packet.as_ref()) {
-                Ok(()) => {
+                Ok(_) => {
                     if blocking_mode == BlockingMode::Blocking {
                         check_events(decoder)?;
                     }
