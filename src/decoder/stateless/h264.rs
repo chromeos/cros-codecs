@@ -233,6 +233,10 @@ pub struct H264DecoderState<B: StatelessDecoderBackend<Sps>> {
     /// We are not using `DbpEntry<T>` as the type because contrary to a DPB entry,
     /// the handle of this member is always valid.
     last_field: Option<(Rc<RefCell<PictureData>>, B::Handle)>,
+
+    /// The picture currently being decoded. We need to preserve it between calls to `decode`
+    /// because multiple slices will be processed in different calls to `decode`.
+    current_pic: Option<CurrentPicState<B>>,
 }
 
 impl<B> Default for H264DecoderState<B>
@@ -250,10 +254,20 @@ where
             prev_pic_info: Default::default(),
             max_long_term_frame_idx: Default::default(),
             last_field: Default::default(),
+            current_pic: None,
         }
     }
 }
 
+/// [`StatelessCodec`] structure to use in order to create a H.264 stateless decoder.
+///
+/// # Accepted input
+///
+/// A decoder using this codec processes exactly one NAL unit of input per call to
+/// [`StatelessDecoder::decode`], and returns the number of bytes until the end of this NAL unit.
+/// This makes it possible to call [`Decode`](StatelessDecoder::decode) repeatedly on some unsplit
+/// Annex B stream and shrinking it by the number of bytes processed after each call, until the
+/// stream ends up being empty.
 pub struct H264;
 
 impl StatelessCodec for H264 {
@@ -617,14 +631,23 @@ where
             max_num_order_frames
         };
 
-        self.ready_queue.extend(self.codec.drain());
-
         self.coded_resolution = resolution;
 
         self.codec
             .dpb
             .set_limits(max_dpb_frames, max_num_reorder_frames);
         self.codec.dpb.set_interlaced(interlaced);
+    }
+
+    fn drain(&mut self) -> anyhow::Result<()> {
+        // Finish the current picture if there is one pending.
+        if let Some(cur_pic) = self.codec.current_pic.take() {
+            self.finish_picture(cur_pic)?;
+        }
+
+        self.ready_queue.extend(self.codec.drain());
+
+        Ok(())
     }
 
     fn sort_pic_num_descending(pics: &mut [DpbEntry<B::Handle>]) {
@@ -1245,7 +1268,7 @@ where
             // Clause 3:
             // The current picture has memory_management_control_operation equal
             // to 5, as specified in clause C.4.4.
-            self.ready_queue.extend(self.codec.drain());
+            self.drain()?;
         }
 
         // Bump the DPB as per C.4.5.3 to cover clauses 1, 4, 5 and 6.
@@ -1418,7 +1441,7 @@ where
             // no_output_of_prior_pics_flag is not equal to 1 and is not
             // inferred to be equal to 1, as specified in clause C.4.4.
             if !pic.ref_pic_marking.no_output_of_prior_pics_flag() {
-                self.ready_queue.extend(self.codec.drain());
+                self.drain()?;
             } else {
                 // C.4.4 When no_output_of_prior_pics_flag is equal to 1 or is
                 // inferred to be equal to 1, all frame buffers in the DPB are
@@ -1440,7 +1463,11 @@ where
         &mut self,
         timestamp: u64,
         slice: &Slice<&[u8]>,
-    ) -> anyhow::Result<CurrentPicState<B>> {
+    ) -> Result<CurrentPicState<B>, DecodeError> {
+        if self.backend.surface_pool().num_free_surfaces() == 0 {
+            return Err(DecodeError::NotEnoughOutputBuffers(1));
+        }
+
         let nalu_hdr = slice.nalu().header();
 
         if nalu_hdr.idr_pic_flag() {
@@ -1793,77 +1820,47 @@ where
         Ok(handle)
     }
 
-    fn peek_sps(parser: &mut Parser, bitstream: &[u8]) -> Option<Sps> {
-        let mut cursor = Cursor::new(bitstream);
-
-        while let Ok(nalu) = Nalu::next(&mut cursor) {
-            if matches!(nalu.header().nalu_type(), NaluType::Sps) {
-                let sps = parser.parse_sps(&nalu).ok()?;
-                return Some(sps.clone());
+    fn process_nalu(&mut self, timestamp: u64, nalu: Nalu<&[u8]>) -> Result<(), DecodeError> {
+        match nalu.header().nalu_type() {
+            NaluType::Sps => {
+                self.codec.parser.parse_sps(&nalu)?;
             }
-        }
-
-        None
-    }
-
-    fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
-        if self.backend.surface_pool().num_free_surfaces() == 0 {
-            return Err(DecodeError::NotEnoughOutputBuffers(1));
-        }
-
-        let mut cursor = Cursor::new(bitstream);
-
-        let mut cur_pic_opt: Option<CurrentPicState<B>> = None;
-
-        while let Ok(nalu) = Nalu::next(&mut cursor) {
-            match nalu.header().nalu_type() {
-                NaluType::Sps => {
-                    self.codec.parser.parse_sps(&nalu)?;
-                }
-
-                NaluType::Pps => {
-                    self.codec.parser.parse_pps(&nalu)?;
-                }
-
-                NaluType::Slice
-                | NaluType::SliceDpa
-                | NaluType::SliceDpb
-                | NaluType::SliceDpc
-                | NaluType::SliceIdr
-                | NaluType::SliceExt => {
-                    let slice = self.codec.parser.parse_slice_header(nalu)?;
-                    let mut cur_pic = match cur_pic_opt {
-                        // No current picture, start a new one.
-                        None => self.begin_picture(timestamp, &slice)?,
-                        // We have a current picture but are starting a new field, or first_mb_in_slice
-                        // indicates that a new picture is starting: finish the current picture and
-                        // start a new one.
-                        Some(cur_pic)
-                            if (self.codec.dpb.interlaced()
-                                && matches!(cur_pic.pic.field, Field::Frame)
-                                && !cur_pic.pic.is_second_field()
-                                && cur_pic.pic.field != slice.header().field())
-                                || (slice.header().first_mb_in_slice == 0) =>
-                        {
-                            self.finish_picture(cur_pic)?;
-                            self.begin_picture(timestamp, &slice)?
-                        }
-                        // This slice is part of the current picture.
-                        Some(cur_pic) => cur_pic,
-                    };
-
-                    self.handle_slice(&mut cur_pic, &slice)?;
-                    cur_pic_opt = Some(cur_pic);
-                }
-
-                other => {
-                    debug!("Unsupported NAL unit type {:?}", other,);
-                }
+            NaluType::Pps => {
+                self.codec.parser.parse_pps(&nalu)?;
             }
-        }
+            NaluType::Slice
+            | NaluType::SliceDpa
+            | NaluType::SliceDpb
+            | NaluType::SliceDpc
+            | NaluType::SliceIdr
+            | NaluType::SliceExt => {
+                let slice = self.codec.parser.parse_slice_header(nalu)?;
+                let mut cur_pic = match self.codec.current_pic.take() {
+                    // No current picture, start a new one.
+                    None => self.begin_picture(timestamp, &slice)?,
+                    // We have a current picture but are starting a new field, or first_mb_in_slice
+                    // indicates that a new picture is starting: finish the current picture and
+                    // start a new one.
+                    Some(cur_pic)
+                        if (self.codec.dpb.interlaced()
+                            && matches!(cur_pic.pic.field, Field::Frame)
+                            && !cur_pic.pic.is_second_field()
+                            && cur_pic.pic.field != slice.header().field())
+                            || (slice.header().first_mb_in_slice == 0) =>
+                    {
+                        self.finish_picture(cur_pic)?;
+                        self.begin_picture(timestamp, &slice)?
+                    }
+                    // This slice is part of the current picture.
+                    Some(cur_pic) => cur_pic,
+                };
 
-        if let Some(cur_pic) = cur_pic_opt.take() {
-            self.finish_picture(cur_pic)?;
+                self.handle_slice(&mut cur_pic, &slice)?;
+                self.codec.current_pic = Some(cur_pic);
+            }
+            other => {
+                debug!("Unsupported NAL unit type {:?}", other,);
+            }
         }
 
         Ok(())
@@ -1876,13 +1873,15 @@ where
     B: StatelessH264DecoderBackend,
     B::Handle: Clone + 'static,
 {
-    fn decode(&mut self, timestamp: u64, mut bitstream: &[u8]) -> Result<usize, DecodeError> {
-        let sps = Self::peek_sps(&mut self.codec.parser, bitstream);
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
+        let mut cursor = Cursor::new(bitstream);
+        let nalu = Nalu::next(&mut cursor)?;
 
-        if let Some(sps) = sps {
+        if nalu.header().nalu_type() == NaluType::Sps {
+            let sps = self.codec.parser.parse_sps(&nalu)?.clone();
             if Self::negotiation_possible(&sps, &self.codec.dpb, self.coded_resolution) {
                 // Make sure all the frames we decoded so far are in the ready queue.
-                self.ready_queue.extend(self.codec.drain());
+                self.drain()?;
                 self.backend.new_sequence(&sps)?;
                 self.decoding_state = DecodingState::AwaitingFormat(sps);
             } else if matches!(self.decoding_state, DecodingState::Reset) {
@@ -1895,28 +1894,29 @@ where
             while let Ok(nalu) = Nalu::next(&mut cursor) {
                 // In the Reset state we can resume decoding from any key frame.
                 if matches!(nalu.header().nalu_type(), NaluType::SliceIdr) {
-                    bitstream = &bitstream[nalu.sc_offset()..];
                     self.decoding_state = DecodingState::Decoding;
                     break;
                 }
             }
         }
 
-        let frame_len = bitstream.len();
+        let nalu_len = nalu.offset() + nalu.size();
 
         match &mut self.decoding_state {
             // Skip input until we get information from the stream.
             DecodingState::AwaitingStreamInfo | DecodingState::Reset => (),
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
-            DecodingState::Decoding => self.decode_access_unit(timestamp, bitstream)?,
-        };
+            DecodingState::Decoding => {
+                self.process_nalu(timestamp, nalu)?;
+            }
+        }
 
-        Ok(frame_len)
+        Ok(nalu_len)
     }
 
     fn flush(&mut self) -> Result<(), DecodeError> {
-        self.ready_queue.extend(self.codec.drain());
+        self.drain()?;
         self.decoding_state = DecodingState::Reset;
 
         Ok(())

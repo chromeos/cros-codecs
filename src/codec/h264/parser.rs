@@ -58,7 +58,7 @@ pub struct Rect<T> {
     pub max: Point<T>,
 }
 
-#[derive(N, Debug)]
+#[derive(N, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum NaluType {
     Unknown = 0,
     Slice = 1,
@@ -2452,8 +2452,8 @@ impl NaluHeader {
     }
 
     /// Get a reference to the nalu header's type.
-    pub fn nalu_type(&self) -> &NaluType {
-        &self.type_
+    pub fn nalu_type(&self) -> NaluType {
+        self.type_
     }
 
     /// Get a reference to the nalu header's idr pic flag.
