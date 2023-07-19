@@ -1839,13 +1839,15 @@ where
                     let mut cur_pic = match cur_pic_opt {
                         // No current picture, start a new one.
                         None => self.begin_picture(timestamp, &slice)?,
-                        // We have a current picture but are starting a new field: finish it and
+                        // We have a current picture but are starting a new field, or first_mb_in_slice
+                        // indicates that a new picture is starting: finish the current picture and
                         // start a new one.
                         Some(cur_pic)
-                            if self.codec.dpb.interlaced()
+                            if (self.codec.dpb.interlaced()
                                 && matches!(cur_pic.pic.field, Field::Frame)
                                 && !cur_pic.pic.is_second_field()
-                                && cur_pic.pic.field != slice.header().field() =>
+                                && cur_pic.pic.field != slice.header().field())
+                                || (slice.header().first_mb_in_slice == 0) =>
                         {
                             self.finish_picture(cur_pic)?;
                             self.begin_picture(timestamp, &slice)?
