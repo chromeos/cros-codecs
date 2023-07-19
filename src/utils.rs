@@ -164,7 +164,7 @@ impl<'a> Iterator for H264FrameIterator<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Ok(Some(nalu)) = Nalu::next(&mut self.cursor) {
+        while let Ok(nalu) = Nalu::next(&mut self.cursor) {
             if let Some(access_unit) = self.aud_parser.accumulate(nalu) {
                 let start_nalu = access_unit.nalus.first().unwrap();
                 let end_nalu = access_unit.nalus.last().unwrap();
@@ -335,7 +335,7 @@ impl<'a> Iterator for H265FrameIterator<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Ok(Some(nalu)) = H265Nalu::next(&mut self.cursor) {
+        while let Ok(nalu) = H265Nalu::next(&mut self.cursor) {
             if let Some(access_unit) = self.aud_parser.accumulate(nalu) {
                 let start_nalu = access_unit.nalus.first().unwrap();
                 let end_nalu = access_unit.nalus.last().unwrap();

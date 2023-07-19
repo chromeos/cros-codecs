@@ -1792,7 +1792,7 @@ where
     fn peek_sps(parser: &mut Parser, bitstream: &[u8]) -> Option<Sps> {
         let mut cursor = Cursor::new(bitstream);
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::next(&mut cursor) {
             if matches!(nalu.header().nalu_type(), NaluType::Sps) {
                 let sps = parser.parse_sps(&nalu).ok()?;
                 return Some(sps.clone());
@@ -1815,7 +1815,7 @@ where
 
         let mut cur_pic_opt: Option<CurrentPicState<B>> = None;
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::next(&mut cursor) {
             match nalu.header().nalu_type() {
                 NaluType::Sps => {
                     self.codec.parser.parse_sps(&nalu)?;
@@ -1890,7 +1890,7 @@ where
         } else if matches!(self.decoding_state, DecodingState::Reset) {
             let mut cursor = Cursor::new(bitstream);
 
-            while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
+            while let Ok(nalu) = Nalu::next(&mut cursor) {
                 // In the Reset state we can resume decoding from any key frame.
                 if matches!(nalu.header().nalu_type(), NaluType::SliceIdr) {
                     bitstream = &bitstream[nalu.sc_offset()..];

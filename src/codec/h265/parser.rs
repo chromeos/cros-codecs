@@ -5548,7 +5548,7 @@ mod tests {
         mut nskip: i32,
     ) -> Option<Nalu<&[u8], NaluHeader>> {
         let mut cursor = Cursor::new(bitstream);
-        while let Ok(Some(nalu)) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::<_, NaluHeader>::next(&mut cursor) {
             if nalu.header().type_ == nalu_type {
                 if nskip == 0 {
                     return Some(nalu);
@@ -5566,7 +5566,7 @@ mod tests {
     fn parse_nalus_from_stream_file() {
         let mut cursor = Cursor::new(STREAM_BEAR);
         let mut num_nalus = 0;
-        while let Ok(Some(_)) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while Nalu::<_, NaluHeader>::next(&mut cursor).is_ok() {
             num_nalus += 1;
         }
 
@@ -5574,7 +5574,7 @@ mod tests {
 
         let mut cursor = Cursor::new(STREAM_BBB);
         let mut num_nalus = 0;
-        while let Ok(Some(_)) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while Nalu::<_, NaluHeader>::next(&mut cursor).is_ok() {
             num_nalus += 1;
         }
 
@@ -5582,7 +5582,7 @@ mod tests {
 
         let mut cursor = Cursor::new(STREAM_TEST25FPS);
         let mut num_nalus = 0;
-        while let Ok(Some(_)) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while Nalu::<_, NaluHeader>::next(&mut cursor).is_ok() {
             num_nalus += 1;
         }
 
@@ -5596,21 +5596,21 @@ mod tests {
         let mut cursor = Cursor::new(STREAM_BBB);
         let mut parser = Parser::default();
 
-        while let Ok(Some(nalu)) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::<_, NaluHeader>::next(&mut cursor) {
             dispatch_parse_call(&mut parser, nalu).unwrap();
         }
 
         let mut cursor = Cursor::new(STREAM_BEAR);
         let mut parser = Parser::default();
 
-        while let Ok(Some(nalu)) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::<_, NaluHeader>::next(&mut cursor) {
             dispatch_parse_call(&mut parser, nalu).unwrap();
         }
 
         let mut cursor = Cursor::new(STREAM_TEST25FPS);
         let mut parser = Parser::default();
 
-        while let Ok(Some(nalu)) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::<_, NaluHeader>::next(&mut cursor) {
             dispatch_parse_call(&mut parser, nalu).unwrap();
         }
     }
@@ -5621,7 +5621,7 @@ mod tests {
         let mut cursor = Cursor::new(STREAM_BEAR);
         let mut parser = Parser::default();
 
-        let vps_nalu = Nalu::<_, NaluHeader>::next(&mut cursor).unwrap().unwrap();
+        let vps_nalu = Nalu::<_, NaluHeader>::next(&mut cursor).unwrap();
         let vps = parser.parse_vps(&vps_nalu).unwrap();
 
         assert!(vps.base_layer_internal_flag);
@@ -5818,7 +5818,7 @@ mod tests {
         let mut cursor = Cursor::new(STREAM_TEST25FPS);
         let mut parser = Parser::default();
 
-        let vps_nalu = Nalu::<_, NaluHeader>::next(&mut cursor).unwrap().unwrap();
+        let vps_nalu = Nalu::<_, NaluHeader>::next(&mut cursor).unwrap();
         let vps = parser.parse_vps(&vps_nalu).unwrap();
         assert!(vps.base_layer_internal_flag);
         assert!(vps.base_layer_available_flag);

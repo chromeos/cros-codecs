@@ -35,7 +35,7 @@ where
     U: Debug + Header,
 {
     /// Find the next Annex B encoded NAL unit.
-    pub fn next(cursor: &mut Cursor<T>) -> anyhow::Result<Option<Nalu<T, U>>> {
+    pub fn next(cursor: &mut Cursor<T>) -> anyhow::Result<Nalu<T, U>> {
         let bitstream = cursor.clone().into_inner();
         let pos = usize::try_from(cursor.position())?;
 
@@ -76,13 +76,13 @@ where
 
         let nal_size = if hdr.is_end() { 1 } else { next_nalu_offset };
 
-        Ok(Some(Nalu {
+        Ok(Nalu {
             header: hdr,
             data: bitstream,
             size: nal_size,
             offset: nalu_offset,
             sc_offset: start_code_offset,
-        }))
+        })
     }
 }
 

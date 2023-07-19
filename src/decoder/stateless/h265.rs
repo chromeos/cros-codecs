@@ -302,7 +302,7 @@ where
     fn peek_sps(parser: &mut Parser, bitstream: &[u8]) -> anyhow::Result<Option<Sps>> {
         let mut cursor = Cursor::new(bitstream);
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::next(&mut cursor) {
             if matches!(nalu.header().type_(), NaluType::SpsNut) {
                 let sps = parser.parse_sps(&nalu)?;
                 return Ok(Some(sps.clone()));
@@ -859,7 +859,7 @@ where
 
         let mut cursor = Cursor::new(bitstream);
 
-        while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::next(&mut cursor) {
             match nalu.header().type_() {
                 NaluType::VpsNut => {
                     self.parser.parse_vps(&nalu)?;
@@ -1005,7 +1005,7 @@ where
         } else if matches!(self.decoding_state, DecodingState::Reset) {
             let mut cursor = Cursor::new(bitstream);
 
-            while let Ok(Some(nalu)) = Nalu::next(&mut cursor) {
+            while let Ok(nalu) = Nalu::next(&mut cursor) {
                 // In the Reset state we can resume decoding from any key frame.
                 if nalu.header().type_().is_idr() {
                     bitstream = &bitstream[nalu.sc_offset()..];
