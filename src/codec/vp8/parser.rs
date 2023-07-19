@@ -270,9 +270,17 @@ impl Header {
 /// A VP8 frame.
 pub struct Frame<T: AsRef<[u8]>> {
     /// The abstraction for the raw memory for this frame.
-    pub bitstream: T,
+    bitstream: T,
+    /// The actual length of the frame data within `bitstream`.
+    frame_len: usize,
     /// The parsed frame header.
     pub header: Header,
+}
+
+impl<T: AsRef<[u8]>> AsRef<[u8]> for Frame<T> {
+    fn as_ref(&self) -> &[u8] {
+        &self.bitstream.as_ref()[..self.frame_len]
+    }
 }
 
 /// A VP8 parser based on GStreamer's vp8parser and Chromium's VP8 parser.
@@ -647,7 +655,11 @@ impl Parser {
             ));
         }
 
-        Ok(Frame { bitstream, header })
+        Ok(Frame {
+            bitstream,
+            frame_len,
+            header,
+        })
     }
 }
 

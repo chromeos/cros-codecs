@@ -74,6 +74,14 @@ impl<B: StatelessDecoderBackend<Header>> Default for Vp8DecoderState<B> {
     }
 }
 
+/// [`StatelessCodec`] structure to use in order to create a VP8 stateless decoder.
+///
+/// # Accepted input
+///
+/// A decoder using this codec processes exactly one encoded frame per call to
+/// [`StatelessDecoder::decode`], and returns the number of bytes actually taken by the frame data.
+/// If the frame was properly encapsulated in its container, the returned value should be equal to
+/// the length of the submitted input.
 pub struct Vp8;
 
 impl StatelessCodec for Vp8 {
@@ -172,7 +180,7 @@ where
             self.codec.last_picture.as_ref(),
             self.codec.golden_ref_picture.as_ref(),
             self.codec.alt_ref_picture.as_ref(),
-            frame.bitstream,
+            frame.as_ref(),
             self.codec.parser.segmentation(),
             self.codec.parser.mb_lf_adjust(),
             timestamp,
