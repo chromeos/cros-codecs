@@ -52,12 +52,12 @@ pub trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Header> {
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
-pub struct Vp9DecoderState<H> {
+pub struct Vp9DecoderState<B: StatelessDecoderBackend<Header>> {
     /// VP9 bitstream parser.
     parser: Parser,
 
     /// The reference frames in use.
-    reference_frames: [Option<H>; NUM_REF_FRAMES],
+    reference_frames: [Option<B::Handle>; NUM_REF_FRAMES],
 
     /// Per-segment data.
     segmentation: [Segmentation; MAX_SEGMENTS],
@@ -68,7 +68,7 @@ pub struct Vp9DecoderState<H> {
     profile: Profile,
 }
 
-impl<H> Default for Vp9DecoderState<H> {
+impl<B: StatelessDecoderBackend<Header>> Default for Vp9DecoderState<B> {
     fn default() -> Self {
         Self {
             parser: Default::default(),
@@ -84,7 +84,7 @@ pub struct Vp9;
 
 impl StatelessCodec for Vp9 {
     type FormatInfo = Header;
-    type DecoderState<H> = Vp9DecoderState<H>;
+    type DecoderState<B: StatelessDecoderBackend<Header>> = Vp9DecoderState<B>;
 }
 
 impl<B> StatelessDecoder<Vp9, B>

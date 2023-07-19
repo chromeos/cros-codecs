@@ -194,7 +194,7 @@ impl<T> Default for ReferencePicLists<T> {
 /// State of the picture being currently decoded.
 ///
 /// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
-struct CurrentPicState<B: StatelessH264DecoderBackend> {
+struct CurrentPicState<B: StatelessDecoderBackend<Sps>> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
     /// Backend-specific data for that picture.
@@ -205,14 +205,13 @@ struct CurrentPicState<B: StatelessH264DecoderBackend> {
 
 /// State of the H.264 decoder.
 ///
-/// `H` is the [`DecodedHandle`] type produced by the backend, used to keep reference frames and
-/// pass them to the backend again when needed.
-pub struct H264DecoderState<H> {
+/// `B` is the backend used for this decoder.
+pub struct H264DecoderState<B: StatelessDecoderBackend<Sps>> {
     /// H.264 bitstream parser.
     parser: Parser,
 
     /// The decoded picture buffer.
-    dpb: Dpb<H>,
+    dpb: Dpb<B::Handle>,
 
     /// The current active SPS id.
     cur_sps_id: u8,
@@ -233,10 +232,14 @@ pub struct H264DecoderState<H> {
     ///
     /// We are not using `DbpEntry<T>` as the type because contrary to a DPB entry,
     /// the handle of this member is always valid.
-    last_field: Option<(Rc<RefCell<PictureData>>, H)>,
+    last_field: Option<(Rc<RefCell<PictureData>>, B::Handle)>,
 }
 
-impl<H: Clone> Default for H264DecoderState<H> {
+impl<B> Default for H264DecoderState<B>
+where
+    B: StatelessH264DecoderBackend,
+    B::Handle: Clone,
+{
     fn default() -> Self {
         H264DecoderState {
             parser: Default::default(),
@@ -255,10 +258,14 @@ pub struct H264;
 
 impl StatelessCodec for H264 {
     type FormatInfo = Sps;
-    type DecoderState<H> = H264DecoderState<H>;
+    type DecoderState<B: StatelessDecoderBackend<Sps>> = H264DecoderState<B>;
 }
 
-impl<H: Clone> H264DecoderState<H> {
+impl<B> H264DecoderState<B>
+where
+    B: StatelessH264DecoderBackend,
+    B::Handle: Clone,
+{
     fn compute_pic_order_count(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         let sps = self
             .parser
@@ -482,7 +489,7 @@ impl<H: Clone> H264DecoderState<H> {
 
     /// Returns an iterator of the handles of the frames that need to be bumped into the ready
     /// queue.
-    fn bump_as_needed(&mut self, current_pic: &PictureData) -> impl Iterator<Item = H> {
+    fn bump_as_needed(&mut self, current_pic: &PictureData) -> impl Iterator<Item = B::Handle> {
         self.dpb
             .bump_as_needed(current_pic)
             .into_iter()
@@ -490,7 +497,7 @@ impl<H: Clone> H264DecoderState<H> {
     }
 
     /// Returns an iterator of the handles of all the frames still present in the DPB.
-    fn drain(&mut self) -> impl Iterator<Item = H> {
+    fn drain(&mut self) -> impl Iterator<Item = B::Handle> {
         let pics = self.dpb.drain();
 
         self.dpb.clear();
@@ -504,7 +511,7 @@ impl<H: Clone> H264DecoderState<H> {
     fn find_first_field(
         &self,
         slice: &Slice<impl AsRef<[u8]>>,
-    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, H)>> {
+    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, B::Handle)>> {
         let mut prev_field = None;
 
         if self.dpb.interlaced() {
