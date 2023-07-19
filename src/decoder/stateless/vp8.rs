@@ -223,7 +223,7 @@ where
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
             DecodingState::Decoding => {
-                let len = frame.bitstream.len();
+                let len = frame.header.frame_len();
                 self.handle_frame(frame, timestamp)?;
                 Ok(len)
             }

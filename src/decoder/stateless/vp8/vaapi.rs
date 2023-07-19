@@ -387,9 +387,9 @@ mod tests {
         // FRAME 0
 
         let packet = ivf_iter.next().unwrap();
-        let frame = parser.parse_frame(packet).unwrap();
+        assert_eq!(packet.len(), 14788);
 
-        assert_eq!(frame.size(), 14788);
+        let frame = parser.parse_frame(packet).unwrap();
 
         let resolution = Resolution {
             width: frame.header.width as u32,
@@ -423,7 +423,7 @@ mod tests {
             _ => panic!(),
         };
 
-        let slice_param = build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = build_slice_param(&frame.header, packet.len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),
@@ -523,9 +523,9 @@ mod tests {
         // FRAME 1
 
         let packet = ivf_iter.next().unwrap();
-        let frame = parser.parse_frame(packet).unwrap();
+        assert_eq!(packet.len(), 257);
 
-        assert_eq!(frame.size(), 257);
+        let frame = parser.parse_frame(packet).unwrap();
 
         let pic_param = build_pic_param(
             &frame.header,
@@ -554,7 +554,7 @@ mod tests {
             _ => panic!(),
         };
 
-        let slice_param = build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = build_slice_param(&frame.header, packet.len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),
@@ -637,9 +637,9 @@ mod tests {
         // FRAME 2
 
         let packet = ivf_iter.next().unwrap();
-        let frame = parser.parse_frame(packet).unwrap();
+        assert_eq!(packet.len(), 131);
 
-        assert_eq!(frame.size(), 131);
+        let frame = parser.parse_frame(packet).unwrap();
 
         let pic_param = build_pic_param(
             &frame.header,
@@ -668,7 +668,7 @@ mod tests {
             _ => panic!(),
         };
 
-        let slice_param = build_slice_param(&frame.header, frame.size()).unwrap();
+        let slice_param = build_slice_param(&frame.header, packet.len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP8(slice_param)) => slice_param,
             _ => panic!(),

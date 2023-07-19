@@ -8,6 +8,7 @@ use std::io::Cursor;
 use anyhow::anyhow;
 use bytes::Buf;
 use log::debug;
+use thiserror::Error;
 
 use crate::codec::vp8::bool_decoder::BoolDecoder;
 use crate::codec::vp8::bool_decoder::BoolDecoderResult;
@@ -193,6 +194,12 @@ pub struct Header {
     pub header_size: u32,
 }
 
+#[derive(Debug, Error)]
+enum ParseUncompressedChunkError {
+    #[error("invalid start code {0}")]
+    InvalidStartCode(u32),
+}
+
 impl Header {
     /// Returns the number of separate partitions containing the DCT coefficients of the
     /// macroblocks.
@@ -219,34 +226,53 @@ impl Header {
             )
             .sum()
     }
+
+    /// Create a new `Header` by parsing the uncompressed data chunk of a frame.
+    fn parse_uncompressed_data_chunk(
+        bitstream: &[u8],
+    ) -> Result<Self, ParseUncompressedChunkError> {
+        debug!("Parsing VP8 uncompressed data chunk.");
+
+        let mut reader = Cursor::new(bitstream);
+
+        let frame_tag = reader.get_uint_le(3) as u32;
+
+        let mut header = Header {
+            key_frame: (frame_tag & 0x1) == 0,
+            version: ((frame_tag >> 1) & 0x07) as u8,
+            show_frame: ((frame_tag >> 4) & 0x1) != 0,
+            first_part_size: (frame_tag >> 5) & 0x7ffff,
+            ..Default::default()
+        };
+
+        if header.key_frame {
+            let start_code = reader.get_uint(3) as u32;
+
+            if start_code != 0x9d012a {
+                return Err(ParseUncompressedChunkError::InvalidStartCode(start_code));
+            }
+
+            let size_code = reader.get_uint_le(2) as u16;
+            header.horiz_scale_code = (size_code >> 14) as u8;
+            header.width = size_code & 0x3fff;
+
+            let size_code = reader.get_uint_le(2) as u16;
+            header.vert_scale_code = (size_code >> 14) as u8;
+            header.height = size_code & 0x3fff;
+        }
+
+        header.data_chunk_size = reader.position() as u8;
+
+        Ok(header)
+    }
 }
 
 /// A VP8 frame.
 pub struct Frame<T: AsRef<[u8]>> {
     /// The abstraction for the raw memory for this frame.
     pub bitstream: T,
-    /// The frame header.
+    /// The parsed frame header.
     pub header: Header,
-}
-
-impl<T: AsRef<[u8]>> Frame<T> {
-    /// Creates a new frame, using the resource as its backing memory.
-    fn new(bitstream: T) -> Self {
-        Self {
-            bitstream,
-            header: Default::default(),
-        }
-    }
-
-    pub fn size(&self) -> usize {
-        self.bitstream.as_ref().len()
-    }
-}
-
-impl<T: AsRef<[u8]>> AsRef<[u8]> for Frame<T> {
-    fn as_ref(&self) -> &[u8] {
-        self.bitstream.as_ref()
-    }
 }
 
 /// A VP8 parser based on GStreamer's vp8parser and Chromium's VP8 parser.
@@ -281,43 +307,6 @@ impl Parser {
             mode_probs.intra_16x16_prob = NK_Y_MODE_PROBS;
             mode_probs.intra_chroma_prob = NK_UV_MODE_PROBS;
         }
-    }
-
-    fn parse_uncompressed_data_chunk<T: AsRef<[u8]>>(
-        &mut self,
-        reader: &mut Cursor<T>,
-        frame: &mut Header,
-    ) -> anyhow::Result<()> {
-        debug!("Parsing VP8 uncompressed data chunk.");
-
-        let frame_tag = reader.get_uint_le(3) as u32;
-
-        frame.key_frame = (frame_tag & 0x1) == 0;
-        frame.version = ((frame_tag >> 1) & 0x07) as u8;
-        frame.show_frame = ((frame_tag >> 4) & 0x1) != 0;
-        frame.first_part_size = (frame_tag >> 5) & 0x7ffff;
-
-        if frame.key_frame {
-            let start_code = reader.get_uint(3) as u32;
-
-            if start_code != 0x9d012a {
-                return Err(anyhow!("Invalid start code {}", start_code));
-            }
-
-            let size_code = reader.get_uint_le(2) as u16;
-            frame.horiz_scale_code = (size_code >> 14) as u8;
-            frame.width = size_code & 0x3fff;
-
-            let size_code = reader.get_uint_le(2) as u16;
-            frame.vert_scale_code = (size_code >> 14) as u8;
-            frame.height = size_code & 0x3fff;
-
-            // Reset on every key frame.
-            *self = Default::default();
-        }
-
-        frame.data_chunk_size = reader.position() as u8;
-        Ok(())
     }
 
     fn update_segmentation<T: AsRef<[u8]>>(
@@ -632,27 +621,31 @@ impl Parser {
     }
 
     /// Parse a single frame from the chunk in `data`.
-    pub fn parse_frame<T: AsRef<[u8]>>(&mut self, resource: T) -> anyhow::Result<Frame<T>> {
-        let mut frame = Frame::new(resource);
-        let mut reader = Cursor::new(frame.bitstream.as_ref());
+    pub fn parse_frame<T: AsRef<[u8]>>(&mut self, bitstream: T) -> anyhow::Result<Frame<T>> {
+        let data = bitstream.as_ref();
+        let mut header = Header::parse_uncompressed_data_chunk(data)?;
+        if header.key_frame {
+            // Reset on every key frame.
+            *self = Default::default();
+        }
 
-        self.parse_uncompressed_data_chunk(&mut reader, &mut frame.header)?;
-
-        let data = frame.bitstream.as_ref();
-
-        if usize::from(frame.header.data_chunk_size)
-            + usize::try_from(frame.header.first_part_size)?
+        if usize::from(header.data_chunk_size) + usize::try_from(header.first_part_size)?
             > data.len()
         {
             return Err(anyhow!("Broken data"));
         }
 
-        let data = &data[frame.header.data_chunk_size as usize..];
+        let compressed_area = &data[header.data_chunk_size as usize..];
 
-        self.parse_frame_header(data, &mut frame.header)?;
-        Parser::compute_partition_sizes(&mut frame.header, data)?;
+        self.parse_frame_header(compressed_area, &mut header)?;
+        Parser::compute_partition_sizes(&mut header, compressed_area)?;
 
-        Ok(frame)
+        let frame_len = header.frame_len();
+        if frame_len > bitstream.as_ref().len() {
+            return Err(anyhow!("bitstream is shorter than computed length of frame"));
+        }
+
+        Ok(Frame { bitstream, header })
     }
 }
 
