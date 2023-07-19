@@ -16,8 +16,6 @@ use crate::decoder::BlockingMode;
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
 
 impl StatelessH265DecoderBackend for Backend {
-    type Picture = ();
-
     fn new_sequence(
         &mut self,
         _: &crate::codec::h265::parser::Sps,

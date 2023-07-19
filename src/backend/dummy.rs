@@ -126,6 +126,7 @@ impl<M> SurfacePool<M> for Backend {
 
 impl<FormatInfo> StatelessDecoderBackend<FormatInfo> for Backend {
     type Handle = Handle;
+    type Picture = ();
 
     fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
         Ok(())

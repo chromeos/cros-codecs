@@ -69,9 +69,6 @@ fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
 
 /// Stateless backend methods specific to H.264.
 pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
-    /// Type used by the backend to represent a picture in the process of being decoded.
-    type Picture;
-
     /// Called when a new SPS is parsed.
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()>;
 

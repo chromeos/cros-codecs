@@ -94,6 +94,10 @@ pub trait StatelessDecoderBackend<FormatInfo> {
     /// operation when it goes out of scope.
     type Handle: DecodedHandle;
 
+    /// Backend-specific type representing a frame being decoded. Useful for decoders that need
+    /// to render a frame in several steps and to preserve its state in between.
+    type Picture;
+
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;
 

@@ -991,6 +991,7 @@ where
     M: SurfaceMemoryDescriptor + 'static,
 {
     type Handle = DecodedHandle<M>;
+    type Picture = Picture<PictureNew, PooledSurface<M>>;
 
     fn try_format(
         &mut self,

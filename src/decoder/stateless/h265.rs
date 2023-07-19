@@ -56,9 +56,6 @@ pub(crate) fn clip3(x: i32, y: i32, z: i32) -> i32 {
 
 /// Stateless backend methods specific to H.265.
 trait StatelessH265DecoderBackend: StatelessDecoderBackend<Sps> {
-    /// Type used by the backend to represent a picture in the process of being decoded.
-    type Picture;
-
     /// Called when a new SPS is parsed.
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()>;
 

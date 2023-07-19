@@ -39,6 +39,7 @@ use crate::decoder::stateless::h265::RefPicSet;
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::BlockingMode;
 
 #[derive(Default)]
@@ -141,7 +142,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
 
     fn submit_last_slice(
         &mut self,
-        picture: &mut <Self as StatelessH265DecoderBackend>::Picture,
+        picture: &mut <Self as StatelessDecoderBackend<Sps>>::Picture,
         is_last_slice: bool,
     ) -> anyhow::Result<()> {
         if let Some(mut last_slice) = self.backend_data.last_slice.take() {
@@ -521,8 +522,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
     for VaapiBackend<BackendData, M>
 {
-    type Picture = VaPicture<PictureNew, PooledSurface<M>>;
-
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
     }

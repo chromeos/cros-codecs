@@ -11,14 +11,12 @@ use libva::Display;
 use libva::IQMatrix;
 use libva::IQMatrixBufferH264;
 use libva::Picture as VaPicture;
-use libva::PictureNew;
 use libva::PictureParameter;
 use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
 use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::PooledSurface;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::codec::h264::dpb::Dpb;
@@ -465,8 +463,6 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<(), M> {
-    type Picture = VaPicture<PictureNew, PooledSurface<M>>;
-
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
     }
