@@ -320,9 +320,9 @@ pub struct Frame<T: AsRef<[u8]>> {
     /// The frame header.
     pub header: Header,
     /// The offset into T
-    offset: usize,
+    pub offset: usize,
     /// The size of the data in T
-    size: usize,
+    pub size: usize,
 }
 
 impl<T: AsRef<[u8]>> Frame<T> {

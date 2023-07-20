@@ -80,6 +80,14 @@ impl<B: StatelessDecoderBackend<Header>> Default for Vp9DecoderState<B> {
     }
 }
 
+/// [`StatelessCodec`] structure to use in order to create a VP9 stateless decoder.
+///
+/// # Accepted input
+///
+/// A decoder using this codec processes exactly one encoded frame per call to
+/// [`StatelessDecoder::decode`], and returns the number of bytes actually taken by the frame data.
+/// If the frame was properly encapsulated in its container, the returned value should be equal to
+/// the length of the submitted input.
 pub struct Vp9;
 
 impl StatelessCodec for Vp9 {
@@ -222,6 +230,12 @@ where
             }
         }
 
+        let superframe_len = frames
+            .iter()
+            .map(|f| f.offset + f.size)
+            .max()
+            .unwrap_or(bitstream.len());
+
         for frame in frames {
             match &mut self.decoding_state {
                 // Skip input until we get information from the stream.
@@ -232,7 +246,7 @@ where
             }
         }
 
-        Ok(bitstream.len())
+        Ok(superframe_len)
     }
 
     fn flush(&mut self) -> Result<(), DecodeError> {
