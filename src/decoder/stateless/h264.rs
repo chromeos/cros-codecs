@@ -1806,11 +1806,7 @@ where
         None
     }
 
-    fn decode_access_unit(
-        &mut self,
-        timestamp: u64,
-        bitstream: &[u8],
-    ) -> Result<(), DecodeError> {
+    fn decode_access_unit(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<(), DecodeError> {
         if self.backend.surface_pool().num_free_surfaces() == 0 {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
@@ -1919,9 +1915,11 @@ where
         Ok(frame_len)
     }
 
-    fn flush(&mut self) {
+    fn flush(&mut self) -> Result<(), DecodeError> {
         self.ready_queue.extend(self.codec.drain());
         self.decoding_state = DecodingState::Reset;
+
+        Ok(())
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<<B::Handle as DecodedHandle>::Descriptor>> {

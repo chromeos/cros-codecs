@@ -234,12 +234,14 @@ where
         }
     }
 
-    fn flush(&mut self) {
+    fn flush(&mut self) -> Result<(), DecodeError> {
         // Note: all the submitted frames are already in the ready queue.
         self.codec.last_picture = Default::default();
         self.codec.golden_ref_picture = Default::default();
         self.codec.alt_ref_picture = Default::default();
         self.decoding_state = DecodingState::Reset;
+
+        Ok(())
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<<B::Handle as DecodedHandle>::Descriptor>> {

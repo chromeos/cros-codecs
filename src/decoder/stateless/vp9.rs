@@ -235,10 +235,12 @@ where
         Ok(bitstream.len())
     }
 
-    fn flush(&mut self) {
+    fn flush(&mut self) -> Result<(), DecodeError> {
         // Note: all the submitted frames are already in the ready queue.
         self.codec.reference_frames = Default::default();
         self.decoding_state = DecodingState::Reset;
+
+        Ok(())
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<<B::Handle as DecodedHandle>::Descriptor>> {

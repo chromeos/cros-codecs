@@ -429,7 +429,7 @@ where
         }
     }
 
-    decoder.flush();
+    decoder.flush()?;
     check_events(decoder)
 }
 

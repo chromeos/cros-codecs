@@ -40,7 +40,7 @@ pub enum StatelessBackendError {
 }
 
 /// Result type returned by stateless backend methods.
-pub type StatelessBackendResult<T> = std::result::Result<T, StatelessBackendError>;
+pub type StatelessBackendResult<T> = Result<T, StatelessBackendError>;
 
 /// Decoder implementations can use this struct to represent their decoding state.
 ///
@@ -205,11 +205,7 @@ pub trait StatelessVideoDecoder<M> {
     /// processing if e.g. several units are sent at the same time. It is the responsibility of the
     /// caller to check that all submitted input has been processed, and to resubmit the
     /// unprocessed part if it hasn't. See the documentation of each codec for their expectations.
-    fn decode(
-        &mut self,
-        timestamp: u64,
-        bitstream: &[u8],
-    ) -> std::result::Result<usize, DecodeError>;
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError>;
 
     /// Flush the decoder i.e. finish processing all pending decode requests and make sure the
     /// resulting frames are ready to be retrieved via [`next_event`].
@@ -217,7 +213,7 @@ pub trait StatelessVideoDecoder<M> {
     /// Note that after flushing, a key frame must be submitted before decoding can resume.
     ///
     /// [`next_event`]: StatelessVideoDecoder::next_event
-    fn flush(&mut self);
+    fn flush(&mut self) -> Result<(), DecodeError>;
 
     /// Returns the surface pool in use with the decoder. Useful to add new frames as decode.
     /// targets.

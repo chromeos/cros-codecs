@@ -1021,9 +1021,11 @@ where
         }
     }
 
-    fn flush(&mut self) {
+    fn flush(&mut self) -> Result<(), DecodeError> {
         self.drain();
         self.decoding_state = DecodingState::Reset;
+
+        Ok(())
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<T::Descriptor>> {

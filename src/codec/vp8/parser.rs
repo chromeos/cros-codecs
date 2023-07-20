@@ -642,7 +642,9 @@ impl Parser {
 
         let frame_len = header.frame_len();
         if frame_len > bitstream.as_ref().len() {
-            return Err(anyhow!("bitstream is shorter than computed length of frame"));
+            return Err(anyhow!(
+                "bitstream is shorter than computed length of frame"
+            ));
         }
 
         Ok(Frame { bitstream, header })
