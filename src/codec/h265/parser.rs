@@ -17,6 +17,8 @@ use enumn::N;
 use crate::codec::h264::nalu;
 use crate::codec::h264::nalu::Header;
 use crate::codec::h264::nalu_reader::NaluReader;
+use crate::codec::h264::parser::Point;
+use crate::codec::h264::parser::Rect;
 
 // Given the max VPS id.
 const MAX_VPS_COUNT: usize = 16;
@@ -39,8 +41,11 @@ const MAX_REF_IDX_ACTIVE: u32 = 15;
 // equal to num_short_term_ref_pic_sets.
 const MAX_SHORT_TERM_REF_PIC_SETS: usize = 65;
 
+// 7.4.3.2.1:
+const MAX_LONG_TERM_REF_PIC_SETS: usize = 32;
+
 // From table 7-5.
-const DEFAULT_SCALING_LIST_0: [u8; 16] = [0; 16];
+const DEFAULT_SCALING_LIST_0: [u8; 16] = [16; 16];
 
 // From Table 7-6.
 const DEFAULT_SCALING_LIST_1: [u8; 64] = [
@@ -145,7 +150,22 @@ impl NaluType {
 
     //// Whether this is a SLNR NALU.
     pub fn is_slnr(&self) -> bool {
-        matches!(self, Self::RsvVclN10 | Self::RsvVclN12 | Self::RsvVclN14)
+        // From the specification:
+        // If a picture has nal_unit_type equal to TRAIL_N, TSA_N, STSA_N,
+        // RADL_N, RASL_N, RSV_VCL_N10, RSV_VCL_N12 or RSV_VCL_N14, the picture
+        // is an SLNR picture. Otherwise, the picture is a sub-layer reference
+        // picture.
+        matches!(
+            self,
+            Self::TrailN
+                | Self::TsaN
+                | Self::StsaN
+                | Self::RadlN
+                | Self::RaslN
+                | Self::RsvVclN10
+                | Self::RsvVclN12
+                | Self::RsvVclN14
+        )
     }
 }
 
@@ -162,7 +182,7 @@ pub struct NaluHeader {
 }
 
 impl NaluHeader {
-    pub fn type_(&self) -> NaluType {
+    pub fn nalu_type(&self) -> NaluType {
         self.type_
     }
 
@@ -1100,13 +1120,13 @@ pub struct Sps {
     /// `lt_ref_pic_poc_lsb_sps[ i ]` specifies the picture order count modulo
     /// MaxPicOrderCntLsb of the i-th candidate long-term reference picture
     /// specified in the SPS.
-    lt_ref_pic_poc_lsb_sps: Vec<u32>,
+    lt_ref_pic_poc_lsb_sps: [u32; MAX_LONG_TERM_REF_PIC_SETS],
     /// `used_by_curr_pic_lt_sps_flag[ i ]` equal to false specifies that the i-th
     /// candidate long-term reference picture specified in the SPS is not used
     /// for reference by a picture that includes in its long-term reference
     /// picture set (RPS) the i-th candidate long-term reference picture
     /// specified in the SPS.
-    used_by_curr_pic_lt_sps_flag: Vec<bool>,
+    used_by_curr_pic_lt_sps_flag: [bool; MAX_LONG_TERM_REF_PIC_SETS],
     /// When set, specifies that slice_temporal_mvp_enabled_flag is present in
     /// the slice headers of non-IDR pictures in the CVS. When not set,
     /// specifies that slice_temporal_mvp_enabled_flag is not present in slice
@@ -1447,6 +1467,42 @@ impl Sps {
 
     pub fn height(&self) -> u16 {
         self.pic_height_in_luma_samples
+    }
+
+    pub fn visible_rectangle(&self) -> Rect<u32> {
+        // From the specification:
+        // NOTE 3 – The conformance cropping window offset parameters are
+        // only applied at the output. All internal decoding processes are
+        // applied to the uncropped picture size.
+        if !self.conformance_window_flag {
+            return Rect {
+                min: Point { x: 0, y: 0 },
+                max: Point {
+                    x: u32::from(self.width()),
+                    y: u32::from(self.height()),
+                },
+            };
+        }
+        const SUB_HEIGHT_C: [u32; 5] = [1, 2, 1, 1, 1];
+        const SUB_WIDTH_C: [u32; 5] = [1, 2, 2, 1, 1];
+
+        let crop_unit_y = SUB_HEIGHT_C[usize::from(self.chroma_array_type)];
+        let crop_unit_x = SUB_WIDTH_C[usize::from(self.chroma_array_type)];
+        let crop_left = crop_unit_x * self.conf_win_left_offset;
+        let crop_right = crop_unit_x * self.conf_win_right_offset;
+        let crop_top = crop_unit_y * self.conf_win_top_offset;
+        let crop_bottom = crop_unit_y * self.conf_win_bottom_offset;
+
+        Rect {
+            min: Point {
+                x: crop_left,
+                y: crop_top,
+            },
+            max: Point {
+                x: u32::from(self.width()) - crop_left - crop_right,
+                y: u32::from(self.height()) - crop_top - crop_bottom,
+            },
+        }
     }
 }
 
@@ -2109,7 +2165,7 @@ pub struct ScalingLists {
     scaling_list_dc_coef_minus8_16x16: [i16; 6],
     /// plus 8 specifies the value of the variable `ScalingFactor[ 3 ][ matrixId
     /// ][ 0 ][ 0 ]` for the scaling list for the 32x32 size.
-    scaling_list_dc_coef_minus8_32x32: [i16; 2],
+    scaling_list_dc_coef_minus8_32x32: [i16; 6],
     /// The 4x4 scaling list.
     scaling_list_4x4: [[u8; 16]; 6],
     /// The 8x8 scaling list.
@@ -2117,7 +2173,7 @@ pub struct ScalingLists {
     /// The 16x16 scaling list.
     scaling_list_16x16: [[u8; 64]; 6],
     /// The 32x32 scaling list.
-    scaling_list_32x32: [[u8; 64]; 2],
+    scaling_list_32x32: [[u8; 64]; 6],
 }
 
 impl ScalingLists {
@@ -2125,7 +2181,7 @@ impl ScalingLists {
         self.scaling_list_dc_coef_minus8_16x16
     }
 
-    pub fn scaling_list_dc_coef_minus8_32x32(&self) -> [i16; 2] {
+    pub fn scaling_list_dc_coef_minus8_32x32(&self) -> [i16; 6] {
         self.scaling_list_dc_coef_minus8_32x32
     }
 
@@ -2141,7 +2197,7 @@ impl ScalingLists {
         self.scaling_list_16x16
     }
 
-    pub fn scaling_list_32x32(&self) -> [[u8; 64]; 2] {
+    pub fn scaling_list_32x32(&self) -> [[u8; 64]; 6] {
         self.scaling_list_32x32
     }
 }
@@ -2154,7 +2210,7 @@ impl Default for ScalingLists {
             scaling_list_4x4: Default::default(),
             scaling_list_8x8: [[0; 64]; 6],
             scaling_list_16x16: [[0; 64]; 6],
-            scaling_list_32x32: [[0; 64]; 2],
+            scaling_list_32x32: [[0; 64]; 6],
         }
     }
 }
@@ -2502,9 +2558,7 @@ pub struct SliceHeader {
     /// reference pictures specified in the active SPS, of the i-th entry in the
     /// long-term RPS of the current picture.
     lt_idx_sps: [u8; 16],
-    /// `poc_lsb_lt[ i ]` specifies the value of the picture order count modulo
-    /// MaxPicOrderCntLsb of the i-th entry in the long-term RPS of the current
-    /// picture.
+    /// Same as PocLsbLt in the specification.
     poc_lsb_lt: [u32; 16],
     /// Same as UsedByCurrPicLt in the specification.
     used_by_curr_pic_lt: [bool; 16],
@@ -2942,13 +2996,19 @@ impl<T> Slice<T> {
                 "Replacing the slice header is only possible for dependent slices"
             ))
         } else {
-            // We have to keep these.
-            // TODO: do we have to keep more? Maybe the computed variables must be kept too?
-            let first_slice_segment_in_pic_flag = header.first_slice_segment_in_pic_flag;
-            let no_output_of_prior_pics_flag = header.no_output_of_prior_pics_flag;
-            let pic_parameter_set_id = header.pic_parameter_set_id;
-            let dependent_slice_segment_flag = header.dependent_slice_segment_flag;
-            let segment_address = header.segment_address;
+            let first_slice_segment_in_pic_flag = self.header.first_slice_segment_in_pic_flag;
+            let no_output_of_prior_pics_flag = self.header.no_output_of_prior_pics_flag;
+            let pic_parameter_set_id = self.header.pic_parameter_set_id;
+            let dependent_slice_segment_flag = self.header.dependent_slice_segment_flag;
+            let segment_address = self.header.segment_address;
+
+            let offset_len_minus1 = self.header.offset_len_minus1;
+            let entry_point_offset_minus1 = self.header.entry_point_offset_minus1;
+            let num_pic_total_curr = self.header.num_pic_total_curr;
+            let header_bit_size = self.header.header_bit_size;
+            let n_emulation_prevention_bytes = self.header.n_emulation_prevention_bytes;
+            let curr_rps_idx = self.header.curr_rps_idx;
+            let st_rps_bits = self.header.st_rps_bits;
 
             self.header = header;
 
@@ -2957,6 +3017,13 @@ impl<T> Slice<T> {
             self.header.pic_parameter_set_id = pic_parameter_set_id;
             self.header.dependent_slice_segment_flag = dependent_slice_segment_flag;
             self.header.segment_address = segment_address;
+            self.header.offset_len_minus1 = offset_len_minus1;
+            self.header.entry_point_offset_minus1 = entry_point_offset_minus1;
+            self.header.num_pic_total_curr = num_pic_total_curr;
+            self.header.header_bit_size = header_bit_size;
+            self.header.n_emulation_prevention_bytes = n_emulation_prevention_bytes;
+            self.header.curr_rps_idx = curr_rps_idx;
+            self.header.st_rps_bits = st_rps_bits;
 
             Ok(())
         }
@@ -3590,7 +3657,7 @@ impl Default for VuiParams {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Parser {
     active_vpses: BTreeMap<u8, Vps>,
     active_spses: BTreeMap<u8, Sps>,
@@ -3947,29 +4014,25 @@ impl Parser {
         Ok(())
     }
 
-    fn fill_default_scaling_list(
-        sl: &mut ScalingLists,
-        size_id: i32,
-        matrix_id: i32,
-    ) -> anyhow::Result<()> {
+    fn fill_default_scaling_list(sl: &mut ScalingLists, size_id: i32, matrix_id: i32) {
         if size_id == 0 {
             sl.scaling_list_4x4[matrix_id as usize] = DEFAULT_SCALING_LIST_0;
-            return Ok(());
+            return;
         }
 
         let dst = match size_id {
             1 => &mut sl.scaling_list_8x8[matrix_id as usize],
             2 => &mut sl.scaling_list_16x16[matrix_id as usize],
             3 => &mut sl.scaling_list_32x32[matrix_id as usize],
-            _ => return Err(anyhow!("Invalid size_id {}", size_id)),
+            _ => panic!("Invalid size_id {}", size_id),
         };
 
         let src = if matrix_id < 3 {
             &DEFAULT_SCALING_LIST_1
-        } else if matrix_id < 5 {
+        } else if matrix_id <= 5 {
             &DEFAULT_SCALING_LIST_2
         } else {
-            return Err(anyhow!("Invalid matrix_id {}", matrix_id));
+            panic!("Invalid matrix_id {}", matrix_id);
         };
 
         *dst = *src;
@@ -3988,8 +4051,6 @@ impl Parser {
         } else if size_id == 3 {
             sl.scaling_list_dc_coef_minus8_32x32[matrix_id as usize] = 8;
         }
-
-        Ok(())
     }
 
     fn parse_scaling_list_data<T: AsRef<[u8]>>(
@@ -3998,8 +4059,8 @@ impl Parser {
     ) -> anyhow::Result<()> {
         // 7.4.5
         for size_id in 0..4 {
-            let step = if size_id == 3 { 3 } else { 1 };
-            for matrix_id in (0..6).step_by(step) {
+            let mut matrix_id = 0;
+            while matrix_id < 6 {
                 let scaling_list_pred_mode_flag = r.read_bit()?;
                 // If `scaling_list_pred_matrix_id_delta[ sizeId ]`[ matrixId ] is
                 // equal to 0, the scaling list is inferred from the default
@@ -4009,7 +4070,7 @@ impl Parser {
                 if !scaling_list_pred_mode_flag {
                     let scaling_list_pred_matrix_id_delta: u32 = r.read_ue()?;
                     if scaling_list_pred_matrix_id_delta == 0 {
-                        Self::fill_default_scaling_list(sl, size_id, matrix_id)?;
+                        Self::fill_default_scaling_list(sl, size_id, matrix_id);
                     } else {
                         // Equation 7-42
                         let factor = if size_id == 3 { 3 } else { 1 };
@@ -4045,33 +4106,39 @@ impl Parser {
                         }
                     }
                 } else {
-                    let mut next_coef = 8;
+                    let mut next_coef = 8i32;
                     let coef_num = std::cmp::min(64, 1 << (4 + (size_id << 1)));
 
                     if size_id > 1 {
                         if size_id == 2 {
                             sl.scaling_list_dc_coef_minus8_16x16[matrix_id as usize] =
                                 r.read_se_bounded(-7, 247)?;
+                            next_coef =
+                                i32::from(sl.scaling_list_dc_coef_minus8_16x16[matrix_id as usize])
+                                    + 8;
                         } else if size_id == 3 {
                             sl.scaling_list_dc_coef_minus8_32x32[matrix_id as usize] =
                                 r.read_se_bounded(-7, 247)?;
+                            next_coef =
+                                i32::from(sl.scaling_list_dc_coef_minus8_32x32[matrix_id as usize])
+                                    + 8;
                         }
-
-                        next_coef += 8;
                     }
 
                     for i in 0..coef_num as usize {
                         let scaling_list_delta_coef: i32 = r.read_se_bounded(-128, 127)?;
-                        let next_coef = ((next_coef + scaling_list_delta_coef + 256) % 256) as u8;
+                        next_coef = (next_coef + scaling_list_delta_coef + 256) % 256;
                         match size_id {
-                            0 => sl.scaling_list_4x4[matrix_id as usize][i] = next_coef,
-                            1 => sl.scaling_list_8x8[matrix_id as usize][i] = next_coef,
-                            2 => sl.scaling_list_16x16[matrix_id as usize][i] = next_coef,
-                            3 => sl.scaling_list_32x32[matrix_id as usize][i] = next_coef,
+                            0 => sl.scaling_list_4x4[matrix_id as usize][i] = next_coef as _,
+                            1 => sl.scaling_list_8x8[matrix_id as usize][i] = next_coef as _,
+                            2 => sl.scaling_list_16x16[matrix_id as usize][i] = next_coef as _,
+                            3 => sl.scaling_list_32x32[matrix_id as usize][i] = next_coef as _,
                             _ => return Err(anyhow!("Invalid size_id {}", size_id)),
                         }
                     }
                 }
+                let step = if size_id == 3 { 3 } else { 1 };
+                matrix_id += step;
             }
         }
         Ok(())
@@ -4245,11 +4312,11 @@ impl Parser {
         r: &mut NaluReader<T>,
     ) -> anyhow::Result<()> {
         for i in 0..cpb_cnt as usize {
-            h.bit_rate_value_minus1[i] = r.read_ue_max(2u32.pow(32) - 2)?;
-            h.cpb_size_value_minus1[i] = r.read_ue_max(2u32.pow(32) - 2)?;
+            h.bit_rate_value_minus1[i] = r.read_ue_max((2u64.pow(32) - 2) as u32)?;
+            h.cpb_size_value_minus1[i] = r.read_ue_max((2u64.pow(32) - 2) as u32)?;
             if sub_pic_hrd_params_present_flag {
-                h.cpb_size_du_value_minus1[i] = r.read_ue_max(2u32.pow(32) - 2)?;
-                h.bit_rate_du_value_minus1[i] = r.read_ue_max(2u32.pow(32) - 2)?;
+                h.cpb_size_du_value_minus1[i] = r.read_ue_max((2u64.pow(32) - 2) as u32)?;
+                h.bit_rate_du_value_minus1[i] = r.read_ue_max((2u64.pow(32) - 2) as u32)?;
             }
 
             h.cbr_flag[i] = r.read_bit()?;
@@ -4286,7 +4353,7 @@ impl Parser {
             }
         }
 
-        for i in 0..max_num_sublayers_minus1 as usize {
+        for i in 0..=max_num_sublayers_minus1 as usize {
             hrd.fixed_pic_rate_general_flag[i] = r.read_bit()?;
             if !hrd.fixed_pic_rate_general_flag[i] {
                 hrd.fixed_pic_rate_within_cvs_flag[i] = r.read_bit()?;
@@ -4379,12 +4446,23 @@ impl Parser {
             vui.num_units_in_tick = r.read_bits::<u32>(31)? << 1;
             vui.num_units_in_tick |= r.read_bits::<u32>(1)?;
 
+            if vui.num_units_in_tick == 0 {
+                log::warn!(
+                    "Incompliant value for num_units_in_tick {}",
+                    vui.num_units_in_tick
+                );
+            }
+
             vui.time_scale = r.read_bits::<u32>(31)? << 1;
             vui.time_scale |= r.read_bits::<u32>(1)?;
 
+            if vui.time_scale == 0 {
+                log::warn!("Incompliant value for time_scale {}", vui.time_scale);
+            }
+
             vui.poc_proportional_to_timing_flag = r.read_bit()?;
             if vui.poc_proportional_to_timing_flag {
-                vui.num_ticks_poc_diff_one_minus1 = r.read_ue_max(2u32.pow(32) - 2)?;
+                vui.num_ticks_poc_diff_one_minus1 = r.read_ue_max((2u64.pow(32) - 2) as u32)?;
             }
 
             vui.hrd_parameters_present_flag = r.read_bit()?;
@@ -4403,7 +4481,7 @@ impl Parser {
             vui.min_spatial_segmentation_idc = r.read_ue_max(4095)?;
             vui.max_bytes_per_pic_denom = r.read_ue()?;
             vui.max_bits_per_min_cu_denom = r.read_ue()?;
-            vui.log2_max_mv_length_horizontal = r.read_ue_max(15)?;
+            vui.log2_max_mv_length_horizontal = r.read_ue_max(16)?;
             vui.log2_max_mv_length_vertical = r.read_ue_max(15)?;
         }
 
@@ -4524,7 +4602,7 @@ impl Parser {
 
         sps.bit_depth_luma_minus8 = r.read_ue_max(6)?;
         sps.bit_depth_chroma_minus8 = r.read_ue_max(6)?;
-        sps.log2_max_pic_order_cnt_lsb_minus4 = r.read_ue_max(6)?;
+        sps.log2_max_pic_order_cnt_lsb_minus4 = r.read_ue_max(12)?;
         sps.sub_layer_ordering_info_present_flag = r.read_bit()?;
 
         {
@@ -4542,10 +4620,10 @@ impl Parser {
             }
         }
 
-        sps.log2_min_luma_coding_block_size_minus3 = r.read_ue()?;
-        sps.log2_diff_max_min_luma_coding_block_size = r.read_ue()?;
-        sps.log2_min_luma_transform_block_size_minus2 = r.read_ue()?;
-        sps.log2_diff_max_min_luma_transform_block_size = r.read_ue()?;
+        sps.log2_min_luma_coding_block_size_minus3 = r.read_ue_max(3)?;
+        sps.log2_diff_max_min_luma_coding_block_size = r.read_ue_max(6)?;
+        sps.log2_min_luma_transform_block_size_minus2 = r.read_ue_max(3)?;
+        sps.log2_diff_max_min_luma_transform_block_size = r.read_ue_max(3)?;
 
         // (7-10)
         sps.min_cb_log2_size_y = u32::from(sps.log2_min_luma_coding_block_size_minus3 + 3);
@@ -4579,8 +4657,8 @@ impl Parser {
 
         sps.pic_size_in_ctbs_y = sps.pic_width_in_ctbs_y * sps.pic_height_in_ctbs_y;
 
-        sps.max_transform_hierarchy_depth_inter = r.read_ue()?;
-        sps.max_transform_hierarchy_depth_intra = r.read_ue()?;
+        sps.max_transform_hierarchy_depth_inter = r.read_ue_max(4)?;
+        sps.max_transform_hierarchy_depth_intra = r.read_ue_max(4)?;
 
         sps.scaling_list_enabled_flag = r.read_bit()?;
         if sps.scaling_list_enabled_flag {
@@ -4666,6 +4744,14 @@ impl Parser {
         };
 
         sps.wp_offset_half_range_c = 1 << shift;
+
+        log::debug!(
+            "Parsed SPS({}), resolution: ({}, {}): NAL size was {}",
+            sps.seq_parameter_set_id(),
+            sps.width(),
+            sps.height(),
+            nalu.size()
+        );
 
         let key = sps.seq_parameter_set_id;
         self.active_spses.insert(key, sps);
@@ -4785,9 +4871,10 @@ impl Parser {
         pps.pic_parameter_set_id = r.read_ue_max(MAX_PPS_COUNT as u32 - 1)?;
         pps.seq_parameter_set_id = r.read_ue_max(MAX_SPS_COUNT as u32 - 1)?;
 
-        let sps = self.get_sps(pps.seq_parameter_set_id).context(
-            "Broken stream: stream references a SPS that has not been successfully parsed",
-        )?;
+        let sps = self.get_sps(pps.seq_parameter_set_id).context(format!(
+            "Broken stream: stream references SPS {} that has not been successfully parsed",
+            pps.seq_parameter_set_id
+        ))?;
 
         pps.dependent_slice_segments_enabled_flag = r.read_bit()?;
         pps.output_flag_present_flag = r.read_bit()?;
@@ -4797,7 +4884,7 @@ impl Parser {
 
         // 7.4.7.1
         pps.num_ref_idx_l0_default_active_minus1 = r.read_ue_max(14)?;
-        pps.num_ref_idx_l0_default_active_minus1 = r.read_ue_max(14)?;
+        pps.num_ref_idx_l1_default_active_minus1 = r.read_ue_max(14)?;
 
         // (7-5)
         let qp_bd_offset_y = 6 * i32::from(sps.bit_depth_luma_minus8);
@@ -4833,7 +4920,9 @@ impl Parser {
                     sps.pic_width_in_ctbs_y - 1;
 
                 for i in 0..usize::from(pps.num_tile_columns_minus1) {
-                    pps.column_width_minus1[i] = r.read_ue_max(pps.column_width_minus1[i] - 1)?;
+                    pps.column_width_minus1[i] = r.read_ue_max(
+                        pps.column_width_minus1[usize::from(pps.num_tile_columns_minus1)] - 1,
+                    )?;
                     pps.column_width_minus1[usize::from(pps.num_tile_columns_minus1)] -=
                         pps.column_width_minus1[i] + 1;
                 }
@@ -4842,7 +4931,9 @@ impl Parser {
                     sps.pic_height_in_ctbs_y - 1;
 
                 for i in 0..usize::from(pps.num_tile_rows_minus1) {
-                    pps.row_height_minus1[i] = r.read_ue_max(pps.row_height_minus1[i] - 1)?;
+                    pps.row_height_minus1[i] = r.read_ue_max(
+                        pps.row_height_minus1[usize::from(pps.num_tile_rows_minus1)] - 1,
+                    )?;
                     pps.row_height_minus1[usize::from(pps.num_tile_rows_minus1)] -=
                         pps.row_height_minus1[i] + 1;
                 }
@@ -4858,7 +4949,7 @@ impl Parser {
                 }
 
                 for j in 0..nrows {
-                    pps.column_width_minus1[j as usize] = ((j + 1) * sps.pic_height_in_ctbs_y)
+                    pps.row_height_minus1[j as usize] = ((j + 1) * sps.pic_height_in_ctbs_y)
                         / nrows
                         - j * sps.pic_height_in_ctbs_y / nrows
                         - 1;
@@ -4884,6 +4975,15 @@ impl Parser {
 
         if pps.scaling_list_data_present_flag {
             Self::parse_scaling_list_data(&mut pps.scaling_list, &mut r)?;
+        } else {
+            for size_id in 0..4 {
+                let mut matrix_id = 0;
+                while matrix_id < 6 {
+                    Self::fill_default_scaling_list(&mut pps.scaling_list, size_id, matrix_id);
+                    let step = if size_id == 3 { 3 } else { 1 };
+                    matrix_id += step;
+                }
+            }
         }
 
         pps.lists_modification_present_flag = r.read_bit()?;
@@ -4917,6 +5017,12 @@ impl Parser {
         }
 
         pps.temporal_id = nalu.header().temporal_id_plus1() - 1;
+
+        log::debug!(
+            "Parsed PPS({}), NAL size was {}",
+            pps.pic_parameter_set_id(),
+            nalu.size()
+        );
 
         let key = pps.pic_parameter_set_id;
         self.active_ppses.insert(key, pps);
@@ -5105,21 +5211,24 @@ impl Parser {
             ..Default::default()
         };
 
-        if nalu_header.type_ as u32 >= (NaluType::BlaWLp as u32)
-            && nalu_header.type_ as u32 <= (NaluType::RsvIrapVcl23 as u32)
-        {
+        if nalu.header().nalu_type().is_irap() {
             hdr.no_output_of_prior_pics_flag = r.read_bit()?;
         }
 
         hdr.pic_parameter_set_id = r.read_ue_max(63)?;
 
-        let pps = self.get_pps(hdr.pic_parameter_set_id).context(
-            "Broken stream: slice references PPS that has not been successfully parsed.",
-        )?;
+        let pps = self.get_pps(hdr.pic_parameter_set_id).with_context(|| {
+            format!(
+                "Broken stream: slice references PPS {} that has not been successfully parsed.",
+                hdr.pic_parameter_set_id,
+            )
+        })?;
 
-        let sps = self.get_sps(pps.seq_parameter_set_id).context(
-            "Broken stream: slice's PPS references SPS that has not been successfully parsed.",
-        )?;
+        let sps = self.get_sps(pps.seq_parameter_set_id).with_context(|| {
+            format!(
+            "Broken stream: slice's PPS references SPS {} that has not been successfully parsed.", pps.seq_parameter_set_id
+        )
+        })?;
 
         Self::slice_header_set_defaults(&mut hdr, sps, pps);
 
@@ -5157,8 +5266,8 @@ impl Parser {
                 let num_bits = usize::from(sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
                 hdr.pic_order_cnt_lsb = r.read_bits(num_bits)?;
 
-                if hdr.pic_order_cnt_lsb
-                    > 2u16.pow(u32::from(sps.log2_max_pic_order_cnt_lsb_minus4 + 4))
+                if u32::from(hdr.pic_order_cnt_lsb)
+                    > 2u32.pow(u32::from(sps.log2_max_pic_order_cnt_lsb_minus4 + 4))
                 {
                     return Err(anyhow!(
                         "Invalid pic_order_cnt_lsb {}",
@@ -5206,7 +5315,9 @@ impl Parser {
                             r.read_ue_max(u32::from(sps.num_long_term_ref_pics_sps))?;
                     }
 
-                    hdr.num_long_term_pics = r.read_ue()?;
+                    hdr.num_long_term_pics = r.read_ue_max(
+                        MAX_LONG_TERM_REF_PIC_SETS as u32 - u32::from(hdr.num_long_term_sps),
+                    )?;
 
                     let num_lt = hdr.num_long_term_sps + hdr.num_long_term_pics;
                     for i in 0..usize::from(num_lt) {
@@ -5235,8 +5346,10 @@ impl Parser {
                                 }
                             }
 
-                            hdr.poc_lsb_lt[i] = sps.lt_ref_pic_poc_lsb_sps[i];
-                            hdr.used_by_curr_pic_lt[i] = sps.used_by_curr_pic_lt_sps_flag[i];
+                            hdr.poc_lsb_lt[i] =
+                                sps.lt_ref_pic_poc_lsb_sps[usize::from(hdr.lt_idx_sps[i])];
+                            hdr.used_by_curr_pic_lt[i] =
+                                sps.used_by_curr_pic_lt_sps_flag[usize::from(hdr.lt_idx_sps[i])];
                         } else {
                             let num_bits = usize::from(sps.log2_max_pic_order_cnt_lsb_minus4) + 4;
                             hdr.poc_lsb_lt[i] = r.read_bits(num_bits)?;
@@ -5253,11 +5366,10 @@ impl Parser {
                             let max =
                                 2u32.pow(32 - u32::from(sps.log2_max_pic_order_cnt_lsb_minus4) - 4);
                             hdr.delta_poc_msb_cycle_lt[i] = r.read_ue_max(max)?;
-
-                            // Equation 7-52 (simplified)
-                            if i != 0 && i != usize::from(hdr.num_long_term_sps) {
-                                hdr.delta_poc_msb_cycle_lt[i] += hdr.delta_poc_msb_cycle_lt[i - 1];
-                            }
+                        }
+                        // Equation 7-52 (simplified)
+                        if i != 0 && i != usize::from(hdr.num_long_term_sps) {
+                            hdr.delta_poc_msb_cycle_lt[i] += hdr.delta_poc_msb_cycle_lt[i - 1];
                         }
                     }
                 }
@@ -5369,10 +5481,10 @@ impl Parser {
                 }
             }
 
-            hdr.qp_delta = r.read_se()?;
+            hdr.qp_delta = r.read_se_bounded(-87, 77)?;
 
             let slice_qp_y = (26 + pps.init_qp_minus26 + hdr.qp_delta) as i32;
-            if slice_qp_y < pps.qp_bd_offset_y as i32 || slice_qp_y > 51 {
+            if slice_qp_y < -(pps.qp_bd_offset_y as i32) || slice_qp_y > 51 {
                 return Err(anyhow!("Invalid slice_qp_delta: {}", hdr.qp_delta));
             }
 
@@ -5410,6 +5522,10 @@ impl Parser {
 
             if pps.deblocking_filter_override_enabled_flag {
                 hdr.deblocking_filter_override_flag = r.read_bit()?;
+            }
+
+            if hdr.deblocking_filter_override_flag {
+                hdr.deblocking_filter_disabled_flag = r.read_bit()?;
                 if !hdr.deblocking_filter_disabled_flag {
                     hdr.beta_offset_div2 = r.read_se_bounded(-6, 6)?;
                     hdr.tc_offset_div2 = r.read_se_bounded(-6, 6)?;
@@ -5460,6 +5576,12 @@ impl Parser {
         hdr.header_bit_size = ((nalu.size() - epb) * 8 - r.num_bits_left()) as u32;
 
         hdr.n_emulation_prevention_bytes = epb as u32;
+
+        log::debug!(
+            "Parsed slice {:?}, NAL size was {}",
+            nalu_header.nalu_type(),
+            nalu.size()
+        );
 
         Ok(Slice { header: hdr, nalu })
     }

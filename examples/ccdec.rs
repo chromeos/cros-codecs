@@ -19,6 +19,7 @@ use std::str::FromStr;
 
 use argh::FromArgs;
 use cros_codecs::decoder::stateless::h264::H264;
+use cros_codecs::decoder::stateless::h265::H265;
 use cros_codecs::decoder::stateless::vp8::Vp8;
 use cros_codecs::decoder::stateless::vp9::Vp9;
 use cros_codecs::decoder::stateless::StatelessDecoder;
@@ -370,10 +371,10 @@ fn main() {
             let frame_iter = Box::new(H265FrameIterator::new(&input).map(Cow::Borrowed))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
-            let decoder = Box::new(
-                cros_codecs::decoder::stateless::h265::Decoder::new_vaapi(display, blocking_mode)
-                    .expect("failed to create decoder"),
-            ) as Box<dyn StatelessVideoDecoder<_>>;
+            let decoder = Box::new(StatelessDecoder::<H265, _>::new_vaapi(
+                display,
+                blocking_mode,
+            )) as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }
