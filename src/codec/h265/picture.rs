@@ -20,7 +20,7 @@ pub enum Reference {
 pub struct PictureData {
     // Fields extracted from the slice header. These are the CamelCase
     // variables, unless noted otherwise.
-    pub nal_unit_type: NaluType,
+    pub nalu_type: NaluType,
     pub no_rasl_output_flag: bool,
     pub pic_output_flag: bool,
     pub valid_for_prev_tid0_pic: bool,
@@ -31,8 +31,8 @@ pub struct PictureData {
 
     // Internal state.
     pub is_irap: bool,
-    pub is_first_picture: bool,
-    pub reference: Reference,
+    pub first_picture_after_eos: bool,
+    reference: Reference,
     pub pic_latency_cnt: i32,
     pub needed_for_output: bool,
     pub short_term_ref_pic_set_size_bits: u32,
@@ -49,13 +49,14 @@ impl PictureData {
     pub fn new_from_slice(
         slice: &Slice<&[u8]>,
         pps: &Pps,
-        is_first_picture_in_au: bool,
+        first_picture_in_bitstream: bool,
+        first_picture_after_eos: bool,
         prev_tid0_pic: Option<&PictureData>,
         max_pic_order_cnt_lsb: i32,
         _timestamp: u64,
     ) -> Self {
         let hdr = slice.header();
-        let nalu_type = slice.nalu().header().type_();
+        let nalu_type = slice.nalu().header().nalu_type();
         let is_irap = nalu_type.is_irap();
 
         // We assume HandleCraAsBlafFLag == 0, as it is only set through
@@ -72,10 +73,11 @@ impl PictureData {
         // order, or has HandleCraAsBlaFlag equal to 1.
         let no_rasl_output_flag = nalu_type.is_idr()
             || nalu_type.is_bla()
-            || nalu_type.is_cra()
-            || is_first_picture_in_au;
+            || (nalu_type.is_cra() && first_picture_in_bitstream)
+            || first_picture_after_eos;
 
-        let pic_output_flag = if slice.nalu().header().type_().is_rasl() && no_rasl_output_flag {
+        let pic_output_flag = if slice.nalu().header().nalu_type().is_rasl() && no_rasl_output_flag
+        {
             false
         } else {
             hdr.pic_output_flag()
@@ -117,14 +119,14 @@ impl PictureData {
             && !nalu_type.is_slnr();
 
         let no_output_of_prior_pics_flag =
-            if nalu_type.is_irap() && no_rasl_output_flag && !is_first_picture_in_au {
+            if nalu_type.is_irap() && no_rasl_output_flag && !first_picture_in_bitstream {
                 nalu_type.is_cra() || hdr.no_output_of_prior_pics_flag()
             } else {
                 false
             };
 
         Self {
-            nal_unit_type: nalu_type,
+            nalu_type,
             no_rasl_output_flag,
             no_output_of_prior_pics_flag,
             pic_output_flag,
@@ -134,7 +136,7 @@ impl PictureData {
             // Equation (8-2)
             pic_order_cnt_val: pic_order_cnt_msb + slice_pic_order_cnt_lsb,
             is_irap,
-            is_first_picture: is_first_picture_in_au,
+            first_picture_after_eos,
             reference: Default::default(),
             pic_latency_cnt: 0,
             needed_for_output: false,
@@ -145,5 +147,19 @@ impl PictureData {
     /// Whether the current picture is a reference, either ShortTerm or LongTerm.
     pub fn is_ref(&self) -> bool {
         !matches!(self.reference, Reference::None)
+    }
+
+    pub fn set_reference(&mut self, reference: Reference) {
+        log::debug!(
+            "Set reference of POC {} to {:?}",
+            self.pic_order_cnt_val,
+            reference
+        );
+
+        self.reference = reference;
+    }
+
+    pub fn reference(&self) -> &Reference {
+        &self.reference
     }
 }

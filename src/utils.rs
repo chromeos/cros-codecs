@@ -110,7 +110,7 @@ impl<T: AsRef<[u8]>> H265AccessUnitParser<T> {
     /// Whether this is a slice type.
     fn is_slice(nalu: &H265Nalu<T>) -> bool {
         matches!(
-            nalu.header().type_(),
+            nalu.header().nalu_type(),
             H265NaluType::BlaWLp
                 | H265NaluType::BlaWRadl
                 | H265NaluType::BlaNLp
@@ -133,7 +133,7 @@ impl<T: AsRef<[u8]>> H265AccessUnitParser<T> {
     /// Whether this is a delimiter, which would automatically start a new AU.
     fn is_delimiter(nalu: &H265Nalu<T>) -> bool {
         matches!(
-            nalu.header().type_(),
+            nalu.header().nalu_type(),
             H265NaluType::AudNut | H265NaluType::EobNut | H265NaluType::EosNut
         )
     }
@@ -146,7 +146,7 @@ impl<T: AsRef<[u8]>> H265AccessUnitParser<T> {
     /// firstVclNalUnitInAu, if any, specifies the start of a new access unit:
     fn specifies_new_au(nalu: &H265Nalu<T>) -> bool {
         matches!(
-            nalu.header().type_(),
+            nalu.header().nalu_type(),
             H265NaluType::PrefixSeiNut
                 | H265NaluType::VpsNut
                 | H265NaluType::SpsNut
@@ -172,30 +172,44 @@ impl<T: AsRef<[u8]>> H265AccessUnitParser<T> {
     }
 
     fn collect(&mut self, include_current_nalu: bool) -> Option<H265AccessUnit<T>> {
-        self.picture_started = false;
-
         let len = if include_current_nalu {
             self.nalus.len()
         } else {
             self.nalus.len() - 1
         };
 
-        return Some(H265AccessUnit {
+        let au = H265AccessUnit {
             nalus: self.nalus.drain(..len).collect::<Vec<_>>(),
+        };
+
+        log::debug!("Collecting access unit: (Nalu, Size): {:?}", {
+            au.nalus
+                .iter()
+                .map(|nalu| (nalu.header().nalu_type(), nalu.size()))
+                .collect::<Vec<_>>()
         });
+
+        let no_slices_left = !self.nalus.iter().any(|nalu| Self::is_slice(nalu));
+
+        if no_slices_left {
+            // Wait for a new slice.
+            self.picture_started = false;
+        }
+
+        Some(au)
     }
 
     /// Accumulates NALUs into Access Units based on gsth265parser's heuristics
     /// and on "F.7.4.2.4.4 Order of NAL units and coded pictures and
     /// association to access units" to accumulate NAL units.
     pub fn accumulate(&mut self, nalu: H265Nalu<T>) -> Option<H265AccessUnit<T>> {
-        if Self::is_delimiter(&nalu) && self.picture_started {
-            return self.collect(true);
-        }
-
         // Accumulate until we see a slice.
         self.nalus.push(nalu);
         let nalu = self.nalus.last().unwrap();
+
+        if Self::is_delimiter(nalu) && self.picture_started {
+            return self.collect(true);
+        }
 
         if !self.picture_started {
             self.picture_started = Self::is_slice(nalu);
@@ -203,7 +217,7 @@ impl<T: AsRef<[u8]>> H265AccessUnitParser<T> {
         }
 
         if Self::specifies_new_au(nalu) {
-            return self.collect(true);
+            return self.collect(false);
         }
         if Self::is_slice_of_next_au(nalu) {
             return self.collect(false);

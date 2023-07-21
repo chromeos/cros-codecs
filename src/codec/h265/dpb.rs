@@ -68,7 +68,7 @@ impl<T: Clone> Dpb<T> {
     /// Mark all pictures in the DPB as unused for reference.
     pub fn mark_all_as_unused_for_ref(&mut self) {
         for mut picture in self.pictures_mut() {
-            picture.reference = Reference::None;
+            picture.set_reference(Reference::None);
         }
     }
 
@@ -89,10 +89,20 @@ impl<T: Clone> Dpb<T> {
         Some(self.entries[position?].clone())
     }
 
+    /// Finds a reference picture in the DPB using `poc` and `mask`.
+    pub fn find_ref_by_poc_masked(&self, poc: i32, mask: i32) -> Option<DpbEntry<T>> {
+        let position = self
+            .pictures()
+            .position(|p| p.is_ref() && p.pic_order_cnt_val & mask == poc);
+
+        log::debug!("find_ref_by_poc: {}, found position {:?}", poc, position);
+        Some(self.entries[position?].clone())
+    }
+
     /// Finds a short term reference picture in the DPB using `poc`.
     pub fn find_short_term_ref_by_poc(&self, poc: i32) -> Option<DpbEntry<T>> {
         let position = self.pictures().position(|p| {
-            matches!(p.reference, Reference::ShortTerm) && p.pic_order_cnt_val == poc
+            matches!(p.reference(), Reference::ShortTerm) && p.pic_order_cnt_val == poc
         });
 
         log::debug!(
@@ -130,7 +140,7 @@ impl<T: Clone> Dpb<T> {
 
         num_needed_for_output > max_num_reorder_pics.into()
             || (max_latency_increase_plus1 != 0 && pic_over_max_latency.is_some())
-            || self.entries().len() > max_dec_pic_buffering
+            || self.entries().len() >= max_dec_pic_buffering
     }
 
     /// Find the lowest POC in the DPB that can be bumped.
@@ -155,11 +165,20 @@ impl<T: Clone> Dpb<T> {
         let mut pic = handle.0.borrow_mut();
 
         pic.needed_for_output = false;
-        log::debug!("Bumping picture {:#?} from the dpb", pic);
+        log::debug!("Bumping POC {} from the dpb", pic.pic_order_cnt_val);
+        log::trace!("{:#?}", pic);
 
         if !pic.is_ref() || flush {
             let index = self.get_position(&handle.0).unwrap();
-            log::debug!("removed picture {:#?} from dpb", pic);
+
+            log::debug!(
+                "Removed POC {} from the dpb: reference: {}, flush: {}",
+                pic.pic_order_cnt_val,
+                pic.is_ref(),
+                flush
+            );
+            log::trace!("{:#?}", pic);
+
             self.entries.remove(index);
         }
 
@@ -231,7 +250,7 @@ impl<T: Clone> Dpb<T> {
         // C.3.4.
         // After all the slices of the current picture have been decoded, this
         // picture is marked as "used for short-term reference".
-        pic.reference = Reference::ShortTerm;
+        pic.set_reference(Reference::ShortTerm);
         drop(pic);
 
         for mut pic in self.pictures_mut() {

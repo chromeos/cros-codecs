@@ -74,7 +74,12 @@ where
             next_nalu_offset -= 1;
         }
 
-        let nal_size = if hdr.is_end() { 1 } else { next_nalu_offset };
+        let nal_size = if hdr.is_end() {
+            // the NALU is comprised of only the header
+            hdr.len()
+        } else {
+            next_nalu_offset
+        };
 
         Ok(Nalu {
             header: hdr,

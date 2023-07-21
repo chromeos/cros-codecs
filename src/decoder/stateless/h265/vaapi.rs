@@ -13,7 +13,6 @@ use libva::IQMatrix;
 use libva::IQMatrixBufferHEVC;
 use libva::Picture as VaPicture;
 use libva::PictureHEVC;
-use libva::PictureNew;
 use libva::PictureParameterBufferHEVC;
 use libva::SliceParameter;
 use libva::SliceParameterBufferHEVC;
@@ -21,7 +20,6 @@ use libva::SliceParameterBufferHEVCRext;
 use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::PooledSurface;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::codec::h265::dpb::Dpb;
@@ -33,17 +31,24 @@ use crate::codec::h265::parser::Sps;
 use crate::codec::h265::picture::PictureData;
 use crate::codec::h265::picture::Reference;
 use crate::decoder::stateless::h265::clip3;
-use crate::decoder::stateless::h265::Decoder;
 use crate::decoder::stateless::h265::RefPicListEntry;
 use crate::decoder::stateless::h265::RefPicSet;
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
+use crate::decoder::stateless::h265::H265;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::BlockingMode;
 
+enum ScalingListType {
+    Sps,
+    Pps,
+    None,
+}
+
 #[derive(Default)]
-struct BackendData {
+pub struct BackendData {
     // We are always one slice behind, so that we can mark the last one in
     // submit_picture()
     last_slice: Option<(
@@ -103,7 +108,9 @@ impl VaStreamInfo for &Sps {
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
-        ((0, 0), self.coded_size()) // TODO
+        let rect = self.visible_rectangle();
+
+        ((rect.min.x, rect.min.y), (rect.max.x, rect.max.y))
     }
 }
 
@@ -229,7 +236,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
     ) -> libva::PictureHEVC {
         let mut flags = 0;
 
-        if matches!(hevc_pic.reference, Reference::LongTerm) {
+        if matches!(hevc_pic.reference(), Reference::LongTerm) {
             flags |= libva::constants::VA_PICTURE_HEVC_LONG_TERM_REFERENCE;
         }
 
@@ -410,8 +417,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
             0,
         );
 
-        let rap_pic_flag = current_picture.nal_unit_type as u32 >= NaluType::BlaWLp as u32
-            && current_picture.nal_unit_type as u32 <= NaluType::CraNut as u32;
+        let rap_pic_flag = current_picture.nalu_type as u32 >= NaluType::BlaWLp as u32
+            && current_picture.nalu_type as u32 <= NaluType::CraNut as u32;
 
         let slice_parsing_fields = libva::HevcSliceParsingFields::new(
             pps.lists_modification_present_flag() as u32,
@@ -426,8 +433,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
             pps.deblocking_filter_disabled_flag() as u32,
             pps.slice_segment_header_extension_present_flag() as u32,
             rap_pic_flag as u32,
-            current_picture.nal_unit_type.is_idr() as u32,
-            current_picture.nal_unit_type.is_irap() as u32,
+            current_picture.nalu_type.is_idr() as u32,
+            current_picture.nalu_type.is_irap() as u32,
         );
 
         let pic_param = PictureParameterBufferHEVC::new(
@@ -476,45 +483,77 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         ))
     }
 
-    fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
-        let scaling_lists = if pps.scaling_list_data_present_flag() {
-            pps.scaling_list()
+    fn find_scaling_list(sps: &Sps, pps: &Pps) -> ScalingListType {
+        if pps.scaling_list_data_present_flag()
+            || (sps.scaling_list_enabled_flag() && !sps.scaling_list_data_present_flag())
+        {
+            ScalingListType::Pps
+        } else if sps.scaling_list_enabled_flag() && sps.scaling_list_data_present_flag() {
+            ScalingListType::Sps
         } else {
-            sps.scaling_list()
+            ScalingListType::None
+        }
+    }
+
+    fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
+        let scaling_lists = match Self::find_scaling_list(sps, pps) {
+            ScalingListType::Sps => sps.scaling_list(),
+            ScalingListType::Pps => pps.scaling_list(),
+            ScalingListType::None => panic!("No scaling list data available"),
         };
 
-        // let mut scaling_list_32x32 = [[0; 64]; 2];
+        let mut scaling_list_32x32 = [[0; 64]; 2];
 
-        // for i in (0..6).step_by(3) {
-        //     for j in 0..64 {
-        //         scaling_list_32x32[i / 3][j] = scaling_lists.scaling_list_32x32()[i][j];
-        //     }
-        // }
+        for i in (0..6).step_by(3) {
+            for j in 0..64 {
+                scaling_list_32x32[i / 3][j] = scaling_lists.scaling_list_32x32()[i][j];
+            }
+        }
 
-        // let mut scaling_list_32x32 = [[0; 64]; 2];
+        let mut scaling_list_dc_32x32 = [0; 2];
+        for i in (0..6).step_by(3) {
+            scaling_list_dc_32x32[i / 3] =
+                (scaling_lists.scaling_list_dc_coef_minus8_32x32()[i] + 8) as u8;
+        }
 
-        // for i in (0..6).step_by(3) {
-        //     for j in 0..64 {
-        //         scaling_list_32x32[i / 3][j] = scaling_lists.scaling_list_32x32()[i][j];
-        //     }
-        // }
+        let mut scaling_list_4x4 = [[0; 16]; 6];
+        let mut scaling_list_8x8 = [[0; 64]; 6];
+        let mut scaling_list_16x16 = [[0; 64]; 6];
+        let mut scaling_list_32x32_r = [[0; 64]; 2];
 
-        // let mut scaling_list_dc_32x32 = [0; 2];
-        // for i in (0..6).step_by(3) {
-        //     scaling_list_dc_32x32[i / 3] = scaling_lists.scaling_list_dc_coef_minus8_32x32();
-        // }
+        (0..6).for_each(|i| {
+            super::get_raster_from_up_right_diagonal_4x4(
+                scaling_lists.scaling_list_4x4()[i],
+                &mut scaling_list_4x4[i],
+            );
+
+            super::get_raster_from_up_right_diagonal_8x8(
+                scaling_lists.scaling_list_8x8()[i],
+                &mut scaling_list_8x8[i],
+            );
+
+            super::get_raster_from_up_right_diagonal_8x8(
+                scaling_lists.scaling_list_16x16()[i],
+                &mut scaling_list_16x16[i],
+            );
+        });
+
+        (0..2).for_each(|i| {
+            super::get_raster_from_up_right_diagonal_8x8(
+                scaling_list_32x32[i],
+                &mut scaling_list_32x32_r[i],
+            );
+        });
 
         BufferType::IQMatrix(IQMatrix::HEVC(IQMatrixBufferHEVC::new(
-            scaling_lists.scaling_list_4x4(),
-            scaling_lists.scaling_list_8x8(),
-            scaling_lists.scaling_list_16x16(),
-            scaling_lists.scaling_list_32x32(),
+            scaling_list_4x4,
+            scaling_list_8x8,
+            scaling_list_16x16,
+            scaling_list_32x32_r,
             scaling_lists
                 .scaling_list_dc_coef_minus8_16x16()
                 .map(|x| (x + 8) as u8),
-            scaling_lists
-                .scaling_list_dc_coef_minus8_32x32()
-                .map(|x| (x + 8) as u8),
+            scaling_list_dc_32x32,
         )))
     }
 }
@@ -545,7 +584,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         ))
     }
 
-    fn handle_picture(
+    fn begin_picture(
         &mut self,
         picture: &mut Self::Picture,
         picture_data: &PictureData,
@@ -569,7 +608,9 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
             .create_buffer(pic_param)
             .context("while creating picture parameter buffer")?;
 
-        if sps.scaling_list_data_present_flag() || pps.scaling_list_data_present_flag() {
+        picture.add_buffer(pic_param);
+
+        if !matches!(Self::find_scaling_list(sps, pps), ScalingListType::None) {
             let iq_matrix = Self::build_iq_matrix(sps, pps);
             let iq_matrix = context
                 .create_buffer(iq_matrix)
@@ -596,8 +637,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
                 picture.add_buffer(scc);
             }
         }
-
-        picture.add_buffer(pic_param);
 
         Ok(())
     }
@@ -662,29 +701,36 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
 
             for j in 0..2 {
                 delta_chroma_weight_l0[i][j] = pwt.delta_chroma_weight_l0()[i][j];
-                let chroma_weight_l0 =
-                    (1 << pwt.chroma_log2_weight_denom()) + pwt.delta_chroma_weight_l0()[i][j];
+                let delta_chroma_offset = pwt.delta_chroma_offset_l0()[i][j];
+
+                let chroma_weight_l0 = (1 << pwt.chroma_log2_weight_denom())
+                    + i32::from(pwt.delta_chroma_weight_l0()[i][j]);
+
+                let offset = sps.wp_offset_half_range_c() as i32 + delta_chroma_offset as i32
+                    - ((sps.wp_offset_half_range_c() as i32 * chroma_weight_l0)
+                        >> pwt.chroma_log2_weight_denom());
 
                 chroma_offset_l0[i][j] = clip3(
                     -(sps.wp_offset_half_range_c() as i32),
                     (sps.wp_offset_half_range_c() - 1) as i32,
-                    (pwt.delta_chroma_offset_l0()[i][j] as i32
-                        - ((sps.wp_offset_half_range_c() as i32 * chroma_weight_l0 as i32)
-                            >> pwt.chroma_log2_weight_denom() as i32)) as _,
+                    offset,
                 ) as _;
 
                 if hdr.type_().is_b() {
                     delta_chroma_weight_l1[i][j] = pwt.delta_chroma_weight_l1()[i][j];
-                    let chroma_weight_l1 =
-                        (1 << pwt.chroma_log2_weight_denom()) + pwt.delta_chroma_weight_l1()[i][j];
+                    let delta_chroma_offset = pwt.delta_chroma_offset_l1()[i][j];
+
+                    let chroma_weight_l1 = (1 << pwt.chroma_log2_weight_denom())
+                        + i32::from(pwt.delta_chroma_weight_l1()[i][j]);
+
+                    let offset = sps.wp_offset_half_range_c() as i32 + delta_chroma_offset as i32
+                        - ((sps.wp_offset_half_range_c() as i32 * chroma_weight_l1)
+                            >> pwt.chroma_log2_weight_denom());
 
                     chroma_offset_l1[i][j] = clip3(
                         -(sps.wp_offset_half_range_c() as i32),
                         (sps.wp_offset_half_range_c() - 1) as i32,
-                        (pwt.delta_chroma_offset_l1()[i][j] as i32
-                            - ((sps.wp_offset_half_range_c() as i32 * chroma_weight_l1 as i32)
-                                >> pwt.chroma_log2_weight_denom() as i32))
-                            as _,
+                        offset,
                     ) as _;
                 }
             }
@@ -764,15 +810,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static>
-    Decoder<VADecodedHandle<M>, VaPicture<PictureNew, PooledSurface<M>>>
-{
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H265, VaapiBackend<BackendData, M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi(display: Rc<Display>, blocking_mode: BlockingMode) -> anyhow::Result<Self> {
-        Self::new(
-            Box::new(VaapiBackend::<BackendData, M>::new(display)),
-            blocking_mode,
-        )
+    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
+    where
+        M: From<S>,
+        S: From<M>,
+    {
+        Self::new(VaapiBackend::<BackendData, M>::new(display), blocking_mode)
     }
 }
 
@@ -780,9 +825,10 @@ impl<M: SurfaceMemoryDescriptor + 'static>
 mod tests {
     use libva::Display;
 
-    use crate::decoder::stateless::h265::Decoder;
+    use crate::decoder::stateless::h265::H265;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
+    use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_surfaces;
@@ -796,7 +842,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = Decoder::new_vaapi(display, blocking_mode).unwrap();
+        let decoder = StatelessDecoder::<H265, _>::new_vaapi::<()>(display, blocking_mode);
 
         test_decode_stream(
             |d, s, f| {
