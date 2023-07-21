@@ -308,15 +308,21 @@ where
     };
 
     for (frame_num, packet) in stream_iter.enumerate() {
+        let mut bitstream = packet.as_ref();
         loop {
-            match decoder.decode(frame_num as u64, packet.as_ref()) {
-                Ok(_) => {
+            match decoder.decode(frame_num as u64, bitstream) {
+                Ok(bytes_decoded) => {
+                    bitstream = &bitstream[bytes_decoded..];
+
                     if blocking_mode == BlockingMode::Blocking {
                         check_events(decoder)?;
                     }
-                    // Break the loop so we can process the next NAL if we sent the current one
-                    // successfully.
-                    break;
+
+                    if bitstream.is_empty() {
+                        // Break the loop so we can process the next NAL if we sent the current one
+                        // successfully.
+                        break;
+                    }
                 }
                 Err(DecodeError::CheckEvents) | Err(DecodeError::NotEnoughOutputBuffers(_)) => {
                     check_events(decoder)?
