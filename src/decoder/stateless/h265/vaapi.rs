@@ -817,7 +817,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H265, VaapiBackend<B
         M: From<S>,
         S: From<M>,
     {
-        Self::new(VaapiBackend::<BackendData, M>::new(display), blocking_mode)
+        Self::new(
+            VaapiBackend::<BackendData, M>::new(display, false),
+            blocking_mode,
+        )
     }
 }
 

@@ -533,6 +533,7 @@ impl StreamMetadataState {
         format_map: Option<&FormatMap>,
         old_metadata_state: StreamMetadataState,
         old_surface_pool: Rc<RefCell<VaSurfacePool<M>>>,
+        supports_context_reuse: bool,
     ) -> anyhow::Result<(StreamMetadataState, Rc<RefCell<VaSurfacePool<M>>>)> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
@@ -577,7 +578,9 @@ impl StreamMetadataState {
         let (config, context, surface_pool) = match old_metadata_state {
             // Reuse current context.
             StreamMetadataState::Parsed(old_state)
-                if old_state.rt_format == rt_format && old_state.profile == va_profile =>
+                if supports_context_reuse
+                    && old_state.rt_format == rt_format
+                    && old_state.profile == va_profile =>
             {
                 (old_state.config, old_state.context, old_surface_pool)
             }
@@ -903,6 +906,9 @@ where
     pub(crate) metadata_state: StreamMetadataState,
     /// Any extra data that the backend might need to keep track of for a given codec.
     pub(crate) backend_data: BackendData,
+    /// Whether the codec supports context reuse on DRC. This is only supported
+    /// by VP9 and AV1.
+    supports_context_reuse: bool,
 }
 
 impl<BackendData, M> VaapiBackend<BackendData, M>
@@ -910,7 +916,7 @@ where
     M: SurfaceMemoryDescriptor + 'static,
     BackendData: Default,
 {
-    pub(crate) fn new(display: Rc<libva::Display>) -> Self {
+    pub(crate) fn new(display: Rc<libva::Display>, supports_context_reuse: bool) -> Self {
         // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
         let surface_pool = Rc::new(RefCell::new(VaSurfacePool::new(
             Rc::clone(&display),
@@ -924,6 +930,7 @@ where
             surface_pool,
             metadata_state: StreamMetadataState::Unparsed,
             backend_data: Default::default(),
+            supports_context_reuse,
         }
     }
 
@@ -943,6 +950,7 @@ where
             None,
             old_metadata_state,
             Rc::clone(&self.surface_pool),
+            self.supports_context_reuse,
         )?;
 
         Ok(())
@@ -1030,6 +1038,7 @@ where
                 Some(map_format),
                 old_metadata_state,
                 Rc::clone(&self.surface_pool),
+                self.supports_context_reuse,
             )?;
 
             Ok(())

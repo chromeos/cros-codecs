@@ -294,7 +294,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Vp8, VaapiBackend<()
         M: From<S>,
         S: From<M>,
     {
-        Self::new(VaapiBackend::<(), M>::new(display), blocking_mode)
+        Self::new(VaapiBackend::<(), M>::new(display, false), blocking_mode)
     }
 }
 
