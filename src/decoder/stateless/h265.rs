@@ -1309,6 +1309,7 @@ where
 #[cfg(test)]
 pub mod tests {
 
+    use crate::codec::h265::parser::Nalu;
     use crate::decoder::stateless::h265::H265;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
@@ -1316,7 +1317,7 @@ pub mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_surfaces;
-    use crate::utils::H265FrameIterator;
+    use crate::utils::NalIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
@@ -1327,7 +1328,7 @@ pub mod tests {
             |d, s, f| {
                 simple_playback_loop(
                     d,
-                    H265FrameIterator::new(s),
+                    NalIterator::<Nalu<_>>::new(s),
                     f,
                     &mut simple_playback_loop_owned_surfaces,
                     DecodedFormat::NV12,

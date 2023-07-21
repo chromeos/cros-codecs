@@ -18,6 +18,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use argh::FromArgs;
+use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
+use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
 use cros_codecs::decoder::stateless::h264::H264;
 use cros_codecs::decoder::stateless::h265::H265;
 use cros_codecs::decoder::stateless::vp8::Vp8;
@@ -32,9 +34,8 @@ use cros_codecs::utils::simple_playback_loop;
 use cros_codecs::utils::simple_playback_loop_owned_surfaces;
 use cros_codecs::utils::simple_playback_loop_userptr_surfaces;
 use cros_codecs::utils::DmabufSurface;
-use cros_codecs::utils::H264FrameIterator;
-use cros_codecs::utils::H265FrameIterator;
 use cros_codecs::utils::IvfIterator;
+use cros_codecs::utils::NalIterator;
 use cros_codecs::utils::UserPtrSurface;
 use cros_codecs::DecodedFormat;
 use cros_codecs::Fourcc;
@@ -337,7 +338,7 @@ fn main() {
     let display = libva::Display::open().expect("failed to open libva display");
     let (mut decoder, frame_iter) = match args.input_format {
         EncodedFormat::H264 => {
-            let frame_iter = Box::new(H264FrameIterator::new(&input).map(Cow::Borrowed))
+            let frame_iter = Box::new(NalIterator::<H264Nalu<_>>::new(&input).map(Cow::Borrowed))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
             let decoder = Box::new(StatelessDecoder::<H264, _>::new_vaapi(
@@ -368,7 +369,7 @@ fn main() {
             (decoder, frame_iter)
         }
         EncodedFormat::H265 => {
-            let frame_iter = Box::new(H265FrameIterator::new(&input).map(Cow::Borrowed))
+            let frame_iter = Box::new(NalIterator::<H265Nalu<_>>::new(&input).map(Cow::Borrowed))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
             let decoder = Box::new(StatelessDecoder::<H265, _>::new_vaapi(
