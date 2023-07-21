@@ -309,6 +309,8 @@ pub struct H265DecoderState<B: StatelessDecoderBackend<Sps>> {
     /// calls to `decode` because multiple slices will be processed in different
     /// calls to `decode`.
     current_pic: Option<CurrentPicState<B>>,
+
+    pending_pps: Vec<Vec<u8>>,
 }
 
 impl<B> Default for H265DecoderState<B>
@@ -331,6 +333,7 @@ where
             irap_no_rasl_output_flag: Default::default(),
             last_independent_slice_header: Default::default(),
             current_pic: Default::default(),
+            pending_pps: Default::default(),
         }
     }
 }
@@ -1137,10 +1140,22 @@ where
                 let sps = self.codec.parser.parse_sps(&nalu)?;
                 self.codec.max_pic_order_cnt_lsb =
                     1 << (sps.log2_max_pic_order_cnt_lsb_minus4() + 4);
+
+                // Try parsing the PPS again.
+                for pending_pps in self.codec.pending_pps.clone().iter().enumerate() {
+                    let mut cursor: Cursor<&[u8]> = Cursor::new(pending_pps.1.as_ref());
+                    let nalu = crate::codec::h265::parser::Nalu::next(&mut cursor)?;
+                    if self.codec.parser.parse_pps(&nalu).is_ok() {
+                        self.codec.pending_pps.remove(pending_pps.0);
+                    }
+                }
             }
 
             NaluType::PpsNut => {
-                self.codec.parser.parse_pps(&nalu)?;
+                if self.codec.parser.parse_pps(&nalu).is_err() {
+                    let data = &nalu.data()[nalu.sc_offset()..nalu.offset() + nalu.size()];
+                    self.codec.pending_pps.push(Vec::from(data))
+                }
             }
 
             NaluType::BlaWLp
@@ -1250,10 +1265,13 @@ where
         let nalu_len = nalu.offset() + nalu.size();
 
         match &mut self.decoding_state {
-            // Process VPS, but skip input until we get information from the
-            // stream.
+            // Process parameter sets, but skip input until we get information
+            // from the stream.
             DecodingState::AwaitingStreamInfo | DecodingState::Reset => {
-                if nalu.header().nalu_type() == NaluType::VpsNut {
+                if matches!(
+                    nalu.header().nalu_type(),
+                    NaluType::VpsNut | NaluType::SpsNut | NaluType::PpsNut
+                ) {
                     self.process_nalu(timestamp, nalu)?;
                 }
             }
