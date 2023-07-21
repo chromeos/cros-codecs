@@ -15,7 +15,7 @@ use bytes::Buf;
 
 use crate::codec::h264::nalu::Header;
 use crate::codec::h264::nalu_reader;
-use crate::codec::h264::parser::Nalu;
+use crate::codec::h264::parser::Nalu as H264Nalu;
 use crate::codec::h265::parser::Nalu as H265Nalu;
 use crate::codec::h265::parser::NaluType as H265NaluType;
 use crate::decoder::stateless::DecodeError;
@@ -84,7 +84,7 @@ impl<'a> Iterator for H264FrameIterator<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        Nalu::next(&mut self.0)
+        H264Nalu::next(&mut self.0)
             .map(|n| {
                 let start = n.sc_offset();
                 let end = n.offset() + n.size();
