@@ -269,6 +269,9 @@ pub struct H264DecoderState<B: StatelessDecoderBackend<Rc<Sps>>> {
     /// The picture currently being decoded. We need to preserve it between calls to `decode`
     /// because multiple slices will be processed in different calls to `decode`.
     current_pic: Option<CurrentPicState<B>>,
+    /// Any PPS that we have not parsed because the needed SPS was missing. We
+    /// do a best-effort attempt here to parse them again when new SPSs come in.
+    pending_pps: Vec<Vec<u8>>,
 }
 
 impl<B> Default for H264DecoderState<B>
@@ -286,6 +289,7 @@ where
             max_long_term_frame_idx: Default::default(),
             last_field: Default::default(),
             current_pic: None,
+            pending_pps: Default::default(),
         }
     }
 }
@@ -1828,9 +1832,21 @@ where
         match nalu.header().nalu_type() {
             NaluType::Sps => {
                 self.codec.parser.parse_sps(&nalu)?;
+
+                // Try parsing the PPS again.
+                for pending_pps in self.codec.pending_pps.clone().iter().enumerate() {
+                    let mut cursor: Cursor<&[u8]> = Cursor::new(pending_pps.1.as_ref());
+                    let nalu = crate::codec::h264::parser::Nalu::next(&mut cursor)?;
+                    if self.codec.parser.parse_pps(&nalu).is_ok() {
+                        self.codec.pending_pps.remove(pending_pps.0);
+                    }
+                }
             }
             NaluType::Pps => {
-                self.codec.parser.parse_pps(&nalu)?;
+                if self.codec.parser.parse_pps(&nalu).is_err() {
+                    let data = &nalu.data()[nalu.sc_offset()..nalu.offset() + nalu.size()];
+                    self.codec.pending_pps.push(Vec::from(data))
+                }
             }
             NaluType::Slice
             | NaluType::SliceDpa
@@ -1908,7 +1924,7 @@ where
             // Process parameter sets, but skip input until we get information
             // from the stream.
             DecodingState::AwaitingStreamInfo | DecodingState::Reset => {
-                if matches!(nalu.header().nalu_type(), NaluType::Pps) {
+                if matches!(nalu.header().nalu_type(), NaluType::Sps | NaluType::Pps) {
                     self.process_nalu(timestamp, nalu)?;
                 }
             }
