@@ -62,10 +62,8 @@ pub struct Vp9DecoderState<B: StatelessDecoderBackend<Header>> {
     /// Per-segment data.
     segmentation: [Segmentation; MAX_SEGMENTS],
 
-    /// Cached value for bit depth
-    bit_depth: BitDepth,
-    /// Cached value for profile
-    profile: Profile,
+    /// Keeps track of the last values seen for negotiation purposes.
+    negotiation_info: NegotiationInfo,
 }
 
 impl<B: StatelessDecoderBackend<Header>> Default for Vp9DecoderState<B> {
@@ -74,8 +72,31 @@ impl<B: StatelessDecoderBackend<Header>> Default for Vp9DecoderState<B> {
             parser: Default::default(),
             reference_frames: Default::default(),
             segmentation: Default::default(),
-            bit_depth: Default::default(),
-            profile: Default::default(),
+            negotiation_info: Default::default(),
+        }
+    }
+}
+
+/// Keeps track of the last values seen for negotiation purposes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct NegotiationInfo {
+    /// The current coded resolution
+    coded_resolution: Resolution,
+    /// Cached value for bit depth
+    bit_depth: BitDepth,
+    /// Cached value for profile
+    profile: Profile,
+}
+
+impl From<&Header> for NegotiationInfo {
+    fn from(hdr: &Header) -> Self {
+        NegotiationInfo {
+            coded_resolution: Resolution {
+                width: hdr.width,
+                height: hdr.height,
+            },
+            bit_depth: hdr.bit_depth,
+            profile: hdr.profile,
         }
     }
 }
@@ -163,21 +184,16 @@ where
         Ok(())
     }
 
-    fn negotiation_possible(&self, hdr: &Header) -> bool {
-        let coded_resolution = self.coded_resolution;
-        let width = hdr.width;
-        let height = hdr.height;
-        let bit_depth = hdr.bit_depth;
-        let profile = hdr.profile;
+    fn negotiation_possible(&self, hdr: &Header, old_negotiation_info: &NegotiationInfo) -> bool {
+        let negotiation_info = NegotiationInfo::from(hdr);
 
-        if width == 0 || height == 0 {
-            return false;
+        if negotiation_info.coded_resolution.width == 0
+            || negotiation_info.coded_resolution.height == 0
+        {
+            false
+        } else {
+            *old_negotiation_info != negotiation_info
         }
-
-        width != coded_resolution.width
-            || height != coded_resolution.height
-            || bit_depth != self.codec.bit_depth
-            || profile != self.codec.profile
     }
 }
 
@@ -220,7 +236,7 @@ where
         });
 
         if let Some(frame) = largest_in_superframe {
-            if self.negotiation_possible(&frame.header) {
+            if self.negotiation_possible(&frame.header, &self.codec.negotiation_info) {
                 self.backend.new_sequence(&frame.header)?;
                 self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
             } else if matches!(self.decoding_state, DecodingState::Reset) {
@@ -260,12 +276,7 @@ where
                 if let DecodingState::AwaitingFormat(hdr) = &self.decoding_state {
                     Some(DecoderEvent::FormatChanged(Box::new(
                         StatelessDecoderFormatNegotiator::new(self, hdr.clone(), |decoder, hdr| {
-                            decoder.codec.profile = hdr.profile;
-                            decoder.codec.bit_depth = hdr.bit_depth;
-                            decoder.coded_resolution = Resolution {
-                                width: hdr.width,
-                                height: hdr.height,
-                            };
+                            decoder.codec.negotiation_info = NegotiationInfo::from(hdr);
                             decoder.decoding_state = DecodingState::Decoding;
                         }),
                     )))
