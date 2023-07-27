@@ -349,7 +349,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         ))
     }
 
-    // fn fill_va_ref_pic_list(h265_pic: &PictureData, )
     fn build_pic_param(
         _: &Slice<impl AsRef<[u8]>>,
         current_picture: &PictureData,
