@@ -123,6 +123,39 @@ pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
     fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle>;
 }
 
+/// Keeps track of the last values seen for negotiation purposes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct NegotiationInfo {
+    /// The current coded resolution
+    coded_resolution: Resolution,
+    /// Same meaning as the specification.
+    profile_idc: u8,
+    /// Same meaning as the specification.
+    bit_depth_luma_minus8: u8,
+    /// Same meaning as the specification.
+    bit_depth_chroma_minus8: u8,
+    /// Same meaning as the specification.
+    chroma_format_idc: u8,
+    /// The maximum size of the dpb in frames.
+    max_dpb_frames: usize,
+    /// Whether this is an interlaced stream
+    interlaced: bool,
+}
+
+impl From<&Sps> for NegotiationInfo {
+    fn from(sps: &Sps) -> Self {
+        NegotiationInfo {
+            coded_resolution: Resolution::from((sps.width, sps.height)),
+            profile_idc: sps.profile_idc,
+            bit_depth_luma_minus8: sps.bit_depth_luma_minus8,
+            bit_depth_chroma_minus8: sps.bit_depth_chroma_minus8,
+            chroma_format_idc: sps.chroma_format_idc,
+            max_dpb_frames: sps.max_dpb_frames(),
+            interlaced: !sps.frame_mbs_only_flag,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 enum RefPicList {
     RefPicList0,
@@ -209,6 +242,8 @@ struct CurrentPicState<B: StatelessDecoderBackend<Sps>> {
 pub struct H264DecoderState<B: StatelessDecoderBackend<Sps>> {
     /// H.264 bitstream parser.
     parser: Parser,
+    /// Keeps track of the last stream parameters seen for negotiation purposes.
+    negotiation_info: NegotiationInfo,
 
     /// The decoded picture buffer.
     dpb: Dpb<B::Handle>,
@@ -247,6 +282,7 @@ where
     fn default() -> Self {
         H264DecoderState {
             parser: Default::default(),
+            negotiation_info: Default::default(),
             dpb: Default::default(),
             cur_sps_id: Default::default(),
             cur_pps_id: Default::default(),
@@ -594,29 +630,15 @@ where
     B: StatelessH264DecoderBackend,
     B::Handle: Clone,
 {
-    fn negotiation_possible(
-        sps: &Sps,
-        dpb: &Dpb<B::Handle>,
-        current_resolution: Resolution,
-    ) -> bool {
-        let max_dpb_frames = sps.max_dpb_frames();
-        let interlaced = !sps.frame_mbs_only_flag;
-
-        let prev_max_dpb_frames = dpb.max_num_pics();
-        let prev_interlaced = dpb.interlaced();
-
-        let resolution = Resolution {
-            width: sps.width,
-            height: sps.height,
-        };
-
-        current_resolution != resolution
-            || prev_max_dpb_frames != max_dpb_frames
-            || prev_interlaced != interlaced
+    fn negotiation_possible(sps: &Sps, old_negotiation_info: &NegotiationInfo) -> bool {
+        let negotiation_info = NegotiationInfo::from(sps);
+        *old_negotiation_info != negotiation_info
     }
 
     // Apply the parameters of `sps` to the decoder.
     fn apply_sps(&mut self, sps: &Sps) {
+        self.codec.negotiation_info = NegotiationInfo::from(sps);
+
         let max_dpb_frames = sps.max_dpb_frames();
         let interlaced = !sps.frame_mbs_only_flag;
         let resolution = Resolution {
@@ -1879,7 +1901,7 @@ where
 
         if nalu.header().nalu_type() == NaluType::Sps {
             let sps = self.codec.parser.parse_sps(&nalu)?.clone();
-            if Self::negotiation_possible(&sps, &self.codec.dpb, self.coded_resolution) {
+            if Self::negotiation_possible(&sps, &self.codec.negotiation_info) {
                 // Make sure all the frames we decoded so far are in the ready queue.
                 self.drain()?;
                 self.backend.new_sequence(&sps)?;
