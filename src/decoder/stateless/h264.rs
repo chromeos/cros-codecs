@@ -1905,8 +1905,13 @@ where
         let nalu_len = nalu.offset() + nalu.size();
 
         match &mut self.decoding_state {
-            // Skip input until we get information from the stream.
-            DecodingState::AwaitingStreamInfo | DecodingState::Reset => (),
+            // Process parameter sets, but skip input until we get information
+            // from the stream.
+            DecodingState::AwaitingStreamInfo | DecodingState::Reset => {
+                if matches!(nalu.header().nalu_type(), NaluType::Pps) {
+                    self.process_nalu(timestamp, nalu)?;
+                }
+            }
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
             DecodingState::Decoding => {
