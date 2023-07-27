@@ -576,7 +576,20 @@ impl StreamMetadataState {
         };
 
         let (config, context, surface_pool) = match old_metadata_state {
-            // Reuse current context.
+            // Nothing has changed for VAAPI, reuse current context.
+            //
+            // This can happen as the decoder cannot possibly know whether a
+            // given backend will really need to renegotiate on a given change
+            // of stream parameters.
+            StreamMetadataState::Parsed(old_state)
+                if old_state.stream_info.coded_resolution == coded_resolution
+                    && old_state.rt_format == rt_format
+                    && old_state.profile == va_profile =>
+            {
+                (old_state.config, old_state.context, old_surface_pool)
+            }
+            // The resolution has changed, but we support context reuse. Reuse
+            // current context.
             StreamMetadataState::Parsed(old_state)
                 if supports_context_reuse
                     && old_state.rt_format == rt_format
