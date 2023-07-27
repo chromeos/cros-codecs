@@ -621,6 +621,17 @@ where
         *old_negotiation_info != negotiation_info
     }
 
+    fn renegotiate_if_needed(&mut self, sps: &Rc<Sps>) -> anyhow::Result<()> {
+        if Self::negotiation_possible(sps, &self.codec.negotiation_info) {
+            // Make sure all the frames we decoded so far are in the ready queue.
+            self.drain()?;
+            self.backend.new_sequence(sps)?;
+            self.decoding_state = DecodingState::AwaitingFormat(sps.clone());
+        }
+
+        Ok(())
+    }
+
     // Apply the parameters of `sps` to the decoder.
     fn apply_sps(&mut self, sps: &Sps) {
         self.codec.negotiation_info = NegotiationInfo::from(sps);
@@ -1463,10 +1474,6 @@ where
         timestamp: u64,
         slice: &Slice<&[u8]>,
     ) -> Result<CurrentPicState<B>, DecodeError> {
-        if self.backend.frame_pool().num_free_frames() == 0 {
-            return Err(DecodeError::NotEnoughOutputBuffers(1));
-        }
-
         let nalu_hdr = slice.nalu().header();
 
         if nalu_hdr.idr_pic_flag() {
@@ -1482,6 +1489,16 @@ where
                 .get_pps(hdr.pic_parameter_set_id)
                 .context("Invalid PPS in handle_picture")?,
         );
+
+        // A picture's SPS may require negociation.
+        self.renegotiate_if_needed(&pps.sps)?;
+        if let DecodingState::AwaitingFormat(_) = &self.decoding_state {
+            return Err(DecodeError::CheckEvents);
+        }
+
+        if self.backend.frame_pool().num_free_frames() == 0 {
+            return Err(DecodeError::NotEnoughOutputBuffers(1));
+        }
 
         if frame_num != self.codec.prev_ref_pic_info.frame_num
             && frame_num
@@ -1764,6 +1781,20 @@ where
         cur_pic: &mut CurrentPicState<B>,
         slice: &Slice<&[u8]>,
     ) -> anyhow::Result<()> {
+        // A slice can technically refer to another PPS.
+        let pps = self
+            .codec
+            .parser
+            .get_pps(slice.header().pic_parameter_set_id)
+            .context("Invalid PPS")?;
+        cur_pic.pps = Rc::clone(pps);
+
+        // Make sure that no negotiation is possible mid-picture. How could it?
+        // We'd lose the context with the previous slices on it.
+        if Self::negotiation_possible(&cur_pic.pps.sps, &self.codec.negotiation_info) {
+            anyhow::bail!("invalid stream: inter-frame renegotiation requested");
+        }
+
         let RefPicLists {
             ref_pic_list0,
             ref_pic_list1,
@@ -1852,11 +1883,9 @@ where
 
         if nalu.header().nalu_type() == NaluType::Sps {
             let sps = self.codec.parser.parse_sps(&nalu)?.clone();
-            if Self::negotiation_possible(&sps, &self.codec.negotiation_info) {
-                // Make sure all the frames we decoded so far are in the ready queue.
-                self.drain()?;
-                self.backend.new_sequence(&sps)?;
-                self.decoding_state = DecodingState::AwaitingFormat(sps);
+            if matches!(self.decoding_state, DecodingState::AwaitingStreamInfo) {
+                // If more SPS come along we will renegotiate in begin_picture().
+                self.renegotiate_if_needed(&sps)?;
             } else if matches!(self.decoding_state, DecodingState::Reset) {
                 // We can resume decoding since the decoding parameters have not changed.
                 self.decoding_state = DecodingState::Decoding;
