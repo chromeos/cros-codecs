@@ -28,7 +28,7 @@ use libva::VAConfigAttrib;
 use libva::VAConfigAttribType;
 use libva::VaError;
 
-use crate::backend::vaapi::surface_pool::VaSurfacePool;
+use crate::backend::vaapi::surface_pool::SurfacePool;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -235,11 +235,11 @@ mod surface_pool {
     /// exists and the surface is still compatible with it.
     pub struct PooledSurface<M: SurfaceMemoryDescriptor> {
         surface: Option<Surface<M>>,
-        pool: Weak<RefCell<VaSurfacePool<M>>>,
+        pool: Weak<RefCell<SurfacePool<M>>>,
     }
 
     impl<M: SurfaceMemoryDescriptor> PooledSurface<M> {
-        fn new(surface: Surface<M>, pool: &Rc<RefCell<VaSurfacePool<M>>>) -> Self {
+        fn new(surface: Surface<M>, pool: &Rc<RefCell<SurfacePool<M>>>) -> Self {
             Self {
                 surface: Some(surface),
                 pool: Rc::downgrade(pool),
@@ -306,7 +306,7 @@ mod surface_pool {
     /// This means that this pool is suitable for inter-frame DRC, as the stale
     /// surfaces will gracefully be dropped, which is arguably better than the
     /// alternative of having more than one pool active at a time.
-    pub(crate) struct VaSurfacePool<M: SurfaceMemoryDescriptor> {
+    pub(crate) struct SurfacePool<M: SurfaceMemoryDescriptor> {
         display: Rc<Display>,
         rt_format: u32,
         usage_hint: Option<libva::UsageHint>,
@@ -318,7 +318,7 @@ mod surface_pool {
         managed_surfaces: BTreeMap<VASurfaceID, Resolution>,
     }
 
-    impl<M: SurfaceMemoryDescriptor> VaSurfacePool<M> {
+    impl<M: SurfaceMemoryDescriptor> SurfacePool<M> {
         /// Create a new pool.
         ///
         /// # Arguments
@@ -432,7 +432,7 @@ mod surface_pool {
         }
     }
 
-    impl<M: SurfaceMemoryDescriptor + 'static> FramePool<M> for Rc<RefCell<VaSurfacePool<M>>> {
+    impl<M: SurfaceMemoryDescriptor + 'static> FramePool<M> for Rc<RefCell<SurfacePool<M>>> {
         fn coded_resolution(&self) -> Resolution {
             (**self).borrow().coded_resolution
         }
@@ -532,9 +532,9 @@ impl StreamMetadataState {
         hdr: S,
         format_map: Option<&FormatMap>,
         old_metadata_state: StreamMetadataState,
-        old_surface_pool: Rc<RefCell<VaSurfacePool<M>>>,
+        old_surface_pool: Rc<RefCell<SurfacePool<M>>>,
         supports_context_reuse: bool,
-    ) -> anyhow::Result<(StreamMetadataState, Rc<RefCell<VaSurfacePool<M>>>)> {
+    ) -> anyhow::Result<(StreamMetadataState, Rc<RefCell<SurfacePool<M>>>)> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
 
@@ -616,7 +616,7 @@ impl StreamMetadataState {
                     true,
                 )?;
 
-                let surface_pool = Rc::new(RefCell::new(VaSurfacePool::new(
+                let surface_pool = Rc::new(RefCell::new(SurfacePool::new(
                     Rc::clone(display),
                     rt_format,
                     Some(libva::UsageHint::USAGE_HINT_DECODER),
@@ -914,7 +914,7 @@ where
     /// VA display in use for this stream.
     display: Rc<Display>,
     /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
-    pub(crate) surface_pool: Rc<RefCell<VaSurfacePool<M>>>,
+    pub(crate) surface_pool: Rc<RefCell<SurfacePool<M>>>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
     /// Any extra data that the backend might need to keep track of for a given codec.
@@ -931,7 +931,7 @@ where
 {
     pub(crate) fn new(display: Rc<libva::Display>, supports_context_reuse: bool) -> Self {
         // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
-        let surface_pool = Rc::new(RefCell::new(VaSurfacePool::new(
+        let surface_pool = Rc::new(RefCell::new(SurfacePool::new(
             Rc::clone(&display),
             libva::constants::VA_RT_FORMAT_YUV420,
             Some(libva::UsageHint::USAGE_HINT_DECODER),
