@@ -41,8 +41,8 @@ pub struct Dpb<T> {
     /// Whether we're decoding in interlaced mode. Interlaced support is
     /// inspired by the GStreamer implementation, in which frames are split if
     /// interlaced=1. This makes reference marking easier. We also decode both
-    /// fields to the same surface, and this surface with both fields is
-    /// outputted only once.
+    /// fields to the same frame, and this frame with both fields is outputted
+    /// only once.
     interlaced: bool,
 }
 

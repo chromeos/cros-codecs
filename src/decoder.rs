@@ -16,13 +16,13 @@ use std::collections::VecDeque;
 use crate::DecodedFormat;
 use crate::Resolution;
 
-/// Trait for a pool of surfaces in a particular format.
+/// Trait for a pool of frames in a particular format.
 ///
 /// This is mostly useful for the decoder where the user is expected to manage how the decoded
 /// frames buffers are allocated and when.
 ///
-/// The `M` generic parameter is the type of the descriptors for the memory backing the surfaces.
-pub trait SurfacePool<M> {
+/// The `M` generic parameter is the type of the descriptors for the memory backing the frames.
+pub trait FramePool<M> {
     /// Returns the coded resolution of the pool.
     ///
     /// All the frames maintained by this pool are guaranteed to be able to contain the coded
@@ -32,21 +32,22 @@ pub trait SurfacePool<M> {
     ///
     /// Frames managed by this pool that can not contain the new resolution are dropped.
     fn set_coded_resolution(&mut self, resolution: Resolution);
-    /// Add new surfaces to the pool, using `descriptors` as backing memory.
-    fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error>;
-    /// Returns new number of surfaces currently available in this pool.
-    fn num_free_surfaces(&self) -> usize;
-    /// Returns the total number of managed surfaces in this pool.
-    fn num_managed_surfaces(&self) -> usize;
-    /// Remove all surfaces from this pool.
+    /// Add new frames to the pool, using `descriptors` as backing memory.
+    fn add_frames(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error>;
+    /// Returns new number of frames currently available in this pool.
+    fn num_free_frames(&self) -> usize;
+    /// Returns the total number of managed frames in this pool.
+    fn num_managed_frames(&self) -> usize;
+    /// Remove all frames from this pool.
     fn clear(&mut self);
-    /// Returns an object holding one of the available surfaces from this pool. The surface will be
-    /// available for rendering again once the returned object is dropped.
+    /// Returns an object holding one of the available frames from this pool.
+    /// The frame will be available for rendering again once the returned object
+    /// is dropped.
     ///
-    /// This is useful to prevent decoding from happening by holding all the available surfaces.
+    /// This is useful to prevent decoding from happening by holding all the available frames.
     ///
-    /// Returns `None` if there is no free surface at the time of calling.
-    fn take_free_surface(&mut self) -> Option<Box<dyn AsRef<M>>>;
+    /// Returns `None` if there is no free frame at the time of calling.
+    fn take_free_frame(&mut self) -> Option<Box<dyn AsRef<M>>>;
 }
 
 /// Information about the current stream.
@@ -61,12 +62,12 @@ pub struct StreamInfo {
     pub coded_resolution: Resolution,
     /// Display resolution of the stream, i.e. the part of the decoded frames we want to display.
     pub display_resolution: Resolution,
-    /// Minimum number of output surfaces required for decoding to proceed.
+    /// Minimum number of output frames required for decoding to proceed.
     ///
     /// Codecs keep some frames as references and cannot decode immediately into them again after
     /// they are returned. Allocating at least this number of frames guarantees that the decoder
-    /// won't starve from output surfaces.
-    pub min_num_surfaces: usize,
+    /// won't starve from output frames.
+    pub min_num_frames: usize,
 }
 
 /// Trait for objects allowing to negotiate the output format of a decoder.
@@ -80,8 +81,8 @@ pub struct StreamInfo {
 pub trait DecoderFormatNegotiator<'a, M> {
     /// Returns the current decoding parameters, as extracted from the stream.
     fn stream_info(&self) -> &StreamInfo;
-    /// Returns the surface pool in use for the decoder, set up for the new format.
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M>;
+    /// Returns the frame pool in use for the decoder, set up for the new format.
+    fn frame_pool(&mut self) -> &mut dyn FramePool<M>;
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
 
@@ -118,7 +119,7 @@ pub trait DecodedHandle {
     /// the memory itself.
     type Descriptor;
 
-    /// Returns a reference to an object allowing a CPU mapping of the decoded surface.
+    /// Returns a reference to an object allowing a CPU mapping of the decoded frame.
     fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a>;
 
     /// Returns the timestamp of the picture.

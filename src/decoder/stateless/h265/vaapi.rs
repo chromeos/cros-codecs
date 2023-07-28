@@ -834,7 +834,7 @@ mod tests {
     use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
-    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::simple_playback_loop_owned_frames;
     use crate::utils::NalIterator;
     use crate::DecodedFormat;
 
@@ -853,7 +853,7 @@ mod tests {
                     d,
                     NalIterator::<Nalu<_>>::new(s),
                     f,
-                    &mut simple_playback_loop_owned_surfaces,
+                    &mut simple_playback_loop_owned_frames,
                     output_format,
                     blocking_mode,
                 )

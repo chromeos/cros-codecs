@@ -312,7 +312,7 @@ mod tests {
     use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
-    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::simple_playback_loop_owned_frames;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
     use crate::Resolution;
@@ -334,7 +334,7 @@ mod tests {
                     d,
                     IvfIterator::new(s),
                     c,
-                    &mut simple_playback_loop_owned_surfaces,
+                    &mut simple_playback_loop_owned_frames,
                     output_format,
                     blocking_mode,
                 )

@@ -11,9 +11,9 @@ use std::rc::Rc;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DynHandle;
+use crate::decoder::FramePool;
 use crate::decoder::MappableHandle;
 use crate::decoder::StreamInfo;
-use crate::decoder::SurfacePool;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -90,7 +90,7 @@ impl Backend {
         Self {
             stream_info: StreamInfo {
                 format: DecodedFormat::I420,
-                min_num_surfaces: 4,
+                min_num_frames: 4,
                 coded_resolution: Resolution::from((320, 200)),
                 display_resolution: Resolution::from((320, 200)),
             },
@@ -98,28 +98,28 @@ impl Backend {
     }
 }
 
-impl<M> SurfacePool<M> for Backend {
+impl<M> FramePool<M> for Backend {
     fn coded_resolution(&self) -> Resolution {
         Resolution::from((320, 200))
     }
 
     fn set_coded_resolution(&mut self, _resolution: Resolution) {}
 
-    fn add_surfaces(&mut self, _descriptors: Vec<M>) -> Result<(), anyhow::Error> {
+    fn add_frames(&mut self, _descriptors: Vec<M>) -> Result<(), anyhow::Error> {
         Ok(())
     }
 
-    fn num_free_surfaces(&self) -> usize {
+    fn num_free_frames(&self) -> usize {
         4
     }
 
-    fn num_managed_surfaces(&self) -> usize {
+    fn num_managed_frames(&self) -> usize {
         4
     }
 
     fn clear(&mut self) {}
 
-    fn take_free_surface(&mut self) -> Option<Box<dyn AsRef<M>>> {
+    fn take_free_frame(&mut self) -> Option<Box<dyn AsRef<M>>> {
         None
     }
 }
@@ -136,7 +136,7 @@ impl<FormatInfo> StatelessDecoderBackend<FormatInfo> for Backend {
         Some(&self.stream_info)
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<()> {
+    fn frame_pool(&mut self) -> &mut dyn FramePool<()> {
         self
     }
 }

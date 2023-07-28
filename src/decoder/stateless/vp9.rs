@@ -28,8 +28,8 @@ use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
+use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
-use crate::decoder::SurfacePool;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP9.
@@ -205,12 +205,11 @@ where
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let frames = self.codec.parser.parse_chunk(bitstream)?;
 
-        let num_free_surfaces = self.backend.surface_pool().num_free_surfaces();
-        if matches!(self.decoding_state, DecodingState::Decoding)
-            && num_free_surfaces < frames.len()
+        let num_free_frames = self.backend.frame_pool().num_free_frames();
+        if matches!(self.decoding_state, DecodingState::Decoding) && num_free_frames < frames.len()
         {
             return Err(DecodeError::NotEnoughOutputBuffers(
-                frames.len() - num_free_surfaces,
+                frames.len() - num_free_frames,
             ));
         }
 
@@ -286,8 +285,8 @@ where
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<<B::Handle as DecodedHandle>::Descriptor> {
-        self.backend.surface_pool()
+    fn frame_pool(&mut self) -> &mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor> {
+        self.backend.frame_pool()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {
@@ -303,7 +302,7 @@ pub mod tests {
     use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
-    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::simple_playback_loop_owned_frames;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
@@ -317,7 +316,7 @@ pub mod tests {
                     d,
                     IvfIterator::new(s),
                     c,
-                    &mut simple_playback_loop_owned_surfaces,
+                    &mut simple_playback_loop_owned_frames,
                     DecodedFormat::NV12,
                     blocking_mode,
                 )

@@ -316,7 +316,7 @@ mod tests {
     use crate::decoder::stateless::vp9::Segmentation;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
-    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::simple_playback_loop_owned_frames;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
@@ -337,7 +337,7 @@ mod tests {
                     d,
                     IvfIterator::new(s),
                     c,
-                    &mut simple_playback_loop_owned_surfaces,
+                    &mut simple_playback_loop_owned_frames,
                     output_format,
                     blocking_mode,
                 )
@@ -436,7 +436,7 @@ mod tests {
                     d,
                     IvfIterator::new(s),
                     c,
-                    &mut simple_playback_loop_owned_surfaces,
+                    &mut simple_playback_loop_owned_frames,
                     DecodedFormat::NV12,
                     BlockingMode::Blocking,
                 )
@@ -463,7 +463,7 @@ mod tests {
                     d,
                     IvfIterator::new(s),
                     c,
-                    &mut simple_playback_loop_owned_surfaces,
+                    &mut simple_playback_loop_owned_frames,
                     DecodedFormat::NV12,
                     BlockingMode::NonBlocking,
                 )

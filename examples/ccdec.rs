@@ -31,17 +31,17 @@ use cros_codecs::decoder::DecodedHandle;
 use cros_codecs::decoder::StreamInfo;
 use cros_codecs::multiple_desc_type;
 use cros_codecs::utils::simple_playback_loop;
-use cros_codecs::utils::simple_playback_loop_owned_surfaces;
-use cros_codecs::utils::simple_playback_loop_userptr_surfaces;
-use cros_codecs::utils::DmabufSurface;
+use cros_codecs::utils::simple_playback_loop_owned_frames;
+use cros_codecs::utils::simple_playback_loop_userptr_frames;
+use cros_codecs::utils::DmabufFrame;
 use cros_codecs::utils::IvfIterator;
 use cros_codecs::utils::NalIterator;
-use cros_codecs::utils::UserPtrSurface;
+use cros_codecs::utils::UserPtrFrame;
 use cros_codecs::DecodedFormat;
 use cros_codecs::Fourcc;
+use cros_codecs::FrameLayout;
 use cros_codecs::PlaneLayout;
 use cros_codecs::Resolution;
-use cros_codecs::SurfaceLayout;
 use matroska_demuxer::Frame;
 use matroska_demuxer::MatroskaFile;
 
@@ -52,14 +52,14 @@ use matroska_demuxer::MatroskaFile;
 multiple_desc_type! {
     enum BufferDescriptor {
         Managed(()),
-        Dmabuf(DmabufSurface),
-        User(UserPtrSurface),
+        Dmabuf(DmabufFrame),
+        User(UserPtrFrame),
     }
 }
 
-/// Export a file descriptor from a GBM `BufferObject` and turn it into a `DmabufSurface` suitable
+/// Export a file descriptor from a GBM `BufferObject` and turn it into a `DmabufFrame` suitable
 /// for using as the target of a decoder.
-fn export_gbm_bo<T>(obj: &gbm::BufferObject<T>) -> anyhow::Result<DmabufSurface> {
+fn export_gbm_bo<T>(obj: &gbm::BufferObject<T>) -> anyhow::Result<DmabufFrame> {
     let fd = obj.fd()?;
     let modifier = obj.modifier()?;
     let format = obj.format()?;
@@ -72,9 +72,9 @@ fn export_gbm_bo<T>(obj: &gbm::BufferObject<T>) -> anyhow::Result<DmabufSurface>
         .collect();
     let size = Resolution::from((obj.width().unwrap(), obj.height().unwrap()));
 
-    Ok(DmabufSurface {
+    Ok(DmabufFrame {
         fds: vec![fd],
-        layout: SurfaceLayout {
+        layout: FrameLayout {
             format: (Fourcc::from(format as u32), modifier.into()),
             size,
             planes,
@@ -84,11 +84,11 @@ fn export_gbm_bo<T>(obj: &gbm::BufferObject<T>) -> anyhow::Result<DmabufSurface>
 
 /// Buffer allocation callback for `simple_playback_loop` to allocate and export buffers from a GBM
 /// device.
-fn simple_playback_loop_prime_surfaces<D: AsFd>(
+fn simple_playback_loop_prime_frames<D: AsFd>(
     device: &gbm::Device<D>,
     stream_info: &StreamInfo,
-    nb_surfaces: usize,
-) -> anyhow::Result<Vec<DmabufSurface>> {
+    nb_frames: usize,
+) -> anyhow::Result<Vec<DmabufFrame>> {
     let gbm_fourcc = match stream_info.format {
         DecodedFormat::I420 | DecodedFormat::NV12 => gbm::Format::Nv12,
         _ => anyhow::bail!(
@@ -97,7 +97,7 @@ fn simple_playback_loop_prime_surfaces<D: AsFd>(
         ),
     };
 
-    (0..nb_surfaces)
+    (0..nb_frames)
         .map(|_| {
             device
                 .create_buffer_object::<()>(
@@ -135,20 +135,20 @@ impl FromStr for EncodedFormat {
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-enum SurfaceMemoryType {
+enum FrameMemoryType {
     Managed,
     Prime,
     User,
 }
 
-impl FromStr for SurfaceMemoryType {
+impl FromStr for FrameMemoryType {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "managed" => Ok(SurfaceMemoryType::Managed),
-            "prime" => Ok(SurfaceMemoryType::Prime),
-            "user" => Ok(SurfaceMemoryType::User),
+            "managed" => Ok(FrameMemoryType::Managed),
+            "prime" => Ok(FrameMemoryType::Prime),
+            "user" => Ok(FrameMemoryType::User),
             _ => Err("unrecognized memory type. Valid values: managed, prime, user"),
         }
     }
@@ -230,10 +230,10 @@ struct Args {
     output_format: DecodedFormat,
 
     /// origin of the memory for decoded buffers (managed, prime or user). Default: managed.
-    #[argh(option, default = "SurfaceMemoryType::Managed")]
-    surface_memory: SurfaceMemoryType,
+    #[argh(option, default = "FrameMemoryType::Managed")]
+    frame_memory: FrameMemoryType,
 
-    /// path to the GBM device to use if surface-memory=prime
+    /// path to the GBM device to use if frame-memory=prime
     #[argh(option)]
     gbm_device: Option<PathBuf>,
 
@@ -300,9 +300,9 @@ fn main() {
         BlockingMode::NonBlocking
     };
 
-    let gbm = match args.surface_memory {
-        SurfaceMemoryType::Managed | SurfaceMemoryType::User => None,
-        SurfaceMemoryType::Prime => {
+    let gbm = match args.frame_memory {
+        FrameMemoryType::Managed | FrameMemoryType::User => None,
+        FrameMemoryType::Prime => {
             /// A simple wrapper for a GBM device node.
             pub struct GbmDevice(std::fs::File);
 
@@ -424,24 +424,24 @@ fn main() {
         decoder.as_mut(),
         frame_iter,
         &mut on_new_frame,
-        &mut |stream_info, nb_surfaces| {
-            Ok(match args.surface_memory {
-                SurfaceMemoryType::Managed => {
-                    simple_playback_loop_owned_surfaces(stream_info, nb_surfaces)?
+        &mut |stream_info, nb_frames| {
+            Ok(match args.frame_memory {
+                FrameMemoryType::Managed => {
+                    simple_playback_loop_owned_frames(stream_info, nb_frames)?
                         .into_iter()
                         .map(BufferDescriptor::Managed)
                         .collect()
                 }
-                SurfaceMemoryType::Prime => simple_playback_loop_prime_surfaces(
+                FrameMemoryType::Prime => simple_playback_loop_prime_frames(
                     gbm.as_ref().unwrap(),
                     stream_info,
-                    nb_surfaces,
+                    nb_frames,
                 )?
                 .into_iter()
                 .map(BufferDescriptor::Dmabuf)
                 .collect(),
-                SurfaceMemoryType::User => {
-                    simple_playback_loop_userptr_surfaces(stream_info, nb_surfaces)?
+                FrameMemoryType::User => {
+                    simple_playback_loop_userptr_frames(stream_info, nb_frames)?
                         .into_iter()
                         .map(BufferDescriptor::User)
                         .collect()

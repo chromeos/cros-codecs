@@ -23,8 +23,8 @@ use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
+use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
-use crate::decoder::SurfacePool;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP8.
@@ -169,7 +169,7 @@ where
 {
     /// Handle a single frame.
     fn handle_frame(&mut self, frame: Frame<&[u8]>, timestamp: u64) -> Result<(), DecodeError> {
-        if self.backend.surface_pool().num_free_surfaces() == 0 {
+        if self.backend.frame_pool().num_free_frames() == 0 {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
@@ -275,8 +275,8 @@ where
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<<B::Handle as DecodedHandle>::Descriptor> {
-        self.backend.surface_pool()
+    fn frame_pool(&mut self) -> &mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor> {
+        self.backend.frame_pool()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {
@@ -292,7 +292,7 @@ pub mod tests {
     use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
-    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::simple_playback_loop_owned_frames;
     use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
@@ -306,7 +306,7 @@ pub mod tests {
                     d,
                     IvfIterator::new(s),
                     c,
-                    &mut simple_playback_loop_owned_surfaces,
+                    &mut simple_playback_loop_owned_frames,
                     DecodedFormat::NV12,
                     blocking_mode,
                 )

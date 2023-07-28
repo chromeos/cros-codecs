@@ -24,9 +24,9 @@ use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
 use crate::DecodedFormat;
 use crate::Fourcc;
+use crate::FrameLayout;
 use crate::PlaneLayout;
 use crate::Resolution;
-use crate::SurfaceLayout;
 
 /// Iterator over IVF packets.
 pub struct IvfIterator<'a> {
@@ -111,7 +111,7 @@ pub fn simple_playback_loop<D, R, I, M>(
     decoder: &mut D,
     stream_iter: I,
     on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle<Descriptor = M>>),
-    allocate_new_surfaces: &mut dyn FnMut(&StreamInfo, usize) -> anyhow::Result<Vec<M>>,
+    allocate_new_frames: &mut dyn FnMut(&StreamInfo, usize) -> anyhow::Result<Vec<M>>,
     output_format: DecodedFormat,
     blocking_mode: BlockingMode,
 ) -> anyhow::Result<()>
@@ -131,15 +131,15 @@ where
                 DecoderEvent::FormatChanged(mut format_setter) => {
                     format_setter.try_format(output_format).unwrap();
                     // Allocate the missing number of buffers in our pool for decoding to succeed.
-                    let min_num_surfaces = format_setter.stream_info().min_num_surfaces;
-                    let pool_num_surfaces = format_setter.surface_pool().num_managed_surfaces();
-                    if pool_num_surfaces < min_num_surfaces {
-                        let surfaces = allocate_new_surfaces(
+                    let min_num_frames = format_setter.stream_info().min_num_frames;
+                    let pool_num_frames = format_setter.frame_pool().num_managed_frames();
+                    if pool_num_frames < min_num_frames {
+                        let frames = allocate_new_frames(
                             format_setter.stream_info(),
-                            min_num_surfaces - pool_num_surfaces,
+                            min_num_frames - pool_num_frames,
                         )?;
-                        let pool = format_setter.surface_pool();
-                        pool.add_surfaces(surfaces).unwrap();
+                        let pool = format_setter.frame_pool();
+                        pool.add_frames(frames).unwrap();
                     }
                 }
             }
@@ -177,42 +177,42 @@ where
     check_events(decoder)
 }
 
-/// Surface allocation callback that results in self-allocated memory.
-pub fn simple_playback_loop_owned_surfaces(
+/// Frame allocation callback that results in self-allocated memory.
+pub fn simple_playback_loop_owned_frames(
     _: &StreamInfo,
-    nb_surfaces: usize,
+    nb_frames: usize,
 ) -> anyhow::Result<Vec<()>> {
-    Ok(vec![(); nb_surfaces])
+    Ok(vec![(); nb_frames])
 }
 
-/// Surface allocation callback that returns user-allocated memory for the surfaces.
-pub fn simple_playback_loop_userptr_surfaces(
+/// Frame allocation callback that returns user-allocated memory for the frames.
+pub fn simple_playback_loop_userptr_frames(
     stream_info: &StreamInfo,
-    nb_surfaces: usize,
-) -> anyhow::Result<Vec<UserPtrSurface>> {
+    nb_frames: usize,
+) -> anyhow::Result<Vec<UserPtrFrame>> {
     let alloc_function = match stream_info.format {
-        DecodedFormat::I420 | DecodedFormat::NV12 => &UserPtrSurface::new_nv12,
+        DecodedFormat::I420 | DecodedFormat::NV12 => &UserPtrFrame::new_nv12,
         _ => anyhow::bail!(
             "{:?} format is unsupported with user memory",
             stream_info.format
         ),
     };
 
-    Ok((0..nb_surfaces)
+    Ok((0..nb_frames)
         .map(|_| alloc_function(stream_info.coded_resolution))
         .collect::<Vec<_>>())
 }
 
-/// A structure that holds user-allocated memory for a surface as well as its layout.
+/// A structure that holds user-allocated memory for a frame as well as its layout.
 #[derive(Debug)]
-pub struct UserPtrSurface {
+pub struct UserPtrFrame {
     pub buffers: Vec<*mut u8>,
     pub mem_layout: std::alloc::Layout,
-    pub layout: SurfaceLayout,
+    pub layout: FrameLayout,
 }
 
-impl UserPtrSurface {
-    /// Allocate enough memory to back a NV12 surface of `size` dimension.
+impl UserPtrFrame {
+    /// Allocate enough memory to back a NV12 frame of `size` dimension.
     pub fn new_nv12(size: Resolution) -> Self {
         /// Add what is needed to a value in order to make it a multiple of some alignment.
         macro_rules! align {
@@ -236,7 +236,7 @@ impl UserPtrSurface {
         Self {
             buffers: vec![mem],
             mem_layout: layout,
-            layout: SurfaceLayout {
+            layout: FrameLayout {
                 format: (Fourcc::from(b"NV12"), 0),
                 size: Resolution::from((width as u32, height as u32)),
                 planes: vec![
@@ -256,12 +256,12 @@ impl UserPtrSurface {
     }
 }
 
-pub struct DmabufSurface {
+pub struct DmabufFrame {
     pub fds: Vec<OwnedFd>,
-    pub layout: SurfaceLayout,
+    pub layout: FrameLayout,
 }
 
-impl Drop for UserPtrSurface {
+impl Drop for UserPtrFrame {
     fn drop(&mut self) {
         for buffer in std::mem::take(&mut self.buffers).into_iter() {
             // Safe because we allocated the memory using `std::alloc::alloc`.

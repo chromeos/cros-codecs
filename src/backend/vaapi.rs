@@ -34,13 +34,13 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
+use crate::decoder::FramePool;
 use crate::decoder::MappableHandle;
 use crate::decoder::StreamInfo;
-use crate::decoder::SurfacePool;
 use crate::i4xx_copy;
 use crate::nv12_copy;
-use crate::utils::DmabufSurface;
-use crate::utils::UserPtrSurface;
+use crate::utils::DmabufFrame;
+use crate::utils::UserPtrFrame;
 use crate::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Fourcc;
@@ -226,7 +226,7 @@ mod surface_pool {
     use libva::VASurfaceID;
     use libva::VaError;
 
-    use crate::decoder::SurfacePool;
+    use crate::decoder::FramePool;
     use crate::Resolution;
 
     /// A VA Surface obtained from a `[SurfacePool]`.
@@ -432,7 +432,7 @@ mod surface_pool {
         }
     }
 
-    impl<M: SurfaceMemoryDescriptor + 'static> SurfacePool<M> for Rc<RefCell<VaSurfacePool<M>>> {
+    impl<M: SurfaceMemoryDescriptor + 'static> FramePool<M> for Rc<RefCell<VaSurfacePool<M>>> {
         fn coded_resolution(&self) -> Resolution {
             (**self).borrow().coded_resolution
         }
@@ -441,18 +441,18 @@ mod surface_pool {
             (**self).borrow_mut().set_coded_resolution(resolution)
         }
 
-        fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error> {
+        fn add_frames(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error> {
             (**self)
                 .borrow_mut()
                 .add_surfaces(descriptors)
                 .map_err(|e| anyhow::anyhow!(e))
         }
 
-        fn num_free_surfaces(&self) -> usize {
+        fn num_free_frames(&self) -> usize {
             (**self).borrow().num_surfaces_left()
         }
 
-        fn num_managed_surfaces(&self) -> usize {
+        fn num_managed_frames(&self) -> usize {
             (**self).borrow().num_managed_surfaces()
         }
 
@@ -463,7 +463,7 @@ mod surface_pool {
             pool.managed_surfaces.clear();
         }
 
-        fn take_free_surface(&mut self) -> Option<Box<dyn AsRef<M>>> {
+        fn take_free_frame(&mut self) -> Option<Box<dyn AsRef<M>>> {
             (**self)
                 .borrow_mut()
                 .get_surface(self)
@@ -663,7 +663,7 @@ impl StreamMetadataState {
                     },
                     coded_resolution,
                     display_resolution,
-                    min_num_surfaces,
+                    min_num_frames: min_num_surfaces,
                 },
                 map_format: Rc::new(map_format),
                 rt_format,
@@ -1060,7 +1060,7 @@ where
         }
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
+    fn frame_pool(&mut self) -> &mut dyn FramePool<M> {
         &mut self.surface_pool
     }
 
@@ -1246,7 +1246,7 @@ fn y412_to_i412(
     }
 }
 
-impl libva::ExternalBufferDescriptor for UserPtrSurface {
+impl libva::ExternalBufferDescriptor for UserPtrFrame {
     const MEMORY_TYPE: libva::MemoryType = libva::MemoryType::UserPtr;
     type DescriptorAttribute = libva::VASurfaceAttribExternalBuffers;
 
@@ -1288,7 +1288,7 @@ impl libva::ExternalBufferDescriptor for UserPtrSurface {
     }
 }
 
-impl libva::ExternalBufferDescriptor for DmabufSurface {
+impl libva::ExternalBufferDescriptor for DmabufFrame {
     const MEMORY_TYPE: libva::MemoryType = libva::MemoryType::DrmPrime2;
     type DescriptorAttribute = libva::VADRMPRIMESurfaceDescriptor;
 

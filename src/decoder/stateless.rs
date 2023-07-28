@@ -22,9 +22,9 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::DecoderFormatNegotiator;
+use crate::decoder::FramePool;
 use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
-use crate::decoder::SurfacePool;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -101,9 +101,8 @@ pub trait StatelessDecoderBackend<FormatInfo> {
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;
 
-    /// Returns the surface pool currently in use by the backend.
-    fn surface_pool(&mut self)
-        -> &mut dyn SurfacePool<<Self::Handle as DecodedHandle>::Descriptor>;
+    /// Returns the frame pool currently in use by the backend.
+    fn frame_pool(&mut self) -> &mut dyn FramePool<<Self::Handle as DecodedHandle>::Descriptor>;
 
     /// Try altering the decoded format.
     fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat)
@@ -158,8 +157,8 @@ where
         self.decoder.try_format(format)
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M> {
-        self.decoder.surface_pool()
+    fn frame_pool(&mut self) -> &mut dyn FramePool<M> {
+        self.decoder.frame_pool()
     }
 
     fn stream_info(&self) -> &StreamInfo {
@@ -215,9 +214,9 @@ pub trait StatelessVideoDecoder<M> {
     /// [`next_event`]: StatelessVideoDecoder::next_event
     fn flush(&mut self) -> Result<(), DecodeError>;
 
-    /// Returns the surface pool in use with the decoder. Useful to add new frames as decode.
+    /// Returns the frame pool in use with the decoder. Useful to add new frames as decode.
     /// targets.
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<M>;
+    fn frame_pool(&mut self) -> &mut dyn FramePool<M>;
 
     fn stream_info(&self) -> Option<&StreamInfo>;
 
@@ -298,8 +297,8 @@ where
     C: StatelessCodec,
     B: StatelessDecoderBackend<C::FormatInfo>,
 {
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<<B::Handle as DecodedHandle>::Descriptor> {
-        self.backend.surface_pool()
+    fn frame_pool(&mut self) -> &mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor> {
+        self.backend.frame_pool()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

@@ -41,8 +41,8 @@ use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
+use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
-use crate::decoder::SurfacePool;
 use crate::Resolution;
 
 type DpbPicList<H> = Vec<DpbEntry<H>>;
@@ -1486,7 +1486,7 @@ where
         timestamp: u64,
         slice: &Slice<&[u8]>,
     ) -> Result<CurrentPicState<B>, DecodeError> {
-        if self.backend.surface_pool().num_free_surfaces() == 0 {
+        if self.backend.frame_pool().num_free_frames() == 0 {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
@@ -1966,8 +1966,8 @@ where
             })
     }
 
-    fn surface_pool(&mut self) -> &mut dyn SurfacePool<<B::Handle as DecodedHandle>::Descriptor> {
-        self.surface_pool()
+    fn frame_pool(&mut self) -> &mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor> {
+        self.frame_pool()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {
@@ -1984,7 +1984,7 @@ pub mod tests {
     use crate::decoder::stateless::StatelessDecoder;
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
-    use crate::utils::simple_playback_loop_owned_surfaces;
+    use crate::utils::simple_playback_loop_owned_frames;
     use crate::utils::NalIterator;
     use crate::DecodedFormat;
 
@@ -1998,7 +1998,7 @@ pub mod tests {
                     d,
                     NalIterator::<Nalu<_>>::new(s),
                     f,
-                    &mut simple_playback_loop_owned_surfaces,
+                    &mut simple_playback_loop_owned_frames,
                     DecodedFormat::NV12,
                     blocking_mode,
                 )

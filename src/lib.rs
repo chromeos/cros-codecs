@@ -183,7 +183,7 @@ impl FromStr for DecodedFormat {
     }
 }
 
-/// Describes the layout of a plane within a surface.
+/// Describes the layout of a plane within a frame.
 #[derive(Debug)]
 pub struct PlaneLayout {
     /// Index of the memory buffer the plane belongs to.
@@ -194,26 +194,26 @@ pub struct PlaneLayout {
     pub stride: usize,
 }
 
-/// Unambiguously describes the layout of a surface.
+/// Unambiguously describes the layout of a frame.
 ///
-/// A surface can be made of one or several memory buffers, each containing one or several planes.
-/// For a given surface, this structure defines where each plane can be found.
+/// A frame can be made of one or several memory buffers, each containing one or several planes.
+/// For a given frame, this structure defines where each plane can be found.
 #[derive(Debug)]
-pub struct SurfaceLayout {
+pub struct FrameLayout {
     /// `(Fourcc, modifier)` tuple describing the arrangement of the planes.
     ///
-    /// This member is enough to infer how many planes and buffers the surface has, and which
+    /// This member is enough to infer how many planes and buffers the frame has, and which
     /// buffer each plane belongs into.
     pub format: (Fourcc, u64),
-    /// Size in pixels of the surface.
+    /// Size in pixels of the frame.
     pub size: Resolution,
     /// Layout of each individual plane.
     pub planes: Vec<PlaneLayout>,
 }
 
-/// Build a surface memory descriptor enum that supports multiple descriptor types.
+/// Build a frame memory descriptor enum that supports multiple descriptor types.
 ///
-/// This is useful for the case where the surfaces' memory backing is not decided at compile-time.
+/// This is useful for the case where the frames' memory backing is not decided at compile-time.
 /// In this case, this macro can be used to list all the potential types supported at run-time, and
 /// the selected one can be built as the program is run.
 ///
@@ -221,13 +221,13 @@ pub struct SurfaceLayout {
 ///
 /// ```
 /// use cros_codecs::multiple_desc_type;
-/// use cros_codecs::utils::DmabufSurface;
+/// use cros_codecs::utils::DmabufFrame;
 ///
-/// /// Surfaces' memory can be provided either by the backend, or via PRIME DMABUF handles.
+/// /// Frames' memory can be provided either by the backend, or via PRIME DMABUF handles.
 /// multiple_desc_type! {
 ///     enum OwnedOrDmaDescriptor {
 ///         Owned(()),
-///         Dmabuf(DmabufSurface),
+///         Dmabuf(DmabufFrame),
 ///     }
 /// }
 /// ```
