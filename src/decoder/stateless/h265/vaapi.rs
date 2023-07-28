@@ -66,9 +66,43 @@ impl VaStreamInfo for &Sps {
         let profile = Profile::n(profile_idc)
             .with_context(|| format!("Invalid profile_idc {:?}", profile_idc))?;
 
+        let bit_depth = std::cmp::max(
+            self.bit_depth_luma_minus8() + 8,
+            self.bit_depth_chroma_minus8() + 8,
+        );
+
+        let chroma_format_idc = self.chroma_format_idc();
+        let err = Err(anyhow!(
+            "Invalid combination of profile, bit depth an chroma_format_idc: ({:?}, {}, {}",
+            profile,
+            bit_depth,
+            chroma_format_idc
+        ));
+
+        // TODO: This can still be much improved in light of table A.2.
         match profile {
-            Profile::Main => Ok(libva::VAProfile::VAProfileHEVCMain),
-            Profile::Main10 => Ok(libva::VAProfile::VAProfileHEVCMain10),
+            Profile::Main | Profile::MainStill | Profile::Main10 => {
+                match (bit_depth, chroma_format_idc) {
+                    (8, 0) | (8, 1) => Ok(libva::VAProfile::VAProfileHEVCMain),
+                    (8, 3) => Ok(libva::VAProfile::VAProfileHEVCMain444),
+                    (10, 0) | (10, 1) => Ok(libva::VAProfile::VAProfileHEVCMain10),
+                    (10, 2) => Ok(libva::VAProfile::VAProfileHEVCMain422_10),
+                    (12, 1) => Ok(libva::VAProfile::VAProfileHEVCMain12),
+                    (12, 2) => Ok(libva::VAProfile::VAProfileHEVCMain422_12),
+                    (12, 3) => Ok(libva::VAProfile::VAProfileHEVCMain444_12),
+                    _ => err,
+                }
+            }
+
+            // See table A.4.
+            Profile::ScalableMain => match (bit_depth, chroma_format_idc) {
+                (8, 1) => Ok(libva::VAProfile::VAProfileHEVCSccMain),
+                (8, 3) => Ok(libva::VAProfile::VAProfileHEVCSccMain444),
+                (10, 1) => Ok(libva::VAProfile::VAProfileHEVCSccMain10),
+                (10, 3) => Ok(libva::VAProfile::VAProfileHEVCSccMain444_10),
+                _ => err,
+            },
+
             _ => unimplemented!("Adding more profile support based on A.3. is still TODO"),
         }
     }
