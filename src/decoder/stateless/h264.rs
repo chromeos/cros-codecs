@@ -8,6 +8,7 @@ mod dummy;
 mod vaapi;
 
 use std::cell::RefCell;
+use std::collections::btree_map::Entry;
 use std::io::Cursor;
 use std::rc::Rc;
 
@@ -225,6 +226,12 @@ impl<T> Default for ReferencePicLists<T> {
     }
 }
 
+/// Used to track that first_mb_in_slice increases monotonically.
+enum CurrentMacroblockTracking {
+    SeparateColorPlane(std::collections::BTreeMap<u8, u32>),
+    NonSeparateColorPlane(u32),
+}
+
 /// State of the picture being currently decoded.
 ///
 /// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
@@ -237,6 +244,8 @@ struct CurrentPicState<B: StatelessDecoderBackend<H264>> {
     backend_pic: B::Picture,
     /// List of reference pictures, used once per slice.
     ref_pic_lists: ReferencePicLists<B::Handle>,
+    /// The current macroblock we are processing
+    current_macroblock: CurrentMacroblockTracking,
 }
 
 /// State of the H.264 decoder.
@@ -1508,6 +1517,11 @@ where
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
+        let current_macroblock = match pps.sps.separate_colour_plane_flag {
+            true => CurrentMacroblockTracking::SeparateColorPlane(Default::default()),
+            false => CurrentMacroblockTracking::NonSeparateColorPlane(0),
+        };
+
         if frame_num != self.codec.prev_ref_pic_info.frame_num
             && frame_num
                 != (self.codec.prev_ref_pic_info.frame_num + 1) % pps.sps.max_frame_num() as i32
@@ -1543,6 +1557,7 @@ where
             pps,
             backend_pic,
             ref_pic_lists,
+            current_macroblock,
         })
     }
 
@@ -1783,12 +1798,43 @@ where
         })
     }
 
+    // Check whether first_mb_in_slice increases monotonically for the current
+    // picture as required by the specification.
+    fn check_first_mb_in_slice(&mut self, cur_pic: &mut CurrentPicState<B>, slice: &Slice) {
+        match &mut cur_pic.current_macroblock {
+            CurrentMacroblockTracking::SeparateColorPlane(current_macroblock) => {
+                match current_macroblock.entry(slice.header.colour_plane_id) {
+                    Entry::Vacant(current_macroblock) => {
+                        current_macroblock.insert(slice.header.first_mb_in_slice);
+                    }
+                    Entry::Occupied(mut current_macroblock) => {
+                        let current_macroblock = current_macroblock.get_mut();
+                        if slice.header.first_mb_in_slice >= *current_macroblock {
+                            log::trace!("first_mb_in_slice does not increase monotically, expect corrupted output");
+                        }
+                        *current_macroblock = slice.header.first_mb_in_slice;
+                    }
+                }
+            }
+            CurrentMacroblockTracking::NonSeparateColorPlane(current_macroblock) => {
+                if slice.header.first_mb_in_slice >= *current_macroblock {
+                    log::trace!(
+                        "first_mb_in_slice does not increase monotically, expect corrupted output"
+                    );
+                }
+                *current_macroblock = slice.header.first_mb_in_slice;
+            }
+        }
+    }
+
     /// Handle a slice. Called once per slice NALU.
     fn handle_slice(
         &mut self,
         cur_pic: &mut CurrentPicState<B>,
         slice: &Slice,
     ) -> anyhow::Result<()> {
+        self.check_first_mb_in_slice(cur_pic, slice);
+
         // A slice can technically refer to another PPS.
         let pps = self
             .codec
