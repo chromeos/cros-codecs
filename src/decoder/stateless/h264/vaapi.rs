@@ -37,7 +37,7 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 
-impl VaStreamInfo for &Sps {
+impl VaStreamInfo for &Rc<Sps> {
     fn va_profile(&self) -> anyhow::Result<i32> {
         let profile_idc = self.profile_idc;
         let profile = Profile::n(profile_idc)
@@ -463,7 +463,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<(), M> {
-    fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
+    fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
     }
 
@@ -532,7 +532,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     }
 
     fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle> {
-        self.process_picture::<Sps>(picture)
+        self.process_picture::<Rc<Sps>>(picture)
     }
 
     fn new_picture(

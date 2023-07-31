@@ -7,6 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::io::Cursor;
+use std::rc::Rc;
 
 use anyhow::anyhow;
 use anyhow::Context;
@@ -511,7 +512,7 @@ pub enum Level {
 /// content of a seq_parameter_set_id syntax element found in the picture
 /// parameter set referred to by the pic_parameter_set_id syntax element found
 /// in each slice header.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Sps {
     /// Identifies the sequence parameter set that is referred to by the picture
     /// parameter set
@@ -1268,7 +1269,7 @@ impl Default for VuiParams {
 /// A H264 Picture Parameter Set. A syntax structure containing syntax elements
 /// that apply to zero or more entire coded pictures as determined by the
 /// `pic_parameter_set_id` syntax element found in each slice header.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Pps {
     /// Identifies the picture parameter set that is referred to in the slice header.
     pic_parameter_set_id: u8,
@@ -1478,8 +1479,8 @@ impl Default for Pps {
 
 #[derive(Debug, Default)]
 pub struct Parser {
-    active_spses: BTreeMap<u8, Sps>,
-    active_ppses: BTreeMap<u8, Pps>,
+    active_spses: BTreeMap<u8, Rc<Sps>>,
+    active_ppses: BTreeMap<u8, Rc<Pps>>,
 }
 
 impl Parser {
@@ -1817,7 +1818,7 @@ impl Parser {
     /// Parse a SPS and add it to the list of active SPSes.
     ///
     /// Returns a reference to the new SPS.
-    pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Sps> {
+    pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Rc<Sps>> {
         if !matches!(nalu.header().type_, NaluType::Sps) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -1966,7 +1967,7 @@ impl Parser {
         }
 
         let key = sps.seq_parameter_set_id;
-        self.active_spses.insert(key, sps);
+        self.active_spses.insert(key, Rc::new(sps));
 
         if self.active_spses.keys().len() > MAX_SPS_COUNT {
             return Err(anyhow!(
@@ -2048,7 +2049,7 @@ impl Parser {
         }
 
         let key = pps.pic_parameter_set_id;
-        self.active_ppses.insert(key, pps);
+        self.active_ppses.insert(key, Rc::new(pps));
 
         if self.active_ppses.keys().len() > MAX_PPS_COUNT {
             return Err(anyhow!(
@@ -2428,12 +2429,11 @@ impl Parser {
         Ok(Slice { header, nalu })
     }
 
-    pub fn get_sps(&self, sps_id: u8) -> Option<&Sps> {
+    pub fn get_sps(&self, sps_id: u8) -> Option<&Rc<Sps>> {
         self.active_spses.get(&sps_id)
-        // &self.active_spses[&sps_id]
     }
 
-    pub fn get_pps(&self, pps_id: u8) -> Option<&Pps> {
+    pub fn get_pps(&self, pps_id: u8) -> Option<&Rc<Pps>> {
         self.active_ppses.get(&pps_id)
     }
 }

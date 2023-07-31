@@ -68,9 +68,9 @@ fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
 }
 
 /// Stateless backend methods specific to H.264.
-pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<Sps> {
+pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<Rc<Sps>> {
     /// Called when a new SPS is parsed.
-    fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()>;
+    fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a frame or field was found.
     fn new_picture(
@@ -227,7 +227,7 @@ impl<T> Default for ReferencePicLists<T> {
 /// State of the picture being currently decoded.
 ///
 /// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
-struct CurrentPicState<B: StatelessDecoderBackend<Sps>> {
+struct CurrentPicState<B: StatelessDecoderBackend<Rc<Sps>>> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
     /// Backend-specific data for that picture.
@@ -239,7 +239,7 @@ struct CurrentPicState<B: StatelessDecoderBackend<Sps>> {
 /// State of the H.264 decoder.
 ///
 /// `B` is the backend used for this decoder.
-pub struct H264DecoderState<B: StatelessDecoderBackend<Sps>> {
+pub struct H264DecoderState<B: StatelessDecoderBackend<Rc<Sps>>> {
     /// H.264 bitstream parser.
     parser: Parser,
     /// Keeps track of the last stream parameters seen for negotiation purposes.
@@ -307,8 +307,8 @@ where
 pub struct H264;
 
 impl StatelessCodec for H264 {
-    type FormatInfo = Sps;
-    type DecoderState<B: StatelessDecoderBackend<Sps>> = H264DecoderState<B>;
+    type FormatInfo = Rc<Sps>;
+    type DecoderState<B: StatelessDecoderBackend<Rc<Sps>>> = H264DecoderState<B>;
 }
 
 impl<B> H264DecoderState<B>
