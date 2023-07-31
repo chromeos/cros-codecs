@@ -230,6 +230,8 @@ impl<T> Default for ReferencePicLists<T> {
 struct CurrentPicState<B: StatelessDecoderBackend<Rc<Sps>>> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
+    /// PPS at the time of the current picture.
+    pps: Rc<Pps>,
     /// Backend-specific data for that picture.
     backend_pic: B::Picture,
     /// List of reference pictures, used once per slice.
@@ -316,12 +318,7 @@ where
     B: StatelessH264DecoderBackend,
     B::Handle: Clone,
 {
-    fn compute_pic_order_count(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
-        let sps = self
-            .parser
-            .get_sps(self.cur_sps_id)
-            .context("Invalid SPS while computing the value of POC for the current picture")?;
-
+    fn compute_pic_order_count(&mut self, pic: &mut PictureData, sps: &Sps) -> anyhow::Result<()> {
         match pic.pic_order_cnt_type {
             // Spec 8.2.1.1
             0 => {
@@ -495,7 +492,7 @@ where
         Ok(())
     }
 
-    fn sliding_window_marking(&self, pic: &mut PictureData) -> anyhow::Result<()> {
+    fn sliding_window_marking(&self, pic: &mut PictureData, pps: &Pps) -> anyhow::Result<()> {
         // If the current picture is a coded field that is the second field in
         // decoding order of a complementary reference field pair, and the first
         // field has been marked as "used for short-term reference", the current
@@ -511,13 +508,9 @@ where
             return Ok(());
         }
 
-        let sps = self
-            .parser
-            .get_sps(self.cur_sps_id)
-            .context("Invalid SPS during the sliding window marking process")?;
-
         let mut num_ref_pics = self.dpb.num_ref_frames();
-        let max_num_ref_frames = usize::try_from(std::cmp::max(1, sps.max_num_ref_frames)).unwrap();
+        let max_num_ref_frames =
+            usize::try_from(std::cmp::max(1, pps.sps.max_num_ref_frames)).unwrap();
 
         if num_ref_pics < max_num_ref_frames {
             return Ok(());
@@ -1174,7 +1167,7 @@ where
         prev.frame_num_offset = pic.frame_num_offset;
     }
 
-    fn reference_pic_marking(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
+    fn reference_pic_marking(&mut self, pic: &mut PictureData, pps: &Pps) -> anyhow::Result<()> {
         /* 8.2.5.1 */
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             self.codec.dpb.mark_all_as_unused_for_ref();
@@ -1194,7 +1187,7 @@ where
         if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag() {
             self.handle_memory_management_ops(pic)?;
         } else {
-            self.codec.sliding_window_marking(pic)?;
+            self.codec.sliding_window_marking(pic, pps)?;
         }
 
         Ok(())
@@ -1273,10 +1266,11 @@ where
 
         // Submit the picture to the backend.
         let handle = self.submit_picture(pic.backend_pic)?;
+        let pps = pic.pps;
         let mut pic = pic.pic;
 
         if matches!(pic.reference(), Reference::ShortTerm | Reference::LongTerm) {
-            self.reference_pic_marking(&mut pic)?;
+            self.reference_pic_marking(&mut pic, &pps)?;
             self.fill_prev_ref_info(&pic);
         }
 
@@ -1359,11 +1353,12 @@ where
 
         debug!("frame_num gap detected.");
 
-        let sps = self
-            .codec
-            .parser
-            .get_sps(self.codec.cur_sps_id)
-            .context("Invalid SPS while handling a frame_num gap")?;
+        let sps = Rc::clone(
+            self.codec
+                .parser
+                .get_sps(self.codec.cur_sps_id)
+                .context("Invalid SPS while handling a frame_num gap")?,
+        );
 
         if !sps.gaps_in_frame_num_value_allowed_flag {
             return Err(anyhow!(
@@ -1375,21 +1370,22 @@ where
         let mut unused_short_term_frame_num =
             (self.codec.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32;
         while unused_short_term_frame_num != frame_num {
-            let sps = self
-                .codec
-                .parser
-                .get_sps(self.codec.cur_sps_id)
-                .context("Invalid SPS while handling a frame_num gap")?;
             let max_frame_num = sps.max_frame_num() as i32;
 
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
-            self.codec.compute_pic_order_count(&mut pic)?;
+            self.codec.compute_pic_order_count(&mut pic, &sps)?;
 
             self.codec
                 .dpb
                 .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
-            self.codec.sliding_window_marking(&mut pic)?;
+            self.codec.sliding_window_marking(
+                &mut pic,
+                self.codec
+                    .parser
+                    .get_pps(self.codec.cur_pps_id)
+                    .ok_or_else(|| anyhow::anyhow!("invalid PPS while handling a frame_num gap"))?,
+            )?;
 
             self.codec.dpb.remove_unused();
             self.ready_queue.extend(self.codec.bump_as_needed(&pic));
@@ -1440,16 +1436,16 @@ where
             .get_pps(slice.header().pic_parameter_set_id)
             .context("Invalid SPS in init_current_pic")?;
 
-        let sps = &pps.sps;
+        let sps = Rc::clone(&pps.sps);
         let max_frame_num = sps.max_frame_num() as i32;
 
-        let mut pic = PictureData::new_from_slice(slice, sps, timestamp);
+        let mut pic = PictureData::new_from_slice(slice, &sps, timestamp);
 
         if let Some(first_field) = first_field {
             pic.set_first_field_to(first_field);
         }
 
-        self.codec.compute_pic_order_count(&mut pic)?;
+        self.codec.compute_pic_order_count(&mut pic, &sps)?;
 
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             // C.4.5.3 "Bumping process"
@@ -1497,23 +1493,18 @@ where
 
         self.codec.cur_pps_id = hdr.pic_parameter_set_id;
 
-        let pps = self
-            .codec
-            .parser
-            .get_pps(self.codec.cur_pps_id)
-            .context("Invalid PPS in handle_picture")?;
+        let pps = Rc::clone(
+            self.codec
+                .parser
+                .get_pps(self.codec.cur_pps_id)
+                .context("Invalid PPS in handle_picture")?,
+        );
 
         self.codec.cur_sps_id = pps.seq_parameter_set_id();
 
-        let sps = self
-            .codec
-            .parser
-            .get_sps(self.codec.cur_sps_id)
-            .context("Invalid SPS in handle_picture")?;
-
         if frame_num != self.codec.prev_ref_pic_info.frame_num
             && frame_num
-                != (self.codec.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32
+                != (self.codec.prev_ref_pic_info.frame_num + 1) % pps.sps.max_frame_num() as i32
         {
             self.handle_frame_num_gap(frame_num, timestamp)?;
         }
@@ -1535,20 +1526,15 @@ where
         self.backend.start_picture(
             &mut backend_pic,
             &pic,
-            self.codec
-                .parser
-                .get_sps(self.codec.cur_sps_id)
-                .context("Invalid SPS in handle_picture")?,
-            self.codec
-                .parser
-                .get_pps(self.codec.cur_pps_id)
-                .context("invalid PPS in handle_picture")?,
+            pps.sps.as_ref(),
+            pps.as_ref(),
             &self.codec.dpb,
             slice,
         )?;
 
         Ok(CurrentPicState {
             pic,
+            pps,
             backend_pic,
             ref_pic_lists,
         })
@@ -1802,23 +1788,11 @@ where
             ref_pic_list1,
         } = self.create_ref_pic_lists(&cur_pic.pic, slice.header(), &cur_pic.ref_pic_lists)?;
 
-        let sps = self
-            .codec
-            .parser
-            .get_sps(self.codec.cur_sps_id)
-            .context("Invalid SPS in handle_slice")?;
-
-        let pps = self
-            .codec
-            .parser
-            .get_pps(self.codec.cur_pps_id)
-            .context("Invalid PPS in handle_slice")?;
-
         self.backend.decode_slice(
             &mut cur_pic.backend_pic,
             slice,
-            sps,
-            pps,
+            cur_pic.pps.sps.as_ref(),
+            cur_pic.pps.as_ref(),
             &self.codec.dpb,
             &ref_pic_list0,
             &ref_pic_list1,
