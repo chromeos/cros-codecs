@@ -1385,6 +1385,9 @@ pub struct Pps {
     /// `second_chroma_qp_index_offset` is not present, it shall be inferred to be
     /// equal to `chroma_qp_index_offset`.
     second_chroma_qp_index_offset: i8,
+
+    /// The SPS referenced by this PPS.
+    pub sps: Rc<Sps>,
 }
 
 impl Pps {
@@ -1447,33 +1450,6 @@ impl Pps {
     }
     pub fn second_chroma_qp_index_offset(&self) -> i8 {
         self.second_chroma_qp_index_offset
-    }
-}
-
-impl Default for Pps {
-    fn default() -> Self {
-        Self {
-            scaling_lists_4x4: [[0; 16]; 6],
-            scaling_lists_8x8: [[0; 64]; 6],
-            pic_parameter_set_id: Default::default(),
-            seq_parameter_set_id: Default::default(),
-            entropy_coding_mode_flag: Default::default(),
-            bottom_field_pic_order_in_frame_present_flag: Default::default(),
-            num_slice_groups_minus1: Default::default(),
-            num_ref_idx_l0_default_active_minus1: Default::default(),
-            num_ref_idx_l1_default_active_minus1: Default::default(),
-            weighted_pred_flag: Default::default(),
-            weighted_bipred_idc: Default::default(),
-            pic_init_qp_minus26: Default::default(),
-            pic_init_qs_minus26: Default::default(),
-            chroma_qp_index_offset: Default::default(),
-            deblocking_filter_control_present_flag: Default::default(),
-            constrained_intra_pred_flag: Default::default(),
-            redundant_pic_cnt_present_flag: Default::default(),
-            transform_8x8_mode_flag: Default::default(),
-            second_chroma_qp_index_offset: Default::default(),
-            pic_scaling_matrix_present_flag: Default::default(),
-        }
     }
 }
 
@@ -1990,15 +1966,34 @@ impl Parser {
         let data = nalu.as_ref();
         // Skip the header
         let mut r = NaluReader::new(&data[nalu.header().len()..]);
-        let mut pps = Pps {
-            pic_parameter_set_id: r.read_ue_max(u32::try_from(MAX_PPS_COUNT)? - 1)?,
-            seq_parameter_set_id: r.read_ue_max(u32::try_from(MAX_SPS_COUNT)? - 1)?,
-            ..Default::default()
-        };
-
-        let sps = self.get_sps(pps.seq_parameter_set_id).context(
+        let pic_parameter_set_id = r.read_ue_max(u32::try_from(MAX_PPS_COUNT)? - 1)?;
+        let seq_parameter_set_id = r.read_ue_max(u32::try_from(MAX_SPS_COUNT)? - 1)?;
+        let sps = self.get_sps(seq_parameter_set_id).context(
             "Broken stream: stream references a SPS that has not been successfully parsed",
         )?;
+        let mut pps = Pps {
+            pic_parameter_set_id,
+            seq_parameter_set_id,
+            sps: Rc::clone(sps),
+            scaling_lists_4x4: [[0; 16]; 6],
+            scaling_lists_8x8: [[0; 64]; 6],
+            entropy_coding_mode_flag: Default::default(),
+            bottom_field_pic_order_in_frame_present_flag: Default::default(),
+            num_slice_groups_minus1: Default::default(),
+            num_ref_idx_l0_default_active_minus1: Default::default(),
+            num_ref_idx_l1_default_active_minus1: Default::default(),
+            weighted_pred_flag: Default::default(),
+            weighted_bipred_idc: Default::default(),
+            pic_init_qp_minus26: Default::default(),
+            pic_init_qs_minus26: Default::default(),
+            chroma_qp_index_offset: Default::default(),
+            deblocking_filter_control_present_flag: Default::default(),
+            constrained_intra_pred_flag: Default::default(),
+            redundant_pic_cnt_present_flag: Default::default(),
+            transform_8x8_mode_flag: Default::default(),
+            second_chroma_qp_index_offset: Default::default(),
+            pic_scaling_matrix_present_flag: Default::default(),
+        };
 
         pps.entropy_coding_mode_flag = r.read_bit()?;
         pps.bottom_field_pic_order_in_frame_present_flag = r.read_bit()?;
@@ -2301,9 +2296,7 @@ impl Parser {
             "Broken stream: slice references PPS that has not been successfully parsed.",
         )?;
 
-        let sps = self.get_sps(pps.seq_parameter_set_id).context(
-            "Broken stream: slice's PPS references SPS that has not been successfully parsed.",
-        )?;
+        let sps = &pps.sps;
 
         if sps.separate_colour_plane_flag {
             header.colour_plane_id = r.read_bits(2)?;

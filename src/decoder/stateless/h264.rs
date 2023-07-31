@@ -1440,11 +1440,7 @@ where
             .get_pps(slice.header().pic_parameter_set_id)
             .context("Invalid SPS in init_current_pic")?;
 
-        let sps = self
-            .codec
-            .parser
-            .get_sps(pps.seq_parameter_set_id())
-            .context("Invalid PPS in init_current_pic")?;
+        let sps = &pps.sps;
         let max_frame_num = sps.max_frame_num() as i32;
 
         let mut pic = PictureData::new_from_slice(slice, sps, timestamp);
