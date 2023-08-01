@@ -12,7 +12,7 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
     - uses: awalsh128/cache-apt-pkgs-action@latest
@@ -28,3 +28,11 @@ jobs:
       run: cargo test --verbose
     - name: Format
       run: cargo fmt --check --all
+    - name: Build release
+      run: cargo build --all-features --examples --release
+    - name: Upload built binary artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ccdec-bin
+        path: target/release/examples/ccdec
+
