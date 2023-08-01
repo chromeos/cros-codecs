@@ -250,8 +250,6 @@ pub struct H264DecoderState<B: StatelessDecoderBackend<Rc<Sps>>> {
     /// The decoded picture buffer.
     dpb: Dpb<B::Handle>,
 
-    /// The current active SPS id.
-    cur_sps_id: u8,
     /// The current active PPS id.
     cur_pps_id: u8,
 
@@ -286,7 +284,6 @@ where
             parser: Default::default(),
             negotiation_info: Default::default(),
             dpb: Default::default(),
-            cur_sps_id: Default::default(),
             cur_pps_id: Default::default(),
             prev_ref_pic_info: Default::default(),
             prev_pic_info: Default::default(),
@@ -1353,14 +1350,14 @@ where
 
         debug!("frame_num gap detected.");
 
-        let sps = Rc::clone(
+        let pps = Rc::clone(
             self.codec
                 .parser
-                .get_sps(self.codec.cur_sps_id)
-                .context("Invalid SPS while handling a frame_num gap")?,
+                .get_pps(self.codec.cur_pps_id)
+                .context("Invalid PPS while handling a frame_num gap")?,
         );
 
-        if !sps.gaps_in_frame_num_value_allowed_flag {
+        if !pps.sps.gaps_in_frame_num_value_allowed_flag {
             return Err(anyhow!(
                 "Invalid frame_num: {}. Assuming unintentional loss of pictures",
                 frame_num
@@ -1368,24 +1365,18 @@ where
         }
 
         let mut unused_short_term_frame_num =
-            (self.codec.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32;
+            (self.codec.prev_ref_pic_info.frame_num + 1) % pps.sps.max_frame_num() as i32;
         while unused_short_term_frame_num != frame_num {
-            let max_frame_num = sps.max_frame_num() as i32;
+            let max_frame_num = pps.sps.max_frame_num() as i32;
 
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
-            self.codec.compute_pic_order_count(&mut pic, &sps)?;
+            self.codec.compute_pic_order_count(&mut pic, &pps.sps)?;
 
             self.codec
                 .dpb
                 .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
-            self.codec.sliding_window_marking(
-                &mut pic,
-                self.codec
-                    .parser
-                    .get_pps(self.codec.cur_pps_id)
-                    .ok_or_else(|| anyhow::anyhow!("invalid PPS while handling a frame_num gap"))?,
-            )?;
+            self.codec.sliding_window_marking(&mut pic, &pps)?;
 
             self.codec.dpb.remove_unused();
             self.ready_queue.extend(self.codec.bump_as_needed(&pic));
@@ -1499,8 +1490,6 @@ where
                 .get_pps(self.codec.cur_pps_id)
                 .context("Invalid PPS in handle_picture")?,
         );
-
-        self.codec.cur_sps_id = pps.seq_parameter_set_id();
 
         if frame_num != self.codec.prev_ref_pic_info.frame_num
             && frame_num
