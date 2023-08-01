@@ -250,9 +250,6 @@ pub struct H264DecoderState<B: StatelessDecoderBackend<Rc<Sps>>> {
     /// The decoded picture buffer.
     dpb: Dpb<B::Handle>,
 
-    /// The current active PPS id.
-    cur_pps_id: u8,
-
     /// Cached variables from the previous reference picture.
     prev_ref_pic_info: PrevReferencePicInfo,
     /// Cached variables from the previous picture.
@@ -284,7 +281,6 @@ where
             parser: Default::default(),
             negotiation_info: Default::default(),
             dpb: Default::default(),
-            cur_pps_id: Default::default(),
             prev_ref_pic_info: Default::default(),
             prev_pic_info: Default::default(),
             max_long_term_frame_idx: Default::default(),
@@ -1343,19 +1339,17 @@ where
         Ok(())
     }
 
-    fn handle_frame_num_gap(&mut self, frame_num: i32, timestamp: u64) -> anyhow::Result<()> {
+    fn handle_frame_num_gap(
+        &mut self,
+        pps: &Pps,
+        frame_num: i32,
+        timestamp: u64,
+    ) -> anyhow::Result<()> {
         if self.codec.dpb.is_empty() {
             return Ok(());
         }
 
         debug!("frame_num gap detected.");
-
-        let pps = Rc::clone(
-            self.codec
-                .parser
-                .get_pps(self.codec.cur_pps_id)
-                .context("Invalid PPS while handling a frame_num gap")?,
-        );
 
         if !pps.sps.gaps_in_frame_num_value_allowed_flag {
             return Err(anyhow!(
@@ -1376,7 +1370,7 @@ where
                 .dpb
                 .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
-            self.codec.sliding_window_marking(&mut pic, &pps)?;
+            self.codec.sliding_window_marking(&mut pic, pps)?;
 
             self.codec.dpb.remove_unused();
             self.ready_queue.extend(self.codec.bump_as_needed(&pic));
@@ -1482,12 +1476,10 @@ where
         let hdr = slice.header();
         let frame_num = i32::from(hdr.frame_num);
 
-        self.codec.cur_pps_id = hdr.pic_parameter_set_id;
-
         let pps = Rc::clone(
             self.codec
                 .parser
-                .get_pps(self.codec.cur_pps_id)
+                .get_pps(hdr.pic_parameter_set_id)
                 .context("Invalid PPS in handle_picture")?,
         );
 
@@ -1495,7 +1487,7 @@ where
             && frame_num
                 != (self.codec.prev_ref_pic_info.frame_num + 1) % pps.sps.max_frame_num() as i32
         {
-            self.handle_frame_num_gap(frame_num, timestamp)?;
+            self.handle_frame_num_gap(&pps, frame_num, timestamp)?;
         }
 
         let first_field = self.codec.find_first_field(slice)?;
