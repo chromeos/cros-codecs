@@ -1,0 +1,72 @@
+context:
+  extra_kernel_args: console_msg_format=syslog earlycon
+device_type: {{ device_type }}
+job_name: Test cros-codecs on {{ arch }}
+
+priority: medium
+timeouts:
+  action:
+    minutes: 120
+  actions:
+    power-off:
+      seconds: 30
+  job:
+    minutes: 120
+  queue:
+    days: 2
+visibility: public
+
+actions:
+- deploy:
+    namespace: cros-codecs
+    kernel:
+      url: https://storage.chromeos.kernelci.org/images/kernel/cros---chromeos-6.1-x86_64-chromiumos-x86_64.flavour.config+x86-chromebook/clang-14/kernel/bzImage
+    modules:
+      compression: xz
+      url: https://storage.chromeos.kernelci.org/images/kernel/cros---chromeos-6.1-x86_64-chromiumos-x86_64.flavour.config+x86-chromebook/clang-14/modules.tar.xz
+    nfsrootfs:
+      compression: xz
+      url: https://storage.kernelci.org/images/rootfs/debian/bullseye-gst-fluster/20231117.0/amd64/full.rootfs.tar.xz
+    os: oe
+    ramdisk:
+      compression: gz
+      url: https://storage.kernelci.org/images/rootfs/debian/bullseye-gst-fluster/20231117.0/amd64/initrd.cpio.gz
+    timeout:
+      minutes: 15
+    to: tftp
+- boot:
+    commands: nfs
+    method: depthcharge
+    namespace: cros-codecs
+    prompts:
+    - '/ #'
+    timeout:
+      minutes: 5
+- test:
+    definitions:
+       - repository: {{ repo_url }}
+         branch: '{{ test_branch }}'
+         history: False
+         from: git
+         name: run_fluster
+         path: ci/test-cases/cros-codecs.yaml
+         params:
+           CCDEC_BUILD_ID: {{ ccdec_build_id }}
+           ARCH: {{ arch }}
+           GITHUB_TOKEN: {{ token }}
+           GITHUB_REPO: {{ repo }}
+       - repository: {{ repo_url }}
+         branch: '{{ test_branch }}'
+         history: False
+         from: git
+         name: run_fluster_single
+         path: ci/test-cases/cros-codecs-single.yaml
+         params:
+           CCDEC_BUILD_ID: {{ ccdec_build_id }}
+           ARCH: {{ arch }}
+           GITHUB_TOKEN: {{ token }}
+           GITHUB_REPO: {{ repo }}
+    namespace: cros-codecs
+    timeout:
+      minutes: 120
+
