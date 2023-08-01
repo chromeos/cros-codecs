@@ -1,6 +1,6 @@
 [package]
 name = "cros-codecs"
-version = "0.0.3"
+version = "0.0.4"
 license = "BSD-3-Clause"
 description = "Hardware-accelerated codecs for Linux"
 repository = "https://github.com/chromeos/cros-codecs"
