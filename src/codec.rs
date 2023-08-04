@@ -11,6 +11,7 @@
 //! There shall be no dependencies from other modules of this crate to this module, so that it
 //! can be turned into a crate of its own if needed in the future.
 
+pub mod av1;
 pub mod h264;
 pub mod h265;
 pub mod vp8;
