@@ -25,6 +25,7 @@ use crate::codec::h264::parser::Level;
 use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::Profile;
 use crate::codec::h264::parser::Slice;
+use crate::codec::h264::parser::SliceHeader;
 use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::PictureData;
@@ -209,7 +210,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
     }
 
     fn build_pic_param(
-        slice: &Slice<impl AsRef<[u8]>>,
+        hdr: &SliceHeader,
         current_picture: &PictureData,
         current_surface_id: libva::VASurfaceID,
         dpb: &Dpb<VADecodedHandle<M>>,
@@ -277,7 +278,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
             pps.weighted_pred_flag() as u32,
             pps.weighted_bipred_idc() as u32,
             pps.transform_8x8_mode_flag() as u32,
-            slice.header().field_pic_flag as u32,
+            hdr.field_pic_flag as u32,
             pps.constrained_intra_pred_flag() as u32,
             pps.bottom_field_pic_order_in_frame_present_flag() as u32,
             pps.deblocking_filter_control_present_flag() as u32,
@@ -310,7 +311,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
             pps.chroma_qp_index_offset(),
             pps.second_chroma_qp_index_offset(),
             &pic_fields,
-            slice.header().frame_num,
+            hdr.frame_num,
         );
 
         Ok(BufferType::PictureParameter(PictureParameter::H264(
@@ -346,15 +347,13 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
     }
 
     fn build_slice_param(
-        slice: &Slice<impl AsRef<[u8]>>,
+        hdr: &SliceHeader,
+        slice_size: usize,
         ref_list_0: &[DpbEntry<VADecodedHandle<M>>],
         ref_list_1: &[DpbEntry<VADecodedHandle<M>>],
         sps: &Sps,
         pps: &Pps,
     ) -> anyhow::Result<BufferType> {
-        let hdr = slice.header();
-        let nalu = slice.nalu();
-
         let ref_list_0 = Self::fill_ref_pic_list(ref_list_0);
         let ref_list_1 = Self::fill_ref_pic_list(ref_list_1);
         let pwt = &hdr.pred_weight_table;
@@ -424,7 +423,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
         }
 
         let slice_param = libva::SliceParameterBufferH264::new(
-            nalu.size() as u32,
+            slice_size as u32,
             0,
             libva::constants::VA_SLICE_DATA_FLAG_ALL,
             hdr.header_bit_size as u16,
@@ -474,14 +473,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         sps: &Sps,
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
-        slice: &Slice<&[u8]>,
+        hdr: &SliceHeader,
     ) -> StatelessBackendResult<()> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
         let surface_id = picture.surface().id();
 
-        let pic_param = Self::build_pic_param(slice, picture_data, surface_id, dpb, sps, pps)?;
+        let pic_param = Self::build_pic_param(hdr, picture_data, surface_id, dpb, sps, pps)?;
         let pic_param = context
             .create_buffer(pic_param)
             .context("while creating picture parameter buffer")?;
@@ -512,7 +511,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
 
         let slice_param = context
             .create_buffer(Self::build_slice_param(
-                slice,
+                slice.header(),
+                slice.nalu().size(),
                 ref_pic_list0,
                 ref_pic_list1,
                 sps,

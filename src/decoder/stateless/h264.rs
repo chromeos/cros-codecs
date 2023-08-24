@@ -98,7 +98,7 @@ pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<Rc<Sps>> {
         sps: &Sps,
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
-        slice: &Slice<&[u8]>,
+        hdr: &SliceHeader,
     ) -> StatelessBackendResult<()>;
 
     /// Called to dispatch a decode operation to the backend.
@@ -1510,7 +1510,7 @@ where
             pps.sps.as_ref(),
             pps.as_ref(),
             &self.codec.dpb,
-            slice,
+            slice.header(),
         )?;
 
         Ok(CurrentPicState {

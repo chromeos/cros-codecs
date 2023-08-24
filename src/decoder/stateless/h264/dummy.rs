@@ -13,6 +13,7 @@ use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::Slice;
+use crate::codec::h264::parser::SliceHeader;
 use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::PictureData;
 use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
@@ -33,7 +34,7 @@ impl StatelessH264DecoderBackend for Backend {
         _: &Sps,
         _: &Pps,
         _: &Dpb<Self::Handle>,
-        _: &Slice<&[u8]>,
+        _: &SliceHeader,
     ) -> StatelessBackendResult<()> {
         Ok(())
     }
