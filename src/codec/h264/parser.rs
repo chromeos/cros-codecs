@@ -1933,8 +1933,17 @@ impl Parser {
             let crop_unit_y = sub_height_c[usize::from(sps.chroma_format_idc)]
                 * (2 - u32::from(sps.frame_mbs_only_flag));
 
-            width -= (sps.frame_crop_left_offset + sps.frame_crop_right_offset) * crop_unit_x;
-            height -= (sps.frame_crop_top_offset + sps.frame_crop_bottom_offset) * crop_unit_y;
+            width = width
+                .checked_sub(
+                    (sps.frame_crop_left_offset + sps.frame_crop_right_offset) * crop_unit_x,
+                )
+                .ok_or(anyhow!("Invalid frame crop width"))?;
+
+            height = height
+                .checked_sub(
+                    (sps.frame_crop_top_offset + sps.frame_crop_bottom_offset) * crop_unit_y,
+                )
+                .ok_or(anyhow!("Invalid frame crop height"))?;
 
             sps.crop_rect_width = width;
             sps.crop_rect_height = height;
@@ -2825,5 +2834,23 @@ mod tests {
         assert_eq!(hdr.max_pic_num, 32);
         assert_eq!(hdr.header_bit_size, 41);
         assert!(!hdr.num_ref_idx_active_override_flag);
+    }
+
+    #[test]
+    fn invalid_sps_crop_width() {
+        // This SPS contains invalid frame_crop_*_offset settings. This led to
+        // unconditional panic in the parser in the past. This test make sure a
+        // panic is avoided.
+        let invalid_sps = vec![
+            0x00, 0x00, 0x01, 0x07, 0x00, 0x00, 0x0a, 0xfb, 0xb0, 0x32, 0xc0, 0xca, 0x80,
+        ];
+
+        let mut cursor = Cursor::new(invalid_sps);
+        let mut parser = Parser::default();
+
+        while let Ok(nalu) = Nalu::next(&mut cursor) {
+            assert_eq!(nalu.header().type_, NaluType::Sps);
+            parser.parse_sps(&nalu).unwrap_err();
+        }
     }
 }
