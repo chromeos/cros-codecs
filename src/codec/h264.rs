@@ -8,3 +8,4 @@ pub mod nalu_reader;
 pub mod nalu_writer;
 pub mod parser;
 pub mod picture;
+pub mod synthesizer;
