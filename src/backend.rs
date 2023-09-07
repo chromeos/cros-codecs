@@ -11,4 +11,4 @@
 #[cfg(test)]
 pub(crate) mod dummy;
 #[cfg(feature = "vaapi")]
-pub(crate) mod vaapi;
+pub mod vaapi;

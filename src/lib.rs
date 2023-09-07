@@ -14,12 +14,16 @@
 //! The [decoder] module contains decoders that can turn an encoded video stream into a sequence of
 //! decoded frames using the hardware acceleration available on the host.
 //!
+//! The [encoder] module contains encoder that can turn a picture sequence into a compressed
+//! sequence of decodable encoded packets using the hardware acceleration available on the host.
+//!
 //! The [utils] module contains some useful code that is shared between different parts of this
 //! crate and didn't fit any of the modules above.
 
 pub mod backend;
 pub mod codec;
 pub mod decoder;
+pub mod encoder;
 pub mod utils;
 
 use std::str::FromStr;
@@ -85,7 +89,7 @@ impl From<Resolution> for (u32, u32) {
 /// Wrapper around u32 when they are meant to be a fourcc.
 ///
 /// Provides conversion and display/debug implementations useful when dealing with fourcc codes.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Fourcc(u32);
 
 impl From<u32> for Fourcc {
@@ -184,7 +188,7 @@ impl FromStr for DecodedFormat {
 }
 
 /// Describes the layout of a plane within a frame.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PlaneLayout {
     /// Index of the memory buffer the plane belongs to.
     pub buffer_index: usize,
@@ -198,7 +202,7 @@ pub struct PlaneLayout {
 ///
 /// A frame can be made of one or several memory buffers, each containing one or several planes.
 /// For a given frame, this structure defines where each plane can be found.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FrameLayout {
     /// `(Fourcc, modifier)` tuple describing the arrangement of the planes.
     ///

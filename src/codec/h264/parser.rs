@@ -326,6 +326,66 @@ impl SliceHeader {
     }
 }
 
+pub struct SliceHeaderBuilder(SliceHeader);
+
+impl SliceHeaderBuilder {
+    pub fn new(pps: &Pps) -> Self {
+        SliceHeaderBuilder(SliceHeader {
+            pic_parameter_set_id: pps.pic_parameter_set_id,
+            ..Default::default()
+        })
+    }
+
+    pub fn slice_type(mut self, type_: SliceType) -> Self {
+        self.0.slice_type = type_;
+        self
+    }
+
+    pub fn first_mb_in_slice(mut self, value: u32) -> Self {
+        self.0.first_mb_in_slice = value;
+        self
+    }
+
+    pub fn pic_order_cnt_lsb(mut self, value: u16) -> Self {
+        self.0.pic_order_cnt_lsb = value;
+        self
+    }
+
+    pub fn idr_pic_id(mut self, value: u16) -> Self {
+        self.0.idr_pic_id = value;
+        self
+    }
+
+    pub fn num_ref_idx_active_override_flag(mut self, value: bool) -> Self {
+        self.0.num_ref_idx_active_override_flag = value;
+        self
+    }
+
+    pub fn num_ref_idx_l0_active_minus1(mut self, value: u8) -> Self {
+        self = self.num_ref_idx_active_override_flag(true);
+        self.0.num_ref_idx_l0_active_minus1 = value;
+        self
+    }
+
+    pub fn num_ref_idx_l0_active(self, value: u8) -> Self {
+        self.num_ref_idx_l0_active_minus1(value - 1)
+    }
+
+    pub fn num_ref_idx_l1_active_minus1(mut self, value: u8) -> Self {
+        self = self.num_ref_idx_active_override_flag(true);
+        self.0.num_ref_idx_l1_active_minus1 = value;
+        self
+    }
+
+    pub fn num_ref_idx_l1_active(self, value: u8) -> Self {
+        self.num_ref_idx_l1_active_minus1(value - 1)
+    }
+
+    pub fn build(self) -> SliceHeader {
+        self.0
+    }
+}
+
 /// A H264 slice. An integer number of macroblocks or macroblock pairs ordered
 /// consecutively in the raster scan within a particular slice group
 pub struct Slice<'a> {
@@ -378,7 +438,7 @@ impl Default for SliceType {
     }
 }
 
-#[derive(N)]
+#[derive(N, Clone, Copy)]
 #[repr(u8)]
 pub enum Profile {
     Baseline = 66,
@@ -729,6 +789,7 @@ impl Sps {
     }
 }
 
+// TODO: Replace with builder
 impl Default for Sps {
     fn default() -> Self {
         Self {
@@ -780,6 +841,230 @@ impl Default for Sps {
             vui_parameters_present_flag: Default::default(),
             vui_parameters: Default::default(),
         }
+    }
+}
+
+#[derive(Default)]
+pub struct SpsBuilder(Sps);
+
+impl SpsBuilder {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn seq_parameter_set_id(mut self, value: u8) -> Self {
+        self.0.seq_parameter_set_id = value;
+        self
+    }
+
+    pub fn profile_idc(mut self, value: Profile) -> Self {
+        self.0.profile_idc = value as u8;
+        self
+    }
+
+    pub fn level_idc(mut self, value: Level) -> Self {
+        self.0.level_idc = value;
+        self
+    }
+
+    pub fn resolution_in_mbs(mut self, width: u32, height: u32) -> Self {
+        self.0.pic_width_in_mbs_minus1 = width - 1;
+        self.0.pic_height_in_map_units_minus1 = height - 1;
+        self
+    }
+
+    pub fn frame_crop_offsets(mut self, top: u32, bottom: u32, left: u32, right: u32) -> Self {
+        self.0.frame_cropping_flag = true;
+        self.0.frame_crop_top_offset = top;
+        self.0.frame_crop_bottom_offset = bottom;
+        self.0.frame_crop_left_offset = left;
+        self.0.frame_crop_right_offset = right;
+        self
+    }
+
+    pub fn frame_crop(self, top: u32, bottom: u32, left: u32, right: u32) -> Self {
+        let sub_width_c = if self.0.chroma_format_idc > 2 { 1 } else { 2 };
+        let sub_height_c = if self.0.chroma_format_idc > 1 { 1 } else { 2 };
+
+        let crop_unit_x = sub_width_c;
+        let crop_unit_y = sub_height_c * (if self.0.frame_mbs_only_flag { 1 } else { 2 });
+
+        self.frame_crop_offsets(
+            top / crop_unit_y,
+            bottom / crop_unit_y,
+            left / crop_unit_x,
+            right / crop_unit_x,
+        )
+    }
+
+    pub fn resolution(mut self, width: u32, height: u32) -> Self {
+        const MB_SIZE: u32 = 16;
+
+        let mb_width = (width + MB_SIZE - 1) / MB_SIZE;
+        let mb_height = (height + MB_SIZE - 1) / MB_SIZE;
+
+        self = self.resolution_in_mbs(mb_width, mb_height);
+
+        let compressed_width = mb_width * MB_SIZE;
+        let compressed_height = mb_height * MB_SIZE;
+
+        if compressed_width != width || compressed_height != height {
+            self = self.frame_crop(0, compressed_height - height, 0, compressed_width - width);
+        }
+
+        self
+    }
+
+    pub fn chroma_format_idc(mut self, value: u8) -> Self {
+        self.0.chroma_format_idc = value;
+        self
+    }
+
+    pub fn max_num_ref_frames(mut self, value: u32) -> Self {
+        self.0.max_num_ref_frames = value;
+        self
+    }
+
+    pub fn frame_mbs_only_flag(mut self, value: bool) -> Self {
+        self.0.frame_mbs_only_flag = value;
+        self
+    }
+
+    pub fn mb_adaptive_frame_field_flag(mut self, value: bool) -> Self {
+        self.0.mb_adaptive_frame_field_flag = value;
+        self
+    }
+
+    pub fn seq_scaling_matrix_present_flag(mut self, value: bool) -> Self {
+        self.0.seq_scaling_matrix_present_flag = value;
+        self
+    }
+
+    pub fn direct_8x8_inference_flag(mut self, value: bool) -> Self {
+        self.0.direct_8x8_inference_flag = value;
+        self
+    }
+
+    pub fn vui_parameters_present(mut self) -> Self {
+        if self.0.vui_parameters_present_flag {
+            return self;
+        }
+
+        self.0.vui_parameters_present_flag = true;
+        // Disable all options at default
+        self.0.vui_parameters.aspect_ratio_info_present_flag = false;
+        self.0.vui_parameters.overscan_info_present_flag = false;
+        self.0.vui_parameters.video_signal_type_present_flag = false;
+        self.0.vui_parameters.colour_description_present_flag = false;
+        self.0.vui_parameters.chroma_loc_info_present_flag = false;
+        self.0.vui_parameters.timing_info_present_flag = false;
+        self.0.vui_parameters.nal_hrd_parameters_present_flag = false;
+        self.0.vui_parameters.vcl_hrd_parameters_present_flag = false;
+        self.0.vui_parameters.pic_struct_present_flag = false;
+        self.0.vui_parameters.bitstream_restriction_flag = false;
+        self
+    }
+
+    pub fn aspect_ratio_idc(mut self, value: u8) -> Self {
+        self = self.vui_parameters_present();
+        self.0.vui_parameters.aspect_ratio_info_present_flag = true;
+        self.0.vui_parameters.aspect_ratio_idc = value;
+        self
+    }
+
+    pub fn sar_resolution(mut self, width: u16, height: u16) -> Self {
+        self = self.aspect_ratio_idc(255);
+        self.0.vui_parameters.sar_width = width;
+        self.0.vui_parameters.sar_height = height;
+        self
+    }
+
+    pub fn aspect_ratio(self, width_ratio: u16, height_ratio: u16) -> Self {
+        // H.264 Table E-1
+        match (width_ratio, height_ratio) {
+            (1, 1) => self.aspect_ratio_idc(1),
+            (12, 11) => self.aspect_ratio_idc(2),
+            (10, 11) => self.aspect_ratio_idc(3),
+            (16, 11) => self.aspect_ratio_idc(4),
+            (40, 33) => self.aspect_ratio_idc(5),
+            (24, 11) => self.aspect_ratio_idc(6),
+            (20, 11) => self.aspect_ratio_idc(7),
+            (32, 11) => self.aspect_ratio_idc(8),
+            (80, 33) => self.aspect_ratio_idc(9),
+            (18, 11) => self.aspect_ratio_idc(10),
+            (15, 11) => self.aspect_ratio_idc(11),
+            (64, 33) => self.aspect_ratio_idc(12),
+            (160, 99) => self.aspect_ratio_idc(13),
+            (4, 3) => self.aspect_ratio_idc(14),
+            (3, 2) => self.aspect_ratio_idc(15),
+            (2, 1) => self.aspect_ratio_idc(16),
+
+            _ => self.sar_resolution(width_ratio, height_ratio),
+        }
+    }
+
+    pub fn timing_info(
+        mut self,
+        num_units_in_tick: u32,
+        time_scale: u32,
+        fixed_frame_rate_flag: bool,
+    ) -> Self {
+        self = self.vui_parameters_present();
+        self.0.vui_parameters.timing_info_present_flag = true;
+        self.0.vui_parameters.num_units_in_tick = num_units_in_tick;
+        self.0.vui_parameters.time_scale = time_scale;
+        self.0.vui_parameters.fixed_frame_rate_flag = fixed_frame_rate_flag;
+        self
+    }
+
+    pub fn log2_max_frame_num_minus4(mut self, value: u8) -> Self {
+        self.0.log2_max_frame_num_minus4 = value;
+        self
+    }
+
+    pub fn max_frame_num(self, value: u32) -> Self {
+        self.log2_max_frame_num_minus4(value.ilog2() as u8 - 4u8)
+    }
+
+    pub fn pic_order_cnt_type(mut self, value: u8) -> Self {
+        self.0.pic_order_cnt_type = value;
+        self
+    }
+
+    pub fn log2_max_pic_order_cnt_lsb_minus4(mut self, value: u8) -> Self {
+        self.0.log2_max_pic_order_cnt_lsb_minus4 = value;
+        self
+    }
+
+    pub fn max_pic_order_cnt_lsb(self, value: u32) -> Self {
+        self.log2_max_pic_order_cnt_lsb_minus4(value.ilog2() as u8 - 4u8)
+    }
+
+    pub fn delta_pic_order_always_zero_flag(mut self, value: bool) -> Self {
+        self.0.delta_pic_order_always_zero_flag = value;
+        self
+    }
+
+    pub fn bit_depth_chroma_minus8(mut self, value: u8) -> Self {
+        self.0.bit_depth_chroma_minus8 = value;
+        self
+    }
+
+    pub fn bit_depth_chroma(self, value: u8) -> Self {
+        self.bit_depth_luma_minus8(value - 8u8)
+    }
+
+    pub fn bit_depth_luma_minus8(mut self, value: u8) -> Self {
+        self.0.bit_depth_luma_minus8 = value;
+        self
+    }
+
+    pub fn bit_depth_luma(self, value: u8) -> Self {
+        self.bit_depth_luma_minus8(value - 8u8)
+    }
+
+    pub fn build(self) -> Rc<Sps> {
+        Rc::new(self.0)
     }
 }
 
@@ -1156,6 +1441,77 @@ pub struct Pps {
 
     /// The SPS referenced by this PPS.
     pub sps: Rc<Sps>,
+}
+
+pub struct PpsBuilder(Pps);
+
+impl PpsBuilder {
+    pub fn new(sps: Rc<Sps>) -> Self {
+        PpsBuilder(Pps {
+            pic_parameter_set_id: 0,
+            seq_parameter_set_id: sps.seq_parameter_set_id,
+            entropy_coding_mode_flag: false,
+            bottom_field_pic_order_in_frame_present_flag: false,
+            num_slice_groups_minus1: 0,
+            num_ref_idx_l0_default_active_minus1: 0,
+            num_ref_idx_l1_default_active_minus1: 0,
+            weighted_pred_flag: false,
+            weighted_bipred_idc: 0,
+            pic_init_qp_minus26: 0,
+            pic_init_qs_minus26: 0,
+            chroma_qp_index_offset: 0,
+            deblocking_filter_control_present_flag: false,
+            constrained_intra_pred_flag: false,
+            redundant_pic_cnt_present_flag: false,
+            transform_8x8_mode_flag: false,
+            pic_scaling_matrix_present_flag: false,
+            scaling_lists_4x4: [[0; 16]; 6],
+            scaling_lists_8x8: [[0; 64]; 6],
+            second_chroma_qp_index_offset: 0,
+            sps,
+        })
+    }
+
+    pub fn pic_parameter_set_id(mut self, value: u8) -> Self {
+        self.0.pic_parameter_set_id = value;
+        self
+    }
+
+    pub fn pic_init_qp_minus26(mut self, value: i8) -> Self {
+        self.0.pic_init_qp_minus26 = value;
+        self
+    }
+
+    pub fn pic_init_qp(self, value: u8) -> Self {
+        self.pic_init_qp_minus26(value as i8 - 26)
+    }
+
+    pub fn deblocking_filter_control_present_flag(mut self, value: bool) -> Self {
+        self.0.deblocking_filter_control_present_flag = value;
+        self
+    }
+
+    pub fn num_ref_idx_l0_default_active_minus1(mut self, value: u8) -> Self {
+        self.0.num_ref_idx_l0_default_active_minus1 = value;
+        self
+    }
+
+    pub fn num_ref_idx_l0_default_active(self, value: u8) -> Self {
+        self.num_ref_idx_l0_default_active_minus1(value - 1)
+    }
+
+    pub fn num_ref_idx_l1_default_active_minus1(mut self, value: u8) -> Self {
+        self.0.num_ref_idx_l1_default_active_minus1 = value;
+        self
+    }
+
+    pub fn num_ref_idx_l1_default_active(self, value: u8) -> Self {
+        self.num_ref_idx_l1_default_active_minus1(value - 1)
+    }
+
+    pub fn build(self) -> Rc<Pps> {
+        Rc::new(self.0)
+    }
 }
 
 #[derive(Debug, Default)]

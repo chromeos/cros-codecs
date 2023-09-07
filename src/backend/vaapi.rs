@@ -21,6 +21,7 @@ use crate::utils::UserPtrFrame;
 use crate::DecodedFormat;
 
 pub mod decoder;
+pub mod encoder;
 pub mod surface_pool;
 
 fn va_rt_format_to_string(va_rt_format: u32) -> String {
