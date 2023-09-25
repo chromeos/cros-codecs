@@ -180,10 +180,10 @@ impl From<&Sps> for NegotiationInfo {
                 width: sps.width().into(),
                 height: sps.height().into(),
             },
-            general_profile_idc: sps.profile_tier_level().general_profile_idc(),
-            bit_depth_luma_minus8: sps.bit_depth_luma_minus8(),
-            bit_depth_chroma_minus8: sps.bit_depth_chroma_minus8(),
-            chroma_format_idc: sps.chroma_format_idc(),
+            general_profile_idc: sps.profile_tier_level.general_profile_idc,
+            bit_depth_luma_minus8: sps.bit_depth_luma_minus8,
+            bit_depth_chroma_minus8: sps.bit_depth_chroma_minus8,
+            chroma_format_idc: sps.chroma_format_idc,
         }
     }
 }
@@ -384,10 +384,10 @@ where
 
     // See 8.3.2, Note 2.
     fn st_ref_pic_set<'a>(hdr: &'a SliceHeader, sps: &'a Sps) -> &'a ShortTermRefPicSet {
-        if hdr.curr_rps_idx() == sps.num_short_term_ref_pic_sets() {
+        if hdr.curr_rps_idx() == sps.num_short_term_ref_pic_sets {
             hdr.short_term_ref_pic_set()
         } else {
-            &sps.short_term_ref_pic_set()[usize::from(hdr.curr_rps_idx())]
+            &sps.short_term_ref_pic_set[usize::from(hdr.curr_rps_idx())]
         }
     }
 
@@ -399,7 +399,7 @@ where
             self.codec.dpb.mark_all_as_unused_for_ref();
         }
 
-        if slice.nalu().header().nalu_type().is_idr() {
+        if slice.nalu().header().type_.is_idr() {
             self.codec.rps.poc_st_curr_before = Default::default();
             self.codec.rps.poc_st_curr_after = Default::default();
             self.codec.rps.poc_st_foll = Default::default();
@@ -657,8 +657,8 @@ where
         if self.codec.rps.num_poc_st_curr_before == 0
             && self.codec.rps.num_poc_st_curr_after == 0
             && self.codec.rps.num_poc_lt_curr == 0
-            && pps.scc_extension_flag()
-            && !pps.scc_extension().curr_pic_ref_enabled_flag()
+            && pps.scc_extension_flag
+            && !pps.scc_extension.curr_pic_ref_enabled_flag
         {
             // Let's try and keep going, if it is a broken stream then maybe it
             // will sort itself out as we go. In any case, we must not loop
@@ -713,7 +713,7 @@ where
                 r_idx += 1;
             }
 
-            if pps.scc_extension().curr_pic_ref_enabled_flag() {
+            if pps.scc_extension.curr_pic_ref_enabled_flag {
                 ref_pic_list_temp0[r_idx as usize] =
                     Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
 
@@ -733,7 +733,7 @@ where
             ref_pic_lists.ref_pic_list0[r_idx] = entry;
         }
 
-        if pps.scc_extension().curr_pic_ref_enabled_flag()
+        if pps.scc_extension.curr_pic_ref_enabled_flag
             && !rplm.ref_pic_list_modification_flag_l0()
             && num_rps_curr_temp_list0 > (u32::from(hdr.num_ref_idx_l0_active_minus1()) + 1)
         {
@@ -783,7 +783,7 @@ where
                     r_idx += 1;
                 }
 
-                if pps.scc_extension().curr_pic_ref_enabled_flag() {
+                if pps.scc_extension.curr_pic_ref_enabled_flag {
                     ref_pic_list_temp1[r_idx as usize] =
                         Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
 
@@ -928,7 +928,7 @@ where
             .get_pps(slice.header().pic_parameter_set_id())
             .context("Invalid PPS in handle_picture")?;
 
-        let pps_id = pps.pic_parameter_set_id();
+        let pps_id = pps.pic_parameter_set_id;
         self.update_current_set_ids(pps_id)?;
         self.renegotiate_if_needed(RenegotiationType::CurrentSps)?;
 
@@ -1004,8 +1004,8 @@ where
     fn update_current_set_ids(&mut self, pps_id: u8) -> anyhow::Result<()> {
         let pps = self.codec.parser.get_pps(pps_id).context("Invalid PPS")?;
 
-        self.codec.cur_pps_id = pps.pic_parameter_set_id();
-        self.codec.cur_sps_id = pps.seq_parameter_set_id();
+        self.codec.cur_pps_id = pps.pic_parameter_set_id;
+        self.codec.cur_sps_id = pps.seq_parameter_set_id;
         Ok(())
     }
 
@@ -1128,18 +1128,17 @@ where
     fn process_nalu(&mut self, timestamp: u64, nalu: Nalu<&[u8]>) -> Result<(), DecodeError> {
         log::debug!(
             "Processing NALU {:?}, length is {}",
-            nalu.header().nalu_type(),
+            nalu.header().type_,
             nalu.size()
         );
 
-        match nalu.header().nalu_type() {
+        match nalu.header().type_ {
             NaluType::VpsNut => {
                 self.codec.parser.parse_vps(&nalu)?;
             }
             NaluType::SpsNut => {
                 let sps = self.codec.parser.parse_sps(&nalu)?;
-                self.codec.max_pic_order_cnt_lsb =
-                    1 << (sps.log2_max_pic_order_cnt_lsb_minus4() + 4);
+                self.codec.max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
 
                 // Try parsing the PPS again.
                 for pending_pps in self.codec.pending_pps.clone().iter().enumerate() {
@@ -1241,7 +1240,7 @@ where
         let mut cursor = Cursor::new(bitstream);
         let nalu = Nalu::next(&mut cursor)?;
 
-        if nalu.header().nalu_type() == NaluType::SpsNut {
+        if nalu.header().type_ == NaluType::SpsNut {
             let sps = self.codec.parser.parse_sps(&nalu)?.clone();
             if matches!(self.decoding_state, DecodingState::AwaitingStreamInfo) {
                 // If more SPS come along we will renegotiate in begin_picture().
@@ -1255,7 +1254,7 @@ where
 
             while let Ok(nalu) = Nalu::next(&mut cursor) {
                 // In the Reset state we can resume decoding from any key frame.
-                if nalu.header().nalu_type().is_idr() {
+                if nalu.header().type_.is_idr() {
                     self.decoding_state = DecodingState::Decoding;
                     break;
                 }
@@ -1269,7 +1268,7 @@ where
             // from the stream.
             DecodingState::AwaitingStreamInfo | DecodingState::Reset => {
                 if matches!(
-                    nalu.header().nalu_type(),
+                    nalu.header().type_,
                     NaluType::VpsNut | NaluType::SpsNut | NaluType::PpsNut
                 ) {
                     self.process_nalu(timestamp, nalu)?;

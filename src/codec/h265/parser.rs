@@ -172,27 +172,13 @@ impl NaluType {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NaluHeader {
     /// The NALU type.
-    type_: NaluType,
+    pub type_: NaluType,
     /// Specifies the identifier of the layer to which a VCL NAL unit belongs or
     /// the identifier of a layer to which a non-VCL NAL unit applies.
-    nuh_layer_id: u8,
+    pub nuh_layer_id: u8,
     /// Minus 1 specifies a temporal identifier for the NAL unit. The value of
     /// nuh_temporal_id_plus1 shall not be equal to 0.
-    nuh_temporal_id_plus1: u8,
-}
-
-impl NaluHeader {
-    pub fn nalu_type(&self) -> NaluType {
-        self.type_
-    }
-
-    pub fn layer_id(&self) -> u8 {
-        self.nuh_layer_id
-    }
-
-    pub fn temporal_id_plus1(&self) -> u8 {
-        self.nuh_temporal_id_plus1
-    }
+    pub nuh_temporal_id_plus1: u8,
 }
 
 impl Header for NaluHeader {
@@ -264,25 +250,25 @@ pub enum Profile {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Vps {
     /// Identifies the VPS for reference by other syntax elements.
-    video_parameter_set_id: u8,
+    pub video_parameter_set_id: u8,
     /// If vps_base_layer_internal_flag is equal to 1 and
     /// vps_base_layer_available_flag is equal to 1, the base layer is present
     /// in the bitstream.
-    base_layer_internal_flag: bool,
+    pub base_layer_internal_flag: bool,
     /// See `base_layer_internal_flag`.
-    base_layer_available_flag: bool,
+    pub base_layer_available_flag: bool,
     /// Plus 1 specifies the maximum allowed number of layers in each CVS
     /// referring to the VPS.
-    max_layers_minus1: u8,
+    pub max_layers_minus1: u8,
     /// Plus 1 specifies the maximum number of temporal sub-layers that may be
     /// present in each CVS referring to the VPS.
-    max_sub_layers_minus1: u8,
+    pub max_sub_layers_minus1: u8,
     /// When vps_max_sub_layers_minus1 is greater than 0, specifies whether
     /// inter prediction is additionally restricted for CVSs referring to the
     /// VPS.
-    temporal_id_nesting_flag: bool,
+    pub temporal_id_nesting_flag: bool,
     /// ProfileTierLevel() data.
-    profile_tier_level: ProfileTierLevel,
+    pub profile_tier_level: ProfileTierLevel,
     /// When true, specifies that `vps_max_dec_pic_buffering_minus1[ i ]`,
     /// `vps_max_num_reorder_pics[ i ]` and `vps_max_latency_increase_plus1[ i ]`
     /// are present for vps_max_sub_layers_ minus1 + 1 sub-layers.
@@ -291,33 +277,33 @@ pub struct Vps {
     /// vps_max_num_reorder_pics[ vps_max_sub_ layers_minus1 ] and
     /// `vps_max_latency_increase_plus1[ vps_max_sub_layers_minus1 ]` apply to all
     /// sub-layers
-    sub_layer_ordering_info_present_flag: bool,
+    pub sub_layer_ordering_info_present_flag: bool,
     /// `max_dec_pic_buffering_minus1[i]` plus 1 specifies the maximum required
     /// size of the decoded picture buffer for the CVS in units of picture
     /// storage buffers when HighestTid is equal to i.
-    max_dec_pic_buffering_minus1: [u32; 7],
+    pub max_dec_pic_buffering_minus1: [u32; 7],
     /// Indicates the maximum allowed number of pictures with PicOutputFlag
     /// equal to 1 that can precede any picture with PicOutputFlag equal to 1 in
     /// the CVS in decoding order and follow that picture with PicOutputFlag
     /// equal to 1 in output order when HighestTid is equal to i.
-    max_num_reorder_pics: [u32; 7],
+    pub max_num_reorder_pics: [u32; 7],
     /// When true, `max_latency_increase_plus1[i]` is used to compute the value of
     /// `VpsMaxLatencyPictures[ i ]`, which specifies the maximum number of
     /// pictures with PicOutputFlag equal to 1 that can precede any picture with
     /// PicOutputFlag equal to 1 in the CVS in output order and follow that
     /// picture with PicOutputFlag equal to 1 in decoding order when HighestTid
     /// is equal to i.
-    max_latency_increase_plus1: [u32; 7],
+    pub max_latency_increase_plus1: [u32; 7],
     /// Specifies the maximum allowed value of nuh_layer_id of all NAL units in
     /// each CVS referring to the VPS.
-    max_layer_id: u8,
+    pub max_layer_id: u8,
     /// num_layer_sets_minus1 plus 1 specifies the number of layer sets that are
     /// specified by the VPS.
-    num_layer_sets_minus1: u32,
+    pub num_layer_sets_minus1: u32,
     /// When true, specifies that num_units_in_tick, time_scale,
     /// poc_proportional_to_timing_flag and num_hrd_parameters are present in
     /// the VPS.
-    timing_info_present_flag: bool,
+    pub timing_info_present_flag: bool,
     /// The number of time units of a clock operating at the frequency
     /// vps_time_scale Hz that corresponds to one increment (called a clock
     /// tick) of a clock tick counter. The value of vps_num_units_in_tick shall
@@ -327,11 +313,11 @@ pub struct Vps {
     /// vps_time_scale may be equal to 27 000 000 and vps_num_units_in_tick may
     /// be equal to 1 080 000, and consequently a clock tick may be 0.04
     /// seconds.
-    num_units_in_tick: u32,
+    pub num_units_in_tick: u32,
     /// The number of time units that pass in one second. For example, a time
     /// coordinate system that measures time using a 27 MHz clock has a
     /// vps_time_scale of 27 000 000.
-    time_scale: u32,
+    pub time_scale: u32,
     /// When true, indicates that the picture order count value for each picture
     /// in the CVS that is not the first picture in the CVS, in decoding order,
     /// is proportional to the output time of the picture relative to the output
@@ -340,17 +326,17 @@ pub struct Vps {
     /// first picture in the CVS, in decoding order, may or may not be
     /// proportional to the output time of the picture relative to the output
     /// time of the first picture in the CVS.
-    poc_proportional_to_timing_flag: bool,
+    pub poc_proportional_to_timing_flag: bool,
     /// num_ticks_poc_diff_one_minus1 plus 1 specifies the number of clock ticks
     /// corresponding to a difference of picture order count values equal to 1.
-    num_ticks_poc_diff_one_minus1: u32,
+    pub num_ticks_poc_diff_one_minus1: u32,
     /// Specifies the number of hrd_parameters( ) syntax structures present in
     /// the VPS RBSP before the vps_extension_flag syntax element.
-    num_hrd_parameters: u32,
+    pub num_hrd_parameters: u32,
     /// `hrd_layer_set_idx[ i ]` specifies the index, into the list of layer sets
     /// specified by the VPS, of the layer set to which the i-th hrd_parameters(
     /// ) syntax structure in the VPS applies.
-    hrd_layer_set_idx: Vec<u16>,
+    pub hrd_layer_set_idx: Vec<u16>,
     /// `cprms_present_flag[ i ]` equal to true specifies that the HRD parameters
     /// that are common for all sub-layers are present in the i-th
     /// hrd_parameters( ) syntax structure in the VPS. `cprms_present_flag[ i ]`
@@ -359,9 +345,9 @@ pub struct Vps {
     /// structure in the VPS and are derived to be the same as the ( i − 1 )-th
     /// hrd_parameters( ) syntax structure in the VPS. `cprms_present_flag[ 0 ]`
     /// is inferred to be equal to true.
-    cprms_present_flag: Vec<bool>,
+    pub cprms_present_flag: Vec<bool>,
     /// The hrd_parameters() data.
-    hrd_parameters: Vec<HrdParams>,
+    pub hrd_parameters: Vec<HrdParams>,
     /// When false, specifies that no vps_extension_data_flag syntax elements
     /// are present in the VPS RBSP syntax structure. When true, specifies that
     /// there are vps_extension_data_flag syntax elements present in the VPS
@@ -369,101 +355,7 @@ pub struct Vps {
     /// Annex A but not supporting the INBLD capability specified in Annex F
     /// shall ignore all data that follow the value 1 for vps_extension_flag in
     /// a VPS NAL unit.
-    extension_flag: bool,
-}
-
-impl Vps {
-    pub fn video_parameter_set_id(&self) -> u8 {
-        self.video_parameter_set_id
-    }
-
-    pub fn base_layer_internal_flag(&self) -> bool {
-        self.base_layer_internal_flag
-    }
-
-    pub fn base_layer_available_flag(&self) -> bool {
-        self.base_layer_available_flag
-    }
-
-    pub fn max_layers_minus1(&self) -> u8 {
-        self.max_layers_minus1
-    }
-
-    pub fn max_sub_layers_minus1(&self) -> u8 {
-        self.max_sub_layers_minus1
-    }
-
-    pub fn temporal_id_nesting_flag(&self) -> bool {
-        self.temporal_id_nesting_flag
-    }
-
-    pub fn profile_tier_level(&self) -> &ProfileTierLevel {
-        &self.profile_tier_level
-    }
-
-    pub fn sub_layer_ordering_info_present_flag(&self) -> bool {
-        self.sub_layer_ordering_info_present_flag
-    }
-
-    pub fn max_dec_pic_buffering_minus1(&self) -> [u32; 7] {
-        self.max_dec_pic_buffering_minus1
-    }
-
-    pub fn max_num_reorder_pics(&self) -> [u32; 7] {
-        self.max_num_reorder_pics
-    }
-
-    pub fn max_latency_increase_plus1(&self) -> [u32; 7] {
-        self.max_latency_increase_plus1
-    }
-
-    pub fn max_layer_id(&self) -> u8 {
-        self.max_layer_id
-    }
-
-    pub fn num_layer_sets_minus1(&self) -> u32 {
-        self.num_layer_sets_minus1
-    }
-
-    pub fn timing_info_present_flag(&self) -> bool {
-        self.timing_info_present_flag
-    }
-
-    pub fn num_units_in_tick(&self) -> u32 {
-        self.num_units_in_tick
-    }
-
-    pub fn time_scale(&self) -> u32 {
-        self.time_scale
-    }
-
-    pub fn poc_proportional_to_timing_flag(&self) -> bool {
-        self.poc_proportional_to_timing_flag
-    }
-
-    pub fn num_ticks_poc_diff_one_minus1(&self) -> u32 {
-        self.num_ticks_poc_diff_one_minus1
-    }
-
-    pub fn num_hrd_parameters(&self) -> u32 {
-        self.num_hrd_parameters
-    }
-
-    pub fn hrd_layer_set_idx(&self) -> &[u16] {
-        self.hrd_layer_set_idx.as_ref()
-    }
-
-    pub fn cprms_present_flag(&self) -> &[bool] {
-        self.cprms_present_flag.as_ref()
-    }
-
-    pub fn hrd_parameters(&self) -> &[HrdParams] {
-        self.hrd_parameters.as_ref()
-    }
-
-    pub fn extension_flag(&self) -> bool {
-        self.extension_flag
-    }
+    pub extension_flag: bool,
 }
 
 impl Default for Vps {
@@ -501,21 +393,21 @@ pub struct ProfileTierLevel {
     /// Specifies the context for the interpretation of general_profile_idc and
     /// `general_profile_compatibility_flag[ j ]` for all values of j in the range
     /// of 0 to 31, inclusive.
-    general_profile_space: u8,
+    pub general_profile_space: u8,
     /// Specifies the tier context for the interpretation of general_level_idc
     /// as specified in Annex A.
-    general_tier_flag: bool,
+    pub general_tier_flag: bool,
     /// When general_profile_space is equal to 0, indicates a profile to which
     /// the CVS conforms as specified in Annex A. Bitstreams shall not contain
     /// values of general_profile_idc other than those specified in Annex A.
     /// Other values of general_profile_idc are reserved for future use by ITU-T
     /// | ISO/IEC.
-    general_profile_idc: u8,
+    pub general_profile_idc: u8,
     /// `general_profile_compatibility_flag[ j ]` equal to true, when
     /// general_profile_space is false, indicates that the CVS conforms to the
     /// profile indicated by general_profile_idc equal to j as specified in
     /// Annex A.
-    general_profile_compatibility_flag: [bool; 32],
+    pub general_profile_compatibility_flag: [bool; 32],
     /// general_progressive_source_flag and general_interlaced_source_flag are
     /// interpreted as follows:
     ///
@@ -535,9 +427,9 @@ pub struct ProfileTierLevel {
     /// general_interlaced_source_flag is true), the source scan type of each
     /// picture in the CVS is indicated at the picture level using the syntax
     /// element source_scan_type in a picture timing SEI message.
-    general_progressive_source_flag: bool,
+    pub general_progressive_source_flag: bool,
     /// See `general_progressive_source_flag`.
-    general_interlaced_source_flag: bool,
+    pub general_interlaced_source_flag: bool,
     /// If true, specifies that there are no frame packing arrangement SEI
     /// messages, segmented rectangular frame packing arrangement SEI messages,
     /// equirectangular projection SEI messages, or cubemap projection SEI
@@ -546,253 +438,85 @@ pub struct ProfileTierLevel {
     /// rectangular frame packing arrangement SEI messages, equirectangular
     /// projection SEI messages, or cubemap projection SEI messages present in
     /// the CVS.
-    general_non_packed_constraint_flag: bool,
+    pub general_non_packed_constraint_flag: bool,
     /// When true, specifies that field_seq_flag is false. When false, indicates
     /// that field_seq_flag may or may not be false.
-    general_frame_only_constraint_flag: bool,
+    pub general_frame_only_constraint_flag: bool,
     /// See Annex A.
-    general_max_12bit_constraint_flag: bool,
+    pub general_max_12bit_constraint_flag: bool,
     /// See Annex A.
-    general_max_10bit_constraint_flag: bool,
+    pub general_max_10bit_constraint_flag: bool,
     /// See Annex A.
-    general_max_8bit_constraint_flag: bool,
+    pub general_max_8bit_constraint_flag: bool,
     /// See Annex A.
-    general_max_422chroma_constraint_flag: bool,
+    pub general_max_422chroma_constraint_flag: bool,
     /// See Annex A.
-    general_max_420chroma_constraint_flag: bool,
+    pub general_max_420chroma_constraint_flag: bool,
     /// See Annex A.
-    general_max_monochrome_constraint_flag: bool,
+    pub general_max_monochrome_constraint_flag: bool,
     /// See Annex A.
-    general_intra_constraint_flag: bool,
+    pub general_intra_constraint_flag: bool,
     /// See Annex A.
-    general_lower_bit_rate_constraint_flag: bool,
+    pub general_lower_bit_rate_constraint_flag: bool,
     /// See Annex A.
-    general_max_14bit_constraint_flag: bool,
+    pub general_max_14bit_constraint_flag: bool,
     /// See Annex A.
-    general_one_picture_only_constraint_flag: bool,
+    pub general_one_picture_only_constraint_flag: bool,
     /// When true, specifies that the INBLD capability as specified in Annex F
     /// is required for decoding of the layer to which the profile_tier_level( )
     /// syntax structure applies. When false, specifies that the INBLD
     /// capability as specified in Annex F is not required for decoding of the
     /// layer to which the profile_tier_level( ) syntax structure applies.
-    general_inbld_flag: bool,
+    pub general_inbld_flag: bool,
     /// Indicates a level to which the CVS conforms as specified in Annex A.
-    general_level_idc: Level,
+    pub general_level_idc: Level,
     /// Sub-layer syntax element.
-    sub_layer_profile_present_flag: [bool; 6],
+    pub sub_layer_profile_present_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_level_present_flag: [bool; 6],
+    pub sub_layer_level_present_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_profile_space: [u8; 6],
+    pub sub_layer_profile_space: [u8; 6],
     /// Sub-layer syntax element.
-    sub_layer_tier_flag: [bool; 6],
+    pub sub_layer_tier_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_profile_idc: [u8; 6],
+    pub sub_layer_profile_idc: [u8; 6],
     /// Sub-layer syntax element.
-    sub_layer_profile_compatibility_flag: [[bool; 32]; 6],
+    pub sub_layer_profile_compatibility_flag: [[bool; 32]; 6],
     /// Sub-layer syntax element.
-    sub_layer_progressive_source_flag: [bool; 6],
+    pub sub_layer_progressive_source_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_interlaced_source_flag: [bool; 6],
+    pub sub_layer_interlaced_source_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_non_packed_constraint_flag: [bool; 6],
+    pub sub_layer_non_packed_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_frame_only_constraint_flag: [bool; 6],
+    pub sub_layer_frame_only_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_max_12bit_constraint_flag: [bool; 6],
+    pub sub_layer_max_12bit_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_max_10bit_constraint_flag: [bool; 6],
+    pub sub_layer_max_10bit_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_max_8bit_constraint_flag: [bool; 6],
+    pub sub_layer_max_8bit_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_max_422chroma_constraint_flag: [bool; 6],
+    pub sub_layer_max_422chroma_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_max_420chroma_constraint_flag: [bool; 6],
+    pub sub_layer_max_420chroma_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_max_monochrome_constraint_flag: [bool; 6],
+    pub sub_layer_max_monochrome_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_intra_constraint_flag: [bool; 6],
+    pub sub_layer_intra_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_one_picture_only_constraint_flag: [bool; 6],
+    pub sub_layer_one_picture_only_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_lower_bit_rate_constraint_flag: [bool; 6],
+    pub sub_layer_lower_bit_rate_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_max_14bit_constraint_flag: [bool; 6],
+    pub sub_layer_max_14bit_constraint_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_inbld_flag: [bool; 6],
+    pub sub_layer_inbld_flag: [bool; 6],
     /// Sub-layer syntax element.
-    sub_layer_level_idc: [Level; 6],
+    pub sub_layer_level_idc: [Level; 6],
 }
 
 impl ProfileTierLevel {
-    pub fn general_profile_space(&self) -> u8 {
-        self.general_profile_space
-    }
-
-    pub fn general_tier_flag(&self) -> bool {
-        self.general_tier_flag
-    }
-
-    pub fn general_profile_idc(&self) -> u8 {
-        self.general_profile_idc
-    }
-
-    pub fn general_profile_compatibility_flag(&self) -> [bool; 32] {
-        self.general_profile_compatibility_flag
-    }
-
-    pub fn general_progressive_source_flag(&self) -> bool {
-        self.general_progressive_source_flag
-    }
-
-    pub fn general_interlaced_source_flag(&self) -> bool {
-        self.general_interlaced_source_flag
-    }
-
-    pub fn general_non_packed_constraint_flag(&self) -> bool {
-        self.general_non_packed_constraint_flag
-    }
-
-    pub fn general_frame_only_constraint_flag(&self) -> bool {
-        self.general_frame_only_constraint_flag
-    }
-
-    pub fn general_max_12bit_constraint_flag(&self) -> bool {
-        self.general_max_12bit_constraint_flag
-    }
-
-    pub fn general_max_10bit_constraint_flag(&self) -> bool {
-        self.general_max_10bit_constraint_flag
-    }
-
-    pub fn general_max_8bit_constraint_flag(&self) -> bool {
-        self.general_max_8bit_constraint_flag
-    }
-
-    pub fn general_max_422chroma_constraint_flag(&self) -> bool {
-        self.general_max_422chroma_constraint_flag
-    }
-
-    pub fn general_max_420chroma_constraint_flag(&self) -> bool {
-        self.general_max_420chroma_constraint_flag
-    }
-
-    pub fn general_max_monochrome_constraint_flag(&self) -> bool {
-        self.general_max_monochrome_constraint_flag
-    }
-
-    pub fn general_intra_constraint_flag(&self) -> bool {
-        self.general_intra_constraint_flag
-    }
-
-    pub fn general_lower_bit_rate_constraint_flag(&self) -> bool {
-        self.general_lower_bit_rate_constraint_flag
-    }
-
-    pub fn general_max_14bit_constraint_flag(&self) -> bool {
-        self.general_max_14bit_constraint_flag
-    }
-
-    pub fn general_one_picture_only_constraint_flag(&self) -> bool {
-        self.general_one_picture_only_constraint_flag
-    }
-
-    pub fn general_inbld_flag(&self) -> bool {
-        self.general_inbld_flag
-    }
-
-    pub fn general_level_idc(&self) -> Level {
-        self.general_level_idc
-    }
-
-    pub fn sub_layer_profile_present_flag(&self) -> [bool; 6] {
-        self.sub_layer_profile_present_flag
-    }
-
-    pub fn sub_layer_level_present_flag(&self) -> [bool; 6] {
-        self.sub_layer_level_present_flag
-    }
-
-    pub fn sub_layer_profile_space(&self) -> [u8; 6] {
-        self.sub_layer_profile_space
-    }
-
-    pub fn sub_layer_tier_flag(&self) -> [bool; 6] {
-        self.sub_layer_tier_flag
-    }
-
-    pub fn sub_layer_profile_idc(&self) -> [u8; 6] {
-        self.sub_layer_profile_idc
-    }
-
-    pub fn sub_layer_profile_compatibility_flag(&self) -> [[bool; 32]; 6] {
-        self.sub_layer_profile_compatibility_flag
-    }
-
-    pub fn sub_layer_progressive_source_flag(&self) -> [bool; 6] {
-        self.sub_layer_progressive_source_flag
-    }
-
-    pub fn sub_layer_interlaced_source_flag(&self) -> [bool; 6] {
-        self.sub_layer_interlaced_source_flag
-    }
-
-    pub fn sub_layer_non_packed_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_non_packed_constraint_flag
-    }
-
-    pub fn sub_layer_frame_only_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_frame_only_constraint_flag
-    }
-
-    pub fn sub_layer_max_12bit_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_max_12bit_constraint_flag
-    }
-
-    pub fn sub_layer_max_10bit_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_max_10bit_constraint_flag
-    }
-
-    pub fn sub_layer_max_8bit_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_max_8bit_constraint_flag
-    }
-
-    pub fn sub_layer_max_422chroma_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_max_422chroma_constraint_flag
-    }
-
-    pub fn sub_layer_max_420chroma_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_max_420chroma_constraint_flag
-    }
-
-    pub fn sub_layer_max_monochrome_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_max_monochrome_constraint_flag
-    }
-
-    pub fn sub_layer_intra_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_intra_constraint_flag
-    }
-
-    pub fn sub_layer_one_picture_only_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_one_picture_only_constraint_flag
-    }
-
-    pub fn sub_layer_lower_bit_rate_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_lower_bit_rate_constraint_flag
-    }
-
-    pub fn sub_layer_max_14bit_constraint_flag(&self) -> [bool; 6] {
-        self.sub_layer_max_14bit_constraint_flag
-    }
-
-    pub fn sub_layer_inbld_flag(&self) -> [bool; 6] {
-        self.sub_layer_inbld_flag
-    }
-
-    pub fn sub_layer_level_idc(&self) -> [Level; 6] {
-        self.sub_layer_level_idc
-    }
-
     pub fn max_luma_ps(&self) -> u32 {
         // See Table A.8.
         match self.general_level_idc {
@@ -818,53 +542,15 @@ impl ProfileTierLevel {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SpsRangeExtension {
-    transform_skip_rotation_enabled_flag: bool,
-    transform_skip_context_enabled_flag: bool,
-    implicit_rdpcm_enabled_flag: bool,
-    explicit_rdpcm_enabled_flag: bool,
-    extended_precision_processing_flag: bool,
-    intra_smoothing_disabled_flag: bool,
-    high_precision_offsets_enabled_flag: bool,
-    persistent_rice_adaptation_enabled_flag: bool,
-    cabac_bypass_alignment_enabled_flag: bool,
-}
-
-impl SpsRangeExtension {
-    pub fn transform_skip_rotation_enabled_flag(&self) -> bool {
-        self.transform_skip_rotation_enabled_flag
-    }
-
-    pub fn transform_skip_context_enabled_flag(&self) -> bool {
-        self.transform_skip_context_enabled_flag
-    }
-
-    pub fn implicit_rdpcm_enabled_flag(&self) -> bool {
-        self.implicit_rdpcm_enabled_flag
-    }
-
-    pub fn explicit_rdpcm_enabled_flag(&self) -> bool {
-        self.explicit_rdpcm_enabled_flag
-    }
-
-    pub fn extended_precision_processing_flag(&self) -> bool {
-        self.extended_precision_processing_flag
-    }
-
-    pub fn intra_smoothing_disabled_flag(&self) -> bool {
-        self.intra_smoothing_disabled_flag
-    }
-
-    pub fn high_precision_offsets_enabled_flag(&self) -> bool {
-        self.high_precision_offsets_enabled_flag
-    }
-
-    pub fn persistent_rice_adaptation_enabled_flag(&self) -> bool {
-        self.persistent_rice_adaptation_enabled_flag
-    }
-
-    pub fn cabac_bypass_alignment_enabled_flag(&self) -> bool {
-        self.cabac_bypass_alignment_enabled_flag
-    }
+    pub transform_skip_rotation_enabled_flag: bool,
+    pub transform_skip_context_enabled_flag: bool,
+    pub implicit_rdpcm_enabled_flag: bool,
+    pub explicit_rdpcm_enabled_flag: bool,
+    pub extended_precision_processing_flag: bool,
+    pub intra_smoothing_disabled_flag: bool,
+    pub high_precision_offsets_enabled_flag: bool,
+    pub persistent_rice_adaptation_enabled_flag: bool,
+    pub cabac_bypass_alignment_enabled_flag: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -873,72 +559,34 @@ pub struct SpsSccExtension {
     /// reference picture list of a slice of the picture itself.  When not set,
     /// specifies that a picture in the CVS is never included in a reference
     /// picture list of a slice of the picture itself.
-    curr_pic_ref_enabled_flag: bool,
+    pub curr_pic_ref_enabled_flag: bool,
     /// When set, specifies that the decoding process for palette mode may be
     /// used for intra blocks. When not set, specifies that the decoding process
     /// for palette mode is not applied.
-    palette_mode_enabled_flag: bool,
+    pub palette_mode_enabled_flag: bool,
     /// Specifies the maximum allowed palette size.
-    palette_max_size: u8,
+    pub palette_max_size: u8,
     /// Specifies the difference between the maximum allowed palette predictor
     /// size and the maximum allowed palette size.
-    delta_palette_max_predictor_size: u8,
+    pub delta_palette_max_predictor_size: u8,
     /// When set, specifies that the sequence palette predictors are initialized
     /// using the sps_palette_predictor_initializers. When not set, specifies
     /// that the entries in the sequence palette predictor are initialized to 0.
-    palette_predictor_initializers_present_flag: bool,
+    pub palette_predictor_initializers_present_flag: bool,
     /// num_palette_predictor_initializers_minus1 plus 1 specifies the number of
     /// entries in the sequence palette predictor initializer.
-    num_palette_predictor_initializer_minus1: u8,
+    pub num_palette_predictor_initializer_minus1: u8,
     /// `palette_predictor_initializer[ comp ][ i ]` specifies the value of the
     /// comp-th component of the i-th palette entry in the SPS that is used to
     /// initialize the array PredictorPaletteEntries.
-    palette_predictor_initializer: [[u32; 128]; 3],
+    pub palette_predictor_initializer: [[u32; 128]; 3],
     /// Controls the presence and inference of the use_integer_mv_flag that
     /// specifies the resolution of motion vectors for inter prediction.
-    motion_vector_resolution_control_idc: u8,
+    pub motion_vector_resolution_control_idc: u8,
     /// When set, specifies that the intra boundary filtering process is
     /// unconditionally disabled for intra prediction.  If not set, specifies
     /// that the intra boundary filtering process may be used.
-    intra_boundary_filtering_disabled_flag: bool,
-}
-
-impl SpsSccExtension {
-    pub fn curr_pic_ref_enabled_flag(&self) -> bool {
-        self.curr_pic_ref_enabled_flag
-    }
-
-    pub fn palette_mode_enabled_flag(&self) -> bool {
-        self.palette_mode_enabled_flag
-    }
-
-    pub fn palette_max_size(&self) -> u8 {
-        self.palette_max_size
-    }
-
-    pub fn delta_palette_max_predictor_size(&self) -> u8 {
-        self.delta_palette_max_predictor_size
-    }
-
-    pub fn palette_predictor_initializers_present_flag(&self) -> bool {
-        self.palette_predictor_initializers_present_flag
-    }
-
-    pub fn num_palette_predictor_initializer_minus1(&self) -> u8 {
-        self.num_palette_predictor_initializer_minus1
-    }
-
-    pub fn palette_predictor_initializer(&self) -> [[u32; 128]; 3] {
-        self.palette_predictor_initializer
-    }
-
-    pub fn motion_vector_resolution_control_idc(&self) -> u8 {
-        self.motion_vector_resolution_control_idc
-    }
-
-    pub fn intra_boundary_filtering_disabled_flag(&self) -> bool {
-        self.intra_boundary_filtering_disabled_flag
-    }
+    pub intra_boundary_filtering_disabled_flag: bool,
 }
 
 impl Default for SpsSccExtension {
@@ -964,27 +612,27 @@ pub struct Sps {
     video_parameter_set_id: u8,
     /// `max_sub_layers_minus1` plus 1 specifies the maximum number of temporal
     /// sub-layers that may be present in each CVS referring to the SPS.
-    max_sub_layers_minus1: u8,
+    pub max_sub_layers_minus1: u8,
     /// When sps_max_sub_layers_minus1 is greater than 0, specifies whether
     /// inter prediction is additionally restricted for CVSs referring to the
     /// SPS.
     temporal_id_nesting_flag: bool,
     /// profile_tier_level() data.
-    profile_tier_level: ProfileTierLevel,
+    pub profile_tier_level: ProfileTierLevel,
     /// Provides an identifier for the SPS for reference by other syntax
     /// elements.
     seq_parameter_set_id: u8,
     /// Specifies the chroma sampling relative to the luma sampling as specified
     /// in clause 6.2.
-    chroma_format_idc: u8,
+    pub chroma_format_idc: u8,
     /// When true, specifies that the three colour components of the 4:4:4
     /// chroma format are coded separately. When false, specifies that the
     /// colour components are not coded separately.
-    separate_colour_plane_flag: bool,
+    pub separate_colour_plane_flag: bool,
     /// Specifies the width of each decoded picture in units of luma samples.
-    pic_width_in_luma_samples: u16,
+    pub pic_width_in_luma_samples: u16,
     /// Specifies the height of each decoded picture in units of luma samples.
-    pic_height_in_luma_samples: u16,
+    pub pic_height_in_luma_samples: u16,
     /// When true, indicates that the conformance cropping window offset
     /// parameters follow next in the SPS. When false, indicates that the
     /// conformance cropping window offset parameters are not present.
@@ -1000,14 +648,14 @@ pub struct Sps {
 
     /// Specifies the bit depth of the samples of the luma array BitDepthY and
     /// the value of the luma quantization parameter range offset QpBdOffsetY.
-    bit_depth_luma_minus8: u8,
+    pub bit_depth_luma_minus8: u8,
     /// Specifies the bit depth of the samples of the chroma arrays BitDepthC
     /// and the value of the chroma quantization parameter range offset
     /// QpBdOffsetC.
-    bit_depth_chroma_minus8: u8,
+    pub bit_depth_chroma_minus8: u8,
     /// Specifies the value of the variable MaxPicOrderCntLsb that is used in
     /// the decoding process for picture order count.
-    log2_max_pic_order_cnt_lsb_minus4: u8,
+    pub log2_max_pic_order_cnt_lsb_minus4: u8,
     /// When true, specifies that `max_dec_pic_buffering_minus1[ i ]`,
     /// `max_num_reorder_pics[ i ]` and `max_latency_increase_plus1[ i ]` are
     /// present for max_sub_layers_minus1 + 1 sub- layers. When false, specifies
@@ -1018,78 +666,78 @@ pub struct Sps {
     /// `max_dec_pic_buffering_minus1[ i ]` plus 1 specifies the maximum required
     /// size of the decoded picture buffer for the CVS in units of picture
     /// storage buffers when HighestTid is equal to i.
-    max_dec_pic_buffering_minus1: [u8; 7],
+    pub max_dec_pic_buffering_minus1: [u8; 7],
     /// `max_num_reorder_pics[ i ]` indicates the maximum allowed number of
     /// pictures with PicOutputFlag equal to 1 that can precede any picture with
     /// PicOutputFlag equal to 1 in the CVS in decoding order and follow that
     /// picture with PicOutputFlag equal to 1 in output order when HighestTid is
     /// equal to i.
-    max_num_reorder_pics: [u8; 7],
+    pub max_num_reorder_pics: [u8; 7],
     /// `max_latency_increase_plus1[ i ]` not equal to 0 is used to compute the
     /// value of `SpsMaxLatencyPictures[ i ]`, which specifies the maximum number
     /// of pictures with PicOutputFlag equal to 1 that can precede any picture
     /// with PicOutputFlag equal to 1 in the CVS in output order and follow that
     /// picture with PicOutputFlag equal to 1 in decoding order when HighestTid
     /// is equal to i.
-    max_latency_increase_plus1: [u8; 7],
+    pub max_latency_increase_plus1: [u8; 7],
     /// min_luma_coding_block_size_minus3 plus 3 specifies the minimum luma
     /// coding block size.
-    log2_min_luma_coding_block_size_minus3: u8,
+    pub log2_min_luma_coding_block_size_minus3: u8,
     /// Specifies the difference between the maximum and minimum luma coding
     /// block size.
-    log2_diff_max_min_luma_coding_block_size: u8,
+    pub log2_diff_max_min_luma_coding_block_size: u8,
     /// min_luma_transform_block_size_minus2 plus 2 specifies the minimum luma
     /// transform block size.
-    log2_min_luma_transform_block_size_minus2: u8,
+    pub log2_min_luma_transform_block_size_minus2: u8,
     /// Specifies the difference between the maximum and minimum luma transform
     /// block size.
-    log2_diff_max_min_luma_transform_block_size: u8,
+    pub log2_diff_max_min_luma_transform_block_size: u8,
     /// Specifies the maximum hierarchy depth for transform units of coding
     /// units coded in inter prediction mode.
-    max_transform_hierarchy_depth_inter: u8,
+    pub max_transform_hierarchy_depth_inter: u8,
     /// Specifies the maximum hierarchy depth for transform units of coding
     /// units coded in intra prediction mode.
-    max_transform_hierarchy_depth_intra: u8,
+    pub max_transform_hierarchy_depth_intra: u8,
     /// When true, specifies that a scaling list is used for the scaling process
     /// for transform coefficients. When false, specifies that scaling list is
     /// not used for the scaling process for transform coefficients.
-    scaling_list_enabled_flag: bool,
+    pub scaling_list_enabled_flag: bool,
     /* if scaling_list_enabled_flag */
     /// When true, specifies that the scaling_list_data( ) syntax structure is
     /// present in the SPS. When false, specifies that the scaling_list_data( )
     /// syntax structure is not present in the SPS.
-    scaling_list_data_present_flag: bool,
+    pub scaling_list_data_present_flag: bool,
     /// The scaling_list_data() syntax data.
-    scaling_list: ScalingLists,
+    pub scaling_list: ScalingLists,
     /// When true, specifies that asymmetric motion partitions, i.e., PartMode
     /// equal to PART_2NxnU, PART_2NxnD, PART_nLx2N or PART_nRx2N, may be used
     /// in CTBs. When false, specifies that asymmetric motion partitions cannot
     /// be used in CTBs.
-    amp_enabled_flag: bool,
+    pub amp_enabled_flag: bool,
     /// When true, specifies that the sample adaptive offset process is applied
     /// to the reconstructed picture after the deblocking filter process.  When
     /// false, specifies that the sample adaptive offset process is not applied
     /// to the reconstructed picture after the deblocking filter process.
-    sample_adaptive_offset_enabled_flag: bool,
+    pub sample_adaptive_offset_enabled_flag: bool,
     /// When false, specifies that PCM-related syntax
     /// (pcm_sample_bit_depth_luma_minus1, pcm_sample_ bit_depth_chroma_minus1,
     /// log2_min_pcm_luma_coding_block_size_minus3, log2_diff_max_min_pcm_luma_
     /// coding_block_size, pcm_loop_filter_disabled_flag, pcm_flag,
     /// pcm_alignment_zero_bit syntax elements and pcm_sample( ) syntax
     /// structure) is not present in the CVS.
-    pcm_enabled_flag: bool,
+    pub pcm_enabled_flag: bool,
 
     /* if pcm_enabled_flag */
-    pcm_sample_bit_depth_luma_minus1: u8,
+    pub pcm_sample_bit_depth_luma_minus1: u8,
     /// Specifies the number of bits used to represent each of PCM sample values
     /// of the luma component.
-    pcm_sample_bit_depth_chroma_minus1: u8,
+    pub pcm_sample_bit_depth_chroma_minus1: u8,
     /// Specifies the number of bits used to represent each of PCM sample values
     /// of the chroma components.
-    log2_min_pcm_luma_coding_block_size_minus3: u8,
+    pub log2_min_pcm_luma_coding_block_size_minus3: u8,
     /// Specifies the difference between the maximum and minimum size of coding
     /// blocks with pcm_flag equal to true.
-    log2_diff_max_min_pcm_luma_coding_block_size: u8,
+    pub log2_diff_max_min_pcm_luma_coding_block_size: u8,
     /// Specifies whether the loop filter process is disabled on reconstructed
     /// samples in a coding unit with pcm_flag equal to true as follows:
     ///
@@ -1101,22 +749,22 @@ pub struct Sps {
     /// deblocking filter and sample adaptive offset filter processes on the
     /// reconstructed samples in a coding unit with pcm_flag set are not
     /// disabled.
-    pcm_loop_filter_disabled_flag: bool,
+    pub pcm_loop_filter_disabled_flag: bool,
     /// Specifies the number of st_ref_pic_set( ) syntax structures included in
     /// the SPS.
-    num_short_term_ref_pic_sets: u8,
+    pub num_short_term_ref_pic_sets: u8,
     /// the st_ref_pic_set() data.
-    short_term_ref_pic_set: Vec<ShortTermRefPicSet>,
+    pub short_term_ref_pic_set: Vec<ShortTermRefPicSet>,
     /// If unset, specifies that no long-term reference picture is used for
     /// inter prediction of any coded picture in the CVS.
     /// If set, specifies that long-term reference pictures may be used for
     /// inter prediction of one or more coded pictures in the CVS.
-    long_term_ref_pics_present_flag: bool,
+    pub long_term_ref_pics_present_flag: bool,
 
     /* if long_term_ref_pics_present_flag */
     /// Specifies the number of candidate long-term reference pictures that are
     /// specified in the SPS.
-    num_long_term_ref_pics_sps: u8,
+    pub num_long_term_ref_pics_sps: u8,
     /// `lt_ref_pic_poc_lsb_sps[ i ]` specifies the picture order count modulo
     /// MaxPicOrderCntLsb of the i-th candidate long-term reference picture
     /// specified in the SPS.
@@ -1132,11 +780,11 @@ pub struct Sps {
     /// specifies that slice_temporal_mvp_enabled_flag is not present in slice
     /// headers and that temporal motion vector predictors are not used in the
     /// CVS.
-    temporal_mvp_enabled_flag: bool,
+    pub temporal_mvp_enabled_flag: bool,
     /// When set, specifies that bi-linear interpolation is conditionally used
     /// in the intraprediction filtering process in the CVS as specified in
     /// clause 8.4.4.2.3.
-    strong_intra_smoothing_enabled_flag: bool,
+    pub strong_intra_smoothing_enabled_flag: bool,
     /// When set, specifies that the vui_parameters( ) syntax structure as
     /// specified in Annex E is present. When not set, specifies that the
     /// vui_parameters( ) syntax structure as specified in Annex E is not
@@ -1153,13 +801,13 @@ pub struct Sps {
 
     range_extension_flag: bool,
     /// The sps_range_extension() data.
-    range_extension: SpsRangeExtension,
+    pub range_extension: SpsRangeExtension,
     /// When set, specifies that the sps_scc_extension( ) syntax structure is
     /// present in the SPS RBSP syntax structure. When not set, specifies that
     /// this syntax structure is not present
     scc_extension_flag: bool,
     /// The sps_scc_extension() data.
-    scc_extension: SpsSccExtension,
+    pub scc_extension: SpsSccExtension,
 
     // Internal H265 variables. Computed from the bitstream.
     /// Equivalent to MinCbLog2SizeY in the specification.
@@ -1179,7 +827,7 @@ pub struct Sps {
     /// Equivalent to WpOffsetHalfRangeY in the specification.
     wp_offset_half_range_y: u32,
     /// Equivalent to WpOffsetHalfRangeC in the specification.
-    wp_offset_half_range_c: u32,
+    pub wp_offset_half_range_c: u32,
     /// Equivalent to MaxTbLog2SizeY in the specification.
     max_tb_log2_size_y: u32,
     /// Equivalent to PicSizeInSamplesY in the specification.
@@ -1187,262 +835,6 @@ pub struct Sps {
 }
 
 impl Sps {
-    pub fn video_parameter_set_id(&self) -> u8 {
-        self.video_parameter_set_id
-    }
-
-    pub fn max_sub_layers_minus1(&self) -> u8 {
-        self.max_sub_layers_minus1
-    }
-
-    pub fn temporal_id_nesting_flag(&self) -> bool {
-        self.temporal_id_nesting_flag
-    }
-
-    pub fn profile_tier_level(&self) -> &ProfileTierLevel {
-        &self.profile_tier_level
-    }
-
-    pub fn seq_parameter_set_id(&self) -> u8 {
-        self.seq_parameter_set_id
-    }
-
-    pub fn chroma_format_idc(&self) -> u8 {
-        self.chroma_format_idc
-    }
-
-    pub fn separate_colour_plane_flag(&self) -> bool {
-        self.separate_colour_plane_flag
-    }
-
-    pub fn pic_width_in_luma_samples(&self) -> u16 {
-        self.pic_width_in_luma_samples
-    }
-
-    pub fn pic_height_in_luma_samples(&self) -> u16 {
-        self.pic_height_in_luma_samples
-    }
-
-    pub fn conformance_window_flag(&self) -> bool {
-        self.conformance_window_flag
-    }
-
-    pub fn conf_win_left_offset(&self) -> u32 {
-        self.conf_win_left_offset
-    }
-
-    pub fn conf_win_right_offset(&self) -> u32 {
-        self.conf_win_right_offset
-    }
-
-    pub fn conf_win_top_offset(&self) -> u32 {
-        self.conf_win_top_offset
-    }
-
-    pub fn conf_win_bottom_offset(&self) -> u32 {
-        self.conf_win_bottom_offset
-    }
-
-    pub fn bit_depth_luma_minus8(&self) -> u8 {
-        self.bit_depth_luma_minus8
-    }
-
-    pub fn bit_depth_chroma_minus8(&self) -> u8 {
-        self.bit_depth_chroma_minus8
-    }
-
-    pub fn log2_max_pic_order_cnt_lsb_minus4(&self) -> u8 {
-        self.log2_max_pic_order_cnt_lsb_minus4
-    }
-
-    pub fn sub_layer_ordering_info_present_flag(&self) -> bool {
-        self.sub_layer_ordering_info_present_flag
-    }
-
-    pub fn max_dec_pic_buffering_minus1(&self) -> [u8; 7] {
-        self.max_dec_pic_buffering_minus1
-    }
-
-    pub fn max_num_reorder_pics(&self) -> [u8; 7] {
-        self.max_num_reorder_pics
-    }
-
-    pub fn max_latency_increase_plus1(&self) -> [u8; 7] {
-        self.max_latency_increase_plus1
-    }
-
-    pub fn log2_min_luma_coding_block_size_minus3(&self) -> u8 {
-        self.log2_min_luma_coding_block_size_minus3
-    }
-
-    pub fn log2_diff_max_min_luma_coding_block_size(&self) -> u8 {
-        self.log2_diff_max_min_luma_coding_block_size
-    }
-
-    pub fn log2_min_luma_transform_block_size_minus2(&self) -> u8 {
-        self.log2_min_luma_transform_block_size_minus2
-    }
-
-    pub fn log2_diff_max_min_luma_transform_block_size(&self) -> u8 {
-        self.log2_diff_max_min_luma_transform_block_size
-    }
-
-    pub fn max_transform_hierarchy_depth_inter(&self) -> u8 {
-        self.max_transform_hierarchy_depth_inter
-    }
-
-    pub fn max_transform_hierarchy_depth_intra(&self) -> u8 {
-        self.max_transform_hierarchy_depth_intra
-    }
-
-    pub fn scaling_list_enabled_flag(&self) -> bool {
-        self.scaling_list_enabled_flag
-    }
-
-    pub fn scaling_list_data_present_flag(&self) -> bool {
-        self.scaling_list_data_present_flag
-    }
-
-    pub fn scaling_list(&self) -> &ScalingLists {
-        &self.scaling_list
-    }
-
-    pub fn amp_enabled_flag(&self) -> bool {
-        self.amp_enabled_flag
-    }
-
-    pub fn sample_adaptive_offset_enabled_flag(&self) -> bool {
-        self.sample_adaptive_offset_enabled_flag
-    }
-
-    pub fn pcm_enabled_flag(&self) -> bool {
-        self.pcm_enabled_flag
-    }
-
-    pub fn pcm_sample_bit_depth_luma_minus1(&self) -> u8 {
-        self.pcm_sample_bit_depth_luma_minus1
-    }
-
-    pub fn pcm_sample_bit_depth_chroma_minus1(&self) -> u8 {
-        self.pcm_sample_bit_depth_chroma_minus1
-    }
-
-    pub fn log2_min_pcm_luma_coding_block_size_minus3(&self) -> u8 {
-        self.log2_min_pcm_luma_coding_block_size_minus3
-    }
-
-    pub fn log2_diff_max_min_pcm_luma_coding_block_size(&self) -> u8 {
-        self.log2_diff_max_min_pcm_luma_coding_block_size
-    }
-
-    pub fn pcm_loop_filter_disabled_flag(&self) -> bool {
-        self.pcm_loop_filter_disabled_flag
-    }
-
-    pub fn num_short_term_ref_pic_sets(&self) -> u8 {
-        self.num_short_term_ref_pic_sets
-    }
-
-    pub fn short_term_ref_pic_set(&self) -> &[ShortTermRefPicSet] {
-        self.short_term_ref_pic_set.as_ref()
-    }
-
-    pub fn long_term_ref_pics_present_flag(&self) -> bool {
-        self.long_term_ref_pics_present_flag
-    }
-
-    pub fn num_long_term_ref_pics_sps(&self) -> u8 {
-        self.num_long_term_ref_pics_sps
-    }
-
-    pub fn lt_ref_pic_poc_lsb_sps(&self) -> &[u32] {
-        self.lt_ref_pic_poc_lsb_sps.as_ref()
-    }
-
-    pub fn used_by_curr_pic_lt_sps_flag(&self) -> &[bool] {
-        self.used_by_curr_pic_lt_sps_flag.as_ref()
-    }
-
-    pub fn temporal_mvp_enabled_flag(&self) -> bool {
-        self.temporal_mvp_enabled_flag
-    }
-
-    pub fn strong_intra_smoothing_enabled_flag(&self) -> bool {
-        self.strong_intra_smoothing_enabled_flag
-    }
-
-    pub fn vui_parameters_present_flag(&self) -> bool {
-        self.vui_parameters_present_flag
-    }
-
-    pub fn vui_parameters(&self) -> &VuiParams {
-        &self.vui_parameters
-    }
-
-    pub fn extension_present_flag(&self) -> bool {
-        self.extension_present_flag
-    }
-
-    pub fn range_extension(&self) -> &SpsRangeExtension {
-        &self.range_extension
-    }
-
-    pub fn min_cb_log2_size_y(&self) -> u32 {
-        self.min_cb_log2_size_y
-    }
-
-    pub fn ctb_log2_size_y(&self) -> u32 {
-        self.ctb_log2_size_y
-    }
-
-    pub fn ctb_size_y(&self) -> u32 {
-        self.ctb_size_y
-    }
-
-    pub fn pic_height_in_ctbs_y(&self) -> u32 {
-        self.pic_height_in_ctbs_y
-    }
-
-    pub fn pic_width_in_ctbs_y(&self) -> u32 {
-        self.pic_width_in_ctbs_y
-    }
-
-    pub fn pic_size_in_ctbs_y(&self) -> u32 {
-        self.pic_size_in_ctbs_y
-    }
-
-    pub fn pic_size_in_samples_y(&self) -> u32 {
-        self.pic_size_in_samples_y
-    }
-
-    pub fn chroma_array_type(&self) -> u8 {
-        self.chroma_array_type
-    }
-
-    pub fn wp_offset_half_range_y(&self) -> u32 {
-        self.wp_offset_half_range_y
-    }
-
-    pub fn wp_offset_half_range_c(&self) -> u32 {
-        self.wp_offset_half_range_c
-    }
-
-    pub fn max_tb_log2_size_y(&self) -> u32 {
-        self.max_tb_log2_size_y
-    }
-
-    pub fn scc_extension(&self) -> &SpsSccExtension {
-        &self.scc_extension
-    }
-
-    pub fn scc_extension_flag(&self) -> bool {
-        self.scc_extension_flag
-    }
-
-    pub fn range_extension_flag(&self) -> bool {
-        self.range_extension_flag
-    }
-
     pub fn max_dpb_size(&self) -> usize {
         let max_luma_ps = self.profile_tier_level.max_luma_ps();
         let max_dpb_pic_buf = self.profile_tier_level.max_dpb_pic_buf();
@@ -1512,95 +904,45 @@ pub struct PpsSccExtension {
     /// in a reference picture list of a slice of the picture itself.  If not
     /// set, specifies that a picture referring to the PPS is never included in
     /// a reference picture list of a slice of the picture itself.
-    curr_pic_ref_enabled_flag: bool,
+    pub curr_pic_ref_enabled_flag: bool,
     /// When set, specifies that an adaptive colour transform may be applied to
     /// the residual in the decoding process. When not set, specifies that
     /// adaptive colour transform is not applied to the residual.
-    residual_adaptive_colour_transform_enabled_flag: bool,
+    pub residual_adaptive_colour_transform_enabled_flag: bool,
     /// When set, specifies that slice_act_y_qp_offset, slice_act_cb_qp_offset,
     /// slice_act_cr_qp_offset are present in the slice header.  When not set,
     /// specifies that slice_act_y_qp_offset, slice_act_cb_qp_offset,
     /// slice_act_cr_qp_offset are not present in the slice header.
-    slice_act_qp_offsets_present_flag: bool,
+    pub slice_act_qp_offsets_present_flag: bool,
     /// See the specificartion for more details.
-    act_y_qp_offset_plus5: i8,
+    pub act_y_qp_offset_plus5: i8,
     /// See the specificartion for more details.
-    act_cb_qp_offset_plus5: i8,
+    pub act_cb_qp_offset_plus5: i8,
     /// See the specificartion for more details.
-    act_cr_qp_offset_plus3: i8,
+    pub act_cr_qp_offset_plus3: i8,
     /// When set, specifies that the palette predictor initializers used for the
     /// pictures referring to the PPS are derived based on the palette predictor
     /// initializers specified by the PPS. If not set, specifies that the
     /// palette predictor initializers used for the pictures referring to the
     /// PPS are inferred to be equal to those specified by the active SPS.
-    palette_predictor_initializers_present_flag: bool,
+    pub palette_predictor_initializers_present_flag: bool,
     /// Specifies the number of entries in the picture palette predictor
     /// initializer.
-    num_palette_predictor_initializers: u8,
+    pub num_palette_predictor_initializers: u8,
     /// When set, specifies that the pictures that refer to this PPS are
     /// monochrome. If not set, specifies that the pictures that refer to this
     /// PPS have multiple components.
-    monochrome_palette_flag: bool,
+    pub monochrome_palette_flag: bool,
     /// luma_bit_depth_entry_minus8 plus 8 specifies the bit depth of the luma
     /// component of the entries of the palette predictor initializer.
-    luma_bit_depth_entry_minus8: u8,
+    pub luma_bit_depth_entry_minus8: u8,
     /// chroma_bit_depth_entry_minus8 plus 8 specifies the bit depth of the
     /// chroma components of the entries of the palette predictor initializer.
-    chroma_bit_depth_entry_minus8: u8,
+    pub chroma_bit_depth_entry_minus8: u8,
     /// `pps_palette_predictor_initializer[ comp ][ i ]` specifies the value of
     /// the comp-th component of the i-th palette entry in the PPS that is used
     /// to initialize the array PredictorPaletteEntries.
-    palette_predictor_initializer: [[u8; 128]; 3],
-}
-
-impl PpsSccExtension {
-    pub fn curr_pic_ref_enabled_flag(&self) -> bool {
-        self.curr_pic_ref_enabled_flag
-    }
-
-    pub fn residual_adaptive_colour_transform_enabled_flag(&self) -> bool {
-        self.residual_adaptive_colour_transform_enabled_flag
-    }
-
-    pub fn slice_act_qp_offsets_present_flag(&self) -> bool {
-        self.slice_act_qp_offsets_present_flag
-    }
-
-    pub fn act_y_qp_offset_plus5(&self) -> i8 {
-        self.act_y_qp_offset_plus5
-    }
-
-    pub fn act_cb_qp_offset_plus5(&self) -> i8 {
-        self.act_cb_qp_offset_plus5
-    }
-
-    pub fn act_cr_qp_offset_plus3(&self) -> i8 {
-        self.act_cr_qp_offset_plus3
-    }
-
-    pub fn palette_predictor_initializers_present_flag(&self) -> bool {
-        self.palette_predictor_initializers_present_flag
-    }
-
-    pub fn num_palette_predictor_initializers(&self) -> u8 {
-        self.num_palette_predictor_initializers
-    }
-
-    pub fn monochrome_palette_flag(&self) -> bool {
-        self.monochrome_palette_flag
-    }
-
-    pub fn luma_bit_depth_entry_minus8(&self) -> u8 {
-        self.luma_bit_depth_entry_minus8
-    }
-
-    pub fn chroma_bit_depth_entry_minus8(&self) -> u8 {
-        self.chroma_bit_depth_entry_minus8
-    }
-
-    pub fn palette_predictor_initializer(&self) -> [[u8; 128]; 3] {
-        self.palette_predictor_initializer
-    }
+    pub palette_predictor_initializer: [[u8; 128]; 3],
 }
 
 impl Default for PpsSccExtension {
@@ -1630,164 +972,126 @@ pub struct PpsRangeExtension {
     /// log2_max_transform_skip_block_size_minus2 is inferred to be equal to 0.
     /// When present, the value of log2_max_transform_skip_block_size_minus2
     /// shall be less than or equal to MaxTbLog2SizeY − 2.
-    log2_max_transform_skip_block_size_minus2: u32,
+    pub log2_max_transform_skip_block_size_minus2: u32,
     /// When set, specifies that log2_res_scale_abs_plus1 and
     /// res_scale_sign_flag may be present in the transform unit syntax for
     /// pictures referring to the PPS. When not set, specifies that
     /// log2_res_scale_abs_plus1 and res_scale_sign_flag are not present for
     /// pictures referring to the PPS.
-    cross_component_prediction_enabled_flag: bool,
+    pub cross_component_prediction_enabled_flag: bool,
     /// When set, specifies that the cu_chroma_qp_offset_flag may be present in
     /// the transform unit syntax. When not set, specifies that the
     /// cu_chroma_qp_offset_flag is not present in the transform unit syntax.
-    chroma_qp_offset_list_enabled_flag: bool,
+    pub chroma_qp_offset_list_enabled_flag: bool,
     /// Specifies the difference between the luma CTB size and the minimum luma
     /// coding block size of coding units that convey cu_chroma_qp_offset_flag.
-    diff_cu_chroma_qp_offset_depth: u32,
+    pub diff_cu_chroma_qp_offset_depth: u32,
     /// chroma_qp_offset_list_len_minus1 plus 1 specifies the number of
     /// `cb_qp_offset_list[ i ]` and `cr_qp_offset_list[ i ]` syntax elements that
     /// are present in the PPS.
-    chroma_qp_offset_list_len_minus1: u32,
+    pub chroma_qp_offset_list_len_minus1: u32,
     /// Specify offsets used in the derivation of Qp′Cb and Qp′Cr, respectively.
-    cb_qp_offset_list: [i32; 6],
+    pub cb_qp_offset_list: [i32; 6],
     /// Specify offsets used in the derivation of Qp′Cb and Qp′Cr, respectively.
-    cr_qp_offset_list: [i32; 6],
+    pub cr_qp_offset_list: [i32; 6],
     /// The base 2 logarithm of the scaling parameter that is used to scale
     /// sample adaptive offset (SAO) offset values for luma samples.
-    log2_sao_offset_scale_luma: u32,
+    pub log2_sao_offset_scale_luma: u32,
     /// The base 2 logarithm of the scaling parameter that is used to scale SAO
     /// offset values for chroma samples.
-    log2_sao_offset_scale_chroma: u32,
-}
-
-impl PpsRangeExtension {
-    pub fn log2_max_transform_skip_block_size_minus2(&self) -> u32 {
-        self.log2_max_transform_skip_block_size_minus2
-    }
-
-    pub fn cross_component_prediction_enabled_flag(&self) -> bool {
-        self.cross_component_prediction_enabled_flag
-    }
-
-    pub fn chroma_qp_offset_list_enabled_flag(&self) -> bool {
-        self.chroma_qp_offset_list_enabled_flag
-    }
-
-    pub fn diff_cu_chroma_qp_offset_depth(&self) -> u32 {
-        self.diff_cu_chroma_qp_offset_depth
-    }
-
-    pub fn chroma_qp_offset_list_len_minus1(&self) -> u32 {
-        self.chroma_qp_offset_list_len_minus1
-    }
-
-    pub fn cb_qp_offset_list(&self) -> [i32; 6] {
-        self.cb_qp_offset_list
-    }
-
-    pub fn cr_qp_offset_list(&self) -> [i32; 6] {
-        self.cr_qp_offset_list
-    }
-
-    pub fn log2_sao_offset_scale_luma(&self) -> u32 {
-        self.log2_sao_offset_scale_luma
-    }
-
-    pub fn log2_sao_offset_scale_chroma(&self) -> u32 {
-        self.log2_sao_offset_scale_chroma
-    }
+    pub log2_sao_offset_scale_chroma: u32,
 }
 
 /// A H.265 Picture Parameter Set.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pps {
     /// Identifies the PPS for reference by other syntax elements.
-    pic_parameter_set_id: u8,
+    pub pic_parameter_set_id: u8,
     /// Specifies the value of sps_seq_parameter_set_id for the active SPS.
-    seq_parameter_set_id: u8,
+    pub seq_parameter_set_id: u8,
     /// When set, specifies the presence of the syntax element
     /// dependent_slice_segment_flag in the slice segment headers for coded
     /// pictures referring to the PPS. When not set, specifies the absence of
     /// the syntax element dependent_slice_segment_flag in the slice segment
     /// headers for coded pictures referring to the PPS.
-    dependent_slice_segments_enabled_flag: bool,
+    pub dependent_slice_segments_enabled_flag: bool,
     /// When set, indicates that the pic_output_flag syntax element is present
     /// in the associated slice headers. When not set, indicates that the
     /// pic_output_flag syntax element is not present in the associated slice
     /// headers.
-    output_flag_present_flag: bool,
+    pub output_flag_present_flag: bool,
     /// Specifies the number of extra slice header bits that are present in the
     /// slice header RBSP for coded pictures referring to the PPS.
-    num_extra_slice_header_bits: u8,
+    pub num_extra_slice_header_bits: u8,
     /// When not set, specifies that sign bit hiding is disabled. Whens set,
     /// specifies that sign bit hiding is enabled.
-    sign_data_hiding_enabled_flag: bool,
+    pub sign_data_hiding_enabled_flag: bool,
     /// When set, specifies that cabac_init_flag is present in slice headers
     /// referring to the PPS. When not set, specifies that cabac_init_flag is
     /// not present in slice headers referring to the PPS.
-    cabac_init_present_flag: bool,
+    pub cabac_init_present_flag: bool,
     /// Specifies the inferred value of num_ref_idx_l0_active_minus1 for P and B
     /// slices with num_ref_idx_active_override_flag not set.
-    num_ref_idx_l0_default_active_minus1: u8,
+    pub num_ref_idx_l0_default_active_minus1: u8,
     /// Specifies the inferred value of num_ref_idx_l1_active_minus1 for B
     /// slices with num_ref_idx_active_override_flag not set.
-    num_ref_idx_l1_default_active_minus1: u8,
+    pub num_ref_idx_l1_default_active_minus1: u8,
     /// init_qp_minus26 plus 26 specifies the initial value of SliceQpY for each
     /// slice referring to the PPS. The initial value of SliceQpY is modified at
     /// the slice segment layer when a non-zero value of slice_qp_delta is
     /// decoded.
-    init_qp_minus26: i8,
+    pub init_qp_minus26: i8,
     /// When not set, specifies that intra prediction allows usage of residual
     /// data and decoded samples of neighbouring coding blocks coded using
     /// either intra or inter prediction modes. When set, specifies constrained
     /// intra prediction, in which case intra prediction only uses residual data
     /// and decoded samples from neighbouring coding blocks coded using intra
     /// prediction modes.
-    constrained_intra_pred_flag: bool,
+    pub constrained_intra_pred_flag: bool,
     /// When set, specifies that transform_skip_flag may be present in the
     /// residual coding syntax. When not set, specifies that transform_skip_flag
     /// is not present in the residual coding syntax.
-    transform_skip_enabled_flag: bool,
+    pub transform_skip_enabled_flag: bool,
     /// When set, specifies that the diff_cu_qp_delta_depth syntax element is
     /// present in the PPS and that cu_qp_delta_abs may be present in the
     /// transform unit syntax and the palette syntax. When not set, specifies
     /// that the diff_cu_qp_delta_depth syntax element is not present in the PPS
     /// and that cu_qp_delta_abs is not present in the transform unit syntax and
     /// the palette syntax.
-    cu_qp_delta_enabled_flag: bool,
+    pub cu_qp_delta_enabled_flag: bool,
 
     /*if cu_qp_delta_enabled_flag */
     /// Specifies the difference between the luma CTB size and the minimum luma
     /// coding block size of coding units that convey cu_qp_delta_abs and
     /// cu_qp_delta_sign_flag.
-    diff_cu_qp_delta_depth: u8,
+    pub diff_cu_qp_delta_depth: u8,
     /// Specifies the offsets to the luma quantization parameter Qp′Y used for
     /// deriving Qp′Cb and Qp′Cr, respectively.
-    cb_qp_offset: i8,
+    pub cb_qp_offset: i8,
     /// Specifies the offsets to the luma quantization parameter Qp′Y used for
     /// deriving Qp′Cb and Qp′Cr, respectively.
-    cr_qp_offset: i8,
+    pub cr_qp_offset: i8,
     /// When set, indicates that the slice_cb_qp_offset and slice_cr_qp_offset
     /// syntax elements are present in the associated slice headers.  When not
     /// set, indicates that these syntax elements are not present in the
     /// associated slice headers. When ChromaArrayType is equal to 0,
     /// pps_slice_chroma_qp_offsets_present_flag shall be equal to 0
-    slice_chroma_qp_offsets_present_flag: bool,
+    pub slice_chroma_qp_offsets_present_flag: bool,
     /// When not set, specifies that weighted prediction is not applied to P
     /// slices. When set, specifies that weighted prediction is applied to P
     /// slices.
-    weighted_pred_flag: bool,
+    pub weighted_pred_flag: bool,
     /// When not set, specifies that the default weighted prediction is applied
     /// to B slices. When set, specifies that weighted prediction is applied to
     /// B slices.
-    weighted_bipred_flag: bool,
+    pub weighted_bipred_flag: bool,
     /// When set, specifies that `cu_transquant_bypass_flag` is present, When
     /// not set, specifies that `cu_transquant_bypass_flag` is not present.
-    transquant_bypass_enabled_flag: bool,
+    pub transquant_bypass_enabled_flag: bool,
     /// When set, specifies that there is more than one tile in each picture
     /// referring to the PPS. When not set, specifies that there is only one
     /// tile in each picture referring to the PPS.
-    tiles_enabled_flag: bool,
+    pub tiles_enabled_flag: bool,
     /// When set, specifies that a specific synchronization process for context
     /// variables, and when applicable, Rice parameter initialization states and
     /// palette predictor variables, is invoked before decoding the CTU which
@@ -1806,13 +1110,13 @@ pub struct Pps {
     /// variables, is required to be invoked after decoding the CTU which
     /// includes the second CTB of a row of CTBs in each tile in each picture
     /// referring to the PPS.
-    entropy_coding_sync_enabled_flag: bool,
+    pub entropy_coding_sync_enabled_flag: bool,
     /// num_tile_columns_minus1 plus 1 specifies the number of tile columns
     /// partitioning the picture.
-    num_tile_columns_minus1: u8,
+    pub num_tile_columns_minus1: u8,
     /// num_tile_rows_minus1 plus 1 specifies the number of tile rows
     /// partitioning the picture.
-    num_tile_rows_minus1: u8,
+    pub num_tile_rows_minus1: u8,
     /// When set, specifies that tile column boundaries and likewise tile row
     /// boundaries are distributed uniformly across the picture.  When not set,
     /// specifies that tile column boundaries and likewise tile row boundaries
@@ -1822,24 +1126,24 @@ pub struct Pps {
     uniform_spacing_flag: bool,
     /// `column_width_minus1[ i ]` plus 1 specifies the width of the i-th tile
     /// column in units of CTBs.
-    column_width_minus1: [u32; 19],
+    pub column_width_minus1: [u32; 19],
     /// `row_height_minus1[ i ]` plus 1 specifies the height of the i-th tile row
     /// in units of CTBs.
-    row_height_minus1: [u32; 21],
+    pub row_height_minus1: [u32; 21],
     /// When set, specifies that in-loop filtering operations may be performed
     /// across tile boundaries in pictures referring to the PPS.  When not set,
     /// specifies that in-loop filtering operations are not performed across
     /// tile boundaries in pictures referring to the PPS. The in-loop filtering
     /// operations include the deblocking filter and sample adaptive offset
     /// filter operations.
-    loop_filter_across_tiles_enabled_flag: bool,
+    pub loop_filter_across_tiles_enabled_flag: bool,
     /// When set, specifies that in-loop filtering operations may be performed
     /// across left and upper boundaries of slices referring to the PPS.  When
     /// not set, specifies that in-loop filtering operations are not performed
     /// across left and upper boundaries of slices referring to the PPS. The in-
     /// loop filtering operations include the deblocking filter and sample
     /// adaptive offset filter operations.
-    loop_filter_across_slices_enabled_flag: bool,
+    pub loop_filter_across_slices_enabled_flag: bool,
     /// When set, specifies the presence of deblocking filter control syntax
     /// elements in the PPS. When not set, specifies the absence of deblocking
     /// filter control syntax elements in the PPS.
@@ -1848,52 +1152,52 @@ pub struct Pps {
     /// the slice headers for pictures referring to the PPS.  When not set,
     /// specifies the absence of deblocking_filter_override_flag in the slice
     /// headers for pictures referring to the PPS.
-    deblocking_filter_override_enabled_flag: bool,
+    pub deblocking_filter_override_enabled_flag: bool,
     /// When set, specifies that the operation of deblocking filter is not
     /// applied for slices referring to the PPS in which
     /// slice_deblocking_filter_disabled_flag is not present.  When not set,
     /// specifies that the operation of the deblocking filter is applied for
     /// slices referring to the PPS in which
     /// slice_deblocking_filter_disabled_flag is not present.
-    deblocking_filter_disabled_flag: bool,
+    pub deblocking_filter_disabled_flag: bool,
     /// Specify the default deblocking parameter offsets for β and tC (divided
     /// by 2) that are applied for slices referring to the PPS, unless the
     /// default deblocking parameter offsets are overridden by the deblocking
     /// parameter offsets present in the slice headers of the slices referring
     /// to the PPS.
-    beta_offset_div2: i8,
+    pub beta_offset_div2: i8,
     /// Specify the default deblocking parameter offsets for β and tC (divided
     /// by 2) that are applied for slices referring to the PPS, unless the
     /// default deblocking parameter offsets are overridden by the deblocking
     /// parameter offsets present in the slice headers of the slices referring
     /// to the PPS.
-    tc_offset_div2: i8,
+    pub tc_offset_div2: i8,
     /// When set, specifies that the scaling list data used for the pictures
     /// referring to the PPS are derived based on the scaling lists specified by
     /// the active SPS and the scaling lists specified by the PPS.
     /// pps_scaling_list_data_present_flag equal to 0 specifies that the scaling
     /// list data used for the pictures referring to the PPS are inferred to be
     /// equal to those specified by the active SPS.
-    scaling_list_data_present_flag: bool,
+    pub scaling_list_data_present_flag: bool,
     /// The scaling list data.
-    scaling_list: ScalingLists,
+    pub scaling_list: ScalingLists,
     /// When set, specifies that the syntax structure
     /// ref_pic_lists_modification( ) is present in the slice segment header.
     /// When not set, specifies that the syntax structure
     /// ref_pic_lists_modification( ) is not present in the slice segment header
-    lists_modification_present_flag: bool,
+    pub lists_modification_present_flag: bool,
     /// log2_parallel_merge_level_minus2 plus 2 specifies the value of the
     /// variable Log2ParMrgLevel, which is used in the derivation process for
     /// luma motion vectors for merge mode as specified in clause 8.5.3.2.2 and
     /// the derivation process for spatial merging candidates as specified in
     /// clause 8.5.3.2.3.
-    log2_parallel_merge_level_minus2: u8,
+    pub log2_parallel_merge_level_minus2: u8,
     /// When not set, specifies that no slice segment header extension syntax
     /// elements are present in the slice segment headers for coded pictures
     /// referring to the PPS. When set, specifies that slice segment header
     /// extension syntax elements are present in the slice segment headers for
     /// coded pictures referring to the PPS.
-    slice_segment_header_extension_present_flag: bool,
+    pub slice_segment_header_extension_present_flag: bool,
     /// When set, specifies that the syntax elements pps_range_extension_flag,
     /// pps_multilayer_extension_flag, pps_3d_extension_flag,
     /// pps_scc_extension_flag, and pps_extension_4bits are present in the
@@ -1905,204 +1209,18 @@ pub struct Pps {
     /// this syntax structure is not present.
     range_extension_flag: bool,
     /// The range extension data.
-    range_extension: PpsRangeExtension,
+    pub range_extension: PpsRangeExtension,
 
-    scc_extension_flag: bool,
+    pub scc_extension_flag: bool,
     /// The SCC extension data.
-    scc_extension: PpsSccExtension,
+    pub scc_extension: PpsSccExtension,
 
     // Internal variables.
     /// Equivalent to QpBdOffsetY in the specification.
     qp_bd_offset_y: u32,
 
     /// The nuh_temporal_id_plus1 - 1 of the associated NALU.
-    temporal_id: u8,
-}
-
-impl Pps {
-    pub fn pic_parameter_set_id(&self) -> u8 {
-        self.pic_parameter_set_id
-    }
-
-    pub fn seq_parameter_set_id(&self) -> u8 {
-        self.seq_parameter_set_id
-    }
-
-    pub fn dependent_slice_segments_enabled_flag(&self) -> bool {
-        self.dependent_slice_segments_enabled_flag
-    }
-
-    pub fn output_flag_present_flag(&self) -> bool {
-        self.output_flag_present_flag
-    }
-
-    pub fn num_extra_slice_header_bits(&self) -> u8 {
-        self.num_extra_slice_header_bits
-    }
-
-    pub fn sign_data_hiding_enabled_flag(&self) -> bool {
-        self.sign_data_hiding_enabled_flag
-    }
-
-    pub fn cabac_init_present_flag(&self) -> bool {
-        self.cabac_init_present_flag
-    }
-
-    pub fn num_ref_idx_l0_default_active_minus1(&self) -> u8 {
-        self.num_ref_idx_l0_default_active_minus1
-    }
-
-    pub fn num_ref_idx_l1_default_active_minus1(&self) -> u8 {
-        self.num_ref_idx_l1_default_active_minus1
-    }
-
-    pub fn init_qp_minus26(&self) -> i8 {
-        self.init_qp_minus26
-    }
-
-    pub fn constrained_intra_pred_flag(&self) -> bool {
-        self.constrained_intra_pred_flag
-    }
-
-    pub fn transform_skip_enabled_flag(&self) -> bool {
-        self.transform_skip_enabled_flag
-    }
-
-    pub fn cu_qp_delta_enabled_flag(&self) -> bool {
-        self.cu_qp_delta_enabled_flag
-    }
-
-    pub fn diff_cu_qp_delta_depth(&self) -> u8 {
-        self.diff_cu_qp_delta_depth
-    }
-
-    pub fn cb_qp_offset(&self) -> i8 {
-        self.cb_qp_offset
-    }
-
-    pub fn cr_qp_offset(&self) -> i8 {
-        self.cr_qp_offset
-    }
-
-    pub fn slice_chroma_qp_offsets_present_flag(&self) -> bool {
-        self.slice_chroma_qp_offsets_present_flag
-    }
-
-    pub fn weighted_pred_flag(&self) -> bool {
-        self.weighted_pred_flag
-    }
-
-    pub fn weighted_bipred_flag(&self) -> bool {
-        self.weighted_bipred_flag
-    }
-
-    pub fn transquant_bypass_enabled_flag(&self) -> bool {
-        self.transquant_bypass_enabled_flag
-    }
-
-    pub fn tiles_enabled_flag(&self) -> bool {
-        self.tiles_enabled_flag
-    }
-
-    pub fn entropy_coding_sync_enabled_flag(&self) -> bool {
-        self.entropy_coding_sync_enabled_flag
-    }
-
-    pub fn num_tile_columns_minus1(&self) -> u8 {
-        self.num_tile_columns_minus1
-    }
-
-    pub fn num_tile_rows_minus1(&self) -> u8 {
-        self.num_tile_rows_minus1
-    }
-
-    pub fn uniform_spacing_flag(&self) -> bool {
-        self.uniform_spacing_flag
-    }
-
-    pub fn column_width_minus1(&self) -> [u32; 19] {
-        self.column_width_minus1
-    }
-
-    pub fn row_height_minus1(&self) -> [u32; 21] {
-        self.row_height_minus1
-    }
-
-    pub fn loop_filter_across_tiles_enabled_flag(&self) -> bool {
-        self.loop_filter_across_tiles_enabled_flag
-    }
-
-    pub fn loop_filter_across_slices_enabled_flag(&self) -> bool {
-        self.loop_filter_across_slices_enabled_flag
-    }
-
-    pub fn deblocking_filter_control_present_flag(&self) -> bool {
-        self.deblocking_filter_control_present_flag
-    }
-
-    pub fn deblocking_filter_override_enabled_flag(&self) -> bool {
-        self.deblocking_filter_override_enabled_flag
-    }
-
-    pub fn deblocking_filter_disabled_flag(&self) -> bool {
-        self.deblocking_filter_disabled_flag
-    }
-
-    pub fn beta_offset_div2(&self) -> i8 {
-        self.beta_offset_div2
-    }
-
-    pub fn tc_offset_div2(&self) -> i8 {
-        self.tc_offset_div2
-    }
-
-    pub fn scaling_list_data_present_flag(&self) -> bool {
-        self.scaling_list_data_present_flag
-    }
-
-    pub fn scaling_list(&self) -> &ScalingLists {
-        &self.scaling_list
-    }
-
-    pub fn lists_modification_present_flag(&self) -> bool {
-        self.lists_modification_present_flag
-    }
-
-    pub fn log2_parallel_merge_level_minus2(&self) -> u8 {
-        self.log2_parallel_merge_level_minus2
-    }
-
-    pub fn slice_segment_header_extension_present_flag(&self) -> bool {
-        self.slice_segment_header_extension_present_flag
-    }
-
-    pub fn extension_present_flag(&self) -> bool {
-        self.extension_present_flag
-    }
-
-    pub fn range_extension_flag(&self) -> bool {
-        self.range_extension_flag
-    }
-
-    pub fn range_extension(&self) -> &PpsRangeExtension {
-        &self.range_extension
-    }
-
-    pub fn qp_bd_offset_y(&self) -> u32 {
-        self.qp_bd_offset_y
-    }
-
-    pub fn scc_extension(&self) -> &PpsSccExtension {
-        &self.scc_extension
-    }
-
-    pub fn scc_extension_flag(&self) -> bool {
-        self.scc_extension_flag
-    }
-
-    pub fn temporal_id(&self) -> u8 {
-        self.temporal_id
-    }
+    pub temporal_id: u8,
 }
 
 impl Default for Pps {
@@ -2158,6 +1276,7 @@ impl Default for Pps {
     }
 }
 
+// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScalingLists {
     /// plus 8 specifies the value of the variable `ScalingFactor[ 2 ][ matrixId
@@ -2215,6 +1334,7 @@ impl Default for ScalingLists {
     }
 }
 
+// TODO
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RefPicListModification {
     /// Whenset, indicates that reference picture list 0 is specified explicitly
@@ -2253,6 +1373,7 @@ impl RefPicListModification {
     }
 }
 
+// TODO
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PredWeightTable {
     /// The base 2 logarithm of the denominator for all luma weighting factors.
@@ -2368,6 +1489,7 @@ impl PredWeightTable {
     }
 }
 
+// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShortTermRefPicSet {
     /// When set, specifies that the stRpsIdx-th candidate short-term RPS is
@@ -2468,6 +1590,7 @@ impl Default for ShortTermRefPicSet {
     }
 }
 
+// TODO
 #[derive(N, Clone, Copy, Debug, PartialEq, Eq)]
 /// See table 7-7 in the specification.
 pub enum SliceType {
@@ -2499,6 +1622,7 @@ impl Default for SliceType {
     }
 }
 
+// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SliceHeader {
     /// When set, specifies that the slice segment is the first slice segment of
@@ -3030,6 +2154,7 @@ impl<T> Slice<T> {
     }
 }
 
+// TODO
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SublayerHrdParameters {
     // NOTE: The value of CpbCnt is cpb_cnt_minus1[i] + 1, and cpb_cnt_minus1
@@ -3072,6 +2197,7 @@ impl SublayerHrdParameters {
     }
 }
 
+// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HrdParams {
     /// When set, specifies that NAL HRD parameters (pertaining to the Type II
@@ -3276,6 +2402,7 @@ impl Default for HrdParams {
     }
 }
 
+// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VuiParams {
     /// When set, specifies that aspect_ratio_idc is present.  When not set,
@@ -4747,7 +3874,7 @@ impl Parser {
 
         log::debug!(
             "Parsed SPS({}), resolution: ({}, {}): NAL size was {}",
-            sps.seq_parameter_set_id(),
+            sps.seq_parameter_set_id,
             sps.width(),
             sps.height(),
             nalu.size()
@@ -5016,11 +4143,11 @@ impl Parser {
             r.skip_bits(4)?; // pps_extension_4bits
         }
 
-        pps.temporal_id = nalu.header().temporal_id_plus1() - 1;
+        pps.temporal_id = nalu.header().nuh_temporal_id_plus1 - 1;
 
         log::debug!(
             "Parsed PPS({}), NAL size was {}",
-            pps.pic_parameter_set_id(),
+            pps.pic_parameter_set_id,
             nalu.size()
         );
 
@@ -5211,7 +4338,7 @@ impl Parser {
             ..Default::default()
         };
 
-        if nalu.header().nalu_type().is_irap() {
+        if nalu.header().type_.is_irap() {
             hdr.no_output_of_prior_pics_flag = r.read_bit()?;
         }
 
@@ -5579,7 +4706,7 @@ impl Parser {
 
         log::debug!(
             "Parsed slice {:?}, NAL size was {}",
-            nalu_header.nalu_type(),
+            nalu_header.type_,
             nalu.size()
         );
 

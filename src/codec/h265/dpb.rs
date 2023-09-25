@@ -129,14 +129,14 @@ impl<T: Clone> Dpb<T> {
     pub fn needs_bumping(&mut self, sps: &Sps) -> bool {
         let num_needed_for_output = self.pictures().filter(|pic| pic.needed_for_output).count();
 
-        let highest_tid = sps.max_sub_layers_minus1();
-        let max_num_reorder_pics = sps.max_num_reorder_pics()[usize::from(highest_tid)];
-        let max_latency_increase_plus1 = sps.max_latency_increase_plus1()[usize::from(highest_tid)];
+        let highest_tid = sps.max_sub_layers_minus1;
+        let max_num_reorder_pics = sps.max_num_reorder_pics[usize::from(highest_tid)];
+        let max_latency_increase_plus1 = sps.max_latency_increase_plus1[usize::from(highest_tid)];
         let pic_over_max_latency = self.pictures().find(|pic| {
             pic.needed_for_output && pic.pic_latency_cnt >= i32::from(max_latency_increase_plus1)
         });
         let max_dec_pic_buffering =
-            usize::from(sps.max_dec_pic_buffering_minus1()[usize::from(highest_tid)]) + 1;
+            usize::from(sps.max_dec_pic_buffering_minus1[usize::from(highest_tid)]) + 1;
 
         num_needed_for_output > max_num_reorder_pics.into()
             || (max_latency_increase_plus1 != 0 && pic_over_max_latency.is_some())
@@ -188,10 +188,10 @@ impl<T: Clone> Dpb<T> {
     /// See C.5.2.3. Happens when we are done decoding the picture.
     pub fn needs_additional_bumping(&mut self, sps: &Sps) -> bool {
         let num_needed_for_output = self.pictures().filter(|pic| pic.needed_for_output).count();
-        let highest_tid = sps.max_sub_layers_minus1();
+        let highest_tid = sps.max_sub_layers_minus1;
 
-        let max_num_reorder_pics = sps.max_num_reorder_pics()[usize::from(highest_tid)];
-        let max_latency_increase_plus1 = sps.max_latency_increase_plus1()[usize::from(highest_tid)];
+        let max_num_reorder_pics = sps.max_num_reorder_pics[usize::from(highest_tid)];
+        let max_latency_increase_plus1 = sps.max_latency_increase_plus1[usize::from(highest_tid)];
 
         let pic_over_max_latency = self.pictures().find(|pic| {
             pic.needed_for_output && pic.pic_latency_cnt >= i32::from(max_latency_increase_plus1)

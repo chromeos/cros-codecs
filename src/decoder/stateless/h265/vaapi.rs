@@ -62,16 +62,16 @@ pub struct BackendData {
 
 impl VaStreamInfo for &Sps {
     fn va_profile(&self) -> anyhow::Result<i32> {
-        let profile_idc = self.profile_tier_level().general_profile_idc();
+        let profile_idc = self.profile_tier_level.general_profile_idc;
         let profile = Profile::n(profile_idc)
             .with_context(|| format!("Invalid profile_idc {:?}", profile_idc))?;
 
         let bit_depth = std::cmp::max(
-            self.bit_depth_luma_minus8() + 8,
-            self.bit_depth_chroma_minus8() + 8,
+            self.bit_depth_luma_minus8 + 8,
+            self.bit_depth_chroma_minus8 + 8,
         );
 
-        let chroma_format_idc = self.chroma_format_idc();
+        let chroma_format_idc = self.chroma_format_idc;
         let err = Err(anyhow!(
             "Invalid combination of profile, bit depth an chroma_format_idc: ({:?}, {}, {}",
             profile,
@@ -109,11 +109,11 @@ impl VaStreamInfo for &Sps {
 
     fn rt_format(&self) -> anyhow::Result<u32> {
         let bit_depth = std::cmp::max(
-            self.bit_depth_luma_minus8() + 8,
-            self.bit_depth_chroma_minus8() + 8,
+            self.bit_depth_luma_minus8 + 8,
+            self.bit_depth_chroma_minus8 + 8,
         );
 
-        let chroma_format_idc = self.chroma_format_idc();
+        let chroma_format_idc = self.chroma_format_idc;
 
         match (bit_depth, chroma_format_idc) {
             (8, 0) | (8, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420),
@@ -302,32 +302,32 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
     }
 
     fn build_picture_rext(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
-        let sps_rext = sps.range_extension();
-        let pps_rext = pps.range_extension();
+        let sps_rext = &sps.range_extension;
+        let pps_rext = &pps.range_extension;
 
         let range_extension_pic_fields = libva::HevcRangeExtensionPicFields::new(
-            sps_rext.transform_skip_rotation_enabled_flag() as u32,
-            sps_rext.transform_skip_context_enabled_flag() as u32,
-            sps_rext.implicit_rdpcm_enabled_flag() as u32,
-            sps_rext.explicit_rdpcm_enabled_flag() as u32,
-            sps_rext.extended_precision_processing_flag() as u32,
-            sps_rext.intra_smoothing_disabled_flag() as u32,
-            sps_rext.high_precision_offsets_enabled_flag() as u32,
-            sps_rext.persistent_rice_adaptation_enabled_flag() as u32,
-            sps_rext.cabac_bypass_alignment_enabled_flag() as u32,
-            pps_rext.cross_component_prediction_enabled_flag() as u32,
-            pps_rext.chroma_qp_offset_list_enabled_flag() as u32,
+            sps_rext.transform_skip_rotation_enabled_flag as u32,
+            sps_rext.transform_skip_context_enabled_flag as u32,
+            sps_rext.implicit_rdpcm_enabled_flag as u32,
+            sps_rext.explicit_rdpcm_enabled_flag as u32,
+            sps_rext.extended_precision_processing_flag as u32,
+            sps_rext.intra_smoothing_disabled_flag as u32,
+            sps_rext.high_precision_offsets_enabled_flag as u32,
+            sps_rext.persistent_rice_adaptation_enabled_flag as u32,
+            sps_rext.cabac_bypass_alignment_enabled_flag as u32,
+            pps_rext.cross_component_prediction_enabled_flag as u32,
+            pps_rext.chroma_qp_offset_list_enabled_flag as u32,
         );
 
         let rext = libva::PictureParameterBufferHEVCRext::new(
             &range_extension_pic_fields,
-            pps_rext.diff_cu_chroma_qp_offset_depth() as u8,
-            pps_rext.chroma_qp_offset_list_len_minus1() as u8,
-            pps_rext.log2_sao_offset_scale_luma() as u8,
-            pps_rext.log2_sao_offset_scale_chroma() as u8,
-            pps_rext.log2_max_transform_skip_block_size_minus2() as u8,
-            pps_rext.cb_qp_offset_list().map(|x| x as i8),
-            pps_rext.cr_qp_offset_list().map(|x| x as i8),
+            pps_rext.diff_cu_chroma_qp_offset_depth as u8,
+            pps_rext.chroma_qp_offset_list_len_minus1 as u8,
+            pps_rext.log2_sao_offset_scale_luma as u8,
+            pps_rext.log2_sao_offset_scale_chroma as u8,
+            pps_rext.log2_max_transform_skip_block_size_minus2 as u8,
+            pps_rext.cb_qp_offset_list.map(|x| x as i8),
+            pps_rext.cr_qp_offset_list.map(|x| x as i8),
         );
 
         Ok(BufferType::PictureParameter(
@@ -336,32 +336,32 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
     }
 
     fn build_picture_scc(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
-        let sps_scc = sps.scc_extension();
-        let pps_scc = pps.scc_extension();
+        let sps_scc = &sps.scc_extension;
+        let pps_scc = &pps.scc_extension;
 
         let scc_pic_fields = libva::HevcScreenContentPicFields::new(
-            pps_scc.curr_pic_ref_enabled_flag() as u32,
-            sps_scc.palette_mode_enabled_flag() as u32,
-            sps_scc.motion_vector_resolution_control_idc() as u32,
-            sps_scc.intra_boundary_filtering_disabled_flag() as u32,
-            pps_scc.residual_adaptive_colour_transform_enabled_flag() as u32,
-            pps_scc.slice_act_qp_offsets_present_flag() as u32,
+            pps_scc.curr_pic_ref_enabled_flag as u32,
+            sps_scc.palette_mode_enabled_flag as u32,
+            sps_scc.motion_vector_resolution_control_idc as u32,
+            sps_scc.intra_boundary_filtering_disabled_flag as u32,
+            pps_scc.residual_adaptive_colour_transform_enabled_flag as u32,
+            pps_scc.slice_act_qp_offsets_present_flag as u32,
         );
 
         let (predictor_palette_entries, predictor_palette_size) =
-            if pps_scc.palette_predictor_initializers_present_flag() {
+            if pps_scc.palette_predictor_initializers_present_flag {
                 (
                     pps_scc
-                        .palette_predictor_initializer()
+                        .palette_predictor_initializer
                         .map(|outer| outer.map(u16::from)),
-                    pps_scc.num_palette_predictor_initializers(),
+                    pps_scc.num_palette_predictor_initializers,
                 )
-            } else if sps_scc.palette_predictor_initializers_present_flag() {
+            } else if sps_scc.palette_predictor_initializers_present_flag {
                 (
                     sps_scc
-                        .palette_predictor_initializer()
+                        .palette_predictor_initializer
                         .map(|outer| outer.map(|inner| inner as u16)),
-                    sps_scc.num_palette_predictor_initializer_minus1() + 1,
+                    sps_scc.num_palette_predictor_initializer_minus1 + 1,
                 )
             } else {
                 ([[0; 128]; 3], 0)
@@ -369,13 +369,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
 
         let scc = libva::PictureParameterBufferHEVCScc::new(
             &scc_pic_fields,
-            sps_scc.palette_max_size(),
-            sps_scc.delta_palette_max_predictor_size(),
+            sps_scc.palette_max_size,
+            sps_scc.delta_palette_max_predictor_size,
             predictor_palette_size,
             predictor_palette_entries,
-            pps_scc.act_y_qp_offset_plus5(),
-            pps_scc.act_cb_qp_offset_plus5(),
-            pps_scc.act_cr_qp_offset_plus3(),
+            pps_scc.act_y_qp_offset_plus5,
+            pps_scc.act_cb_qp_offset_plus5,
+            pps_scc.act_cr_qp_offset_plus3,
         );
 
         Ok(BufferType::PictureParameter(
@@ -405,7 +405,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         // RefPicListL0 and RefPicListL1 may signal that they want to refer to
         // the current picture. We must tell VA that it is a reference as it is
         // not in the DPB at this point.
-        if pps.scc_extension().curr_pic_ref_enabled_flag() {
+        if pps.scc_extension.curr_pic_ref_enabled_flag {
             if reference_frames.len() >= 15 {
                 log::warn!("Bug: Trying to set the current picture as a VA reference, but the VA DPB is full.")
             } else {
@@ -427,24 +427,24 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         };
 
         let pic_fields = libva::HevcPicFields::new(
-            sps.chroma_format_idc() as u32,
-            sps.separate_colour_plane_flag() as u32,
-            sps.pcm_enabled_flag() as u32,
-            sps.scaling_list_enabled_flag() as u32,
-            pps.transform_skip_enabled_flag() as u32,
-            sps.amp_enabled_flag() as u32,
-            sps.strong_intra_smoothing_enabled_flag() as u32,
-            pps.sign_data_hiding_enabled_flag() as u32,
-            pps.constrained_intra_pred_flag() as u32,
-            pps.cu_qp_delta_enabled_flag() as u32,
-            pps.weighted_pred_flag() as u32,
-            pps.weighted_bipred_flag() as u32,
-            pps.transquant_bypass_enabled_flag() as u32,
-            pps.tiles_enabled_flag() as u32,
-            pps.entropy_coding_sync_enabled_flag() as u32,
-            pps.loop_filter_across_slices_enabled_flag() as u32,
-            pps.loop_filter_across_tiles_enabled_flag() as u32,
-            sps.pcm_loop_filter_disabled_flag() as u32,
+            sps.chroma_format_idc as u32,
+            sps.separate_colour_plane_flag as u32,
+            sps.pcm_enabled_flag as u32,
+            sps.scaling_list_enabled_flag as u32,
+            pps.transform_skip_enabled_flag as u32,
+            sps.amp_enabled_flag as u32,
+            sps.strong_intra_smoothing_enabled_flag as u32,
+            pps.sign_data_hiding_enabled_flag as u32,
+            pps.constrained_intra_pred_flag as u32,
+            pps.cu_qp_delta_enabled_flag as u32,
+            pps.weighted_pred_flag as u32,
+            pps.weighted_bipred_flag as u32,
+            pps.transquant_bypass_enabled_flag as u32,
+            pps.tiles_enabled_flag as u32,
+            pps.entropy_coding_sync_enabled_flag as u32,
+            pps.loop_filter_across_slices_enabled_flag as u32,
+            pps.loop_filter_across_tiles_enabled_flag as u32,
+            sps.pcm_loop_filter_disabled_flag as u32,
             /* lets follow the FFMPEG and GStreamer train and set these to false */
             0,
             0,
@@ -454,17 +454,17 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
             && current_picture.nalu_type as u32 <= NaluType::CraNut as u32;
 
         let slice_parsing_fields = libva::HevcSliceParsingFields::new(
-            pps.lists_modification_present_flag() as u32,
-            sps.long_term_ref_pics_present_flag() as u32,
-            sps.temporal_mvp_enabled_flag() as u32,
-            pps.cabac_init_present_flag() as u32,
-            pps.output_flag_present_flag() as u32,
-            pps.dependent_slice_segments_enabled_flag() as u32,
-            pps.slice_chroma_qp_offsets_present_flag() as u32,
-            sps.sample_adaptive_offset_enabled_flag() as u32,
-            pps.deblocking_filter_override_enabled_flag() as u32,
-            pps.deblocking_filter_disabled_flag() as u32,
-            pps.slice_segment_header_extension_present_flag() as u32,
+            pps.lists_modification_present_flag as u32,
+            sps.long_term_ref_pics_present_flag as u32,
+            sps.temporal_mvp_enabled_flag as u32,
+            pps.cabac_init_present_flag as u32,
+            pps.output_flag_present_flag as u32,
+            pps.dependent_slice_segments_enabled_flag as u32,
+            pps.slice_chroma_qp_offsets_present_flag as u32,
+            sps.sample_adaptive_offset_enabled_flag as u32,
+            pps.deblocking_filter_override_enabled_flag as u32,
+            pps.deblocking_filter_disabled_flag as u32,
+            pps.slice_segment_header_extension_present_flag as u32,
             rap_pic_flag as u32,
             current_picture.nalu_type.is_idr() as u32,
             current_picture.nalu_type.is_irap() as u32,
@@ -473,40 +473,40 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         let pic_param = PictureParameterBufferHEVC::new(
             curr_pic,
             reference_frames,
-            sps.pic_width_in_luma_samples(),
-            sps.pic_height_in_luma_samples(),
+            sps.pic_width_in_luma_samples,
+            sps.pic_height_in_luma_samples,
             &pic_fields,
-            sps.max_dec_pic_buffering_minus1()[usize::from(sps.max_sub_layers_minus1())],
-            sps.bit_depth_luma_minus8(),
-            sps.bit_depth_chroma_minus8(),
-            sps.pcm_sample_bit_depth_luma_minus1(),
-            sps.pcm_sample_bit_depth_chroma_minus1(),
-            sps.log2_min_luma_coding_block_size_minus3(),
-            sps.log2_diff_max_min_luma_coding_block_size(),
-            sps.log2_min_luma_transform_block_size_minus2(),
-            sps.log2_diff_max_min_luma_transform_block_size(),
-            sps.log2_min_pcm_luma_coding_block_size_minus3(),
-            sps.log2_diff_max_min_pcm_luma_coding_block_size(),
-            sps.max_transform_hierarchy_depth_intra(),
-            sps.max_transform_hierarchy_depth_inter(),
-            pps.init_qp_minus26(),
-            pps.diff_cu_qp_delta_depth(),
-            pps.cb_qp_offset(),
-            pps.cr_qp_offset(),
-            pps.log2_parallel_merge_level_minus2(),
-            pps.num_tile_columns_minus1(),
-            pps.num_tile_rows_minus1(),
-            pps.column_width_minus1().map(|x| x as u16),
-            pps.row_height_minus1().map(|x| x as u16),
+            sps.max_dec_pic_buffering_minus1[usize::from(sps.max_sub_layers_minus1)],
+            sps.bit_depth_luma_minus8,
+            sps.bit_depth_chroma_minus8,
+            sps.pcm_sample_bit_depth_luma_minus1,
+            sps.pcm_sample_bit_depth_chroma_minus1,
+            sps.log2_min_luma_coding_block_size_minus3,
+            sps.log2_diff_max_min_luma_coding_block_size,
+            sps.log2_min_luma_transform_block_size_minus2,
+            sps.log2_diff_max_min_luma_transform_block_size,
+            sps.log2_min_pcm_luma_coding_block_size_minus3,
+            sps.log2_diff_max_min_pcm_luma_coding_block_size,
+            sps.max_transform_hierarchy_depth_intra,
+            sps.max_transform_hierarchy_depth_inter,
+            pps.init_qp_minus26,
+            pps.diff_cu_qp_delta_depth,
+            pps.cb_qp_offset,
+            pps.cr_qp_offset,
+            pps.log2_parallel_merge_level_minus2,
+            pps.num_tile_columns_minus1,
+            pps.num_tile_rows_minus1,
+            pps.column_width_minus1.map(|x| x as u16),
+            pps.row_height_minus1.map(|x| x as u16),
             &slice_parsing_fields,
-            sps.log2_max_pic_order_cnt_lsb_minus4(),
-            sps.num_short_term_ref_pic_sets(),
-            sps.num_long_term_ref_pics_sps(),
-            pps.num_ref_idx_l0_default_active_minus1(),
-            pps.num_ref_idx_l1_default_active_minus1(),
-            pps.beta_offset_div2(),
-            pps.tc_offset_div2(),
-            pps.num_extra_slice_header_bits(),
+            sps.log2_max_pic_order_cnt_lsb_minus4,
+            sps.num_short_term_ref_pic_sets,
+            sps.num_long_term_ref_pics_sps,
+            pps.num_ref_idx_l0_default_active_minus1,
+            pps.num_ref_idx_l1_default_active_minus1,
+            pps.beta_offset_div2,
+            pps.tc_offset_div2,
+            pps.num_extra_slice_header_bits,
             current_picture.short_term_ref_pic_set_size_bits,
         );
 
@@ -517,11 +517,11 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
     }
 
     fn find_scaling_list(sps: &Sps, pps: &Pps) -> ScalingListType {
-        if pps.scaling_list_data_present_flag()
-            || (sps.scaling_list_enabled_flag() && !sps.scaling_list_data_present_flag())
+        if pps.scaling_list_data_present_flag
+            || (sps.scaling_list_enabled_flag && !sps.scaling_list_data_present_flag)
         {
             ScalingListType::Pps
-        } else if sps.scaling_list_enabled_flag() && sps.scaling_list_data_present_flag() {
+        } else if sps.scaling_list_enabled_flag && sps.scaling_list_data_present_flag {
             ScalingListType::Sps
         } else {
             ScalingListType::None
@@ -530,8 +530,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
 
     fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
         let scaling_lists = match Self::find_scaling_list(sps, pps) {
-            ScalingListType::Sps => sps.scaling_list(),
-            ScalingListType::Pps => pps.scaling_list(),
+            ScalingListType::Sps => &sps.scaling_list,
+            ScalingListType::Pps => &pps.scaling_list,
             ScalingListType::None => panic!("No scaling list data available"),
         };
 
@@ -739,13 +739,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
                 let chroma_weight_l0 = (1 << pwt.chroma_log2_weight_denom())
                     + i32::from(pwt.delta_chroma_weight_l0()[i][j]);
 
-                let offset = sps.wp_offset_half_range_c() as i32 + delta_chroma_offset as i32
-                    - ((sps.wp_offset_half_range_c() as i32 * chroma_weight_l0)
+                let offset = sps.wp_offset_half_range_c as i32 + delta_chroma_offset as i32
+                    - ((sps.wp_offset_half_range_c as i32 * chroma_weight_l0)
                         >> pwt.chroma_log2_weight_denom());
 
                 chroma_offset_l0[i][j] = clip3(
-                    -(sps.wp_offset_half_range_c() as i32),
-                    (sps.wp_offset_half_range_c() - 1) as i32,
+                    -(sps.wp_offset_half_range_c as i32),
+                    (sps.wp_offset_half_range_c - 1) as i32,
                     offset,
                 ) as _;
 
@@ -756,13 +756,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
                     let chroma_weight_l1 = (1 << pwt.chroma_log2_weight_denom())
                         + i32::from(pwt.delta_chroma_weight_l1()[i][j]);
 
-                    let offset = sps.wp_offset_half_range_c() as i32 + delta_chroma_offset as i32
-                        - ((sps.wp_offset_half_range_c() as i32 * chroma_weight_l1)
+                    let offset = sps.wp_offset_half_range_c as i32 + delta_chroma_offset as i32
+                        - ((sps.wp_offset_half_range_c as i32 * chroma_weight_l1)
                             >> pwt.chroma_log2_weight_denom());
 
                     chroma_offset_l1[i][j] = clip3(
-                        -(sps.wp_offset_half_range_c() as i32),
-                        (sps.wp_offset_half_range_c() - 1) as i32,
+                        -(sps.wp_offset_half_range_c as i32),
+                        (sps.wp_offset_half_range_c - 1) as i32,
                         offset,
                     ) as _;
                 }
