@@ -33,3 +33,7 @@ gbm = { version = "0.12", default-features = false, features = ["drm-support"] }
 [[example]]
 name = "ccdec"
 required-features = ["vaapi"]
+
+[[example]]
+name = "ccenc"
+required-features = ["vaapi"]
