@@ -1534,8 +1534,8 @@ impl Parser {
         }
     }
 
-    fn parse_scaling_list<T: AsRef<[u8]>, U: AsMut<[u8]>>(
-        r: &mut NaluReader<T>,
+    fn parse_scaling_list<U: AsMut<[u8]>>(
+        r: &mut NaluReader,
         scaling_list: &mut U,
         use_default: &mut bool,
     ) -> anyhow::Result<()> {
@@ -1565,10 +1565,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_sps_scaling_lists<T: AsRef<[u8]>>(
-        r: &mut NaluReader<T>,
-        sps: &mut Sps,
-    ) -> anyhow::Result<()> {
+    fn parse_sps_scaling_lists(r: &mut NaluReader, sps: &mut Sps) -> anyhow::Result<()> {
         let scaling_lists4x4 = &mut sps.scaling_lists_4x4;
         let scaling_lisst8x8 = &mut sps.scaling_lists_8x8;
 
@@ -1616,11 +1613,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_pps_scaling_lists<T: AsRef<[u8]>>(
-        r: &mut NaluReader<T>,
-        pps: &mut Pps,
-        sps: &Sps,
-    ) -> anyhow::Result<()> {
+    fn parse_pps_scaling_lists(r: &mut NaluReader, pps: &mut Pps, sps: &Sps) -> anyhow::Result<()> {
         let scaling_lists4x4 = &mut pps.scaling_lists_4x4;
         let scaling_lists8x8 = &mut pps.scaling_lists_8x8;
 
@@ -1689,7 +1682,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_hrd<T: AsRef<[u8]>>(r: &mut NaluReader<T>, hrd: &mut HrdParams) -> anyhow::Result<()> {
+    fn parse_hrd(r: &mut NaluReader, hrd: &mut HrdParams) -> anyhow::Result<()> {
         hrd.cpb_cnt_minus1 = r.read_ue_max(31)?;
         hrd.bit_rate_scale = r.read_bits(4)?;
         hrd.cpb_size_scale = r.read_bits(4)?;
@@ -1707,7 +1700,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_vui<T: AsRef<[u8]>>(r: &mut NaluReader<T>, sps: &mut Sps) -> anyhow::Result<()> {
+    fn parse_vui(r: &mut NaluReader, sps: &mut Sps) -> anyhow::Result<()> {
         let vui = &mut sps.vui_parameters;
 
         vui.aspect_ratio_info_present_flag = r.read_bit()?;
@@ -2064,8 +2057,8 @@ impl Parser {
         Ok(self.get_pps(key).unwrap())
     }
 
-    fn parse_ref_pic_list_modification<T: AsRef<[u8]>>(
-        r: &mut NaluReader<T>,
+    fn parse_ref_pic_list_modification(
+        r: &mut NaluReader,
         num_ref_idx_active_minus1: u8,
         ref_list_mods: &mut Vec<RefPicListModification>,
     ) -> anyhow::Result<()> {
@@ -2102,8 +2095,8 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_ref_pic_list_modifications<T: AsRef<[u8]>>(
-        r: &mut NaluReader<T>,
+    fn parse_ref_pic_list_modifications(
+        r: &mut NaluReader,
         header: &mut SliceHeader,
     ) -> anyhow::Result<()> {
         if !header.slice_type.is_i() && !header.slice_type.is_si() {
@@ -2131,8 +2124,8 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_pred_weight_table<T: AsRef<[u8]>>(
-        r: &mut NaluReader<T>,
+    fn parse_pred_weight_table(
+        r: &mut NaluReader,
         sps: &Sps,
         header: &mut SliceHeader,
     ) -> anyhow::Result<()> {
@@ -2222,8 +2215,8 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_dec_ref_pic_marking<T: AsRef<[u8]>, U: AsRef<[u8]>>(
-        r: &mut NaluReader<T>,
+    fn parse_dec_ref_pic_marking<U: AsRef<[u8]>>(
+        r: &mut NaluReader,
         nalu: &Nalu<U>,
         header: &mut SliceHeader,
     ) -> anyhow::Result<()> {

@@ -2935,9 +2935,9 @@ impl Parser {
         Ok(self.get_vps(key).unwrap())
     }
 
-    fn parse_profile_tier_level<T: AsRef<[u8]>>(
+    fn parse_profile_tier_level(
         ptl: &mut ProfileTierLevel,
-        r: &mut NaluReader<T>,
+        r: &mut NaluReader,
         profile_present_flag: bool,
         sps_max_sub_layers_minus_1: u8,
     ) -> anyhow::Result<()> {
@@ -3180,10 +3180,7 @@ impl Parser {
         }
     }
 
-    fn parse_scaling_list_data<T: AsRef<[u8]>>(
-        sl: &mut ScalingLists,
-        r: &mut NaluReader<T>,
-    ) -> anyhow::Result<()> {
+    fn parse_scaling_list_data(sl: &mut ScalingLists, r: &mut NaluReader) -> anyhow::Result<()> {
         // 7.4.5
         for size_id in 0..4 {
             let mut matrix_id = 0;
@@ -3271,10 +3268,10 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_short_term_ref_pic_set<T: AsRef<[u8]>>(
+    fn parse_short_term_ref_pic_set(
         sps: &Sps,
         st: &mut ShortTermRefPicSet,
-        r: &mut NaluReader<T>,
+        r: &mut NaluReader,
         st_rps_idx: u8,
     ) -> anyhow::Result<()> {
         if st_rps_idx != 0 {
@@ -3432,11 +3429,11 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_sublayer_hrd_parameters<T: AsRef<[u8]>>(
+    fn parse_sublayer_hrd_parameters(
         h: &mut SublayerHrdParameters,
         cpb_cnt: u32,
         sub_pic_hrd_params_present_flag: bool,
-        r: &mut NaluReader<T>,
+        r: &mut NaluReader,
     ) -> anyhow::Result<()> {
         for i in 0..cpb_cnt as usize {
             h.bit_rate_value_minus1[i] = r.read_ue_max((2u64.pow(32) - 2) as u32)?;
@@ -3452,11 +3449,11 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_hrd_parameters<T: AsRef<[u8]>>(
+    fn parse_hrd_parameters(
         common_inf_present_flag: bool,
         max_num_sublayers_minus1: u8,
         hrd: &mut HrdParams,
-        r: &mut NaluReader<T>,
+        r: &mut NaluReader,
     ) -> anyhow::Result<()> {
         if common_inf_present_flag {
             hrd.nal_hrd_parameters_present_flag = r.read_bit()?;
@@ -3517,10 +3514,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_vui_parameters<T: AsRef<[u8]>>(
-        sps: &mut Sps,
-        r: &mut NaluReader<T>,
-    ) -> anyhow::Result<()> {
+    fn parse_vui_parameters(sps: &mut Sps, r: &mut NaluReader) -> anyhow::Result<()> {
         let vui = &mut sps.vui_parameters;
 
         vui.aspect_ratio_info_present_flag = r.read_bit()?;
@@ -3615,10 +3609,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_sps_scc_extension<T: AsRef<[u8]>>(
-        sps: &mut Sps,
-        r: &mut NaluReader<T>,
-    ) -> anyhow::Result<()> {
+    fn parse_sps_scc_extension(sps: &mut Sps, r: &mut NaluReader) -> anyhow::Result<()> {
         let scc = &mut sps.scc_extension;
 
         scc.curr_pic_ref_enabled_flag = r.read_bit()?;
@@ -3654,10 +3645,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_sps_range_extension<T: AsRef<[u8]>>(
-        sps: &mut Sps,
-        r: &mut NaluReader<T>,
-    ) -> anyhow::Result<()> {
+    fn parse_sps_range_extension(sps: &mut Sps, r: &mut NaluReader) -> anyhow::Result<()> {
         let ext = &mut sps.range_extension;
 
         ext.transform_skip_rotation_enabled_flag = r.read_bit()?;
@@ -3892,11 +3880,7 @@ impl Parser {
         Ok(self.get_sps(key).unwrap())
     }
 
-    fn parse_pps_scc_extension<T: AsRef<[u8]>>(
-        pps: &mut Pps,
-        sps: &Sps,
-        r: &mut NaluReader<T>,
-    ) -> anyhow::Result<()> {
+    fn parse_pps_scc_extension(pps: &mut Pps, sps: &Sps, r: &mut NaluReader) -> anyhow::Result<()> {
         let scc = &mut pps.scc_extension;
         scc.curr_pic_ref_enabled_flag = r.read_bit()?;
         scc.residual_adaptive_colour_transform_enabled_flag = r.read_bit()?;
@@ -3942,10 +3926,10 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_pps_range_extension<T: AsRef<[u8]>>(
+    fn parse_pps_range_extension(
         pps: &mut Pps,
         sps: &Sps,
-        r: &mut NaluReader<T>,
+        r: &mut NaluReader,
     ) -> anyhow::Result<()> {
         let rext = &mut pps.range_extension;
 
@@ -4163,9 +4147,9 @@ impl Parser {
         Ok(self.get_pps(key).unwrap())
     }
 
-    pub fn parse_pred_weight_table<T: AsRef<[u8]>>(
+    fn parse_pred_weight_table(
         hdr: &mut SliceHeader,
-        r: &mut NaluReader<T>,
+        r: &mut NaluReader,
         sps: &Sps,
     ) -> anyhow::Result<()> {
         let pwt = &mut hdr.pred_weight_table;
@@ -4237,9 +4221,9 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_ref_pic_lists_modification<T: AsRef<[u8]>>(
+    fn parse_ref_pic_lists_modification(
         hdr: &mut SliceHeader,
-        r: &mut NaluReader<T>,
+        r: &mut NaluReader,
     ) -> anyhow::Result<()> {
         let rplm = &mut hdr.ref_pic_list_modification;
 
