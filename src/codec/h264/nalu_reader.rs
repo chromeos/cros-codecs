@@ -9,9 +9,9 @@ use bytes::Buf;
 
 /// A bit reader for h264 bitstreams. It properly handles emulation-prevention
 /// bytes and stop bits.
-pub struct NaluReader<T> {
+pub(crate) struct NaluReader<'a> {
     /// A reference into the next unread byte in the stream.
-    data: Cursor<T>,
+    data: Cursor<&'a [u8]>,
     /// Contents of the current byte. First unread bit starting at position 8 -
     /// num_remaining_bits_in_curr_bytes.
     curr_byte: u32,
@@ -23,8 +23,8 @@ pub struct NaluReader<T> {
     num_epb: usize,
 }
 
-impl<T: AsRef<[u8]>> NaluReader<T> {
-    pub fn new(data: T) -> Self {
+impl<'a> NaluReader<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
         Self {
             data: Cursor::new(data),
             curr_byte: Default::default(),
