@@ -47,7 +47,7 @@ impl PictureData {
     /// This will also call the picture order count process (clause 8.3.1) to
     /// correctly initialize the POC values.
     pub fn new_from_slice(
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
         pps: &Pps,
         first_picture_in_bitstream: bool,
         first_picture_after_eos: bool,

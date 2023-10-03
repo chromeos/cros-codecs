@@ -106,7 +106,7 @@ pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<Rc<Sps>> {
     fn decode_slice(
         &mut self,
         picture: &mut Self::Picture,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
         sps: &Sps,
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
@@ -546,7 +546,7 @@ where
     #[allow(clippy::type_complexity)]
     fn find_first_field(
         &self,
-        slice: &Slice<impl AsRef<[u8]>>,
+        slice: &Slice,
     ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, B::Handle)>> {
         let mut prev_field = None;
 
@@ -1422,7 +1422,7 @@ where
     /// Init the current picture being decoded.
     fn init_current_pic(
         &mut self,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
         first_field: Option<&Rc<RefCell<PictureData>>>,
         timestamp: u64,
     ) -> anyhow::Result<PictureData> {
@@ -1472,7 +1472,7 @@ where
     fn begin_picture(
         &mut self,
         timestamp: u64,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
     ) -> Result<CurrentPicState<B>, DecodeError> {
         let nalu_hdr = slice.nalu().header();
 
@@ -1779,7 +1779,7 @@ where
     fn handle_slice(
         &mut self,
         cur_pic: &mut CurrentPicState<B>,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
     ) -> anyhow::Result<()> {
         // A slice can technically refer to another PPS.
         let pps = self
@@ -1824,7 +1824,7 @@ where
         Ok(handle)
     }
 
-    fn process_nalu(&mut self, timestamp: u64, nalu: Nalu<&[u8]>) -> Result<(), DecodeError> {
+    fn process_nalu(&mut self, timestamp: u64, nalu: Nalu) -> Result<(), DecodeError> {
         match nalu.header().nalu_type() {
             NaluType::Sps => {
                 self.codec.parser.parse_sps(&nalu)?;
@@ -1981,7 +1981,7 @@ pub mod tests {
             |d, s, f| {
                 simple_playback_loop(
                     d,
-                    NalIterator::<Nalu<_>>::new(s),
+                    NalIterator::<Nalu>::new(s),
                     f,
                     &mut simple_playback_loop_owned_frames,
                     DecodedFormat::NV12,

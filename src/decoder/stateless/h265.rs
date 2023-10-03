@@ -122,7 +122,7 @@ pub trait StatelessH265DecoderBackend: StatelessDecoderBackend<Sps> {
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
         rps: &RefPicSet<Self::Handle>,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
     ) -> StatelessBackendResult<()>;
 
     /// Called to dispatch a decode operation to the backend.
@@ -130,7 +130,7 @@ pub trait StatelessH265DecoderBackend: StatelessDecoderBackend<Sps> {
     fn decode_slice(
         &mut self,
         picture: &mut Self::Picture,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
         sps: &Sps,
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
@@ -392,7 +392,7 @@ where
     }
 
     // See 8.3.2.
-    fn decode_rps(&mut self, slice: &Slice<&[u8]>, cur_pic: &PictureData) -> anyhow::Result<()> {
+    fn decode_rps(&mut self, slice: &Slice, cur_pic: &PictureData) -> anyhow::Result<()> {
         let hdr = slice.header();
 
         if cur_pic.nalu_type.is_irap() && cur_pic.no_rasl_output_flag {
@@ -916,7 +916,7 @@ where
     fn begin_picture(
         &mut self,
         timestamp: u64,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
     ) -> Result<Option<CurrentPicState<B>>, DecodeError> {
         if self.backend.frame_pool().num_free_frames() == 0 {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
@@ -1010,11 +1010,7 @@ where
     }
 
     /// Handle a slice. Called once per slice NALU.
-    fn handle_slice(
-        &mut self,
-        pic: &mut CurrentPicState<B>,
-        slice: &Slice<&[u8]>,
-    ) -> anyhow::Result<()> {
+    fn handle_slice(&mut self, pic: &mut CurrentPicState<B>, slice: &Slice) -> anyhow::Result<()> {
         // A dependent slice may refer to a previous SPS which
         // is not the one currently in use.
         self.update_current_set_ids(slice.header().pic_parameter_set_id())?;
@@ -1125,7 +1121,7 @@ where
         Ok(())
     }
 
-    fn process_nalu(&mut self, timestamp: u64, nalu: Nalu<&[u8]>) -> Result<(), DecodeError> {
+    fn process_nalu(&mut self, timestamp: u64, nalu: Nalu) -> Result<(), DecodeError> {
         log::debug!(
             "Processing NALU {:?}, length is {}",
             nalu.header().nalu_type(),
@@ -1346,7 +1342,7 @@ pub mod tests {
             |d, s, f| {
                 simple_playback_loop(
                     d,
-                    NalIterator::<Nalu<_>>::new(s),
+                    NalIterator::<Nalu>::new(s),
                     f,
                     &mut simple_playback_loop_owned_frames,
                     DecodedFormat::NV12,

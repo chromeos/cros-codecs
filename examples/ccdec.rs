@@ -338,7 +338,7 @@ fn main() {
     let display = libva::Display::open().expect("failed to open libva display");
     let (mut decoder, frame_iter) = match args.input_format {
         EncodedFormat::H264 => {
-            let frame_iter = Box::new(NalIterator::<H264Nalu<_>>::new(&input).map(Cow::Borrowed))
+            let frame_iter = Box::new(NalIterator::<H264Nalu>::new(&input).map(Cow::Borrowed))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
             let decoder = Box::new(StatelessDecoder::<H264, _>::new_vaapi(
@@ -369,7 +369,7 @@ fn main() {
             (decoder, frame_iter)
         }
         EncodedFormat::H265 => {
-            let frame_iter = Box::new(NalIterator::<H265Nalu<_>>::new(&input).map(Cow::Borrowed))
+            let frame_iter = Box::new(NalIterator::<H265Nalu>::new(&input).map(Cow::Borrowed))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
             let decoder = Box::new(StatelessDecoder::<H265, _>::new_vaapi(

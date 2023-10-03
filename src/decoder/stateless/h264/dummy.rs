@@ -51,7 +51,7 @@ impl StatelessH264DecoderBackend for Backend {
     fn decode_slice(
         &mut self,
         _: &mut Self::Picture,
-        _: &Slice<&[u8]>,
+        _: &Slice,
         _: &Sps,
         _: &Pps,
         _: &Dpb<Self::Handle>,

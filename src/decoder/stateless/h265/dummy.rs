@@ -40,7 +40,7 @@ impl StatelessH265DecoderBackend for Backend {
         _: &crate::codec::h265::parser::Pps,
         _: &crate::codec::h265::dpb::Dpb<Self::Handle>,
         _: &crate::decoder::stateless::h265::RefPicSet<Self::Handle>,
-        _: &crate::codec::h265::parser::Slice<&[u8]>,
+        _: &crate::codec::h265::parser::Slice,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
         Ok(())
     }
@@ -48,7 +48,7 @@ impl StatelessH265DecoderBackend for Backend {
     fn decode_slice(
         &mut self,
         _: &mut Self::Picture,
-        _: &crate::codec::h265::parser::Slice<&[u8]>,
+        _: &crate::codec::h265::parser::Slice,
         _: &crate::codec::h265::parser::Sps,
         _: &crate::codec::h265::parser::Pps,
         _: &crate::codec::h265::dpb::Dpb<Self::Handle>,
