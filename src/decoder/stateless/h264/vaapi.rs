@@ -499,7 +499,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     fn decode_slice(
         &mut self,
         picture: &mut Self::Picture,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
         sps: &Sps,
         pps: &Pps,
         _: &Dpb<Self::Handle>,
@@ -612,7 +612,7 @@ mod tests {
             |d, s, f| {
                 simple_playback_loop(
                     d,
-                    NalIterator::<Nalu<_>>::new(s),
+                    NalIterator::<Nalu>::new(s),
                     f,
                     &mut simple_playback_loop_owned_frames,
                     output_format,

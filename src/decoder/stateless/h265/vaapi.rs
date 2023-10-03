@@ -384,7 +384,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
     }
 
     fn build_pic_param(
-        _: &Slice<impl AsRef<[u8]>>,
+        _: &Slice,
         current_picture: &PictureData,
         current_surface_id: libva::VASurfaceID,
         dpb: &Dpb<VADecodedHandle<M>>,
@@ -625,7 +625,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         pps: &Pps,
         dpb: &Dpb<Self::Handle>,
         rps: &RefPicSet<Self::Handle>,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
@@ -677,7 +677,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
     fn decode_slice(
         &mut self,
         picture: &mut Self::Picture,
-        slice: &Slice<&[u8]>,
+        slice: &Slice,
         sps: &Sps,
         _: &Pps,
         _: &Dpb<Self::Handle>,
@@ -885,7 +885,7 @@ mod tests {
             |d, s, f| {
                 simple_playback_loop(
                     d,
-                    NalIterator::<Nalu<_>>::new(s),
+                    NalIterator::<Nalu>::new(s),
                     f,
                     &mut simple_playback_loop_owned_frames,
                     output_format,

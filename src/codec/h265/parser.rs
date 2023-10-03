@@ -206,7 +206,7 @@ impl Header for NaluHeader {
     }
 }
 
-pub type Nalu<T> = nalu::Nalu<T, NaluHeader>;
+pub type Nalu<'a> = nalu::Nalu<'a, NaluHeader>;
 
 /// H265 levels as defined by table A.8.
 /// `general_level_idc` and `sub_layer_level_idc[ OpTid ]` shall be set equal to a
@@ -2094,21 +2094,21 @@ impl Default for SliceHeader {
 
 /// A H265 slice. An integer number of macroblocks or macroblock pairs ordered
 /// consecutively in the raster scan within a particular slice group
-pub struct Slice<T> {
+pub struct Slice<'a> {
     /// The slice header.
     header: SliceHeader,
     /// The NAL unit backing this slice.
-    nalu: Nalu<T>,
+    nalu: Nalu<'a>,
 }
 
-impl<T> Slice<T> {
+impl<'a> Slice<'a> {
     /// Get a reference to the slice's header.
     pub fn header(&self) -> &SliceHeader {
         &self.header
     }
 
     /// Get a reference to the slice's nalu.
-    pub fn nalu(&self) -> &Nalu<T> {
+    pub fn nalu(&self) -> &Nalu {
         &self.nalu
     }
 
@@ -2793,7 +2793,7 @@ pub struct Parser {
 
 impl Parser {
     /// Parse a VPS NALU.
-    pub fn parse_vps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Vps> {
+    pub fn parse_vps(&mut self, nalu: &Nalu) -> anyhow::Result<&Vps> {
         if !matches!(nalu.header().type_, NaluType::VpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -3662,7 +3662,7 @@ impl Parser {
     }
 
     /// Parse a SPS NALU.
-    pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Sps> {
+    pub fn parse_sps(&mut self, nalu: &Nalu) -> anyhow::Result<&Sps> {
         if !matches!(nalu.header().type_, NaluType::SpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -3959,7 +3959,7 @@ impl Parser {
     }
 
     /// Parse a PPS NALU.
-    pub fn parse_pps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Pps> {
+    pub fn parse_pps(&mut self, nalu: &Nalu) -> anyhow::Result<&Pps> {
         if !matches!(nalu.header().type_, NaluType::PpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -4282,10 +4282,7 @@ impl Parser {
     }
 
     /// Parses a slice header from a slice NALU.
-    pub fn parse_slice_header<T: AsRef<[u8]>>(
-        &mut self,
-        nalu: Nalu<T>,
-    ) -> anyhow::Result<Slice<T>> {
+    pub fn parse_slice_header<'a>(&mut self, nalu: Nalu<'a>) -> anyhow::Result<Slice<'a>> {
         if !matches!(
             nalu.header().type_,
             NaluType::TrailN
@@ -4738,10 +4735,7 @@ mod tests {
     const STREAM_TEST_25_FPS_SLICE_1: &[u8] =
         include_bytes!("test_data/test-25fps-h265-slice-data-1.bin");
 
-    fn dispatch_parse_call(
-        parser: &mut Parser,
-        nalu: Nalu<&[u8], NaluHeader>,
-    ) -> anyhow::Result<()> {
+    fn dispatch_parse_call(parser: &mut Parser, nalu: Nalu<NaluHeader>) -> anyhow::Result<()> {
         match nalu.header().type_ {
             NaluType::TrailN
             | NaluType::TrailR
@@ -4779,9 +4773,9 @@ mod tests {
         bitstream: &[u8],
         nalu_type: NaluType,
         mut nskip: i32,
-    ) -> Option<Nalu<&[u8], NaluHeader>> {
+    ) -> Option<Nalu<NaluHeader>> {
         let mut cursor = Cursor::new(bitstream);
-        while let Ok(nalu) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::<NaluHeader>::next(&mut cursor) {
             if nalu.header().type_ == nalu_type {
                 if nskip == 0 {
                     return Some(nalu);
@@ -4799,7 +4793,7 @@ mod tests {
     fn parse_nalus_from_stream_file() {
         let mut cursor = Cursor::new(STREAM_BEAR);
         let mut num_nalus = 0;
-        while Nalu::<_, NaluHeader>::next(&mut cursor).is_ok() {
+        while Nalu::<NaluHeader>::next(&mut cursor).is_ok() {
             num_nalus += 1;
         }
 
@@ -4807,7 +4801,7 @@ mod tests {
 
         let mut cursor = Cursor::new(STREAM_BBB);
         let mut num_nalus = 0;
-        while Nalu::<_, NaluHeader>::next(&mut cursor).is_ok() {
+        while Nalu::<NaluHeader>::next(&mut cursor).is_ok() {
             num_nalus += 1;
         }
 
@@ -4815,7 +4809,7 @@ mod tests {
 
         let mut cursor = Cursor::new(STREAM_TEST25FPS);
         let mut num_nalus = 0;
-        while Nalu::<_, NaluHeader>::next(&mut cursor).is_ok() {
+        while Nalu::<NaluHeader>::next(&mut cursor).is_ok() {
             num_nalus += 1;
         }
 
@@ -4829,21 +4823,21 @@ mod tests {
         let mut cursor = Cursor::new(STREAM_BBB);
         let mut parser = Parser::default();
 
-        while let Ok(nalu) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::<NaluHeader>::next(&mut cursor) {
             dispatch_parse_call(&mut parser, nalu).unwrap();
         }
 
         let mut cursor = Cursor::new(STREAM_BEAR);
         let mut parser = Parser::default();
 
-        while let Ok(nalu) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::<NaluHeader>::next(&mut cursor) {
             dispatch_parse_call(&mut parser, nalu).unwrap();
         }
 
         let mut cursor = Cursor::new(STREAM_TEST25FPS);
         let mut parser = Parser::default();
 
-        while let Ok(nalu) = Nalu::<_, NaluHeader>::next(&mut cursor) {
+        while let Ok(nalu) = Nalu::<NaluHeader>::next(&mut cursor) {
             dispatch_parse_call(&mut parser, nalu).unwrap();
         }
     }
@@ -4854,7 +4848,7 @@ mod tests {
         let mut cursor = Cursor::new(STREAM_BEAR);
         let mut parser = Parser::default();
 
-        let vps_nalu = Nalu::<_, NaluHeader>::next(&mut cursor).unwrap();
+        let vps_nalu = Nalu::<NaluHeader>::next(&mut cursor).unwrap();
         let vps = parser.parse_vps(&vps_nalu).unwrap();
 
         assert!(vps.base_layer_internal_flag);
@@ -5051,7 +5045,7 @@ mod tests {
         let mut cursor = Cursor::new(STREAM_TEST25FPS);
         let mut parser = Parser::default();
 
-        let vps_nalu = Nalu::<_, NaluHeader>::next(&mut cursor).unwrap();
+        let vps_nalu = Nalu::<NaluHeader>::next(&mut cursor).unwrap();
         let vps = parser.parse_vps(&vps_nalu).unwrap();
         assert!(vps.base_layer_internal_flag);
         assert!(vps.base_layer_available_flag);

@@ -19,7 +19,7 @@ use crate::codec::h264::nalu::Header;
 use crate::codec::h264::nalu_reader::NaluReader;
 use crate::codec::h264::picture::Field;
 
-pub type Nalu<T> = nalu::Nalu<T, NaluHeader>;
+pub type Nalu<'a> = nalu::Nalu<'a, NaluHeader>;
 
 const DEFAULT_4X4_INTRA: [u8; 16] = [
     6, 13, 13, 20, 20, 20, 28, 28, 28, 28, 32, 32, 32, 37, 37, 42,
@@ -409,21 +409,21 @@ impl SliceHeader {
 
 /// A H264 slice. An integer number of macroblocks or macroblock pairs ordered
 /// consecutively in the raster scan within a particular slice group
-pub struct Slice<T> {
+pub struct Slice<'a> {
     /// The slice header.
     header: SliceHeader,
     /// The NAL unit backing this slice.
-    nalu: Nalu<T>,
+    nalu: Nalu<'a>,
 }
 
-impl<T> Slice<T> {
+impl<'a> Slice<'a> {
     /// Get a reference to the slice's header.
     pub fn header(&self) -> &SliceHeader {
         &self.header
     }
 
     /// Get a reference to the slice's nalu.
-    pub fn nalu(&self) -> &Nalu<T> {
+    pub fn nalu(&self) -> &Nalu<'a> {
         &self.nalu
     }
 }
@@ -1787,7 +1787,7 @@ impl Parser {
     /// Parse a SPS and add it to the list of active SPSes.
     ///
     /// Returns a reference to the new SPS.
-    pub fn parse_sps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Rc<Sps>> {
+    pub fn parse_sps(&mut self, nalu: &Nalu) -> anyhow::Result<&Rc<Sps>> {
         if !matches!(nalu.header().type_, NaluType::Sps) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -1956,7 +1956,7 @@ impl Parser {
         Ok(self.get_sps(key).unwrap())
     }
 
-    pub fn parse_pps<T: AsRef<[u8]>>(&mut self, nalu: &Nalu<T>) -> anyhow::Result<&Pps> {
+    pub fn parse_pps(&mut self, nalu: &Nalu) -> anyhow::Result<&Pps> {
         if !matches!(nalu.header().type_, NaluType::Pps) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
@@ -2215,9 +2215,9 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_dec_ref_pic_marking<U: AsRef<[u8]>>(
+    fn parse_dec_ref_pic_marking(
         r: &mut NaluReader,
-        nalu: &Nalu<U>,
+        nalu: &Nalu,
         header: &mut SliceHeader,
     ) -> anyhow::Result<()> {
         let rpm = &mut header.dec_ref_pic_marking;
@@ -2263,7 +2263,7 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_slice_header<T: AsRef<[u8]>>(&self, nalu: Nalu<T>) -> anyhow::Result<Slice<T>> {
+    pub fn parse_slice_header<'a>(&self, nalu: Nalu<'a>) -> anyhow::Result<Slice<'a>> {
         if !matches!(
             nalu.header().type_,
             NaluType::Slice
@@ -2838,7 +2838,7 @@ mod tests {
             0x00, 0x00, 0x01, 0x07, 0x00, 0x00, 0x0a, 0xfb, 0xb0, 0x32, 0xc0, 0xca, 0x80,
         ];
 
-        let mut cursor = Cursor::new(invalid_sps);
+        let mut cursor = Cursor::new(invalid_sps.as_ref());
         let mut parser = Parser::default();
 
         while let Ok(nalu) = Nalu::next(&mut cursor) {

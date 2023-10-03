@@ -18,29 +18,28 @@ pub trait Header: Sized {
 }
 
 #[derive(Debug)]
-pub struct Nalu<T, U> {
+pub struct Nalu<'a, U> {
     header: U,
     /// The mapping that backs this NALU. Possibly shared with the other NALUs
     /// in the Access Unit.
-    data: T,
+    data: &'a [u8],
 
     size: usize,
     offset: usize,
     sc_offset: usize,
 }
 
-impl<T, U> Nalu<T, U>
+impl<'a, U> Nalu<'a, U>
 where
-    T: AsRef<[u8]> + Clone,
     U: Debug + Header,
 {
     /// Find the next Annex B encoded NAL unit.
-    pub fn next(cursor: &mut Cursor<T>) -> anyhow::Result<Nalu<T, U>> {
+    pub fn next(cursor: &mut Cursor<&'a [u8]>) -> anyhow::Result<Nalu<'a, U>> {
         let bitstream = cursor.clone().into_inner();
         let pos = usize::try_from(cursor.position())?;
 
         // Find the start code for this NALU
-        let current_nalu_offset = match Nalu::<T, U>::find_start_code(cursor, pos) {
+        let current_nalu_offset = match Nalu::<'a, U>::find_start_code(cursor, pos) {
             Some(offset) => offset,
             None => return Err(anyhow!("No NAL found")),
         };
@@ -49,7 +48,7 @@ where
 
         // If the preceding byte is 00, then we actually have a four byte SC,
         // i.e. 00 00 00 01 Where the first 00 is the "zero_byte()"
-        if start_code_offset > 0 && cursor.get_ref().as_ref()[start_code_offset - 1] == 00 {
+        if start_code_offset > 0 && cursor.get_ref()[start_code_offset - 1] == 00 {
             start_code_offset -= 1;
         }
 
@@ -62,14 +61,12 @@ where
         let hdr = U::parse(cursor)?;
 
         // Find the start of the subsequent NALU.
-        let mut next_nalu_offset = match Nalu::<T, U>::find_start_code(cursor, nalu_offset) {
+        let mut next_nalu_offset = match Nalu::<'a, U>::find_start_code(cursor, nalu_offset) {
             Some(offset) => offset,
             None => cursor.chunk().len(), // Whatever data is left must be part of the current NALU
         };
 
-        while next_nalu_offset > 0
-            && cursor.get_ref().as_ref()[nalu_offset + next_nalu_offset - 1] == 00
-        {
+        while next_nalu_offset > 0 && cursor.get_ref()[nalu_offset + next_nalu_offset - 1] == 00 {
             // Discard trailing_zero_8bits
             next_nalu_offset -= 1;
         }
@@ -91,14 +88,13 @@ where
     }
 }
 
-impl<T, U> Nalu<T, U>
+impl<'a, U> Nalu<'a, U>
 where
-    T: AsRef<[u8]>,
     U: Debug,
 {
-    fn find_start_code(data: &mut Cursor<T>, offset: usize) -> Option<usize> {
+    fn find_start_code(data: &mut Cursor<&'a [u8]>, offset: usize) -> Option<usize> {
         // discard all zeroes until the start code pattern is found
-        data.get_ref().as_ref()[offset..]
+        data.get_ref()[offset..]
             .windows(3)
             .position(|window| window == [0x00, 0x00, 0x01])
     }
@@ -109,8 +105,8 @@ where
     }
 
     /// Get a reference to the nalu's data.
-    pub fn data(&self) -> &T {
-        &self.data
+    pub fn data(&self) -> &'a [u8] {
+        self.data
     }
 
     /// Get a reference to the nalu's size.
@@ -129,9 +125,8 @@ where
     }
 }
 
-impl<T: AsRef<[u8]>, U> AsRef<[u8]> for Nalu<T, U> {
+impl<'a, U> AsRef<[u8]> for Nalu<'a, U> {
     fn as_ref(&self) -> &[u8] {
-        let data = self.data.as_ref();
-        &data[self.offset..self.offset + self.size]
+        &self.data[self.offset..self.offset + self.size]
     }
 }

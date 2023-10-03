@@ -78,7 +78,7 @@ impl<'a, Nalu> NalIterator<'a, Nalu> {
     }
 }
 
-impl<'a> Iterator for NalIterator<'a, H264Nalu<&[u8]>> {
+impl<'a> Iterator for NalIterator<'a, H264Nalu<'a>> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -92,7 +92,7 @@ impl<'a> Iterator for NalIterator<'a, H264Nalu<&[u8]>> {
     }
 }
 
-impl<'a> Iterator for NalIterator<'a, H265Nalu<&[u8]>> {
+impl<'a> Iterator for NalIterator<'a, H265Nalu<'a>> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
