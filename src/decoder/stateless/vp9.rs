@@ -139,7 +139,7 @@ where
     }
 
     /// Handle a single frame.
-    fn handle_frame(&mut self, frame: &Frame<&[u8]>, timestamp: u64) -> Result<(), DecodeError> {
+    fn handle_frame(&mut self, frame: &Frame, timestamp: u64) -> Result<(), DecodeError> {
         let decoded_handle = if frame.header.show_existing_frame {
             // Frame to be shown. Unwrapping must produce a Picture, because the
             // spec mandates frame_to_show_map_idx references a valid entry in

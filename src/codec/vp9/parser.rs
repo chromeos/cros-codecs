@@ -314,9 +314,9 @@ struct FrameSize {
     height: u32,
 }
 
-pub struct Frame<T: AsRef<[u8]>> {
-    /// The abstraction for the raw memory for this frame.
-    bitstream: T,
+pub struct Frame<'a> {
+    /// The bitstream data for this frame.
+    bitstream: &'a [u8],
     /// The frame header.
     pub header: Header,
     /// The offset into T
@@ -325,8 +325,8 @@ pub struct Frame<T: AsRef<[u8]>> {
     size: usize,
 }
 
-impl<T: AsRef<[u8]>> Frame<T> {
-    pub fn new(bitstream: T, header: Header, offset: usize, size: usize) -> Self {
+impl<'a> Frame<'a> {
+    pub fn new(bitstream: &'a [u8], header: Header, offset: usize, size: usize) -> Self {
         Self {
             bitstream,
             header,
@@ -336,9 +336,9 @@ impl<T: AsRef<[u8]>> Frame<T> {
     }
 }
 
-impl<T: AsRef<[u8]>> AsRef<[u8]> for Frame<T> {
+impl<'a> AsRef<[u8]> for Frame<'a> {
     fn as_ref(&self) -> &[u8] {
-        let data = self.bitstream.as_ref();
+        let data = self.bitstream;
         &data[self.offset..self.offset + self.size]
     }
 }
@@ -1090,13 +1090,13 @@ impl Parser {
     }
 
     /// Parse a single VP9 frame.
-    pub fn parse_frame<T: AsRef<[u8]>>(
+    pub fn parse_frame<'a>(
         &mut self,
-        bitstream: T,
+        bitstream: &'a [u8],
         offset: usize,
         size: usize,
-    ) -> anyhow::Result<Frame<T>> {
-        let header = self.parse_frame_header(&bitstream, offset)?;
+    ) -> anyhow::Result<Frame<'a>> {
+        let header = self.parse_frame_header(bitstream, offset)?;
 
         Ok(Frame {
             header,
@@ -1108,10 +1108,7 @@ impl Parser {
 
     /// Parses VP9 frames from the data in `resource`. This can result in more than one frame if the
     /// data passed in contains a VP9 superframe.
-    pub fn parse_chunk<T: AsRef<[u8]> + Copy>(
-        &mut self,
-        resource: T,
-    ) -> anyhow::Result<Vec<Frame<T>>> {
+    pub fn parse_chunk<'a>(&mut self, resource: &'a [u8]) -> anyhow::Result<Vec<Frame<'a>>> {
         let superframe_hdr = Parser::parse_superframe_hdr(resource)?;
         let mut offset = 0;
 
