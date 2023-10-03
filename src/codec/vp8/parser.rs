@@ -268,18 +268,18 @@ impl Header {
 }
 
 /// A VP8 frame.
-pub struct Frame<T: AsRef<[u8]>> {
-    /// The abstraction for the raw memory for this frame.
-    bitstream: T,
+pub struct Frame<'a> {
+    /// The bitstream data for this frame.
+    bitstream: &'a [u8],
     /// The actual length of the frame data within `bitstream`.
     frame_len: usize,
     /// The parsed frame header.
     pub header: Header,
 }
 
-impl<T: AsRef<[u8]>> AsRef<[u8]> for Frame<T> {
+impl<'a> AsRef<[u8]> for Frame<'a> {
     fn as_ref(&self) -> &[u8] {
-        &self.bitstream.as_ref()[..self.frame_len]
+        &self.bitstream[..self.frame_len]
     }
 }
 
@@ -629,21 +629,20 @@ impl Parser {
     }
 
     /// Parse a single frame from the chunk in `data`.
-    pub fn parse_frame<T: AsRef<[u8]>>(&mut self, bitstream: T) -> anyhow::Result<Frame<T>> {
-        let data = bitstream.as_ref();
-        let mut header = Header::parse_uncompressed_data_chunk(data)?;
+    pub fn parse_frame<'a>(&mut self, bitstream: &'a [u8]) -> anyhow::Result<Frame<'a>> {
+        let mut header = Header::parse_uncompressed_data_chunk(bitstream)?;
         if header.key_frame {
             // Reset on every key frame.
             *self = Default::default();
         }
 
         if usize::from(header.data_chunk_size) + usize::try_from(header.first_part_size)?
-            > data.len()
+            > bitstream.len()
         {
             return Err(anyhow!("Broken data"));
         }
 
-        let compressed_area = &data[header.data_chunk_size as usize..];
+        let compressed_area = &bitstream[header.data_chunk_size as usize..];
 
         self.parse_frame_header(compressed_area, &mut header)?;
         Parser::compute_partition_sizes(&mut header, compressed_area)?;

@@ -168,7 +168,7 @@ where
     B::Handle: Clone,
 {
     /// Handle a single frame.
-    fn handle_frame(&mut self, frame: Frame<&[u8]>, timestamp: u64) -> Result<(), DecodeError> {
+    fn handle_frame(&mut self, frame: Frame, timestamp: u64) -> Result<(), DecodeError> {
         if self.backend.frame_pool().num_free_frames() == 0 {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
@@ -201,7 +201,7 @@ where
         Ok(())
     }
 
-    fn negotiation_possible(&self, frame: &Frame<impl AsRef<[u8]>>) -> bool {
+    fn negotiation_possible(&self, frame: &Frame) -> bool {
         let coded_resolution = self.coded_resolution;
         let hdr = &frame.header;
         let width = u32::from(hdr.width);
