@@ -21,6 +21,7 @@ libva = { git = "https://github.com/chromeos/cros-libva", rev = "905041a9", pack
 log = { version = "0", features = ["release_max_level_debug"] }
 thiserror = "1.0.31"
 crc32fast = "1.3.2"
+zerocopy = { version = "0.7", features = ["derive"] }
 
 [dev-dependencies]
 argh = "0.1"
