@@ -1107,7 +1107,7 @@ struct ReferenceFrameInfo {
     showable_frame: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct AnnexBState {
     pub temporal_unit_size: u32,
     pub frame_unit_size: u32,
@@ -1115,7 +1115,7 @@ pub struct AnnexBState {
     pub frame_unit_consumed: u32,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum StreamFormat {
     LowOverhead,
     AnnexB(AnnexBState),
@@ -3740,6 +3740,40 @@ impl Default for Parser {
             lf: Default::default(),
             seg: Default::default(),
             sequence_header: Default::default(),
+        }
+    }
+}
+
+impl Clone for Parser {
+    fn clone(&self) -> Self {
+        let sequence_header = self
+            .sequence_header
+            .as_ref()
+            .map(|s| Rc::new((**s).clone()));
+
+        Self {
+            stream_format: self.stream_format.clone(),
+            operating_point: self.operating_point,
+            seen_frame_header: self.seen_frame_header,
+            last_frame_header: self.last_frame_header.clone(),
+            operating_point_idc: self.operating_point_idc,
+            should_probe_for_annexb: self.should_probe_for_annexb,
+            is_first_frame: self.is_first_frame,
+            ref_info: self.ref_info.clone(),
+            mi_cols: self.mi_cols,
+            mi_rows: self.mi_rows,
+            prev_frame_id: self.prev_frame_id,
+            current_frame_id: self.current_frame_id,
+            mi_col_starts: self.mi_col_starts,
+            mi_row_starts: self.mi_row_starts,
+            tile_cols_log2: self.tile_cols_log2,
+            tile_cols: self.tile_cols,
+            tile_rows_log2: self.tile_rows_log2,
+            tile_rows: self.tile_rows,
+            tile_size_bytes: self.tile_size_bytes,
+            lf: self.lf.clone(),
+            seg: self.seg.clone(),
+            sequence_header,
         }
     }
 }
