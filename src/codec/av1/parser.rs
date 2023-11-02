@@ -51,6 +51,14 @@ pub const GM_TRANS_ONLY_PREC_BITS: u32 = 3;
 pub const GM_ABS_TRANS_BITS: u32 = 12;
 pub const GM_TRANS_PREC_BITS: u32 = 6;
 
+pub enum ParsedObu<'a> {
+    /// We should process the OBU normally.
+    Process(Obu<'a>),
+    /// We should drop this OBU and advance to the next one. The u32 is how much
+    /// we should advance.
+    Drop(u32),
+}
+
 #[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ObuType {
     #[default]
@@ -1482,7 +1490,7 @@ impl Parser {
     /// format.
     ///
     /// `None` may eventually be returned if the OBU is to be dropped.
-    pub fn parse_obu<'a>(&mut self, data: &'a [u8]) -> anyhow::Result<Option<Obu<'a>>> {
+    pub fn parse_obu<'a>(&mut self, data: &'a [u8]) -> anyhow::Result<ParsedObu<'a>> {
         if data.is_empty() {
             return Err(anyhow!("Empty data"));
         }
@@ -1508,7 +1516,7 @@ impl Parser {
             let obu_length = reader.current_annexb_obu_length(annexb_state)?;
             match obu_length {
                 Some(length) => length,
-                None => return Ok(None),
+                None => return Ok(ParsedObu::Drop(reader.consumed(0))),
             }
         } else {
             0
@@ -1560,9 +1568,9 @@ impl Parser {
             && header.extension_flag
         {
             log::debug!("Dropping obu as per drop_obu() in the specification",);
-            Ok(None)
+            Ok(ParsedObu::Drop(reader.consumed(0)))
         } else {
-            Ok(Some(Obu {
+            Ok(ParsedObu::Process(Obu {
                 header,
                 data: Cow::from(&data[..start_offset + obu_size]),
                 start_offset,
@@ -3738,7 +3746,7 @@ impl Default for Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::av1::parser::{Parser, StreamFormat};
+    use crate::codec::av1::parser::{ParsedObu, Parser, StreamFormat};
     use crate::utils::IvfIterator;
 
     use super::ObuType;
@@ -3767,9 +3775,12 @@ mod tests {
 
             while let Ok(obu) = parser.parse_obu(&packet[consumed..]) {
                 let obu = match obu {
-                    Some(obu) => obu,
+                    ParsedObu::Process(obu) => obu,
                     // This OBU should be dropped.
-                    None => continue,
+                    ParsedObu::Drop(length) => {
+                        consumed += usize::try_from(length).unwrap();
+                        continue;
+                    }
                 };
                 consumed += obu.data.len();
                 num_obus += 1;
@@ -3813,9 +3824,12 @@ mod tests {
 
             while let Ok(obu) = parser.parse_obu(&packet[consumed..]) {
                 let obu = match obu {
-                    Some(obu) => obu,
+                    ParsedObu::Process(obu) => obu,
                     // This OBU should be dropped.
-                    None => continue,
+                    ParsedObu::Drop(length) => {
+                        consumed += usize::try_from(length).unwrap();
+                        continue;
+                    }
                 };
                 assert!(matches!(parser.stream_format, StreamFormat::LowOverhead));
                 consumed += obu.data.len();
@@ -3831,9 +3845,12 @@ mod tests {
 
             while let Ok(obu) = parser.parse_obu(&packet[consumed..]) {
                 let obu = match obu {
-                    Some(obu) => obu,
+                    ParsedObu::Process(obu) => obu,
                     // This OBU should be dropped.
-                    None => continue,
+                    ParsedObu::Drop(length) => {
+                        consumed += usize::try_from(length).unwrap();
+                        continue;
+                    }
                 };
                 assert!(matches!(parser.stream_format, StreamFormat::AnnexB { .. }));
                 consumed += obu.data.len();
@@ -3866,9 +3883,12 @@ mod tests {
 
             while let Ok(obu) = parser.parse_obu(&packet[consumed..]) {
                 let obu = match obu {
-                    Some(obu) => obu,
+                    ParsedObu::Process(obu) => obu,
                     // This OBU should be dropped.
-                    None => continue,
+                    ParsedObu::Drop(length) => {
+                        consumed += usize::try_from(length).unwrap();
+                        continue;
+                    }
                 };
 
                 let data_len = obu.data.len();
