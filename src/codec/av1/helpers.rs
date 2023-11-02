@@ -157,6 +157,7 @@ pub fn round2signed(x: i32, n: u32) -> anyhow::Result<i32> {
     if x >= 0 {
         i32::try_from(round2(x as u32, n)).map_err(|e| anyhow::anyhow!(e))
     } else {
+        let x = x as i64;
         let val = i32::try_from(round2(-x as u32, n)).map_err(|e| anyhow::anyhow!(e))?;
         Ok(-val)
     }
