@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::rc::Rc;
 
 use anyhow::anyhow;
+use anyhow::Context;
 use enumn::N;
 
 use crate::codec::av1::helpers;
@@ -162,6 +163,8 @@ pub struct TileGroupObu<'a> {
     pub tg_end: u32,
     /// Contains the tiles in this tile group. Use `tile_offset`to index into
     /// the OBU data.
+    ///
+    /// The tiles in the Vec span from tg_start to tg_end.
     pub tiles: Vec<Tile>,
 }
 
@@ -1125,9 +1128,9 @@ enum StreamFormat {
 pub struct Parser {
     stream_format: StreamFormat,
     operating_point: u32,
-    /// The last seen frame header, if any. Replaces "seen_frame_header" in the
-    /// specification.
+    /// Same as SeenFrameHeader in the specification
     seen_frame_header: bool,
+    /// We keep this to implement frame_header_copy() in the specification.
     last_frame_header: Option<FrameHeaderObu>,
     operating_point_idc: u32,
     should_probe_for_annexb: bool,
@@ -1146,12 +1149,6 @@ pub struct Parser {
     tile_rows_log2: u32,
     tile_rows: u32,
     tile_size_bytes: u32,
-
-    // We first read into these, then copy into the frame. Not sure whether it
-    // is strictly necessary, but it lets us implement setup_past_independence()
-    // in a similar fashion as the vp9 parser.
-    lf: LoopFilterParams,
-    seg: SegmentationParams,
 
     /// The last SequenceHeaderObu parsed.
     pub sequence_header: Option<Rc<SequenceHeaderObu>>,
@@ -1377,6 +1374,7 @@ impl Parser {
             }
         }
 
+        fh.ref_frame_idx = ref_frame_idx;
         Ok(())
     }
 
@@ -1567,16 +1565,20 @@ impl Parser {
             && self.operating_point_idc != 0
             && header.extension_flag
         {
-            log::debug!("Dropping obu as per drop_obu() in the specification",);
-            Ok(ParsedObu::Drop(reader.consumed(0)))
-        } else {
-            Ok(ParsedObu::Process(Obu {
-                header,
-                data: Cow::from(&data[..start_offset + obu_size]),
-                start_offset,
-                size: obu_size,
-            }))
+            let in_temporal_layer = ((self.operating_point_idc >> header.temporal_id) & 1) != 0;
+            let in_spatial_layer = ((self.operating_point_idc >> (header.spatial_id + 8)) & 1) != 0;
+            if !in_temporal_layer || !in_spatial_layer {
+                log::debug!("Dropping obu as per drop_obu() in the specification",);
+                return Ok(ParsedObu::Drop(reader.consumed(0)));
+            }
         }
+
+        Ok(ParsedObu::Process(Obu {
+            header,
+            data: Cow::from(&data[..start_offset + obu_size]),
+            start_offset,
+            size: obu_size,
+        }))
     }
 
     fn parse_color_config(s: &mut SequenceHeaderObu, r: &mut Reader) -> anyhow::Result<()> {
@@ -1814,8 +1816,6 @@ impl Parser {
             }
         }
 
-        /* Client is supposed to set the operating point */
-
         s.frame_width_bits_minus_1 = r.read_bits(4)?;
         s.frame_height_bits_minus_1 = r.read_bits(4)?;
         s.max_frame_width_minus_1 =
@@ -1902,6 +1902,10 @@ impl Parser {
         Self::skip_and_check_trailing_bits(&mut r, obu)?;
         let rc = Rc::new(s);
         self.sequence_header = Some(rc.clone());
+
+        /* Client is supposed to set the operating point through external means,
+         * here we just set 0 as default. */
+        self.choose_operating_point(0)?;
 
         Ok(rc)
     }
@@ -2031,6 +2035,15 @@ impl Parser {
                 return Err(anyhow!("Invalid tile_cols {}", self.tile_cols));
             }
 
+            /* compute this anyways */
+            while i >= 1 {
+                ti.width_in_sbs_minus_1[i - 1] =
+                    ((self.mi_col_starts[i] - self.mi_col_starts[i - 1] + ((1 << sb_shift) - 1))
+                        >> sb_shift)
+                        - 1;
+                i -= 1;
+            }
+
             let min_log2_tile_rows =
                 std::cmp::max(min_log2_tiles.saturating_sub(self.tile_cols_log2), 0);
             self.tile_rows_log2 = min_log2_tile_rows;
@@ -2061,6 +2074,15 @@ impl Parser {
 
             if self.tile_rows > MAX_TILE_ROWS as u32 {
                 return Err(anyhow!("Invalid tile_rows {}", self.tile_cols));
+            }
+
+            /* compute this anyways */
+            while i >= 1 {
+                ti.height_in_sbs_minus_1[i - 1] =
+                    ((self.mi_row_starts[i] - self.mi_row_starts[i - 1] + ((1 << sb_shift) - 1))
+                        >> sb_shift)
+                        - 1;
+                i -= 1;
             }
         } else {
             let mut widest_tile_sb = 0;
@@ -2215,17 +2237,19 @@ impl Parser {
     }
 
     fn parse_segmentation_params(
+        &self,
         r: &mut Reader,
-        s: &mut SegmentationParams,
-        primary_ref_frame: u32,
+        fh: &mut FrameHeaderObu,
     ) -> anyhow::Result<()> {
         const FEATURE_BITS: [u8; SEG_LVL_MAX] = [8, 6, 6, 6, 6, 3, 0, 0];
         const FEATURE_SIGNED: [bool; SEG_LVL_MAX] =
             [true, true, true, true, true, false, false, false];
         const FEATURE_MAX: [i32; SEG_LVL_MAX] = [255, 63, 63, 63, 63, 7, 0, 0];
+
+        let s = &mut fh.segmentation_params;
         s.segmentation_enabled = r.read_bit()?;
         if s.segmentation_enabled {
-            if primary_ref_frame == PRIMARY_REF_NONE {
+            if fh.primary_ref_frame == PRIMARY_REF_NONE {
                 s.segmentation_update_map = true;
                 s.segmentation_temporal_update = false;
                 s.segmentation_update_data = true;
@@ -2251,22 +2275,40 @@ impl Parser {
                                 let clipped_value = helpers::clip3(-limit, limit, feature_value);
                                 s.feature_data[i][j] = clipped_value as _;
                             } else {
-                                let feature_value = r.read_su(bits_to_read)?;
-                                let clipped_value = helpers::clip3(0, limit, feature_value);
+                                let feature_value = r.read_bits(bits_to_read)?;
+                                let clipped_value = helpers::clip3(
+                                    0,
+                                    limit,
+                                    feature_value.try_into().context("Invalid feature_value")?,
+                                );
                                 s.feature_data[i][j] = clipped_value as _;
                             }
                         }
                     }
                 }
             } else {
-                for i in 0..MAX_SEGMENTS {
-                    for j in 0..SEG_LVL_MAX {
-                        s.feature_enabled[i][j] = false;
-                        s.feature_data[i][j] = 0;
-                    }
+                /* copy from prev_frame */
+                let prev_frame = &self.ref_info[usize::try_from(
+                    fh.ref_frame_idx[fh.primary_ref_frame as usize],
+                )
+                .context("Invalid ref_frame_idx")?];
+
+                if !prev_frame.ref_valid {
+                    return Err(anyhow!("Reference is invalid"));
+                }
+
+                s.feature_enabled = prev_frame.segmentation_params.feature_enabled;
+                s.feature_data = prev_frame.segmentation_params.feature_data;
+            }
+        } else {
+            for i in 0..MAX_SEGMENTS {
+                for j in 0..SEG_LVL_MAX {
+                    s.feature_enabled[i][j] = false;
+                    s.feature_data[i][j] = 0;
                 }
             }
         }
+
         s.seg_id_pre_skip = 0;
         s.last_active_seg_id = 0;
         for i in 0..MAX_SEGMENTS {
@@ -2418,7 +2460,7 @@ impl Parser {
             }
         }
 
-        if lr.uses_chroma_lr {
+        if lr.uses_lr {
             if use_128x128_superblock {
                 lr.lr_unit_shift = r.read_bits(1)? + 1;
             } else {
@@ -2595,17 +2637,32 @@ impl Parser {
     }
 
     fn setup_shear(warp_params: &[i32; 6]) -> anyhow::Result<bool> {
+        let mut default = true;
+        for i in 0..warp_params.len() {
+            let default_value = if i % 3 == 2 {
+                1 << WARPEDMODEL_PREC_BITS
+            } else {
+                0
+            };
+            if warp_params[i] != default_value {
+                default = false;
+                break;
+            }
+        }
+
+        /* assume the default params to be valid */
+        if default {
+            return Ok(true);
+        }
+
         let alpha0 = helpers::clip3(-32768, 32767, warp_params[2] - (1 << WARPEDMODEL_PREC_BITS));
         let beta0 = helpers::clip3(-32768, 32767, warp_params[3]);
 
         let (div_shift, div_factor) = helpers::resolve_divisor(warp_params[2])?;
 
-        let v = warp_params[4] << WARPEDMODEL_PREC_BITS;
-        let gamma0 = helpers::clip3(
-            -32678,
-            32767,
-            helpers::round2signed(v * div_factor, div_shift)?,
-        );
+        let v = i64::from(warp_params[4] << WARPEDMODEL_PREC_BITS);
+        let v = (v * i64::from(div_factor)) as i32;
+        let gamma0 = helpers::clip3(-32678, 32767, helpers::round2signed(v, div_shift)?);
 
         let w = warp_params[3] * warp_params[4];
 
@@ -2651,7 +2708,7 @@ impl Parser {
         if idx < 2 {
             if type_ == WarpModelType::Translation {
                 abs_bits = GM_ABS_TRANS_ONLY_BITS - !allow_high_precision_mv as u32;
-                prec_bits = GM_ABS_TRANS_ONLY_BITS - !allow_high_precision_mv as u32;
+                prec_bits = GM_TRANS_ONLY_PREC_BITS - !allow_high_precision_mv as u32;
             } else {
                 abs_bits = GM_ABS_TRANS_BITS;
                 prec_bits = GM_TRANS_PREC_BITS;
@@ -2692,6 +2749,7 @@ impl Parser {
                     0
                 }
             }
+            gm.warp_valid[ref_frame] = true;
         }
 
         if fh.frame_is_intra {
@@ -3410,12 +3468,14 @@ impl Parser {
             }
 
             /* load_loop_filter_params: load ref_deltas and mode_deltas */
-            self.lf.loop_filter_ref_deltas = prev_frame.loop_filter_params.loop_filter_ref_deltas;
-            self.lf.loop_filter_mode_deltas = prev_frame.loop_filter_params.loop_filter_mode_deltas;
+            fh.loop_filter_params.loop_filter_ref_deltas =
+                prev_frame.loop_filter_params.loop_filter_ref_deltas;
+            fh.loop_filter_params.loop_filter_mode_deltas =
+                prev_frame.loop_filter_params.loop_filter_mode_deltas;
 
             /* load_segmentation_params: load feature_enabled and feature_data */
-            self.seg.feature_enabled = prev_frame.segmentation_params.feature_enabled;
-            self.seg.feature_data = prev_frame.segmentation_params.feature_data;
+            fh.segmentation_params.feature_enabled = prev_frame.segmentation_params.feature_enabled;
+            fh.segmentation_params.feature_data = prev_frame.segmentation_params.feature_data;
         }
 
         // TODO: we can live without this for now.
@@ -3430,7 +3490,7 @@ impl Parser {
             num_planes,
             separate_uv_delta_q,
         )?;
-        Self::parse_segmentation_params(&mut r, &mut fh.segmentation_params, fh.primary_ref_frame)?;
+        self.parse_segmentation_params(&mut r, &mut fh)?;
         Self::parse_delta_q_params(&mut r, &mut fh.quantization_params)?;
         Self::parse_delta_lf_params(
             &mut r,
@@ -3582,14 +3642,6 @@ impl Parser {
             tile_num += 1;
         }
 
-        if tg.tiles.len() != num_tiles as usize {
-            return Err(anyhow!(
-                "Expected {} tiles, got {}",
-                num_tiles,
-                tg.tiles.len()
-            ));
-        }
-
         if tg.tg_end == num_tiles - 1 {
             // left to the accelerator:
             // if ( !disable_frame_end_update_cdf ) {
@@ -3644,6 +3696,7 @@ impl Parser {
             let header = self.parse_uncompressed_frame_header(obu)?;
             if header.show_existing_frame {
                 self.last_frame_header = None;
+                self.seen_frame_header = false;
             } else {
                 /* TileNum = 0 */
                 self.seen_frame_header = true;
@@ -3713,6 +3766,15 @@ impl Parser {
 
         Ok(())
     }
+
+    pub fn highest_operating_point(&self) -> Option<u32> {
+        if self.operating_point_idc == 0 {
+            /* No scalability information, all OBUs must be decoded */
+            None
+        } else {
+            Some(helpers::floor_log2(self.operating_point_idc >> 8))
+        }
+    }
 }
 
 impl Default for Parser {
@@ -3737,8 +3799,6 @@ impl Default for Parser {
             tile_rows_log2: Default::default(),
             tile_rows: Default::default(),
             tile_size_bytes: Default::default(),
-            lf: Default::default(),
-            seg: Default::default(),
             sequence_header: Default::default(),
         }
     }
@@ -3771,8 +3831,6 @@ impl Clone for Parser {
             tile_rows_log2: self.tile_rows_log2,
             tile_rows: self.tile_rows,
             tile_size_bytes: self.tile_size_bytes,
-            lf: self.lf.clone(),
-            seg: self.seg.clone(),
             sequence_header,
         }
     }

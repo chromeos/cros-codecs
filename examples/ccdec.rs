@@ -20,6 +20,7 @@ use std::str::FromStr;
 use argh::FromArgs;
 use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
 use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
+use cros_codecs::decoder::stateless::av1::Av1;
 use cros_codecs::decoder::stateless::h264::H264;
 use cros_codecs::decoder::stateless::h265::H265;
 use cros_codecs::decoder::stateless::vp8::Vp8;
@@ -118,6 +119,7 @@ enum EncodedFormat {
     H265,
     VP8,
     VP9,
+    AV1,
 }
 
 impl FromStr for EncodedFormat {
@@ -129,7 +131,8 @@ impl FromStr for EncodedFormat {
             "h265" | "H265" => Ok(EncodedFormat::H265),
             "vp8" | "VP8" => Ok(EncodedFormat::VP8),
             "vp9" | "VP9" => Ok(EncodedFormat::VP9),
-            _ => Err("unrecognized input format. Valid values: h264, h265, vp8, vp9"),
+            "av1" | "AV1" => Ok(EncodedFormat::AV1),
+            _ => Err("unrecognized input format. Valid values: h264, h265, vp8, vp9, av1"),
         }
     }
 }
@@ -373,6 +376,16 @@ fn main() {
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
             let decoder = Box::new(StatelessDecoder::<H265, _>::new_vaapi(
+                display,
+                blocking_mode,
+            )) as Box<dyn StatelessVideoDecoder<_>>;
+
+            (decoder, frame_iter)
+        }
+        EncodedFormat::AV1 => {
+            let frame_iter = create_vpx_frame_iterator(&input);
+
+            let decoder = Box::new(StatelessDecoder::<Av1, _>::new_vaapi(
                 display,
                 blocking_mode,
             )) as Box<dyn StatelessVideoDecoder<_>>;

@@ -11,6 +11,7 @@
 //! combining a codec codec to a [backend](crate::backend), after which bitstream units can be
 //! submitted through the [`StatelessDecoder::decode`] method.
 
+pub mod av1;
 pub mod h264;
 pub mod h265;
 pub mod vp8;
