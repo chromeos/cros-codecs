@@ -577,8 +577,8 @@ pub enum TxMode {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FrameObu<'a> {
-    header: FrameHeaderObu,
-    tile: TileGroupObu<'a>,
+    pub header: FrameHeaderObu,
+    pub tile_group: TileGroupObu<'a>,
 }
 
 /// A FrameHeaderOBU
@@ -3621,7 +3621,7 @@ impl Parser {
 
         Ok(FrameObu {
             header: frame_header_obu,
-            tile: tile_group_obu,
+            tile_group: tile_group_obu,
         })
     }
 
