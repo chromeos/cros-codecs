@@ -3751,7 +3751,8 @@ mod tests {
 
     use super::ObuType;
 
-    const STREAM_TEST_25_FPS: &[u8] = include_bytes!("test_data/test-25fps.av1.ivf");
+    /// Same as test-25fps.av1.ivf from Chromium
+    const STREAM_TEST_25_FPS: &[u8] = include_bytes!("test_data/test-25fps.ivf.av1");
 
     /// Encoded with
     ///
@@ -3761,8 +3762,8 @@ mod tests {
     ///
     /// And:
     ///
-    /// aomenc -p 1 --ivf -w 64 -h 64 -o av1-annexb.ivf aom_input.yuv --annexb=1
-    const STREAM_ANNEXB: &[u8] = include_bytes!("test_data/av1-annexb.ivf");
+    /// aomenc -p 1 --ivf -w 64 -h 64 -o av1-annexb.ivf.av1 aom_input.yuv --annexb=1
+    const STREAM_ANNEXB: &[u8] = include_bytes!("test_data/av1-annexb.ivf.av1");
 
     #[test]
     fn parse_test25fps() {
