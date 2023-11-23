@@ -208,10 +208,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
             let slice_data = BufferType::SliceData(last_slice.2);
             let slice_data = context.create_buffer(slice_data)?;
             picture.add_buffer(slice_data);
-
-            if is_last_slice {
-                self.backend_data.last_slice = None;
-            }
         }
 
         Ok(())
