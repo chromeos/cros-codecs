@@ -208,15 +208,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         Ok(())
     }
 
-    fn replace_last_slice(
-        &mut self,
-        slice_param: SliceParameterBufferHEVC,
-        slice_param_ext: Option<SliceParameterBufferHEVCRext>,
-        slice_data: Vec<u8>,
-    ) {
-        self.backend_data.last_slice = Some((slice_param, slice_param_ext, slice_data));
-    }
-
     fn va_rps_flag(hevc_pic: &PictureData, rps: &RefPicSet<VADecodedHandle<M>>) -> u32 {
         if rps
             .ref_pic_set_st_curr_before
@@ -820,7 +811,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
 
         let slice_data = Vec::from(slice.nalu().as_ref());
 
-        self.replace_last_slice(slice_param, slice_param_ext, slice_data);
+        self.backend_data.last_slice = Some((slice_param, slice_param_ext, slice_data));
 
         Ok(())
     }
