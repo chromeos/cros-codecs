@@ -184,15 +184,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
     fn submit_last_slice(
         &mut self,
         picture: &mut <Self as StatelessDecoderBackend<Sps>>::Picture,
-        is_last_slice: bool,
     ) -> anyhow::Result<()> {
-        if let Some(mut last_slice) = self.backend_data.last_slice.take() {
+        if let Some(last_slice) = self.backend_data.last_slice.take() {
             let metadata = self.metadata_state.get_parsed()?;
             let context = &metadata.context;
-
-            if is_last_slice {
-                last_slice.0.set_as_last();
-            }
 
             let slice_param = BufferType::SliceParameter(SliceParameter::HEVC(last_slice.0));
             let slice_param = context.create_buffer(slice_param)?;
@@ -680,7 +675,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         ref_pic_list0: &[Option<RefPicListEntry<Self::Handle>>; 16],
         ref_pic_list1: &[Option<RefPicListEntry<Self::Handle>>; 16],
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
-        self.submit_last_slice(picture, false)?;
+        self.submit_last_slice(picture)?;
         let hdr = slice.header();
 
         let va_references = &self.backend_data.va_references;
@@ -834,7 +829,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         &mut self,
         mut picture: Self::Picture,
     ) -> StatelessBackendResult<Self::Handle> {
-        self.submit_last_slice(&mut picture, true)?;
+        if let Some(last_slice) = &mut self.backend_data.last_slice {
+            last_slice.0.set_as_last();
+        }
+        self.submit_last_slice(&mut picture)?;
         self.process_picture::<Sps>(picture)
     }
 }
