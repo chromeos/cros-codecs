@@ -2638,13 +2638,13 @@ impl Parser {
 
     fn setup_shear(warp_params: &[i32; 6]) -> anyhow::Result<bool> {
         let mut default = true;
-        for i in 0..warp_params.len() {
+        for (i, param) in warp_params.iter().enumerate() {
             let default_value = if i % 3 == 2 {
                 1 << WARPEDMODEL_PREC_BITS
             } else {
                 0
             };
-            if warp_params[i] != default_value {
+            if *param != default_value {
                 default = false;
                 break;
             }

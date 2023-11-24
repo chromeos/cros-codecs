@@ -252,9 +252,7 @@ fn build_wm_info(hdr: &FrameHeaderObu) -> [libva::AV1WarpedMotionParams; 7] {
 
         let params = {
             let mut params = [0; 8];
-            for j in 0..6 {
-                params[j] = gm.gm_params[i][j];
-            }
+            params[0..6].copy_from_slice(&gm.gm_params[i][0..6]);
             params
         };
 
