@@ -11,8 +11,9 @@ This crate is still under heavy development and is not recommended for use yet.
 ## Current features
 
 * Simple decoder API,
-* VAAPI decoder support (using [cros-libva](https://github.com/chromeos/cros-libva)) for H.264, VP8
-  and VP9.
+* VAAPI decoder support (using
+  [cros-libva](https://github.com/chromeos/cros-libva)) for H.264, H.265, VP8,
+  VP9 and AV1.
 
 ## Planned features:
 
@@ -20,7 +21,6 @@ This crate is still under heavy development and is not recommended for use yet.
 * Stateless V4L2 decoder support.
 * Vaapi encoder support.
 * V4L2 encoder support.
-* Support for H.265 and AV1.
 * C API to be used in non-Rust projects.
 
 ## Non-goals
