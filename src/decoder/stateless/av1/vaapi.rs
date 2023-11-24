@@ -271,7 +271,7 @@ fn build_wm_info(hdr: &FrameHeaderObu) -> [libva::AV1WarpedMotionParams; 7] {
 
 fn build_pic_param<M: SurfaceMemoryDescriptor>(
     hdr: &FrameHeaderObu,
-    seq: Rc<SequenceHeaderObu>,
+    seq: &SequenceHeaderObu,
     current_frame: libva::VASurfaceID,
     reference_frames: &[Option<VADecodedHandle<M>>; NUM_REF_FRAMES],
 ) -> anyhow::Result<libva::BufferType> {
@@ -572,10 +572,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend
 {
     fn new_sequence(
         &mut self,
-        sequence: Rc<SequenceHeaderObu>,
+        sequence: &Rc<SequenceHeaderObu>,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
-        self.backend_data.sequence = Some(Rc::clone(&sequence));
-        self.new_sequence(&sequence)
+        self.backend_data.sequence = Some(Rc::clone(sequence));
+        self.new_sequence(sequence)
     }
 
     fn new_picture(
@@ -600,7 +600,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend
             .ok_or(anyhow!("No sequence available in new_picture"))?;
         let surface_id = picture.surface().id();
 
-        let pic_param = build_pic_param(hdr, Rc::clone(sequence), surface_id, reference_frames)
+        let pic_param = build_pic_param(hdr, sequence, surface_id, reference_frames)
             .context("Failed to build picture parameter")?;
         let pic_param = metadata
             .context

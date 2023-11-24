@@ -38,7 +38,7 @@ mod vaapi;
 /// Stateless backend methods specific to AV1.
 pub trait StatelessAV1DecoderBackend: StatelessDecoderBackend<Rc<SequenceHeaderObu>> {
     /// Called when a new Sequence Header OBU is parsed.
-    fn new_sequence(&mut self, sequence: Rc<SequenceHeaderObu>) -> StatelessBackendResult<()>;
+    fn new_sequence(&mut self, sequence: &Rc<SequenceHeaderObu>) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a new picture was found.
     fn new_picture(
@@ -404,7 +404,7 @@ where
                             sequence.bit_depth
                         );
                         /* there is nothing to drain, much like vp8 and vp9 */
-                        self.backend.new_sequence(Rc::clone(&sequence))?;
+                        self.backend.new_sequence(&sequence)?;
                         self.decoding_state = DecodingState::AwaitingFormat(sequence);
                         self.codec.highest_spatial_layer =
                             self.codec.parser.highest_operating_point();

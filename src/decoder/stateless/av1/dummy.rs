@@ -18,7 +18,7 @@ use crate::decoder::BlockingMode;
 impl StatelessAV1DecoderBackend for Backend {
     fn new_sequence(
         &mut self,
-        _: std::rc::Rc<crate::codec::av1::parser::SequenceHeaderObu>,
+        _: &std::rc::Rc<crate::codec::av1::parser::SequenceHeaderObu>,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
         Ok(())
     }
