@@ -233,13 +233,11 @@ fn build_slice_param(
     ))
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp9>
-    for VaapiBackend<(), M>
-{
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp9> for VaapiBackend<M> {
     type Picture = ();
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiBackend<(), M> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiBackend<M> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         self.new_sequence(header)
     }
@@ -297,14 +295,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Vp9, VaapiBackend<(), M>> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Vp9, VaapiBackend<M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
     where
         M: From<S>,
         S: From<M>,
     {
-        Self::new(VaapiBackend::<(), M>::new(display, true), blocking_mode)
+        Self::new(VaapiBackend::new(display, true), blocking_mode)
     }
 }
 

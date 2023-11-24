@@ -109,7 +109,7 @@ impl VaStreamInfo for &Rc<Sps> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
+impl<M: SurfaceMemoryDescriptor> VaapiBackend<M> {
     /// Gets the VASurfaceID for the given `picture`.
     fn surface_id(handle: &Option<VADecodedHandle<M>>) -> libva::VASurfaceID {
         match handle {
@@ -464,12 +464,12 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H264>
-    for VaapiBackend<(), M>
+    for VaapiBackend<M>
 {
     type Picture = VaapiPicture<M>;
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<(), M> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<M> {
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
     }
@@ -581,14 +581,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H264, VaapiBackend<(), M>> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H264, VaapiBackend<M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
     where
         M: From<S>,
         S: From<M>,
     {
-        Self::new(VaapiBackend::<(), M>::new(display, false), blocking_mode)
+        Self::new(VaapiBackend::new(display, false), blocking_mode)
     }
 }
 

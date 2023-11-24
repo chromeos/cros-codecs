@@ -563,11 +563,11 @@ fn build_slice_data_for_tg(tg: TileGroupObu) -> libva::BufferType {
     libva::BufferType::SliceData(Vec::from(obu.as_ref()))
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Av1> for VaapiBackend<(), M> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Av1> for VaapiBackend<M> {
     type Picture = VaapiPicture<M>;
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiBackend<(), M> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiBackend<M> {
     fn new_sequence(
         &mut self,
         sequence: &Rc<SequenceHeaderObu>,
@@ -640,7 +640,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Av1, VaapiBackend<(), M>> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Av1, VaapiBackend<M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
     where

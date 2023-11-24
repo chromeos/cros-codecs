@@ -908,9 +908,8 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
     }
 }
 
-pub struct VaapiBackend<BackendData, M>
+pub struct VaapiBackend<M>
 where
-    BackendData: Default,
     M: SurfaceMemoryDescriptor,
 {
     /// VA display in use for this stream.
@@ -919,17 +918,14 @@ where
     pub(crate) surface_pool: Rc<RefCell<SurfacePool<M>>>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
-    /// Any extra data that the backend might need to keep track of for a given codec.
-    pub(crate) backend_data: BackendData,
     /// Whether the codec supports context reuse on DRC. This is only supported
     /// by VP9 and AV1.
     supports_context_reuse: bool,
 }
 
-impl<BackendData, M> VaapiBackend<BackendData, M>
+impl<M> VaapiBackend<M>
 where
     M: SurfaceMemoryDescriptor + 'static,
-    BackendData: Default,
 {
     pub(crate) fn new(display: Rc<libva::Display>, supports_context_reuse: bool) -> Self {
         // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
@@ -944,7 +940,6 @@ where
             display,
             surface_pool,
             metadata_state: StreamMetadataState::Unparsed,
-            backend_data: Default::default(),
             supports_context_reuse,
         }
     }
@@ -1010,12 +1005,10 @@ where
 /// Shortcut for pictures used for the VAAPI backend.
 pub type VaapiPicture<M> = Picture<PictureNew, PooledSurface<M>>;
 
-impl<Codec: StatelessCodec, BackendData, M> StatelessDecoderBackend<Codec>
-    for VaapiBackend<BackendData, M>
+impl<Codec: StatelessCodec, M> StatelessDecoderBackend<Codec> for VaapiBackend<M>
 where
-    VaapiBackend<BackendData, M>: StatelessDecoderBackendPicture<Codec>,
+    VaapiBackend<M>: StatelessDecoderBackendPicture<Codec>,
     for<'a> &'a Codec::FormatInfo: VaStreamInfo,
-    BackendData: Default,
     M: SurfaceMemoryDescriptor + 'static,
 {
     type Handle = DecodedHandle<M>;
