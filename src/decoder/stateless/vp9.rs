@@ -141,11 +141,18 @@ where
     /// Handle a single frame.
     fn handle_frame(&mut self, frame: &Frame, timestamp: u64) -> Result<(), DecodeError> {
         let decoded_handle = if frame.header.show_existing_frame {
-            // Frame to be shown. Unwrapping must produce a Picture, because the
-            // spec mandates frame_to_show_map_idx references a valid entry in
-            // the DPB
+            // Frame to be shown. Because the spec mandates that frame_to_show_map_idx references a
+            // valid entry in the DPB, an non-existing index means that the stream is invalid.
             let idx = usize::from(frame.header.frame_to_show_map_idx);
-            let ref_frame = self.codec.reference_frames[idx].as_ref().unwrap();
+            let ref_frame = self
+                .codec
+                .reference_frames
+                .get(idx)
+                .ok_or_else(|| anyhow::anyhow!("invalid reference frame index in header"))?
+                .as_ref()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("empty reference frame referenced in frame header")
+                })?;
 
             // We are done, no further processing needed.
             ref_frame.clone()
