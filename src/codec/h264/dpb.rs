@@ -50,6 +50,8 @@ pub struct Dpb<T> {
 pub enum StorePictureError {
     #[error("DPB is full")]
     DpbIsFull,
+    #[error("picture is second field but first field doesn't exist")]
+    NoFirstField,
 }
 
 #[derive(Debug, Error)]
@@ -217,7 +219,9 @@ impl<T: Clone> Dpb<T> {
         pic_mut.needed_for_output = !pic_mut.nonexisting;
 
         if pic_mut.is_second_field() {
-            let first_field_rc = pic_mut.other_field().unwrap();
+            let first_field_rc = pic_mut
+                .other_field()
+                .ok_or(StorePictureError::NoFirstField)?;
             drop(pic_mut);
             let mut first_field = first_field_rc.borrow_mut();
             first_field.set_second_field_to(&picture);
