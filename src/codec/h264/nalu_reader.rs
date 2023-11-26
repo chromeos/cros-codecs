@@ -6,6 +6,7 @@ use std::io::Cursor;
 
 use anyhow::anyhow;
 use bytes::Buf;
+use thiserror::Error;
 
 /// A bit reader for h264 bitstreams. It properly handles emulation-prevention
 /// bytes and stop bits.
@@ -21,6 +22,22 @@ pub(crate) struct NaluReader<'a> {
     prev_two_bytes: u32,
     /// Number of epbs (i.e. 0x000003) we found.
     num_epb: usize,
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum GetByteError {
+    #[error("reader ran out of bits")]
+    OutOfBits,
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum ReadBitsError {
+    #[error("more than 31 ({0}) bits were requested")]
+    TooManyBytesRequested(usize),
+    #[error("failed to advance the current byte")]
+    GetByte(#[from] GetByteError),
+    #[error("failed to convert read input to target type")]
+    ConversionFailed,
 }
 
 impl<'a> NaluReader<'a> {
@@ -45,9 +62,9 @@ impl<'a> NaluReader<'a> {
     }
 
     /// Read up to 31 bits from the stream.
-    pub fn read_bits<U: TryFrom<u32>>(&mut self, num_bits: usize) -> anyhow::Result<U> {
+    pub fn read_bits<U: TryFrom<u32>>(&mut self, num_bits: usize) -> Result<U, ReadBitsError> {
         if num_bits > 31 {
-            return Err(anyhow!("Overflow: more than 31 bits requested at once"));
+            return Err(ReadBitsError::TooManyBytesRequested(num_bits));
         }
 
         let mut bits_left = num_bits;
@@ -63,11 +80,11 @@ impl<'a> NaluReader<'a> {
         out &= (1 << num_bits) - 1;
         self.num_remaining_bits_in_curr_byte -= bits_left;
 
-        U::try_from(out).map_err(|_| anyhow!("Conversion failed"))
+        U::try_from(out).map_err(|_| ReadBitsError::ConversionFailed)
     }
 
     /// Skip `num_bits` bits from the stream.
-    pub fn skip_bits(&mut self, mut num_bits: usize) -> anyhow::Result<()> {
+    pub fn skip_bits(&mut self, mut num_bits: usize) -> Result<(), ReadBitsError> {
         while num_bits > 0 {
             let n = std::cmp::min(num_bits, 31);
             self.read_bits::<u32>(n)?;
@@ -196,15 +213,15 @@ impl<'a> NaluReader<'a> {
         }
     }
 
-    fn get_byte(&mut self) -> anyhow::Result<u8> {
+    fn get_byte(&mut self) -> Result<u8, GetByteError> {
         if self.data.remaining() == 0 {
-            return Err(anyhow!("Reader ran out of bits"));
+            return Err(GetByteError::OutOfBits);
         }
 
         Ok(self.data.get_u8())
     }
 
-    fn update_curr_byte(&mut self) -> anyhow::Result<()> {
+    fn update_curr_byte(&mut self) -> Result<(), GetByteError> {
         let mut byte = self.get_byte()?;
 
         if (self.prev_two_bytes & 0xffff) == 0 && byte == 0x03 {
