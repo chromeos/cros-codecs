@@ -41,9 +41,9 @@ const DEFAULT_8X8_INTER: [u8; 64] = [
     27, 28, 28, 28, 28, 28, 30, 30, 30, 30, 32, 32, 32, 33, 33, 35,
 ];
 
-const MAX_PPS_COUNT: usize = 256;
-const MAX_SPS_COUNT: usize = 32;
-///
+const MAX_PPS_COUNT: u16 = 256;
+const MAX_SPS_COUNT: u8 = 32;
+
 /// The maximum number of pictures in the DPB, as per A.3.1, clause h)
 const DPB_MAX_SIZE: usize = 16;
 
@@ -1929,7 +1929,7 @@ impl Parser {
         let key = sps.seq_parameter_set_id;
         self.active_spses.insert(key, Rc::new(sps));
 
-        if self.active_spses.keys().len() > MAX_SPS_COUNT {
+        if self.active_spses.keys().len() > MAX_SPS_COUNT as usize {
             return Err(anyhow!(
                 "Broken data: Number of active SPSs > MAX_SPS_COUNT"
             ));
@@ -1950,8 +1950,8 @@ impl Parser {
         let data = nalu.as_ref();
         // Skip the header
         let mut r = NaluReader::new(&data[nalu.header().len()..]);
-        let pic_parameter_set_id = r.read_ue_max(u32::try_from(MAX_PPS_COUNT)? - 1)?;
-        let seq_parameter_set_id = r.read_ue_max(u32::try_from(MAX_SPS_COUNT)? - 1)?;
+        let pic_parameter_set_id = r.read_ue_max(MAX_PPS_COUNT as u32 - 1)?;
+        let seq_parameter_set_id = r.read_ue_max(MAX_SPS_COUNT as u32 - 1)?;
         let sps = self.get_sps(seq_parameter_set_id).context(
             "Broken stream: stream references a SPS that has not been successfully parsed",
         )?;
@@ -2030,7 +2030,7 @@ impl Parser {
         let key = pps.pic_parameter_set_id;
         self.active_ppses.insert(key, Rc::new(pps));
 
-        if self.active_ppses.keys().len() > MAX_PPS_COUNT {
+        if self.active_ppses.keys().len() > MAX_PPS_COUNT as usize {
             return Err(anyhow!(
                 "Broken Data: number of active PPSs > MAX_PPS_COUNT"
             ));
