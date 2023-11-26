@@ -333,7 +333,7 @@ impl<T: Clone> Dpb<T> {
 
     /// Bump the dpb, returning a picture as per the bumping process described in C.4.5.3.
     /// Note that this picture will still be referenced by its pair, if any.
-    pub fn bump(&mut self, flush: bool) -> Option<DpbEntry<T>> {
+    fn bump(&mut self, flush: bool) -> Option<DpbEntry<T>> {
         let handle = self.find_lowest_poc_for_bumping()?.clone();
         let mut pic = handle.0.borrow_mut();
 
