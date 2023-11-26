@@ -35,8 +35,8 @@ impl<'a> NaluReader<'a> {
     }
 
     /// Read a single bit from the stream.
-    pub fn read_bit(&mut self) -> anyhow::Result<bool> {
-        let bit = self.read_bits(1)?;
+    pub fn read_bit(&mut self) -> Result<bool, ReadBitsError> {
+        let bit = self.read_bits::<u32>(1)?;
         match bit {
             1 => Ok(true),
             0 => Ok(false),
