@@ -162,19 +162,6 @@ impl<'a> NaluReader<'a> {
         U::try_from(value).map_err(|_| anyhow!("Conversion error"))
     }
 
-    pub fn read_ue_max<U: TryFrom<u32>>(&mut self, max: u32) -> anyhow::Result<U> {
-        let ue = self.read_ue()?;
-        if ue > max {
-            Err(anyhow!(
-                "Value out of bounds: expected at most {}, got {}",
-                max,
-                ue
-            ))
-        } else {
-            Ok(U::try_from(ue).map_err(|_| anyhow!("Conversion error"))?)
-        }
-    }
-
     pub fn read_ue_bounded<U: TryFrom<u32>>(&mut self, min: u32, max: u32) -> anyhow::Result<U> {
         let ue = self.read_ue()?;
         if ue > max || ue < min {
@@ -187,6 +174,10 @@ impl<'a> NaluReader<'a> {
         } else {
             Ok(U::try_from(ue).map_err(|_| anyhow!("Conversion error"))?)
         }
+    }
+
+    pub fn read_ue_max<U: TryFrom<u32>>(&mut self, max: u32) -> anyhow::Result<U> {
+        self.read_ue_bounded(0, max)
     }
 
     pub fn read_se<U: TryFrom<i32>>(&mut self) -> anyhow::Result<U> {
