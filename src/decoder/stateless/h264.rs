@@ -1133,7 +1133,7 @@ where
         let markings = pic.ref_pic_marking.clone();
 
         for (i, marking) in markings.inner().iter().enumerate() {
-            match marking.memory_management_control_operation() {
+            match marking.memory_management_control_operation {
                 0 => break,
                 1 => self.codec.dpb.mmco_op_1(pic, i)?,
                 2 => self.codec.dpb.mmco_op_2(pic, i)?,

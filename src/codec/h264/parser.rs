@@ -171,43 +171,25 @@ pub struct RefPicMarkingInner {
     /// of `memory_management_control_operation`. The values and control
     /// operations associated with `memory_management_control_operation` are
     /// specified in Table 7-9
-    memory_management_control_operation: u8,
+    pub memory_management_control_operation: u8,
 
     /// Used (with memory_management_control_operation equal to 3 or 1) to
     /// assign a long-term frame index to a short-term reference picture or to
     /// mark a short-term reference picture as "unused for reference".
-    difference_of_pic_nums_minus1: u32,
+    pub difference_of_pic_nums_minus1: u32,
 
     /// Used (with memory_management_control_operation equal to 2) to mark a
     /// long-term reference picture as "unused for reference".
-    long_term_pic_num: u32,
+    pub long_term_pic_num: u32,
 
     /// Used (with memory_management_control_operation equal to 3 or 6) to
     /// assign a long-term frame index to a picture.
-    long_term_frame_idx: u32,
+    pub long_term_frame_idx: u32,
 
     /// Minus 1 specifies the maximum value of long-term frame index allowed for
     /// long-term reference pictures (until receipt of another value of
     /// `max_long_term_frame_idx_plus1`).
-    max_long_term_frame_idx_plus1: i32,
-}
-
-impl RefPicMarkingInner {
-    pub fn memory_management_control_operation(&self) -> u8 {
-        self.memory_management_control_operation
-    }
-    pub fn difference_of_pic_nums_minus1(&self) -> u32 {
-        self.difference_of_pic_nums_minus1
-    }
-    pub fn long_term_pic_num(&self) -> u32 {
-        self.long_term_pic_num
-    }
-    pub fn long_term_frame_idx(&self) -> u32 {
-        self.long_term_frame_idx
-    }
-    pub fn max_long_term_frame_idx_plus1(&self) -> i32 {
-        self.max_long_term_frame_idx_plus1
-    }
+    pub max_long_term_frame_idx_plus1: i32,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
