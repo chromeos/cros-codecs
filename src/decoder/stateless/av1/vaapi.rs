@@ -651,7 +651,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend
         &mut self,
         picture: Self::Picture,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Handle> {
-        self.process_picture::<Rc<SequenceHeaderObu>>(picture)
+        self.process_picture::<Av1>(picture)
     }
 }
 

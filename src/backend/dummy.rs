@@ -130,10 +130,10 @@ impl<Codec: StatelessCodec> StatelessDecoderBackendPicture<Codec> for Backend {
     type Picture = ();
 }
 
-impl<FormatInfo> StatelessDecoderBackend<FormatInfo> for Backend {
+impl<Codec: StatelessCodec> StatelessDecoderBackend<Codec> for Backend {
     type Handle = Handle;
 
-    fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
+    fn try_format(&mut self, _: &Codec::FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
         Ok(())
     }
 

@@ -540,7 +540,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     }
 
     fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle> {
-        self.process_picture::<Rc<Sps>>(picture)
+        self.process_picture::<H264>(picture)
     }
 
     fn new_picture(

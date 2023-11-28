@@ -31,7 +31,9 @@ use libva::VaError;
 use crate::backend::vaapi::surface_pool::SurfacePool;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
 use crate::decoder::FramePool;
@@ -969,12 +971,13 @@ where
         Ok(())
     }
 
-    pub(crate) fn process_picture<StreamData>(
+    pub(crate) fn process_picture<Codec: StatelessCodec>(
         &mut self,
         picture: Picture<PictureNew, PooledSurface<M>>,
-    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<StreamData>>::Handle>
+    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<Codec>>::Handle>
     where
-        for<'a> &'a StreamData: VaStreamInfo,
+        Self: StatelessDecoderBackendPicture<Codec>,
+        for<'a> &'a Codec::FormatInfo: VaStreamInfo,
     {
         let metadata = self.metadata_state.get_parsed()?;
 
@@ -1007,10 +1010,11 @@ where
 /// Shortcut for pictures used for the VAAPI backend.
 pub type VaapiPicture<M> = Picture<PictureNew, PooledSurface<M>>;
 
-impl<StreamData, BackendData, M> StatelessDecoderBackend<StreamData>
+impl<Codec: StatelessCodec, BackendData, M> StatelessDecoderBackend<Codec>
     for VaapiBackend<BackendData, M>
 where
-    for<'a> &'a StreamData: VaStreamInfo,
+    VaapiBackend<BackendData, M>: StatelessDecoderBackendPicture<Codec>,
+    for<'a> &'a Codec::FormatInfo: VaStreamInfo,
     BackendData: Default,
     M: SurfaceMemoryDescriptor + 'static,
 {
@@ -1018,7 +1022,7 @@ where
 
     fn try_format(
         &mut self,
-        format_info: &StreamData,
+        format_info: &Codec::FormatInfo,
         format: crate::DecodedFormat,
     ) -> anyhow::Result<()> {
         let supported_formats_for_stream = self.supported_formats_for_stream()?;

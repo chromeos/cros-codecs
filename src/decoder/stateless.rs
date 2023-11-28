@@ -100,7 +100,9 @@ pub trait StatelessDecoderBackendPicture<Codec: StatelessCodec> {
 
 /// Common trait shared by all stateless video decoder backends, providing codec-independent
 /// methods.
-pub trait StatelessDecoderBackend<FormatInfo> {
+pub trait StatelessDecoderBackend<Codec: StatelessCodec>:
+    StatelessDecoderBackendPicture<Codec>
+{
     /// The type that the backend returns as a result of a decode operation.
     /// This will usually be some backend-specific type with a resource and a
     /// resource pool so that said buffer can be reused for another decode
@@ -114,8 +116,11 @@ pub trait StatelessDecoderBackend<FormatInfo> {
     fn frame_pool(&mut self) -> &mut dyn FramePool<<Self::Handle as DecodedHandle>::Descriptor>;
 
     /// Try altering the decoded format.
-    fn try_format(&mut self, format_info: &FormatInfo, format: DecodedFormat)
-        -> anyhow::Result<()>;
+    fn try_format(
+        &mut self,
+        format_info: &Codec::FormatInfo,
+        format: DecodedFormat,
+    ) -> anyhow::Result<()>;
 }
 
 /// Helper to implement [`DecoderFormatNegotiator`] for stateless decoders.
@@ -239,9 +244,7 @@ pub trait StatelessCodec {
     /// For H.264 this would be the Sps, for VP8 or VP9 the frame header.
     type FormatInfo;
     /// State that needs to be kept during a decoding operation, typed by backend.
-    type DecoderState<
-        B: StatelessDecoderBackend<Self::FormatInfo> + StatelessDecoderBackendPicture<Self>,
-    >;
+    type DecoderState<B: StatelessDecoderBackend<Self>>;
 }
 
 /// A struct that serves as a basis to implement a stateless decoder.
@@ -266,7 +269,7 @@ pub trait StatelessCodec {
 pub struct StatelessDecoder<C, B>
 where
     C: StatelessCodec,
-    B: StatelessDecoderBackend<C::FormatInfo> + StatelessDecoderBackendPicture<C>,
+    B: StatelessDecoderBackend<C>,
 {
     /// The current coded resolution
     coded_resolution: Resolution,
@@ -288,7 +291,7 @@ where
 impl<C, B> StatelessDecoder<C, B>
 where
     C: StatelessCodec,
-    B: StatelessDecoderBackend<C::FormatInfo> + StatelessDecoderBackendPicture<C>,
+    B: StatelessDecoderBackend<C>,
     C::DecoderState<B>: Default,
 {
     pub fn new(backend: B, blocking_mode: BlockingMode) -> Self {
@@ -306,7 +309,7 @@ where
 impl<C, B> StatelessDecoder<C, B>
 where
     C: StatelessCodec,
-    B: StatelessDecoderBackend<C::FormatInfo> + StatelessDecoderBackendPicture<C>,
+    B: StatelessDecoderBackend<C>,
 {
     fn frame_pool(&mut self) -> &mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor> {
         self.backend.frame_pool()
@@ -320,7 +323,7 @@ where
 impl<C, B> private::StatelessVideoDecoder for StatelessDecoder<C, B>
 where
     C: StatelessCodec,
-    B: StatelessDecoderBackend<C::FormatInfo> + StatelessDecoderBackendPicture<C>,
+    B: StatelessDecoderBackend<C>,
 {
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {

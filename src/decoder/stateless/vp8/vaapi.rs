@@ -290,7 +290,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
         va_picture.add_buffer(slice_param);
         va_picture.add_buffer(slice_data);
 
-        self.process_picture::<Header>(va_picture)
+        self.process_picture::<Vp8>(va_picture)
     }
 }
 

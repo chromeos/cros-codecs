@@ -831,7 +831,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
             last_slice.0.set_as_last();
         }
         self.submit_last_slice(&mut picture)?;
-        self.process_picture::<Sps>(picture)
+        self.process_picture::<H265>(picture)
     }
 }
 

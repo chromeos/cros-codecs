@@ -32,7 +32,6 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
-use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
@@ -102,9 +101,7 @@ fn get_raster_from_up_right_diagonal_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
 }
 
 /// Stateless backend methods specific to H.265.
-pub trait StatelessH265DecoderBackend:
-    StatelessDecoderBackend<Sps> + StatelessDecoderBackendPicture<H265>
-{
+pub trait StatelessH265DecoderBackend: StatelessDecoderBackend<H265> {
     /// Called when a new SPS is parsed.
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()>;
 
@@ -243,7 +240,7 @@ impl<T: Clone> Default for RefPicSet<T> {
 /// State of the picture being currently decoded.
 ///
 /// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
-struct CurrentPicState<B: StatelessDecoderBackend<Sps> + StatelessDecoderBackendPicture<H265>> {
+struct CurrentPicState<B: StatelessDecoderBackend<H265>> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
     /// Backend-specific data for that picture.
@@ -273,8 +270,7 @@ impl<T> Default for ReferencePicLists<T> {
     }
 }
 
-pub struct H265DecoderState<B: StatelessDecoderBackend<Sps> + StatelessDecoderBackendPicture<H265>>
-{
+pub struct H265DecoderState<B: StatelessDecoderBackend<H265>> {
     /// A parser to extract bitstream metadata
     parser: Parser,
 
@@ -355,8 +351,7 @@ pub struct H265;
 
 impl StatelessCodec for H265 {
     type FormatInfo = Sps;
-    type DecoderState<B: StatelessDecoderBackend<Sps> + StatelessDecoderBackendPicture<Self>> =
-        H265DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend<Self>> = H265DecoderState<B>;
 }
 
 impl<B> StatelessDecoder<H265, B>
