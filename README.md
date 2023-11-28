@@ -62,3 +62,8 @@ testing. Just make sure the `ccdec` binary is in your `PATH`, and run Fluster us
 ```
 $ python fluster.py run -d ccdec-H.264 -ts JVT-AVC_V1
 ```
+
+## Credits
+
+The majority of the code in the initial commit has been written by Daniel
+Almeida as a VAAPI backend for crosvm, before being split into this crate.
