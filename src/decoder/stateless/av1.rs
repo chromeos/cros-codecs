@@ -43,6 +43,7 @@ pub trait StatelessAV1DecoderBackend: StatelessDecoderBackend<Av1> {
     /// Called when the decoder determines that a new picture was found.
     fn new_picture(
         &mut self,
+        sequence: &SequenceHeaderObu,
         picture: &FrameHeaderObu,
         timestamp: u64,
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
@@ -187,15 +188,20 @@ where
                 header: frame_header,
                 handle: ref_frame.clone(),
             });
-        } else {
-            let backend_picture =
-                self.backend
-                    .new_picture(&frame_header, timestamp, &self.codec.reference_frames)?;
+        } else if let Some(sequence) = &self.codec.sequence {
+            let backend_picture = self.backend.new_picture(
+                sequence,
+                &frame_header,
+                timestamp,
+                &self.codec.reference_frames,
+            )?;
 
             self.codec.current_pic = Some(CurrentPicState::RegularFrame {
                 header: frame_header.clone(),
                 backend_picture,
             });
+        } else {
+            log::warn!("invalid stream: frame header received while no valid sequence ongoing");
         }
 
         Ok(())

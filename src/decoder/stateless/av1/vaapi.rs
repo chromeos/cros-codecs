@@ -36,12 +36,6 @@ use crate::decoder::BlockingMode;
 /// The number of surfaces to allocate for this codec.
 const NUM_SURFACES: usize = 16;
 
-#[derive(Default)]
-pub struct BackendData {
-    /// The active sequence
-    sequence: Option<Rc<SequenceHeaderObu>>,
-}
-
 impl VaStreamInfo for &Rc<SequenceHeaderObu> {
     fn va_profile(&self) -> anyhow::Result<i32> {
         match self.seq_profile {
@@ -569,25 +563,21 @@ fn build_slice_data_for_tg(tg: TileGroupObu) -> libva::BufferType {
     libva::BufferType::SliceData(Vec::from(obu.as_ref()))
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Av1>
-    for VaapiBackend<BackendData, M>
-{
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Av1> for VaapiBackend<(), M> {
     type Picture = VaapiPicture<M>;
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend
-    for VaapiBackend<BackendData, M>
-{
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiBackend<(), M> {
     fn new_sequence(
         &mut self,
         sequence: &Rc<SequenceHeaderObu>,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
-        self.backend_data.sequence = Some(Rc::clone(sequence));
         self.new_sequence(sequence)
     }
 
     fn new_picture(
         &mut self,
+        sequence: &SequenceHeaderObu,
         hdr: &FrameHeaderObu,
         timestamp: u64,
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
@@ -601,11 +591,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend
 
         let mut picture = VaPicture::new(timestamp, Rc::clone(&metadata.context), surface);
 
-        let sequence = self
-            .backend_data
-            .sequence
-            .as_ref()
-            .ok_or(anyhow!("No sequence available in new_picture"))?;
         let surface_id = picture.surface().id();
 
         let pic_param = build_pic_param(hdr, sequence, surface_id, reference_frames)
@@ -655,17 +640,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Av1, VaapiBackend<BackendData, M>> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Av1, VaapiBackend<(), M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
     where
         M: From<S>,
         S: From<M>,
     {
-        Self::new(
-            VaapiBackend::<BackendData, M>::new(display, true),
-            blocking_mode,
-        )
+        Self::new(VaapiBackend::new(display, true), blocking_mode)
     }
 }
 
