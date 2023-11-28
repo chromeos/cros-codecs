@@ -48,19 +48,6 @@ enum ScalingListType {
     None,
 }
 
-#[derive(Default)]
-pub struct BackendData {
-    // We are always one slice behind, so that we can mark the last one in
-    // submit_picture()
-    last_slice: Option<(
-        SliceParameterBufferHEVC,
-        Option<SliceParameterBufferHEVCRext>,
-        Vec<u8>,
-    )>,
-
-    va_references: [PictureHEVC; 15],
-}
-
 impl VaStreamInfo for &Sps {
     fn va_profile(&self) -> anyhow::Result<i32> {
         let profile_idc = self.profile_tier_level.general_profile_idc;
@@ -149,7 +136,7 @@ impl VaStreamInfo for &Sps {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
+impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<(), M> {
     fn build_slice_ref_pic_list(
         ref_pic_list: &[Option<RefPicListEntry<VADecodedHandle<M>>>; 16],
         va_references: &[PictureHEVC; 15],
@@ -186,9 +173,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         &mut self,
         picture: &mut <Self as StatelessDecoderBackendPicture<H265>>::Picture,
     ) -> anyhow::Result<()> {
-        if let Some(last_slice) = self.backend_data.last_slice.take() {
+        if let Some(last_slice) = picture.last_slice.take() {
             let metadata = self.metadata_state.get_parsed()?;
             let context = &metadata.context;
+            let picture = &mut picture.picture;
 
             let slice_param = BufferType::SliceParameter(SliceParameter::HEVC(last_slice.0));
             let slice_param = context.create_buffer(slice_param)?;
@@ -366,7 +354,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         ))
     }
 
-    fn build_pic_param(
+    // TODO move this to local function to avoid conflict with h.264 implementation.
+    fn build_h265_pic_param(
         _: &Slice,
         current_picture: &PictureData,
         current_surface_id: libva::VASurfaceID,
@@ -511,7 +500,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
         }
     }
 
-    fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
+    // TODO move this to local functions to avoid conflict with H.264 implementation!
+    fn build_h265_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
         let scaling_lists = match Self::find_scaling_list(sps, pps) {
             ScalingListType::Sps => &sps.scaling_list,
             ScalingListType::Pps => &pps.scaling_list,
@@ -574,15 +564,27 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H265>
-    for VaapiBackend<BackendData, M>
-{
-    type Picture = VaapiPicture<M>;
+pub struct VaapiH265Picture<Picture> {
+    picture: Picture,
+
+    // We are always one slice behind, so that we can mark the last one in
+    // submit_picture()
+    last_slice: Option<(
+        SliceParameterBufferHEVC,
+        Option<SliceParameterBufferHEVCRext>,
+        Vec<u8>,
+    )>,
+
+    va_references: [PictureHEVC; 15],
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
-    for VaapiBackend<BackendData, M>
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H265>
+    for VaapiBackend<(), M>
 {
+    type Picture = VaapiH265Picture<VaapiPicture<M>>;
+}
+
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for VaapiBackend<(), M> {
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
         self.new_sequence(sps)
     }
@@ -599,11 +601,11 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
             .get_surface(&self.surface_pool)
             .ok_or(StatelessBackendError::OutOfResources)?;
 
-        Ok(VaPicture::new(
-            timestamp,
-            Rc::clone(&metadata.context),
-            surface,
-        ))
+        Ok(VaapiH265Picture {
+            picture: VaPicture::new(timestamp, Rc::clone(&metadata.context), surface),
+            last_slice: Default::default(),
+            va_references: Default::default(),
+        })
     }
 
     fn begin_picture(
@@ -619,12 +621,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
-        let surface_id = picture.surface().id();
+        let surface_id = picture.picture.surface().id();
 
         let (pic_param, reference_frames) =
-            Self::build_pic_param(slice, picture_data, surface_id, dpb, rps, sps, pps)?;
+            Self::build_h265_pic_param(slice, picture_data, surface_id, dpb, rps, sps, pps)?;
 
-        self.backend_data.va_references = reference_frames;
+        picture.va_references = reference_frames;
+
+        let picture = &mut picture.picture;
 
         let pic_param = context
             .create_buffer(pic_param)
@@ -633,7 +637,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         picture.add_buffer(pic_param);
 
         if !matches!(Self::find_scaling_list(sps, pps), ScalingListType::None) {
-            let iq_matrix = Self::build_iq_matrix(sps, pps);
+            let iq_matrix = Self::build_h265_iq_matrix(sps, pps);
             let iq_matrix = context
                 .create_buffer(iq_matrix)
                 .context("while creating IQ matrix buffer")?;
@@ -676,7 +680,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         self.submit_last_slice(picture)?;
         let hdr = slice.header();
 
-        let va_references = &self.backend_data.va_references;
+        let va_references = &picture.va_references;
         let ref_pic_list0 = Self::build_slice_ref_pic_list(ref_pic_list0, va_references);
         let ref_pic_list1 = Self::build_slice_ref_pic_list(ref_pic_list1, va_references);
 
@@ -818,7 +822,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
 
         let slice_data = Vec::from(slice.nalu().as_ref());
 
-        self.backend_data.last_slice = Some((slice_param, slice_param_ext, slice_data));
+        picture.last_slice = Some((slice_param, slice_param_ext, slice_data));
 
         Ok(())
     }
@@ -827,25 +831,22 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend
         &mut self,
         mut picture: Self::Picture,
     ) -> StatelessBackendResult<Self::Handle> {
-        if let Some(last_slice) = &mut self.backend_data.last_slice {
+        if let Some(last_slice) = &mut picture.last_slice {
             last_slice.0.set_as_last();
         }
         self.submit_last_slice(&mut picture)?;
-        self.process_picture::<H265>(picture)
+        self.process_picture::<H265>(picture.picture)
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H265, VaapiBackend<BackendData, M>> {
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H265, VaapiBackend<(), M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
     where
         M: From<S>,
         S: From<M>,
     {
-        Self::new(
-            VaapiBackend::<BackendData, M>::new(display, false),
-            blocking_mode,
-        )
+        Self::new(VaapiBackend::new(display, false), blocking_mode)
     }
 }
 
