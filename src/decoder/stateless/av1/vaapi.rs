@@ -13,6 +13,7 @@ use libva::SurfaceMemoryDescriptor;
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
+use crate::backend::vaapi::VaapiPicture;
 use crate::codec::av1::parser::BitDepth;
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::Profile;
@@ -29,6 +30,7 @@ use crate::decoder::stateless::av1::Av1;
 use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 
 /// The number of surfaces to allocate for this codec.
@@ -565,6 +567,12 @@ fn build_slice_params_for_tg(tg: &TileGroupObu) -> anyhow::Result<Vec<libva::Buf
 fn build_slice_data_for_tg(tg: TileGroupObu) -> libva::BufferType {
     let TileGroupObu { obu, .. } = tg;
     libva::BufferType::SliceData(Vec::from(obu.as_ref()))
+}
+
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Av1>
+    for VaapiBackend<BackendData, M>
+{
+    type Picture = VaapiPicture<M>;
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend

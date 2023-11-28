@@ -24,6 +24,7 @@ use crate::decoder::stateless::vp8::Vp8;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 use crate::Resolution;
 
@@ -200,6 +201,12 @@ fn build_slice_param(frame_hdr: &Header, slice_size: usize) -> anyhow::Result<li
             partition_size,
         )),
     ))
+}
+
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp8>
+    for VaapiBackend<(), M>
+{
+    type Picture = ();
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiBackend<(), M> {

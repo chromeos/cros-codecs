@@ -19,6 +19,7 @@ use libva::SurfaceMemoryDescriptor;
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
+use crate::backend::vaapi::VaapiPicture;
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::parser::Level;
@@ -35,6 +36,7 @@ use crate::decoder::stateless::h264::H264;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 
@@ -459,6 +461,12 @@ impl<M: SurfaceMemoryDescriptor> VaapiBackend<(), M> {
             slice_param,
         )))
     }
+}
+
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H264>
+    for VaapiBackend<(), M>
+{
+    type Picture = VaapiPicture<M>;
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<(), M> {

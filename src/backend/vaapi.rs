@@ -1004,6 +1004,9 @@ where
     }
 }
 
+/// Shortcut for pictures used for the VAAPI backend.
+pub type VaapiPicture<M> = Picture<PictureNew, PooledSurface<M>>;
+
 impl<StreamData, BackendData, M> StatelessDecoderBackend<StreamData>
     for VaapiBackend<BackendData, M>
 where
@@ -1012,7 +1015,6 @@ where
     M: SurfaceMemoryDescriptor + 'static,
 {
     type Handle = DecodedHandle<M>;
-    type Picture = Picture<PictureNew, PooledSurface<M>>;
 
     fn try_format(
         &mut self,

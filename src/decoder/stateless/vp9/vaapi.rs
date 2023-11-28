@@ -27,6 +27,7 @@ use crate::decoder::stateless::vp9::Vp9;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 
 /// The number of surfaces to allocate for this codec.
@@ -230,6 +231,12 @@ fn build_slice_param(
             seg_params,
         )),
     ))
+}
+
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp9>
+    for VaapiBackend<(), M>
+{
+    type Picture = ();
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiBackend<(), M> {

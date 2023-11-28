@@ -22,6 +22,7 @@ use libva::SurfaceMemoryDescriptor;
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
+use crate::backend::vaapi::VaapiPicture;
 use crate::codec::h265::dpb::Dpb;
 use crate::codec::h265::parser::NaluType;
 use crate::codec::h265::parser::Pps;
@@ -38,7 +39,7 @@ use crate::decoder::stateless::h265::H265;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
-use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 
 enum ScalingListType {
@@ -183,7 +184,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
 
     fn submit_last_slice(
         &mut self,
-        picture: &mut <Self as StatelessDecoderBackend<Sps>>::Picture,
+        picture: &mut <Self as StatelessDecoderBackendPicture<H265>>::Picture,
     ) -> anyhow::Result<()> {
         if let Some(last_slice) = self.backend_data.last_slice.take() {
             let metadata = self.metadata_state.get_parsed()?;
@@ -571,6 +572,12 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<BackendData, M> {
             scaling_list_dc_32x32,
         )))
     }
+}
+
+impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H265>
+    for VaapiBackend<BackendData, M>
+{
+    type Picture = VaapiPicture<M>;
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend

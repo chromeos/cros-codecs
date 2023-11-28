@@ -18,6 +18,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
@@ -86,7 +87,8 @@ pub struct Vp8;
 
 impl StatelessCodec for Vp8 {
     type FormatInfo = Header;
-    type DecoderState<B: StatelessDecoderBackend<Header>> = Vp8DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend<Header> + StatelessDecoderBackendPicture<Self>> =
+        Vp8DecoderState<B>;
 }
 
 impl<B> Vp8DecoderState<B>
@@ -164,7 +166,7 @@ where
 
 impl<B> StatelessDecoder<Vp8, B>
 where
-    B: StatelessVp8DecoderBackend,
+    B: StatelessVp8DecoderBackend + StatelessDecoderBackendPicture<Vp8>,
     B::Handle: Clone,
 {
     /// Handle a single frame.
@@ -213,7 +215,7 @@ where
 
 impl<B> StatelessVideoDecoder<<B::Handle as DecodedHandle>::Descriptor> for StatelessDecoder<Vp8, B>
 where
-    B: StatelessVp8DecoderBackend,
+    B: StatelessVp8DecoderBackend + StatelessDecoderBackendPicture<Vp8>,
     B::Handle: Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {

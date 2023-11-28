@@ -23,6 +23,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
@@ -112,12 +113,13 @@ pub struct Vp9;
 
 impl StatelessCodec for Vp9 {
     type FormatInfo = Header;
-    type DecoderState<B: StatelessDecoderBackend<Header>> = Vp9DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend<Header> + StatelessDecoderBackendPicture<Self>> =
+        Vp9DecoderState<B>;
 }
 
 impl<B> StatelessDecoder<Vp9, B>
 where
-    B: StatelessVp9DecoderBackend,
+    B: StatelessVp9DecoderBackend + StatelessDecoderBackendPicture<Vp9>,
     B::Handle: Clone,
 {
     fn update_references(
@@ -206,7 +208,7 @@ where
 
 impl<B> StatelessVideoDecoder<<B::Handle as DecodedHandle>::Descriptor> for StatelessDecoder<Vp9, B>
 where
-    B: StatelessVp9DecoderBackend,
+    B: StatelessVp9DecoderBackend + StatelessDecoderBackendPicture<Vp9>,
     B::Handle: Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {

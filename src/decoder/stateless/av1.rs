@@ -22,6 +22,7 @@ use crate::decoder::stateless::DecoderEvent;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::DecodedHandle;
@@ -36,7 +37,9 @@ mod dummy;
 mod vaapi;
 
 /// Stateless backend methods specific to AV1.
-pub trait StatelessAV1DecoderBackend: StatelessDecoderBackend<Rc<SequenceHeaderObu>> {
+pub trait StatelessAV1DecoderBackend:
+    StatelessDecoderBackend<Rc<SequenceHeaderObu>> + StatelessDecoderBackendPicture<Av1>
+{
     /// Called when a new Sequence Header OBU is parsed.
     fn new_sequence(&mut self, sequence: &Rc<SequenceHeaderObu>) -> StatelessBackendResult<()>;
 
@@ -66,7 +69,9 @@ pub trait StatelessAV1DecoderBackend: StatelessDecoderBackend<Rc<SequenceHeaderO
 ///
 /// Stored between calls to [`StatelessDecoder::handle_tile`] that belong to the
 /// same picture.
-enum CurrentPicState<B: StatelessDecoderBackend<Rc<SequenceHeaderObu>>> {
+enum CurrentPicState<
+    B: StatelessDecoderBackend<Rc<SequenceHeaderObu>> + StatelessDecoderBackendPicture<Av1>,
+> {
     /// A regular frame
     RegularFrame {
         /// Data for the current picture as extracted from the stream.
@@ -84,7 +89,9 @@ enum CurrentPicState<B: StatelessDecoderBackend<Rc<SequenceHeaderObu>>> {
     },
 }
 
-pub struct AV1DecoderState<B: StatelessDecoderBackend<Rc<SequenceHeaderObu>>> {
+pub struct AV1DecoderState<
+    B: StatelessDecoderBackend<Rc<SequenceHeaderObu>> + StatelessDecoderBackendPicture<Av1>,
+> {
     /// AV1 bitstream parser.
     parser: Parser,
 
@@ -135,7 +142,9 @@ pub struct Av1;
 
 impl StatelessCodec for Av1 {
     type FormatInfo = Rc<SequenceHeaderObu>;
-    type DecoderState<B: StatelessDecoderBackend<Rc<SequenceHeaderObu>>> = AV1DecoderState<B>;
+    type DecoderState<
+        B: StatelessDecoderBackend<Rc<SequenceHeaderObu>> + StatelessDecoderBackendPicture<Self>,
+    > = AV1DecoderState<B>;
 }
 
 impl<B> StatelessDecoder<Av1, B>

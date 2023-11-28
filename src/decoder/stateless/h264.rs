@@ -36,6 +36,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
@@ -68,7 +69,9 @@ fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
 }
 
 /// Stateless backend methods specific to H.264.
-pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<Rc<Sps>> {
+pub trait StatelessH264DecoderBackend:
+    StatelessDecoderBackend<Rc<Sps>> + StatelessDecoderBackendPicture<H264>
+{
     /// Called when a new SPS is parsed.
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()>;
 
@@ -227,7 +230,7 @@ impl<T> Default for ReferencePicLists<T> {
 /// State of the picture being currently decoded.
 ///
 /// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
-struct CurrentPicState<B: StatelessDecoderBackend<Rc<Sps>>> {
+struct CurrentPicState<B: StatelessDecoderBackend<Rc<Sps>> + StatelessDecoderBackendPicture<H264>> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
     /// PPS at the time of the current picture.
@@ -241,7 +244,9 @@ struct CurrentPicState<B: StatelessDecoderBackend<Rc<Sps>>> {
 /// State of the H.264 decoder.
 ///
 /// `B` is the backend used for this decoder.
-pub struct H264DecoderState<B: StatelessDecoderBackend<Rc<Sps>>> {
+pub struct H264DecoderState<
+    B: StatelessDecoderBackend<Rc<Sps>> + StatelessDecoderBackendPicture<H264>,
+> {
     /// H.264 bitstream parser.
     parser: Parser,
     /// Keeps track of the last stream parameters seen for negotiation purposes.
@@ -303,7 +308,8 @@ pub struct H264;
 
 impl StatelessCodec for H264 {
     type FormatInfo = Rc<Sps>;
-    type DecoderState<B: StatelessDecoderBackend<Rc<Sps>>> = H264DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend<Rc<Sps>> + StatelessDecoderBackendPicture<Self>> =
+        H264DecoderState<B>;
 }
 
 impl<B> H264DecoderState<B>

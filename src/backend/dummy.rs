@@ -8,7 +8,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DynHandle;
 use crate::decoder::FramePool;
@@ -124,9 +126,12 @@ impl<M> FramePool<M> for Backend {
     }
 }
 
+impl<Codec: StatelessCodec> StatelessDecoderBackendPicture<Codec> for Backend {
+    type Picture = ();
+}
+
 impl<FormatInfo> StatelessDecoderBackend<FormatInfo> for Backend {
     type Handle = Handle;
-    type Picture = ();
 
     fn try_format(&mut self, _: &FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
         Ok(())
