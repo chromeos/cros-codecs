@@ -109,358 +109,359 @@ impl VaStreamInfo for &Rc<Sps> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> VaapiBackend<M> {
-    /// Gets the VASurfaceID for the given `picture`.
-    fn surface_id(handle: &Option<VADecodedHandle<M>>) -> libva::VASurfaceID {
-        match handle {
-            None => libva::constants::VA_INVALID_SURFACE,
-            Some(handle) => handle.borrow().surface_id(),
-        }
+/// Gets the VASurfaceID for the given `picture`.
+fn surface_id<M: SurfaceMemoryDescriptor>(
+    handle: &Option<VADecodedHandle<M>>,
+) -> libva::VASurfaceID {
+    match handle {
+        None => libva::constants::VA_INVALID_SURFACE,
+        Some(handle) => handle.borrow().surface_id(),
     }
+}
 
-    /// Fills the internal `va_pic` picture parameter with data from `h264_pic`
-    fn fill_va_h264_pic(
-        h264_pic: &PictureData,
-        surface_id: libva::VASurfaceID,
-        merge_other_field: bool,
-    ) -> libva::PictureH264 {
-        let mut flags = 0;
-        let frame_idx = if matches!(h264_pic.reference(), Reference::LongTerm) {
-            flags |= libva::constants::VA_PICTURE_H264_LONG_TERM_REFERENCE;
-            h264_pic.long_term_frame_idx
-        } else {
-            if matches!(h264_pic.reference(), Reference::ShortTerm { .. }) {
-                flags |= libva::constants::VA_PICTURE_H264_SHORT_TERM_REFERENCE;
-            }
+/// Fills the internal `va_pic` picture parameter with data from `h264_pic`
+fn fill_va_h264_pic(
+    h264_pic: &PictureData,
+    surface_id: libva::VASurfaceID,
+    merge_other_field: bool,
+) -> libva::PictureH264 {
+    let mut flags = 0;
+    let frame_idx = if matches!(h264_pic.reference(), Reference::LongTerm) {
+        flags |= libva::constants::VA_PICTURE_H264_LONG_TERM_REFERENCE;
+        h264_pic.long_term_frame_idx
+    } else {
+        if matches!(h264_pic.reference(), Reference::ShortTerm { .. }) {
+            flags |= libva::constants::VA_PICTURE_H264_SHORT_TERM_REFERENCE;
+        }
 
-            h264_pic.frame_num
-        };
+        h264_pic.frame_num
+    };
 
-        let top_field_order_cnt;
-        let bottom_field_order_cnt;
+    let top_field_order_cnt;
+    let bottom_field_order_cnt;
 
-        match h264_pic.field {
-            Field::Frame => {
-                top_field_order_cnt = h264_pic.top_field_order_cnt;
-                bottom_field_order_cnt = h264_pic.bottom_field_order_cnt;
-            }
-            Field::Top => {
-                match (merge_other_field, h264_pic.other_field()) {
-                    (true, Some(other_field)) => {
-                        bottom_field_order_cnt = other_field.borrow().bottom_field_order_cnt
-                    }
-                    (_, _) => {
-                        flags |= libva::constants::VA_PICTURE_H264_TOP_FIELD;
-                        bottom_field_order_cnt = 0;
-                    }
+    match h264_pic.field {
+        Field::Frame => {
+            top_field_order_cnt = h264_pic.top_field_order_cnt;
+            bottom_field_order_cnt = h264_pic.bottom_field_order_cnt;
+        }
+        Field::Top => {
+            match (merge_other_field, h264_pic.other_field()) {
+                (true, Some(other_field)) => {
+                    bottom_field_order_cnt = other_field.borrow().bottom_field_order_cnt
                 }
-
-                top_field_order_cnt = h264_pic.top_field_order_cnt;
-            }
-            Field::Bottom => {
-                match (merge_other_field, h264_pic.other_field()) {
-                    (true, Some(other_field)) => {
-                        top_field_order_cnt = other_field.borrow().top_field_order_cnt
-                    }
-                    (_, _) => {
-                        flags |= libva::constants::VA_PICTURE_H264_BOTTOM_FIELD;
-                        top_field_order_cnt = 0;
-                    }
+                (_, _) => {
+                    flags |= libva::constants::VA_PICTURE_H264_TOP_FIELD;
+                    bottom_field_order_cnt = 0;
                 }
-
-                bottom_field_order_cnt = h264_pic.bottom_field_order_cnt;
             }
+
+            top_field_order_cnt = h264_pic.top_field_order_cnt;
         }
-
-        libva::PictureH264::new(
-            surface_id,
-            frame_idx as u32,
-            flags,
-            top_field_order_cnt,
-            bottom_field_order_cnt,
-        )
-    }
-
-    /// Builds an invalid VaPictureH264. These pictures are used to fill empty
-    /// array slots there is no data to fill them with.
-    fn build_invalid_va_h264_pic() -> libva::PictureH264 {
-        libva::PictureH264::new(
-            libva::constants::VA_INVALID_ID,
-            0,
-            libva::constants::VA_PICTURE_H264_INVALID,
-            0,
-            0,
-        )
-    }
-
-    fn build_iq_matrix(pps: &Pps) -> BufferType {
-        let mut scaling_list4x4 = [[0; 16]; 6];
-        let mut scaling_list8x8 = [[0; 64]; 2];
-
-        (0..6).for_each(|i| {
-            super::get_raster_from_zigzag_4x4(pps.scaling_lists_4x4()[i], &mut scaling_list4x4[i]);
-        });
-
-        (0..2).for_each(|i| {
-            super::get_raster_from_zigzag_8x8(pps.scaling_lists_8x8()[i], &mut scaling_list8x8[i]);
-        });
-
-        BufferType::IQMatrix(IQMatrix::H264(IQMatrixBufferH264::new(
-            scaling_list4x4,
-            scaling_list8x8,
-        )))
-    }
-
-    fn build_pic_param(
-        hdr: &SliceHeader,
-        current_picture: &PictureData,
-        current_surface_id: libva::VASurfaceID,
-        dpb: &Dpb<VADecodedHandle<M>>,
-        sps: &Sps,
-        pps: &Pps,
-    ) -> anyhow::Result<BufferType> {
-        let curr_pic = Self::fill_va_h264_pic(current_picture, current_surface_id, false);
-
-        let mut refs = vec![];
-        let mut va_refs = vec![];
-
-        dpb.get_short_term_refs(&mut refs);
-        refs.retain(|handle| {
-            let pic = handle.0.borrow();
-            !pic.nonexisting && !pic.is_second_field()
-        });
-
-        for handle in &refs {
-            let ref_pic = handle.0.borrow();
-            let surface_id = Self::surface_id(&handle.1);
-            let pic = Self::fill_va_h264_pic(&ref_pic, surface_id, true);
-            va_refs.push(pic);
-        }
-
-        refs.clear();
-
-        dpb.get_long_term_refs(&mut refs);
-        refs.retain(|handle| {
-            let pic = handle.0.borrow();
-            !pic.is_second_field()
-        });
-
-        for handle in &refs {
-            let ref_pic = handle.0.borrow();
-            let surface_id = Self::surface_id(&handle.1);
-            let pic = Self::fill_va_h264_pic(&ref_pic, surface_id, true);
-            va_refs.push(pic);
-        }
-
-        for _ in va_refs.len()..16 {
-            va_refs.push(Self::build_invalid_va_h264_pic());
-        }
-
-        refs.clear();
-
-        let seq_fields = libva::H264SeqFields::new(
-            sps.chroma_format_idc as u32,
-            sps.separate_colour_plane_flag as u32,
-            sps.gaps_in_frame_num_value_allowed_flag as u32,
-            sps.frame_mbs_only_flag as u32,
-            sps.mb_adaptive_frame_field_flag as u32,
-            sps.direct_8x8_inference_flag as u32,
-            (sps.level_idc >= Level::L3_1) as u32, /* see A.3.3.2 */
-            sps.log2_max_frame_num_minus4 as u32,
-            sps.pic_order_cnt_type as u32,
-            sps.log2_max_pic_order_cnt_lsb_minus4 as u32,
-            sps.delta_pic_order_always_zero_flag as u32,
-        );
-        let interlaced = !sps.frame_mbs_only_flag as u32;
-        let picture_height_in_mbs_minus1 =
-            ((sps.pic_height_in_map_units_minus1 + 1) << interlaced) - 1;
-
-        let pic_fields = libva::H264PicFields::new(
-            pps.entropy_coding_mode_flag() as u32,
-            pps.weighted_pred_flag() as u32,
-            pps.weighted_bipred_idc() as u32,
-            pps.transform_8x8_mode_flag() as u32,
-            hdr.field_pic_flag as u32,
-            pps.constrained_intra_pred_flag() as u32,
-            pps.bottom_field_pic_order_in_frame_present_flag() as u32,
-            pps.deblocking_filter_control_present_flag() as u32,
-            pps.redundant_pic_cnt_present_flag() as u32,
-            (current_picture.nal_ref_idc != 0) as u32,
-        );
-
-        let va_refs = va_refs.try_into();
-        let va_refs = match va_refs {
-            Ok(va_refs) => va_refs,
-            Err(_) => {
-                panic!("Bug: wrong number of references, expected 16");
+        Field::Bottom => {
+            match (merge_other_field, h264_pic.other_field()) {
+                (true, Some(other_field)) => {
+                    top_field_order_cnt = other_field.borrow().top_field_order_cnt
+                }
+                (_, _) => {
+                    flags |= libva::constants::VA_PICTURE_H264_BOTTOM_FIELD;
+                    top_field_order_cnt = 0;
+                }
             }
-        };
 
-        let pic_param = PictureParameterBufferH264::new(
-            curr_pic,
-            va_refs,
-            u16::try_from(sps.pic_width_in_mbs_minus1)?,
-            u16::try_from(picture_height_in_mbs_minus1)?,
-            sps.bit_depth_luma_minus8,
-            sps.bit_depth_chroma_minus8,
-            u8::try_from(sps.max_num_ref_frames)?,
-            &seq_fields,
-            0, /* FMO not supported by VA */
-            0, /* FMO not supported by VA */
-            0, /* FMO not supported by VA */
-            pps.pic_init_qp_minus26(),
-            pps.pic_init_qs_minus26(),
-            pps.chroma_qp_index_offset(),
-            pps.second_chroma_qp_index_offset(),
-            &pic_fields,
-            hdr.frame_num,
-        );
-
-        Ok(BufferType::PictureParameter(PictureParameter::H264(
-            pic_param,
-        )))
+            bottom_field_order_cnt = h264_pic.bottom_field_order_cnt;
+        }
     }
 
-    fn fill_ref_pic_list(ref_list_x: &[DpbEntry<VADecodedHandle<M>>]) -> [libva::PictureH264; 32] {
-        let mut va_pics = vec![];
+    libva::PictureH264::new(
+        surface_id,
+        frame_idx as u32,
+        flags,
+        top_field_order_cnt,
+        bottom_field_order_cnt,
+    )
+}
 
-        for handle in ref_list_x {
-            let pic = handle.0.borrow();
-            let surface_id = Self::surface_id(&handle.1);
-            let merge = matches!(pic.field, Field::Frame);
-            let va_pic = Self::fill_va_h264_pic(&pic, surface_id, merge);
+/// Builds an invalid VaPictureH264. These pictures are used to fill empty
+/// array slots there is no data to fill them with.
+fn build_invalid_va_h264_pic() -> libva::PictureH264 {
+    libva::PictureH264::new(
+        libva::constants::VA_INVALID_ID,
+        0,
+        libva::constants::VA_PICTURE_H264_INVALID,
+        0,
+        0,
+    )
+}
 
-            va_pics.push(va_pic);
-        }
+fn build_iq_matrix(pps: &Pps) -> BufferType {
+    let mut scaling_list4x4 = [[0; 16]; 6];
+    let mut scaling_list8x8 = [[0; 64]; 2];
 
-        for _ in va_pics.len()..32 {
-            va_pics.push(Self::build_invalid_va_h264_pic());
-        }
+    (0..6).for_each(|i| {
+        super::get_raster_from_zigzag_4x4(pps.scaling_lists_4x4()[i], &mut scaling_list4x4[i]);
+    });
 
-        let va_pics: [libva::PictureH264; 32] = match va_pics.try_into() {
-            Ok(va_pics) => va_pics,
-            Err(e) => panic!(
-                "Bug: wrong number of references, expected 32, got {:?}",
-                e.len()
-            ),
-        };
+    (0..2).for_each(|i| {
+        super::get_raster_from_zigzag_8x8(pps.scaling_lists_8x8()[i], &mut scaling_list8x8[i]);
+    });
 
-        va_pics
+    BufferType::IQMatrix(IQMatrix::H264(IQMatrixBufferH264::new(
+        scaling_list4x4,
+        scaling_list8x8,
+    )))
+}
+
+fn build_pic_param<M: SurfaceMemoryDescriptor>(
+    hdr: &SliceHeader,
+    current_picture: &PictureData,
+    current_surface_id: libva::VASurfaceID,
+    dpb: &Dpb<VADecodedHandle<M>>,
+    sps: &Sps,
+    pps: &Pps,
+) -> anyhow::Result<BufferType> {
+    let curr_pic = fill_va_h264_pic(current_picture, current_surface_id, false);
+
+    let mut refs = vec![];
+    let mut va_refs = vec![];
+
+    dpb.get_short_term_refs(&mut refs);
+    refs.retain(|handle| {
+        let pic = handle.0.borrow();
+        !pic.nonexisting && !pic.is_second_field()
+    });
+
+    for handle in &refs {
+        let ref_pic = handle.0.borrow();
+        let surface_id = surface_id(&handle.1);
+        let pic = fill_va_h264_pic(&ref_pic, surface_id, true);
+        va_refs.push(pic);
     }
 
-    fn build_slice_param(
-        hdr: &SliceHeader,
-        slice_size: usize,
-        ref_list_0: &[DpbEntry<VADecodedHandle<M>>],
-        ref_list_1: &[DpbEntry<VADecodedHandle<M>>],
-        sps: &Sps,
-        pps: &Pps,
-    ) -> anyhow::Result<BufferType> {
-        let ref_list_0 = Self::fill_ref_pic_list(ref_list_0);
-        let ref_list_1 = Self::fill_ref_pic_list(ref_list_1);
-        let pwt = &hdr.pred_weight_table;
+    refs.clear();
 
-        let mut luma_weight_l0_flag = false;
-        let mut chroma_weight_l0_flag = false;
-        let mut luma_weight_l0 = [0i16; 32];
-        let mut luma_offset_l0 = [0i16; 32];
-        let mut chroma_weight_l0: [[i16; 2]; 32] = [[0i16; 2]; 32];
-        let mut chroma_offset_l0: [[i16; 2]; 32] = [[0i16; 2]; 32];
+    dpb.get_long_term_refs(&mut refs);
+    refs.retain(|handle| {
+        let pic = handle.0.borrow();
+        !pic.is_second_field()
+    });
 
-        let mut luma_weight_l1_flag = false;
-        let mut chroma_weight_l1_flag = false;
-        let mut luma_weight_l1 = [0i16; 32];
-        let mut luma_offset_l1 = [0i16; 32];
-        let mut chroma_weight_l1: [[i16; 2]; 32] = [[0i16; 2]; 32];
-        let mut chroma_offset_l1: [[i16; 2]; 32] = [[0i16; 2]; 32];
+    for handle in &refs {
+        let ref_pic = handle.0.borrow();
+        let surface_id = surface_id(&handle.1);
+        let pic = fill_va_h264_pic(&ref_pic, surface_id, true);
+        va_refs.push(pic);
+    }
 
-        let mut fill_l0 = false;
-        let mut fill_l1 = false;
+    for _ in va_refs.len()..16 {
+        va_refs.push(build_invalid_va_h264_pic());
+    }
 
-        if pps.weighted_pred_flag() && (hdr.slice_type.is_p() || hdr.slice_type.is_sp()) {
-            fill_l0 = true;
-        } else if pps.weighted_bipred_idc() == 1 && hdr.slice_type.is_b() {
-            fill_l0 = true;
-            fill_l1 = true;
+    refs.clear();
+
+    let seq_fields = libva::H264SeqFields::new(
+        sps.chroma_format_idc as u32,
+        sps.separate_colour_plane_flag as u32,
+        sps.gaps_in_frame_num_value_allowed_flag as u32,
+        sps.frame_mbs_only_flag as u32,
+        sps.mb_adaptive_frame_field_flag as u32,
+        sps.direct_8x8_inference_flag as u32,
+        (sps.level_idc >= Level::L3_1) as u32, /* see A.3.3.2 */
+        sps.log2_max_frame_num_minus4 as u32,
+        sps.pic_order_cnt_type as u32,
+        sps.log2_max_pic_order_cnt_lsb_minus4 as u32,
+        sps.delta_pic_order_always_zero_flag as u32,
+    );
+    let interlaced = !sps.frame_mbs_only_flag as u32;
+    let picture_height_in_mbs_minus1 = ((sps.pic_height_in_map_units_minus1 + 1) << interlaced) - 1;
+
+    let pic_fields = libva::H264PicFields::new(
+        pps.entropy_coding_mode_flag() as u32,
+        pps.weighted_pred_flag() as u32,
+        pps.weighted_bipred_idc() as u32,
+        pps.transform_8x8_mode_flag() as u32,
+        hdr.field_pic_flag as u32,
+        pps.constrained_intra_pred_flag() as u32,
+        pps.bottom_field_pic_order_in_frame_present_flag() as u32,
+        pps.deblocking_filter_control_present_flag() as u32,
+        pps.redundant_pic_cnt_present_flag() as u32,
+        (current_picture.nal_ref_idc != 0) as u32,
+    );
+
+    let va_refs = va_refs.try_into();
+    let va_refs = match va_refs {
+        Ok(va_refs) => va_refs,
+        Err(_) => {
+            panic!("Bug: wrong number of references, expected 16");
+        }
+    };
+
+    let pic_param = PictureParameterBufferH264::new(
+        curr_pic,
+        va_refs,
+        u16::try_from(sps.pic_width_in_mbs_minus1)?,
+        u16::try_from(picture_height_in_mbs_minus1)?,
+        sps.bit_depth_luma_minus8,
+        sps.bit_depth_chroma_minus8,
+        u8::try_from(sps.max_num_ref_frames)?,
+        &seq_fields,
+        0, /* FMO not supported by VA */
+        0, /* FMO not supported by VA */
+        0, /* FMO not supported by VA */
+        pps.pic_init_qp_minus26(),
+        pps.pic_init_qs_minus26(),
+        pps.chroma_qp_index_offset(),
+        pps.second_chroma_qp_index_offset(),
+        &pic_fields,
+        hdr.frame_num,
+    );
+
+    Ok(BufferType::PictureParameter(PictureParameter::H264(
+        pic_param,
+    )))
+}
+
+fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
+    ref_list_x: &[DpbEntry<VADecodedHandle<M>>],
+) -> [libva::PictureH264; 32] {
+    let mut va_pics = vec![];
+
+    for handle in ref_list_x {
+        let pic = handle.0.borrow();
+        let surface_id = surface_id(&handle.1);
+        let merge = matches!(pic.field, Field::Frame);
+        let va_pic = fill_va_h264_pic(&pic, surface_id, merge);
+
+        va_pics.push(va_pic);
+    }
+
+    for _ in va_pics.len()..32 {
+        va_pics.push(build_invalid_va_h264_pic());
+    }
+
+    let va_pics: [libva::PictureH264; 32] = match va_pics.try_into() {
+        Ok(va_pics) => va_pics,
+        Err(e) => panic!(
+            "Bug: wrong number of references, expected 32, got {:?}",
+            e.len()
+        ),
+    };
+
+    va_pics
+}
+
+fn build_slice_param<M: SurfaceMemoryDescriptor>(
+    hdr: &SliceHeader,
+    slice_size: usize,
+    ref_list_0: &[DpbEntry<VADecodedHandle<M>>],
+    ref_list_1: &[DpbEntry<VADecodedHandle<M>>],
+    sps: &Sps,
+    pps: &Pps,
+) -> anyhow::Result<BufferType> {
+    let ref_list_0 = fill_ref_pic_list(ref_list_0);
+    let ref_list_1 = fill_ref_pic_list(ref_list_1);
+    let pwt = &hdr.pred_weight_table;
+
+    let mut luma_weight_l0_flag = false;
+    let mut chroma_weight_l0_flag = false;
+    let mut luma_weight_l0 = [0i16; 32];
+    let mut luma_offset_l0 = [0i16; 32];
+    let mut chroma_weight_l0: [[i16; 2]; 32] = [[0i16; 2]; 32];
+    let mut chroma_offset_l0: [[i16; 2]; 32] = [[0i16; 2]; 32];
+
+    let mut luma_weight_l1_flag = false;
+    let mut chroma_weight_l1_flag = false;
+    let mut luma_weight_l1 = [0i16; 32];
+    let mut luma_offset_l1 = [0i16; 32];
+    let mut chroma_weight_l1: [[i16; 2]; 32] = [[0i16; 2]; 32];
+    let mut chroma_offset_l1: [[i16; 2]; 32] = [[0i16; 2]; 32];
+
+    let mut fill_l0 = false;
+    let mut fill_l1 = false;
+
+    if pps.weighted_pred_flag() && (hdr.slice_type.is_p() || hdr.slice_type.is_sp()) {
+        fill_l0 = true;
+    } else if pps.weighted_bipred_idc() == 1 && hdr.slice_type.is_b() {
+        fill_l0 = true;
+        fill_l1 = true;
+    }
+
+    if fill_l0 {
+        luma_weight_l0_flag = true;
+
+        for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
+            luma_weight_l0[i] = pwt.luma_weight_l0()[i];
+            luma_offset_l0[i] = i16::from(pwt.luma_offset_l0()[i]);
         }
 
-        if fill_l0 {
-            luma_weight_l0_flag = true;
-
+        chroma_weight_l0_flag = sps.chroma_array_type != 0;
+        if chroma_weight_l0_flag {
             for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
-                luma_weight_l0[i] = pwt.luma_weight_l0()[i];
-                luma_offset_l0[i] = i16::from(pwt.luma_offset_l0()[i]);
-            }
-
-            chroma_weight_l0_flag = sps.chroma_array_type != 0;
-            if chroma_weight_l0_flag {
-                for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
-                    for j in 0..2 {
-                        chroma_weight_l0[i][j] = pwt.chroma_weight_l0()[i][j];
-                        chroma_offset_l0[i][j] = i16::from(pwt.chroma_offset_l0()[i][j]);
-                    }
+                for j in 0..2 {
+                    chroma_weight_l0[i][j] = pwt.chroma_weight_l0()[i][j];
+                    chroma_offset_l0[i][j] = i16::from(pwt.chroma_offset_l0()[i][j]);
                 }
             }
         }
+    }
 
-        if fill_l1 {
-            luma_weight_l1_flag = true;
+    if fill_l1 {
+        luma_weight_l1_flag = true;
 
-            luma_weight_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)].clone_from_slice(
-                &pwt.luma_weight_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
-            );
-            luma_offset_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)].clone_from_slice(
-                &pwt.luma_offset_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
-            );
-
-            chroma_weight_l1_flag = sps.chroma_array_type != 0;
-            if chroma_weight_l1_flag {
-                for i in 0..=hdr.num_ref_idx_l1_active_minus1 as usize {
-                    for j in 0..2 {
-                        chroma_weight_l1[i][j] = pwt.chroma_weight_l1()[i][j];
-                        chroma_offset_l1[i][j] = i16::from(pwt.chroma_offset_l1()[i][j]);
-                    }
-                }
-            }
-        }
-
-        let slice_param = libva::SliceParameterBufferH264::new(
-            slice_size as u32,
-            0,
-            libva::constants::VA_SLICE_DATA_FLAG_ALL,
-            hdr.header_bit_size as u16,
-            hdr.first_mb_in_slice as u16,
-            hdr.slice_type as u8,
-            hdr.direct_spatial_mv_pred_flag as u8,
-            hdr.num_ref_idx_l0_active_minus1,
-            hdr.num_ref_idx_l1_active_minus1,
-            hdr.cabac_init_idc,
-            hdr.slice_qp_delta,
-            hdr.disable_deblocking_filter_idc,
-            hdr.slice_alpha_c0_offset_div2,
-            hdr.slice_beta_offset_div2,
-            ref_list_0,
-            ref_list_1,
-            pwt.luma_log2_weight_denom(),
-            pwt.chroma_log2_weight_denom(),
-            luma_weight_l0_flag as u8,
-            luma_weight_l0,
-            luma_offset_l0,
-            chroma_weight_l0_flag as u8,
-            chroma_weight_l0,
-            chroma_offset_l0,
-            luma_weight_l1_flag as u8,
-            luma_weight_l1,
-            luma_offset_l1,
-            chroma_weight_l1_flag as u8,
-            chroma_weight_l1,
-            chroma_offset_l1,
+        luma_weight_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)].clone_from_slice(
+            &pwt.luma_weight_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
+        );
+        luma_offset_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)].clone_from_slice(
+            &pwt.luma_offset_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
         );
 
-        Ok(BufferType::SliceParameter(SliceParameter::H264(
-            slice_param,
-        )))
+        chroma_weight_l1_flag = sps.chroma_array_type != 0;
+        if chroma_weight_l1_flag {
+            for i in 0..=hdr.num_ref_idx_l1_active_minus1 as usize {
+                for j in 0..2 {
+                    chroma_weight_l1[i][j] = pwt.chroma_weight_l1()[i][j];
+                    chroma_offset_l1[i][j] = i16::from(pwt.chroma_offset_l1()[i][j]);
+                }
+            }
+        }
     }
+
+    let slice_param = libva::SliceParameterBufferH264::new(
+        slice_size as u32,
+        0,
+        libva::constants::VA_SLICE_DATA_FLAG_ALL,
+        hdr.header_bit_size as u16,
+        hdr.first_mb_in_slice as u16,
+        hdr.slice_type as u8,
+        hdr.direct_spatial_mv_pred_flag as u8,
+        hdr.num_ref_idx_l0_active_minus1,
+        hdr.num_ref_idx_l1_active_minus1,
+        hdr.cabac_init_idc,
+        hdr.slice_qp_delta,
+        hdr.disable_deblocking_filter_idc,
+        hdr.slice_alpha_c0_offset_div2,
+        hdr.slice_beta_offset_div2,
+        ref_list_0,
+        ref_list_1,
+        pwt.luma_log2_weight_denom(),
+        pwt.chroma_log2_weight_denom(),
+        luma_weight_l0_flag as u8,
+        luma_weight_l0,
+        luma_offset_l0,
+        chroma_weight_l0_flag as u8,
+        chroma_weight_l0,
+        chroma_offset_l0,
+        luma_weight_l1_flag as u8,
+        luma_weight_l1,
+        luma_offset_l1,
+        chroma_weight_l1_flag as u8,
+        chroma_weight_l1,
+        chroma_offset_l1,
+    );
+
+    Ok(BufferType::SliceParameter(SliceParameter::H264(
+        slice_param,
+    )))
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H264>
@@ -488,12 +489,12 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
 
         let surface_id = picture.surface().id();
 
-        let pic_param = Self::build_pic_param(hdr, picture_data, surface_id, dpb, sps, pps)?;
+        let pic_param = build_pic_param(hdr, picture_data, surface_id, dpb, sps, pps)?;
         let pic_param = context
             .create_buffer(pic_param)
             .context("while creating picture parameter buffer")?;
 
-        let iq_matrix = Self::build_iq_matrix(pps);
+        let iq_matrix = build_iq_matrix(pps);
         let iq_matrix = context
             .create_buffer(iq_matrix)
             .context("while creating IQ matrix buffer")?;
@@ -518,7 +519,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         let context = &metadata.context;
 
         let slice_param = context
-            .create_buffer(Self::build_slice_param(
+            .create_buffer(build_slice_param(
                 slice.header(),
                 slice.nalu().size(),
                 ref_pic_list0,
