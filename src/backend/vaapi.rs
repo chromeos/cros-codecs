@@ -174,7 +174,7 @@ fn supported_formats_for_rt_format(
 }
 
 /// A decoded frame handle.
-pub(crate) type DecodedHandle<M> = Rc<RefCell<GenericBackendHandle<M>>>;
+pub(crate) type DecodedHandle<M> = Rc<RefCell<VaapiDecodedHandle<M>>>;
 
 impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
     type Descriptor = M;
@@ -680,7 +680,7 @@ impl StreamMetadataState {
 ///
 /// This includes the VA picture which can be pending rendering or complete, as well as useful
 /// meta-information.
-pub struct GenericBackendHandle<M: SurfaceMemoryDescriptor> {
+pub struct VaapiDecodedHandle<M: SurfaceMemoryDescriptor> {
     state: PictureState<M>,
     /// The decoder resolution when this frame was processed. Not all codecs
     /// send resolution data in every frame header.
@@ -691,7 +691,7 @@ pub struct GenericBackendHandle<M: SurfaceMemoryDescriptor> {
     map_format: Rc<libva::VAImageFormat>,
 }
 
-impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
+impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
     /// Creates a new pending handle on `surface_id`.
     fn new(
         picture: Picture<PictureNew, PooledSurface<M>>,
@@ -784,7 +784,7 @@ impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
     }
 }
 
-impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::Ref<'a, GenericBackendHandle<M>> {
+impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::Ref<'a, VaapiDecodedHandle<M>> {
     fn dyn_mappable_handle<'b>(&'b self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
         self.image().map(|i| Box::new(i) as Box<dyn MappableHandle>)
     }
@@ -976,7 +976,7 @@ where
     {
         let metadata = self.metadata_state.get_parsed()?;
 
-        Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
+        Ok(Rc::new(RefCell::new(VaapiDecodedHandle::new(
             picture, metadata,
         )?)))
     }
