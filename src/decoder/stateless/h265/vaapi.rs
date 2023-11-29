@@ -136,39 +136,408 @@ impl VaStreamInfo for &Sps {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<M> {
-    fn build_slice_ref_pic_list(
-        ref_pic_list: &[Option<RefPicListEntry<VADecodedHandle<M>>>; 16],
-        va_references: &[PictureHEVC; 15],
-    ) -> [u8; 15] {
-        let mut va_refs = [0xff; 15];
+fn build_slice_ref_pic_list<M: SurfaceMemoryDescriptor>(
+    ref_pic_list: &[Option<RefPicListEntry<VADecodedHandle<M>>>; 16],
+    va_references: &[PictureHEVC; 15],
+) -> [u8; 15] {
+    let mut va_refs = [0xff; 15];
 
-        for (ref_pic_list_idx, ref_pic_list_entry) in ref_pic_list.iter().enumerate() {
-            if ref_pic_list_idx == 15 {
-                break;
-            }
+    for (ref_pic_list_idx, ref_pic_list_entry) in ref_pic_list.iter().enumerate() {
+        if ref_pic_list_idx == 15 {
+            break;
+        }
 
-            if let Some(ref_pic_list_entry) = ref_pic_list_entry {
-                for (va_ref_idx, va_ref) in va_references.iter().enumerate() {
-                    if va_ref.picture_id() == libva::constants::VA_INVALID_ID {
-                        break;
-                    }
+        if let Some(ref_pic_list_entry) = ref_pic_list_entry {
+            for (va_ref_idx, va_ref) in va_references.iter().enumerate() {
+                if va_ref.picture_id() == libva::constants::VA_INVALID_ID {
+                    break;
+                }
 
-                    let pic_order_cnt = match ref_pic_list_entry {
-                        RefPicListEntry::CurrentPicture(p) => p.pic_order_cnt_val,
-                        RefPicListEntry::DpbEntry(p) => p.0.borrow().pic_order_cnt_val,
-                    };
+                let pic_order_cnt = match ref_pic_list_entry {
+                    RefPicListEntry::CurrentPicture(p) => p.pic_order_cnt_val,
+                    RefPicListEntry::DpbEntry(p) => p.0.borrow().pic_order_cnt_val,
+                };
 
-                    if va_ref.pic_order_cnt() == pic_order_cnt {
-                        va_refs[ref_pic_list_idx] = va_ref_idx as u8;
-                    }
+                if va_ref.pic_order_cnt() == pic_order_cnt {
+                    va_refs[ref_pic_list_idx] = va_ref_idx as u8;
                 }
             }
         }
-
-        va_refs
     }
 
+    va_refs
+}
+
+fn va_rps_flag<M: SurfaceMemoryDescriptor>(
+    hevc_pic: &PictureData,
+    rps: &RefPicSet<VADecodedHandle<M>>,
+) -> u32 {
+    if rps
+        .ref_pic_set_st_curr_before
+        .iter()
+        .flatten()
+        .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
+    {
+        libva::constants::VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE
+    } else if rps
+        .ref_pic_set_st_curr_after
+        .iter()
+        .flatten()
+        .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
+    {
+        libva::constants::VA_PICTURE_HEVC_RPS_ST_CURR_AFTER
+    } else if rps
+        .ref_pic_set_lt_curr
+        .iter()
+        .flatten()
+        .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
+    {
+        libva::constants::VA_PICTURE_HEVC_RPS_LT_CURR
+    } else {
+        0
+    }
+}
+
+/// Builds an invalid VaPictureHEVC. These pictures are used to fill empty
+/// array slots there is no data to fill them with.
+fn build_invalid_va_hevc_pic() -> libva::PictureHEVC {
+    libva::PictureHEVC::new(
+        libva::constants::VA_INVALID_ID,
+        0,
+        libva::constants::VA_PICTURE_HEVC_INVALID,
+    )
+}
+
+fn fill_va_hevc_pic<M: SurfaceMemoryDescriptor>(
+    hevc_pic: &PictureData,
+    surface_id: libva::VASurfaceID,
+    rps: &RefPicSet<VADecodedHandle<M>>,
+) -> libva::PictureHEVC {
+    let mut flags = 0;
+
+    if matches!(hevc_pic.reference(), Reference::LongTerm) {
+        flags |= libva::constants::VA_PICTURE_HEVC_LONG_TERM_REFERENCE;
+    }
+
+    flags |= va_rps_flag(hevc_pic, rps);
+
+    libva::PictureHEVC::new(surface_id, hevc_pic.pic_order_cnt_val, flags)
+}
+
+fn is_range_extension_profile(va_profile: libva::VAProfile::Type) -> bool {
+    matches!(
+        va_profile,
+        libva::VAProfile::VAProfileHEVCMain422_10
+            | libva::VAProfile::VAProfileHEVCMain444
+            | libva::VAProfile::VAProfileHEVCMain444_10
+            | libva::VAProfile::VAProfileHEVCMain12
+            | libva::VAProfile::VAProfileHEVCMain422_12
+            | libva::VAProfile::VAProfileHEVCMain444_12
+    )
+}
+
+fn is_scc_ext_profile(va_profile: libva::VAProfile::Type) -> bool {
+    matches!(
+        va_profile,
+        libva::VAProfile::VAProfileHEVCSccMain
+            | libva::VAProfile::VAProfileHEVCSccMain10
+            | libva::VAProfile::VAProfileHEVCSccMain444
+            | libva::VAProfile::VAProfileHEVCMain444_10,
+    )
+}
+
+fn build_picture_rext(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
+    let sps_rext = &sps.range_extension;
+    let pps_rext = &pps.range_extension;
+
+    let range_extension_pic_fields = libva::HevcRangeExtensionPicFields::new(
+        sps_rext.transform_skip_rotation_enabled_flag as u32,
+        sps_rext.transform_skip_context_enabled_flag as u32,
+        sps_rext.implicit_rdpcm_enabled_flag as u32,
+        sps_rext.explicit_rdpcm_enabled_flag as u32,
+        sps_rext.extended_precision_processing_flag as u32,
+        sps_rext.intra_smoothing_disabled_flag as u32,
+        sps_rext.high_precision_offsets_enabled_flag as u32,
+        sps_rext.persistent_rice_adaptation_enabled_flag as u32,
+        sps_rext.cabac_bypass_alignment_enabled_flag as u32,
+        pps_rext.cross_component_prediction_enabled_flag as u32,
+        pps_rext.chroma_qp_offset_list_enabled_flag as u32,
+    );
+
+    let rext = libva::PictureParameterBufferHEVCRext::new(
+        &range_extension_pic_fields,
+        pps_rext.diff_cu_chroma_qp_offset_depth as u8,
+        pps_rext.chroma_qp_offset_list_len_minus1 as u8,
+        pps_rext.log2_sao_offset_scale_luma as u8,
+        pps_rext.log2_sao_offset_scale_chroma as u8,
+        pps_rext.log2_max_transform_skip_block_size_minus2 as u8,
+        pps_rext.cb_qp_offset_list.map(|x| x as i8),
+        pps_rext.cr_qp_offset_list.map(|x| x as i8),
+    );
+
+    Ok(BufferType::PictureParameter(
+        libva::PictureParameter::HEVCRext(rext),
+    ))
+}
+
+fn build_picture_scc(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
+    let sps_scc = &sps.scc_extension;
+    let pps_scc = &pps.scc_extension;
+
+    let scc_pic_fields = libva::HevcScreenContentPicFields::new(
+        pps_scc.curr_pic_ref_enabled_flag as u32,
+        sps_scc.palette_mode_enabled_flag as u32,
+        sps_scc.motion_vector_resolution_control_idc as u32,
+        sps_scc.intra_boundary_filtering_disabled_flag as u32,
+        pps_scc.residual_adaptive_colour_transform_enabled_flag as u32,
+        pps_scc.slice_act_qp_offsets_present_flag as u32,
+    );
+
+    let (predictor_palette_entries, predictor_palette_size) =
+        if pps_scc.palette_predictor_initializers_present_flag {
+            (
+                pps_scc
+                    .palette_predictor_initializer
+                    .map(|outer| outer.map(u16::from)),
+                pps_scc.num_palette_predictor_initializers,
+            )
+        } else if sps_scc.palette_predictor_initializers_present_flag {
+            (
+                sps_scc
+                    .palette_predictor_initializer
+                    .map(|outer| outer.map(|inner| inner as u16)),
+                sps_scc.num_palette_predictor_initializer_minus1 + 1,
+            )
+        } else {
+            ([[0; 128]; 3], 0)
+        };
+
+    let scc = libva::PictureParameterBufferHEVCScc::new(
+        &scc_pic_fields,
+        sps_scc.palette_max_size,
+        sps_scc.delta_palette_max_predictor_size,
+        predictor_palette_size,
+        predictor_palette_entries,
+        pps_scc.act_y_qp_offset_plus5,
+        pps_scc.act_cb_qp_offset_plus5,
+        pps_scc.act_cr_qp_offset_plus3,
+    );
+
+    Ok(BufferType::PictureParameter(
+        libva::PictureParameter::HEVCScc(scc),
+    ))
+}
+
+fn build_pic_param<M: SurfaceMemoryDescriptor>(
+    _: &Slice,
+    current_picture: &PictureData,
+    current_surface_id: libva::VASurfaceID,
+    dpb: &Dpb<VADecodedHandle<M>>,
+    rps: &RefPicSet<VADecodedHandle<M>>,
+    sps: &Sps,
+    pps: &Pps,
+) -> anyhow::Result<(BufferType, [PictureHEVC; 15])> {
+    let curr_pic = fill_va_hevc_pic(current_picture, current_surface_id, rps);
+
+    let mut reference_frames = vec![];
+
+    for ref_pic in dpb.get_all_references() {
+        let surface_id = ref_pic.1.borrow().surface_id();
+        let ref_pic = fill_va_hevc_pic(&ref_pic.0.borrow(), surface_id, rps);
+        reference_frames.push(ref_pic);
+    }
+
+    // RefPicListL0 and RefPicListL1 may signal that they want to refer to
+    // the current picture. We must tell VA that it is a reference as it is
+    // not in the DPB at this point.
+    if pps.scc_extension.curr_pic_ref_enabled_flag {
+        if reference_frames.len() >= 15 {
+            log::warn!(
+                "Bug: Trying to set the current picture as a VA reference, but the VA DPB is full."
+            )
+        } else {
+            reference_frames.push(curr_pic);
+        }
+    }
+
+    for _ in reference_frames.len()..15 {
+        reference_frames.push(build_invalid_va_hevc_pic());
+    }
+
+    let reference_frames = reference_frames.try_into();
+    let reference_frames = match reference_frames {
+        Ok(va_refs) => va_refs,
+        Err(_) => {
+            // Can't panic, we guarantee len() == 15.
+            panic!("Bug: wrong number of references, expected 15");
+        }
+    };
+
+    let pic_fields = libva::HevcPicFields::new(
+        sps.chroma_format_idc as u32,
+        sps.separate_colour_plane_flag as u32,
+        sps.pcm_enabled_flag as u32,
+        sps.scaling_list_enabled_flag as u32,
+        pps.transform_skip_enabled_flag as u32,
+        sps.amp_enabled_flag as u32,
+        sps.strong_intra_smoothing_enabled_flag as u32,
+        pps.sign_data_hiding_enabled_flag as u32,
+        pps.constrained_intra_pred_flag as u32,
+        pps.cu_qp_delta_enabled_flag as u32,
+        pps.weighted_pred_flag as u32,
+        pps.weighted_bipred_flag as u32,
+        pps.transquant_bypass_enabled_flag as u32,
+        pps.tiles_enabled_flag as u32,
+        pps.entropy_coding_sync_enabled_flag as u32,
+        pps.loop_filter_across_slices_enabled_flag as u32,
+        pps.loop_filter_across_tiles_enabled_flag as u32,
+        sps.pcm_loop_filter_disabled_flag as u32,
+        /* lets follow the FFMPEG and GStreamer train and set these to false */
+        0,
+        0,
+    );
+
+    let rap_pic_flag = current_picture.nalu_type as u32 >= NaluType::BlaWLp as u32
+        && current_picture.nalu_type as u32 <= NaluType::CraNut as u32;
+
+    let slice_parsing_fields = libva::HevcSliceParsingFields::new(
+        pps.lists_modification_present_flag as u32,
+        sps.long_term_ref_pics_present_flag as u32,
+        sps.temporal_mvp_enabled_flag as u32,
+        pps.cabac_init_present_flag as u32,
+        pps.output_flag_present_flag as u32,
+        pps.dependent_slice_segments_enabled_flag as u32,
+        pps.slice_chroma_qp_offsets_present_flag as u32,
+        sps.sample_adaptive_offset_enabled_flag as u32,
+        pps.deblocking_filter_override_enabled_flag as u32,
+        pps.deblocking_filter_disabled_flag as u32,
+        pps.slice_segment_header_extension_present_flag as u32,
+        rap_pic_flag as u32,
+        current_picture.nalu_type.is_idr() as u32,
+        current_picture.nalu_type.is_irap() as u32,
+    );
+
+    let pic_param = PictureParameterBufferHEVC::new(
+        curr_pic,
+        reference_frames,
+        sps.pic_width_in_luma_samples,
+        sps.pic_height_in_luma_samples,
+        &pic_fields,
+        sps.max_dec_pic_buffering_minus1[usize::from(sps.max_sub_layers_minus1)],
+        sps.bit_depth_luma_minus8,
+        sps.bit_depth_chroma_minus8,
+        sps.pcm_sample_bit_depth_luma_minus1,
+        sps.pcm_sample_bit_depth_chroma_minus1,
+        sps.log2_min_luma_coding_block_size_minus3,
+        sps.log2_diff_max_min_luma_coding_block_size,
+        sps.log2_min_luma_transform_block_size_minus2,
+        sps.log2_diff_max_min_luma_transform_block_size,
+        sps.log2_min_pcm_luma_coding_block_size_minus3,
+        sps.log2_diff_max_min_pcm_luma_coding_block_size,
+        sps.max_transform_hierarchy_depth_intra,
+        sps.max_transform_hierarchy_depth_inter,
+        pps.init_qp_minus26,
+        pps.diff_cu_qp_delta_depth,
+        pps.cb_qp_offset,
+        pps.cr_qp_offset,
+        pps.log2_parallel_merge_level_minus2,
+        pps.num_tile_columns_minus1,
+        pps.num_tile_rows_minus1,
+        pps.column_width_minus1.map(|x| x as u16),
+        pps.row_height_minus1.map(|x| x as u16),
+        &slice_parsing_fields,
+        sps.log2_max_pic_order_cnt_lsb_minus4,
+        sps.num_short_term_ref_pic_sets,
+        sps.num_long_term_ref_pics_sps,
+        pps.num_ref_idx_l0_default_active_minus1,
+        pps.num_ref_idx_l1_default_active_minus1,
+        pps.beta_offset_div2,
+        pps.tc_offset_div2,
+        pps.num_extra_slice_header_bits,
+        current_picture.short_term_ref_pic_set_size_bits,
+    );
+
+    Ok((
+        BufferType::PictureParameter(libva::PictureParameter::HEVC(pic_param)),
+        reference_frames,
+    ))
+}
+
+fn find_scaling_list(sps: &Sps, pps: &Pps) -> ScalingListType {
+    if pps.scaling_list_data_present_flag
+        || (sps.scaling_list_enabled_flag && !sps.scaling_list_data_present_flag)
+    {
+        ScalingListType::Pps
+    } else if sps.scaling_list_enabled_flag && sps.scaling_list_data_present_flag {
+        ScalingListType::Sps
+    } else {
+        ScalingListType::None
+    }
+}
+
+fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
+    let scaling_lists = match find_scaling_list(sps, pps) {
+        ScalingListType::Sps => &sps.scaling_list,
+        ScalingListType::Pps => &pps.scaling_list,
+        ScalingListType::None => panic!("No scaling list data available"),
+    };
+
+    let mut scaling_list_32x32 = [[0; 64]; 2];
+
+    for i in (0..6).step_by(3) {
+        for j in 0..64 {
+            scaling_list_32x32[i / 3][j] = scaling_lists.scaling_list_32x32()[i][j];
+        }
+    }
+
+    let mut scaling_list_dc_32x32 = [0; 2];
+    for i in (0..6).step_by(3) {
+        scaling_list_dc_32x32[i / 3] =
+            (scaling_lists.scaling_list_dc_coef_minus8_32x32()[i] + 8) as u8;
+    }
+
+    let mut scaling_list_4x4 = [[0; 16]; 6];
+    let mut scaling_list_8x8 = [[0; 64]; 6];
+    let mut scaling_list_16x16 = [[0; 64]; 6];
+    let mut scaling_list_32x32_r = [[0; 64]; 2];
+
+    (0..6).for_each(|i| {
+        super::get_raster_from_up_right_diagonal_4x4(
+            scaling_lists.scaling_list_4x4()[i],
+            &mut scaling_list_4x4[i],
+        );
+
+        super::get_raster_from_up_right_diagonal_8x8(
+            scaling_lists.scaling_list_8x8()[i],
+            &mut scaling_list_8x8[i],
+        );
+
+        super::get_raster_from_up_right_diagonal_8x8(
+            scaling_lists.scaling_list_16x16()[i],
+            &mut scaling_list_16x16[i],
+        );
+    });
+
+    (0..2).for_each(|i| {
+        super::get_raster_from_up_right_diagonal_8x8(
+            scaling_list_32x32[i],
+            &mut scaling_list_32x32_r[i],
+        );
+    });
+
+    BufferType::IQMatrix(IQMatrix::HEVC(IQMatrixBufferHEVC::new(
+        scaling_list_4x4,
+        scaling_list_8x8,
+        scaling_list_16x16,
+        scaling_list_32x32_r,
+        scaling_lists
+            .scaling_list_dc_coef_minus8_16x16()
+            .map(|x| (x + 8) as u8),
+        scaling_list_dc_32x32,
+    )))
+}
+
+impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<M> {
     fn submit_last_slice(
         &mut self,
         picture: &mut <Self as StatelessDecoderBackendPicture<H265>>::Picture,
@@ -195,372 +564,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<M> {
         }
 
         Ok(())
-    }
-
-    fn va_rps_flag(hevc_pic: &PictureData, rps: &RefPicSet<VADecodedHandle<M>>) -> u32 {
-        if rps
-            .ref_pic_set_st_curr_before
-            .iter()
-            .flatten()
-            .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
-        {
-            libva::constants::VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE
-        } else if rps
-            .ref_pic_set_st_curr_after
-            .iter()
-            .flatten()
-            .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
-        {
-            libva::constants::VA_PICTURE_HEVC_RPS_ST_CURR_AFTER
-        } else if rps
-            .ref_pic_set_lt_curr
-            .iter()
-            .flatten()
-            .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
-        {
-            libva::constants::VA_PICTURE_HEVC_RPS_LT_CURR
-        } else {
-            0
-        }
-    }
-
-    /// Builds an invalid VaPictureHEVC. These pictures are used to fill empty
-    /// array slots there is no data to fill them with.
-    fn build_invalid_va_hevc_pic() -> libva::PictureHEVC {
-        libva::PictureHEVC::new(
-            libva::constants::VA_INVALID_ID,
-            0,
-            libva::constants::VA_PICTURE_HEVC_INVALID,
-        )
-    }
-
-    fn fill_va_hevc_pic(
-        hevc_pic: &PictureData,
-        surface_id: libva::VASurfaceID,
-        rps: &RefPicSet<VADecodedHandle<M>>,
-    ) -> libva::PictureHEVC {
-        let mut flags = 0;
-
-        if matches!(hevc_pic.reference(), Reference::LongTerm) {
-            flags |= libva::constants::VA_PICTURE_HEVC_LONG_TERM_REFERENCE;
-        }
-
-        flags |= Self::va_rps_flag(hevc_pic, rps);
-
-        libva::PictureHEVC::new(surface_id, hevc_pic.pic_order_cnt_val, flags)
-    }
-
-    fn is_range_extension_profile(va_profile: libva::VAProfile::Type) -> bool {
-        matches!(
-            va_profile,
-            libva::VAProfile::VAProfileHEVCMain422_10
-                | libva::VAProfile::VAProfileHEVCMain444
-                | libva::VAProfile::VAProfileHEVCMain444_10
-                | libva::VAProfile::VAProfileHEVCMain12
-                | libva::VAProfile::VAProfileHEVCMain422_12
-                | libva::VAProfile::VAProfileHEVCMain444_12
-        )
-    }
-
-    fn is_scc_ext_profile(va_profile: libva::VAProfile::Type) -> bool {
-        matches!(
-            va_profile,
-            libva::VAProfile::VAProfileHEVCSccMain
-                | libva::VAProfile::VAProfileHEVCSccMain10
-                | libva::VAProfile::VAProfileHEVCSccMain444
-                | libva::VAProfile::VAProfileHEVCMain444_10,
-        )
-    }
-
-    fn build_picture_rext(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
-        let sps_rext = &sps.range_extension;
-        let pps_rext = &pps.range_extension;
-
-        let range_extension_pic_fields = libva::HevcRangeExtensionPicFields::new(
-            sps_rext.transform_skip_rotation_enabled_flag as u32,
-            sps_rext.transform_skip_context_enabled_flag as u32,
-            sps_rext.implicit_rdpcm_enabled_flag as u32,
-            sps_rext.explicit_rdpcm_enabled_flag as u32,
-            sps_rext.extended_precision_processing_flag as u32,
-            sps_rext.intra_smoothing_disabled_flag as u32,
-            sps_rext.high_precision_offsets_enabled_flag as u32,
-            sps_rext.persistent_rice_adaptation_enabled_flag as u32,
-            sps_rext.cabac_bypass_alignment_enabled_flag as u32,
-            pps_rext.cross_component_prediction_enabled_flag as u32,
-            pps_rext.chroma_qp_offset_list_enabled_flag as u32,
-        );
-
-        let rext = libva::PictureParameterBufferHEVCRext::new(
-            &range_extension_pic_fields,
-            pps_rext.diff_cu_chroma_qp_offset_depth as u8,
-            pps_rext.chroma_qp_offset_list_len_minus1 as u8,
-            pps_rext.log2_sao_offset_scale_luma as u8,
-            pps_rext.log2_sao_offset_scale_chroma as u8,
-            pps_rext.log2_max_transform_skip_block_size_minus2 as u8,
-            pps_rext.cb_qp_offset_list.map(|x| x as i8),
-            pps_rext.cr_qp_offset_list.map(|x| x as i8),
-        );
-
-        Ok(BufferType::PictureParameter(
-            libva::PictureParameter::HEVCRext(rext),
-        ))
-    }
-
-    fn build_picture_scc(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
-        let sps_scc = &sps.scc_extension;
-        let pps_scc = &pps.scc_extension;
-
-        let scc_pic_fields = libva::HevcScreenContentPicFields::new(
-            pps_scc.curr_pic_ref_enabled_flag as u32,
-            sps_scc.palette_mode_enabled_flag as u32,
-            sps_scc.motion_vector_resolution_control_idc as u32,
-            sps_scc.intra_boundary_filtering_disabled_flag as u32,
-            pps_scc.residual_adaptive_colour_transform_enabled_flag as u32,
-            pps_scc.slice_act_qp_offsets_present_flag as u32,
-        );
-
-        let (predictor_palette_entries, predictor_palette_size) =
-            if pps_scc.palette_predictor_initializers_present_flag {
-                (
-                    pps_scc
-                        .palette_predictor_initializer
-                        .map(|outer| outer.map(u16::from)),
-                    pps_scc.num_palette_predictor_initializers,
-                )
-            } else if sps_scc.palette_predictor_initializers_present_flag {
-                (
-                    sps_scc
-                        .palette_predictor_initializer
-                        .map(|outer| outer.map(|inner| inner as u16)),
-                    sps_scc.num_palette_predictor_initializer_minus1 + 1,
-                )
-            } else {
-                ([[0; 128]; 3], 0)
-            };
-
-        let scc = libva::PictureParameterBufferHEVCScc::new(
-            &scc_pic_fields,
-            sps_scc.palette_max_size,
-            sps_scc.delta_palette_max_predictor_size,
-            predictor_palette_size,
-            predictor_palette_entries,
-            pps_scc.act_y_qp_offset_plus5,
-            pps_scc.act_cb_qp_offset_plus5,
-            pps_scc.act_cr_qp_offset_plus3,
-        );
-
-        Ok(BufferType::PictureParameter(
-            libva::PictureParameter::HEVCScc(scc),
-        ))
-    }
-
-    // TODO move this to local function to avoid conflict with h.264 implementation.
-    fn build_h265_pic_param(
-        _: &Slice,
-        current_picture: &PictureData,
-        current_surface_id: libva::VASurfaceID,
-        dpb: &Dpb<VADecodedHandle<M>>,
-        rps: &RefPicSet<VADecodedHandle<M>>,
-        sps: &Sps,
-        pps: &Pps,
-    ) -> anyhow::Result<(BufferType, [PictureHEVC; 15])> {
-        let curr_pic = Self::fill_va_hevc_pic(current_picture, current_surface_id, rps);
-
-        let mut reference_frames = vec![];
-
-        for ref_pic in dpb.get_all_references() {
-            let surface_id = ref_pic.1.borrow().surface_id();
-            let ref_pic = Self::fill_va_hevc_pic(&ref_pic.0.borrow(), surface_id, rps);
-            reference_frames.push(ref_pic);
-        }
-
-        // RefPicListL0 and RefPicListL1 may signal that they want to refer to
-        // the current picture. We must tell VA that it is a reference as it is
-        // not in the DPB at this point.
-        if pps.scc_extension.curr_pic_ref_enabled_flag {
-            if reference_frames.len() >= 15 {
-                log::warn!("Bug: Trying to set the current picture as a VA reference, but the VA DPB is full.")
-            } else {
-                reference_frames.push(curr_pic);
-            }
-        }
-
-        for _ in reference_frames.len()..15 {
-            reference_frames.push(Self::build_invalid_va_hevc_pic());
-        }
-
-        let reference_frames = reference_frames.try_into();
-        let reference_frames = match reference_frames {
-            Ok(va_refs) => va_refs,
-            Err(_) => {
-                // Can't panic, we guarantee len() == 15.
-                panic!("Bug: wrong number of references, expected 15");
-            }
-        };
-
-        let pic_fields = libva::HevcPicFields::new(
-            sps.chroma_format_idc as u32,
-            sps.separate_colour_plane_flag as u32,
-            sps.pcm_enabled_flag as u32,
-            sps.scaling_list_enabled_flag as u32,
-            pps.transform_skip_enabled_flag as u32,
-            sps.amp_enabled_flag as u32,
-            sps.strong_intra_smoothing_enabled_flag as u32,
-            pps.sign_data_hiding_enabled_flag as u32,
-            pps.constrained_intra_pred_flag as u32,
-            pps.cu_qp_delta_enabled_flag as u32,
-            pps.weighted_pred_flag as u32,
-            pps.weighted_bipred_flag as u32,
-            pps.transquant_bypass_enabled_flag as u32,
-            pps.tiles_enabled_flag as u32,
-            pps.entropy_coding_sync_enabled_flag as u32,
-            pps.loop_filter_across_slices_enabled_flag as u32,
-            pps.loop_filter_across_tiles_enabled_flag as u32,
-            sps.pcm_loop_filter_disabled_flag as u32,
-            /* lets follow the FFMPEG and GStreamer train and set these to false */
-            0,
-            0,
-        );
-
-        let rap_pic_flag = current_picture.nalu_type as u32 >= NaluType::BlaWLp as u32
-            && current_picture.nalu_type as u32 <= NaluType::CraNut as u32;
-
-        let slice_parsing_fields = libva::HevcSliceParsingFields::new(
-            pps.lists_modification_present_flag as u32,
-            sps.long_term_ref_pics_present_flag as u32,
-            sps.temporal_mvp_enabled_flag as u32,
-            pps.cabac_init_present_flag as u32,
-            pps.output_flag_present_flag as u32,
-            pps.dependent_slice_segments_enabled_flag as u32,
-            pps.slice_chroma_qp_offsets_present_flag as u32,
-            sps.sample_adaptive_offset_enabled_flag as u32,
-            pps.deblocking_filter_override_enabled_flag as u32,
-            pps.deblocking_filter_disabled_flag as u32,
-            pps.slice_segment_header_extension_present_flag as u32,
-            rap_pic_flag as u32,
-            current_picture.nalu_type.is_idr() as u32,
-            current_picture.nalu_type.is_irap() as u32,
-        );
-
-        let pic_param = PictureParameterBufferHEVC::new(
-            curr_pic,
-            reference_frames,
-            sps.pic_width_in_luma_samples,
-            sps.pic_height_in_luma_samples,
-            &pic_fields,
-            sps.max_dec_pic_buffering_minus1[usize::from(sps.max_sub_layers_minus1)],
-            sps.bit_depth_luma_minus8,
-            sps.bit_depth_chroma_minus8,
-            sps.pcm_sample_bit_depth_luma_minus1,
-            sps.pcm_sample_bit_depth_chroma_minus1,
-            sps.log2_min_luma_coding_block_size_minus3,
-            sps.log2_diff_max_min_luma_coding_block_size,
-            sps.log2_min_luma_transform_block_size_minus2,
-            sps.log2_diff_max_min_luma_transform_block_size,
-            sps.log2_min_pcm_luma_coding_block_size_minus3,
-            sps.log2_diff_max_min_pcm_luma_coding_block_size,
-            sps.max_transform_hierarchy_depth_intra,
-            sps.max_transform_hierarchy_depth_inter,
-            pps.init_qp_minus26,
-            pps.diff_cu_qp_delta_depth,
-            pps.cb_qp_offset,
-            pps.cr_qp_offset,
-            pps.log2_parallel_merge_level_minus2,
-            pps.num_tile_columns_minus1,
-            pps.num_tile_rows_minus1,
-            pps.column_width_minus1.map(|x| x as u16),
-            pps.row_height_minus1.map(|x| x as u16),
-            &slice_parsing_fields,
-            sps.log2_max_pic_order_cnt_lsb_minus4,
-            sps.num_short_term_ref_pic_sets,
-            sps.num_long_term_ref_pics_sps,
-            pps.num_ref_idx_l0_default_active_minus1,
-            pps.num_ref_idx_l1_default_active_minus1,
-            pps.beta_offset_div2,
-            pps.tc_offset_div2,
-            pps.num_extra_slice_header_bits,
-            current_picture.short_term_ref_pic_set_size_bits,
-        );
-
-        Ok((
-            BufferType::PictureParameter(libva::PictureParameter::HEVC(pic_param)),
-            reference_frames,
-        ))
-    }
-
-    fn find_scaling_list(sps: &Sps, pps: &Pps) -> ScalingListType {
-        if pps.scaling_list_data_present_flag
-            || (sps.scaling_list_enabled_flag && !sps.scaling_list_data_present_flag)
-        {
-            ScalingListType::Pps
-        } else if sps.scaling_list_enabled_flag && sps.scaling_list_data_present_flag {
-            ScalingListType::Sps
-        } else {
-            ScalingListType::None
-        }
-    }
-
-    // TODO move this to local functions to avoid conflict with H.264 implementation!
-    fn build_h265_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
-        let scaling_lists = match Self::find_scaling_list(sps, pps) {
-            ScalingListType::Sps => &sps.scaling_list,
-            ScalingListType::Pps => &pps.scaling_list,
-            ScalingListType::None => panic!("No scaling list data available"),
-        };
-
-        let mut scaling_list_32x32 = [[0; 64]; 2];
-
-        for i in (0..6).step_by(3) {
-            for j in 0..64 {
-                scaling_list_32x32[i / 3][j] = scaling_lists.scaling_list_32x32()[i][j];
-            }
-        }
-
-        let mut scaling_list_dc_32x32 = [0; 2];
-        for i in (0..6).step_by(3) {
-            scaling_list_dc_32x32[i / 3] =
-                (scaling_lists.scaling_list_dc_coef_minus8_32x32()[i] + 8) as u8;
-        }
-
-        let mut scaling_list_4x4 = [[0; 16]; 6];
-        let mut scaling_list_8x8 = [[0; 64]; 6];
-        let mut scaling_list_16x16 = [[0; 64]; 6];
-        let mut scaling_list_32x32_r = [[0; 64]; 2];
-
-        (0..6).for_each(|i| {
-            super::get_raster_from_up_right_diagonal_4x4(
-                scaling_lists.scaling_list_4x4()[i],
-                &mut scaling_list_4x4[i],
-            );
-
-            super::get_raster_from_up_right_diagonal_8x8(
-                scaling_lists.scaling_list_8x8()[i],
-                &mut scaling_list_8x8[i],
-            );
-
-            super::get_raster_from_up_right_diagonal_8x8(
-                scaling_lists.scaling_list_16x16()[i],
-                &mut scaling_list_16x16[i],
-            );
-        });
-
-        (0..2).for_each(|i| {
-            super::get_raster_from_up_right_diagonal_8x8(
-                scaling_list_32x32[i],
-                &mut scaling_list_32x32_r[i],
-            );
-        });
-
-        BufferType::IQMatrix(IQMatrix::HEVC(IQMatrixBufferHEVC::new(
-            scaling_list_4x4,
-            scaling_list_8x8,
-            scaling_list_16x16,
-            scaling_list_32x32_r,
-            scaling_lists
-                .scaling_list_dc_coef_minus8_16x16()
-                .map(|x| (x + 8) as u8),
-            scaling_list_dc_32x32,
-        )))
     }
 }
 
@@ -624,7 +627,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         let surface_id = picture.picture.surface().id();
 
         let (pic_param, reference_frames) =
-            Self::build_h265_pic_param(slice, picture_data, surface_id, dpb, rps, sps, pps)?;
+            build_pic_param(slice, picture_data, surface_id, dpb, rps, sps, pps)?;
 
         picture.va_references = reference_frames;
 
@@ -636,8 +639,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
 
         picture.add_buffer(pic_param);
 
-        if !matches!(Self::find_scaling_list(sps, pps), ScalingListType::None) {
-            let iq_matrix = Self::build_h265_iq_matrix(sps, pps);
+        if !matches!(find_scaling_list(sps, pps), ScalingListType::None) {
+            let iq_matrix = build_iq_matrix(sps, pps);
             let iq_matrix = context
                 .create_buffer(iq_matrix)
                 .context("while creating IQ matrix buffer")?;
@@ -646,16 +649,16 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         }
 
         let va_profile = sps.va_profile()?;
-        if Self::is_range_extension_profile(va_profile) || Self::is_scc_ext_profile(va_profile) {
-            let rext = Self::build_picture_rext(sps, pps)?;
+        if is_range_extension_profile(va_profile) || is_scc_ext_profile(va_profile) {
+            let rext = build_picture_rext(sps, pps)?;
             let rext = context
                 .create_buffer(rext)
                 .context("while creating picture parameter range extension buffer")?;
 
             picture.add_buffer(rext);
 
-            if Self::is_scc_ext_profile(va_profile) {
-                let scc = Self::build_picture_scc(sps, pps)?;
+            if is_scc_ext_profile(va_profile) {
+                let scc = build_picture_scc(sps, pps)?;
                 let scc = context
                     .create_buffer(scc)
                     .context("while creating picture screen content coding buffer")?;
@@ -681,8 +684,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         let hdr = slice.header();
 
         let va_references = &picture.va_references;
-        let ref_pic_list0 = Self::build_slice_ref_pic_list(ref_pic_list0, va_references);
-        let ref_pic_list1 = Self::build_slice_ref_pic_list(ref_pic_list1, va_references);
+        let ref_pic_list0 = build_slice_ref_pic_list(ref_pic_list0, va_references);
+        let ref_pic_list1 = build_slice_ref_pic_list(ref_pic_list1, va_references);
 
         let long_slice_flags = libva::HevcLongSliceFlags::new(
             0,
@@ -796,29 +799,28 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
 
         let va_profile = sps.va_profile()?;
 
-        let slice_param_ext = if Self::is_range_extension_profile(va_profile)
-            || Self::is_scc_ext_profile(va_profile)
-        {
-            let slice_ext_flags = HevcSliceExtFlags::new(
-                hdr.cu_chroma_qp_offset_enabled_flag() as u32,
-                hdr.use_integer_mv_flag() as u32,
-            );
+        let slice_param_ext =
+            if is_range_extension_profile(va_profile) || is_scc_ext_profile(va_profile) {
+                let slice_ext_flags = HevcSliceExtFlags::new(
+                    hdr.cu_chroma_qp_offset_enabled_flag() as u32,
+                    hdr.use_integer_mv_flag() as u32,
+                );
 
-            let slice_param_ext = SliceParameterBufferHEVCRext::new(
-                luma_offset_l0.map(i16::from),
-                chroma_offset_l0.map(|outer| outer.map(i16::from)),
-                luma_offset_l1.map(i16::from),
-                chroma_offset_l1.map(|outer| outer.map(i16::from)),
-                &slice_ext_flags,
-                hdr.slice_act_y_qp_offset(),
-                hdr.slice_act_cb_qp_offset(),
-                hdr.slice_act_cr_qp_offset(),
-            );
+                let slice_param_ext = SliceParameterBufferHEVCRext::new(
+                    luma_offset_l0.map(i16::from),
+                    chroma_offset_l0.map(|outer| outer.map(i16::from)),
+                    luma_offset_l1.map(i16::from),
+                    chroma_offset_l1.map(|outer| outer.map(i16::from)),
+                    &slice_ext_flags,
+                    hdr.slice_act_y_qp_offset(),
+                    hdr.slice_act_cb_qp_offset(),
+                    hdr.slice_act_cr_qp_offset(),
+                );
 
-            Some(slice_param_ext)
-        } else {
-            None
-        };
+                Some(slice_param_ext)
+            } else {
+                None
+            };
 
         let slice_data = Vec::from(slice.nalu().as_ref());
 
