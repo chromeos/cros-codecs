@@ -460,7 +460,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     pub fn mmco_op_1(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
-        let marking = &pic.ref_pic_marking.inner()[marking];
+        let marking = &pic.ref_pic_marking.inner[marking];
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1).unwrap() + 1);
 
@@ -480,7 +480,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     pub fn mmco_op_2(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
-        let marking = &pic.ref_pic_marking.inner()[marking];
+        let marking = &pic.ref_pic_marking.inner[marking];
 
         log::debug!(
             "MMCO op 2 for long_term_pic_num {}",
@@ -504,7 +504,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     pub fn mmco_op_3(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
-        let marking = &pic.ref_pic_marking.inner()[marking];
+        let marking = &pic.ref_pic_marking.inner[marking];
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1).unwrap() + 1);
 
@@ -604,7 +604,7 @@ impl<T: Clone> Dpb<T> {
 
     /// Returns the new `max_long_term_frame_idx`.
     pub fn mmco_op_4(&mut self, pic: &PictureData, marking: usize) -> i32 {
-        let marking = &pic.ref_pic_marking.inner()[marking];
+        let marking = &pic.ref_pic_marking.inner[marking];
         let max_long_term_frame_idx = marking.max_long_term_frame_idx_plus1 - 1;
 
         log::debug!(
@@ -670,7 +670,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     pub fn mmco_op_6(&mut self, pic: &mut PictureData, marking: usize) {
-        let marking = &pic.ref_pic_marking.inner()[marking];
+        let marking = &pic.ref_pic_marking.inner[marking];
         let long_term_frame_idx = i32::try_from(marking.long_term_frame_idx).unwrap();
 
         log::debug!("MMCO op 6, long_term_frame_idx: {}", long_term_frame_idx);

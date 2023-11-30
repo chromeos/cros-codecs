@@ -115,10 +115,10 @@ impl PictureData {
     }
 
     pub fn new_from_slice(slice: &Slice, sps: &Sps, timestamp: u64) -> Self {
-        let hdr = slice.header();
-        let nalu_hdr = slice.nalu().header();
+        let hdr = &slice.header;
+        let nalu_hdr = &slice.nalu.header;
 
-        let is_idr = if nalu_hdr.idr_pic_flag() {
+        let is_idr = if nalu_hdr.idr_pic_flag {
             IsIdr::Yes {
                 idr_pic_id: hdr.idr_pic_id,
             }
@@ -136,7 +136,7 @@ impl PictureData {
             Field::Frame
         };
 
-        let reference = if nalu_hdr.ref_idc() != 0 {
+        let reference = if nalu_hdr.ref_idc != 0 {
             Reference::ShortTerm
         } else {
             Reference::None
@@ -193,7 +193,7 @@ impl PictureData {
             delta_pic_order_cnt1,
             pic_num: i32::from(pic_num),
             frame_num: i32::from(hdr.frame_num),
-            nal_ref_idc: nalu_hdr.ref_idc(),
+            nal_ref_idc: nalu_hdr.ref_idc,
             is_idr,
             reference,
             field,

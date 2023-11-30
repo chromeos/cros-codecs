@@ -609,19 +609,19 @@ impl Default for SpsSccExtension {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Sps {
     /// Specifies the value of the vps_video_parameter_set_id of the active VPS.
-    video_parameter_set_id: u8,
+    pub video_parameter_set_id: u8,
     /// `max_sub_layers_minus1` plus 1 specifies the maximum number of temporal
     /// sub-layers that may be present in each CVS referring to the SPS.
     pub max_sub_layers_minus1: u8,
     /// When sps_max_sub_layers_minus1 is greater than 0, specifies whether
     /// inter prediction is additionally restricted for CVSs referring to the
     /// SPS.
-    temporal_id_nesting_flag: bool,
+    pub temporal_id_nesting_flag: bool,
     /// profile_tier_level() data.
     pub profile_tier_level: ProfileTierLevel,
     /// Provides an identifier for the SPS for reference by other syntax
     /// elements.
-    seq_parameter_set_id: u8,
+    pub seq_parameter_set_id: u8,
     /// Specifies the chroma sampling relative to the luma sampling as specified
     /// in clause 6.2.
     pub chroma_format_idc: u8,
@@ -636,15 +636,15 @@ pub struct Sps {
     /// When true, indicates that the conformance cropping window offset
     /// parameters follow next in the SPS. When false, indicates that the
     /// conformance cropping window offset parameters are not present.
-    conformance_window_flag: bool,
+    pub conformance_window_flag: bool,
     /* if conformance_window_flag */
     /// Specify the samples of the pictures in the CVS that are output from the
     /// decoding process, in terms of a rectangular region specified in picture
     /// coordinates for output.
-    conf_win_left_offset: u32,
-    conf_win_right_offset: u32,
-    conf_win_top_offset: u32,
-    conf_win_bottom_offset: u32,
+    pub conf_win_left_offset: u32,
+    pub conf_win_right_offset: u32,
+    pub conf_win_top_offset: u32,
+    pub conf_win_bottom_offset: u32,
 
     /// Specifies the bit depth of the samples of the luma array BitDepthY and
     /// the value of the luma quantization parameter range offset QpBdOffsetY.
@@ -662,7 +662,7 @@ pub struct Sps {
     /// that the values of `max_dec_pic_ buffering_minus1[ max_sub_layers_minus1
     /// ]`, `max_num_reorder_pics[ max_sub_layers_minus1 ]` and max_
     /// `latency_increase_plus1[ max_sub_layers_minus1 ]` apply to all sub-layers.
-    sub_layer_ordering_info_present_flag: bool,
+    pub sub_layer_ordering_info_present_flag: bool,
     /// `max_dec_pic_buffering_minus1[ i ]` plus 1 specifies the maximum required
     /// size of the decoded picture buffer for the CVS in units of picture
     /// storage buffers when HighestTid is equal to i.
@@ -768,13 +768,13 @@ pub struct Sps {
     /// `lt_ref_pic_poc_lsb_sps[ i ]` specifies the picture order count modulo
     /// MaxPicOrderCntLsb of the i-th candidate long-term reference picture
     /// specified in the SPS.
-    lt_ref_pic_poc_lsb_sps: [u32; MAX_LONG_TERM_REF_PIC_SETS],
+    pub lt_ref_pic_poc_lsb_sps: [u32; MAX_LONG_TERM_REF_PIC_SETS],
     /// `used_by_curr_pic_lt_sps_flag[ i ]` equal to false specifies that the i-th
     /// candidate long-term reference picture specified in the SPS is not used
     /// for reference by a picture that includes in its long-term reference
     /// picture set (RPS) the i-th candidate long-term reference picture
     /// specified in the SPS.
-    used_by_curr_pic_lt_sps_flag: [bool; MAX_LONG_TERM_REF_PIC_SETS],
+    pub used_by_curr_pic_lt_sps_flag: [bool; MAX_LONG_TERM_REF_PIC_SETS],
     /// When set, specifies that slice_temporal_mvp_enabled_flag is present in
     /// the slice headers of non-IDR pictures in the CVS. When not set,
     /// specifies that slice_temporal_mvp_enabled_flag is not present in slice
@@ -789,49 +789,49 @@ pub struct Sps {
     /// specified in Annex E is present. When not set, specifies that the
     /// vui_parameters( ) syntax structure as specified in Annex E is not
     /// present.
-    vui_parameters_present_flag: bool,
+    pub vui_parameters_present_flag: bool,
     /// The vui_parameters() data.
-    vui_parameters: VuiParams,
+    pub vui_parameters: VuiParams,
     /// When set, specifies that the syntax elements sps_range_extension_flag,
     /// sps_multilayer_extension_flag, sps_3d_extension_flag,
     /// sps_scc_extension_flag, and sps_extension_4bits are present in the SPS
     /// RBSP syntax structure. When not set, specifies that these syntax
     /// elements are not present.
-    extension_present_flag: bool,
+    pub extension_present_flag: bool,
 
-    range_extension_flag: bool,
+    pub range_extension_flag: bool,
     /// The sps_range_extension() data.
     pub range_extension: SpsRangeExtension,
     /// When set, specifies that the sps_scc_extension( ) syntax structure is
     /// present in the SPS RBSP syntax structure. When not set, specifies that
     /// this syntax structure is not present
-    scc_extension_flag: bool,
+    pub scc_extension_flag: bool,
     /// The sps_scc_extension() data.
     pub scc_extension: SpsSccExtension,
 
     // Internal H265 variables. Computed from the bitstream.
     /// Equivalent to MinCbLog2SizeY in the specification.
-    min_cb_log2_size_y: u32,
+    pub min_cb_log2_size_y: u32,
     /// Equivalent to CtbLog2SizeY in the specification.
-    ctb_log2_size_y: u32,
+    pub ctb_log2_size_y: u32,
     /// Equivalent to CtbSizeY in the specification.
-    ctb_size_y: u32,
+    pub ctb_size_y: u32,
     /// Equivalent to PicHeightInCtbsY in the specification.
-    pic_height_in_ctbs_y: u32,
+    pub pic_height_in_ctbs_y: u32,
     /// Equivalent to PicWidthInCtbsY in the specification.
-    pic_width_in_ctbs_y: u32,
+    pub pic_width_in_ctbs_y: u32,
     /// Equivalent to PicSizeInCtbsY in the specification.
-    pic_size_in_ctbs_y: u32,
+    pub pic_size_in_ctbs_y: u32,
     /// Equivalent to ChromaArrayType in the specification.
-    chroma_array_type: u8,
+    pub chroma_array_type: u8,
     /// Equivalent to WpOffsetHalfRangeY in the specification.
-    wp_offset_half_range_y: u32,
+    pub wp_offset_half_range_y: u32,
     /// Equivalent to WpOffsetHalfRangeC in the specification.
     pub wp_offset_half_range_c: u32,
     /// Equivalent to MaxTbLog2SizeY in the specification.
-    max_tb_log2_size_y: u32,
+    pub max_tb_log2_size_y: u32,
     /// Equivalent to PicSizeInSamplesY in the specification.
-    pic_size_in_samples_y: u32,
+    pub pic_size_in_samples_y: u32,
 }
 
 impl Sps {
@@ -1123,7 +1123,7 @@ pub struct Pps {
     /// are not distributed uniformly across the picture but signalled
     /// explicitly using the syntax elements `column_width_minus1[ i ]` and
     /// `row_height_minus1[ i ]`.
-    uniform_spacing_flag: bool,
+    pub uniform_spacing_flag: bool,
     /// `column_width_minus1[ i ]` plus 1 specifies the width of the i-th tile
     /// column in units of CTBs.
     pub column_width_minus1: [u32; 19],
@@ -1147,7 +1147,7 @@ pub struct Pps {
     /// When set, specifies the presence of deblocking filter control syntax
     /// elements in the PPS. When not set, specifies the absence of deblocking
     /// filter control syntax elements in the PPS.
-    deblocking_filter_control_present_flag: bool,
+    pub deblocking_filter_control_present_flag: bool,
     /// When set, specifies the presence of deblocking_filter_override_flag in
     /// the slice headers for pictures referring to the PPS.  When not set,
     /// specifies the absence of deblocking_filter_override_flag in the slice
@@ -1203,11 +1203,11 @@ pub struct Pps {
     /// pps_scc_extension_flag, and pps_extension_4bits are present in the
     /// picture parameter set RBSP syntax structure. When not set, specifies
     /// that these syntax elements are not present.
-    extension_present_flag: bool,
+    pub extension_present_flag: bool,
     /// When setspecifies that the pps_range_extension( ) syntax structure is
     /// present in the PPS RBSP syntax structure. When not set, specifies that
     /// this syntax structure is not present.
-    range_extension_flag: bool,
+    pub range_extension_flag: bool,
     /// The range extension data.
     pub range_extension: PpsRangeExtension,
 
@@ -1217,7 +1217,7 @@ pub struct Pps {
 
     // Internal variables.
     /// Equivalent to QpBdOffsetY in the specification.
-    qp_bd_offset_y: u32,
+    pub qp_bd_offset_y: u32,
 
     /// The nuh_temporal_id_plus1 - 1 of the associated NALU.
     pub temporal_id: u8,
@@ -1276,49 +1276,22 @@ impl Default for Pps {
     }
 }
 
-// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScalingLists {
     /// plus 8 specifies the value of the variable `ScalingFactor[ 2 ][ matrixId
     /// ] [ 0 ][ 0 ]` for the scaling list for the 16x16 size.
-    scaling_list_dc_coef_minus8_16x16: [i16; 6],
+    pub scaling_list_dc_coef_minus8_16x16: [i16; 6],
     /// plus 8 specifies the value of the variable `ScalingFactor[ 3 ][ matrixId
     /// ][ 0 ][ 0 ]` for the scaling list for the 32x32 size.
-    scaling_list_dc_coef_minus8_32x32: [i16; 6],
+    pub scaling_list_dc_coef_minus8_32x32: [i16; 6],
     /// The 4x4 scaling list.
-    scaling_list_4x4: [[u8; 16]; 6],
+    pub scaling_list_4x4: [[u8; 16]; 6],
     /// The 8x8 scaling list.
-    scaling_list_8x8: [[u8; 64]; 6],
+    pub scaling_list_8x8: [[u8; 64]; 6],
     /// The 16x16 scaling list.
-    scaling_list_16x16: [[u8; 64]; 6],
+    pub scaling_list_16x16: [[u8; 64]; 6],
     /// The 32x32 scaling list.
-    scaling_list_32x32: [[u8; 64]; 6],
-}
-
-impl ScalingLists {
-    pub fn scaling_list_dc_coef_minus8_16x16(&self) -> [i16; 6] {
-        self.scaling_list_dc_coef_minus8_16x16
-    }
-
-    pub fn scaling_list_dc_coef_minus8_32x32(&self) -> [i16; 6] {
-        self.scaling_list_dc_coef_minus8_32x32
-    }
-
-    pub fn scaling_list_4x4(&self) -> [[u8; 16]; 6] {
-        self.scaling_list_4x4
-    }
-
-    pub fn scaling_list_8x8(&self) -> [[u8; 64]; 6] {
-        self.scaling_list_8x8
-    }
-
-    pub fn scaling_list_16x16(&self) -> [[u8; 64]; 6] {
-        self.scaling_list_16x16
-    }
-
-    pub fn scaling_list_32x32(&self) -> [[u8; 64]; 6] {
-        self.scaling_list_32x32
-    }
+    pub scaling_list_32x32: [[u8; 64]; 6],
 }
 
 impl Default for ScalingLists {
@@ -1334,78 +1307,58 @@ impl Default for ScalingLists {
     }
 }
 
-// TODO
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RefPicListModification {
     /// Whenset, indicates that reference picture list 0 is specified explicitly
     /// by a list of `list_entry_l0[ i ]` values.  When not set, indicates that
     /// reference picture list 0 is determined implicitly.
-    ref_pic_list_modification_flag_l0: bool,
+    pub ref_pic_list_modification_flag_l0: bool,
     /// `list_entry_l0[ i ]` specifies the index of the reference picture in
     /// RefPicListTemp0 to be placed at the current position of reference
     /// picture list 0.
-    list_entry_l0: Vec<u32>,
+    pub list_entry_l0: Vec<u32>,
     /// Whenset, indicates that reference picture list 1 is specified explicitly
     /// by a list of `list_entry_l1[ i ]` values.  When not set, indicates that
     /// reference picture list 1 is determined implicitly.
-    ref_pic_list_modification_flag_l1: bool,
+    pub ref_pic_list_modification_flag_l1: bool,
     /// `list_entry_l1[ i ]` specifies the index of the reference picture in
     /// RefPicListTemp1 to be placed at the current position of reference
     /// picture list 1.
-    list_entry_l1: Vec<u32>,
+    pub list_entry_l1: Vec<u32>,
 }
 
-impl RefPicListModification {
-    pub fn ref_pic_list_modification_flag_l0(&self) -> bool {
-        self.ref_pic_list_modification_flag_l0
-    }
-
-    pub fn list_entry_l0(&self) -> &[u32] {
-        self.list_entry_l0.as_ref()
-    }
-
-    pub fn ref_pic_list_modification_flag_l1(&self) -> bool {
-        self.ref_pic_list_modification_flag_l1
-    }
-
-    pub fn list_entry_l1(&self) -> &[u32] {
-        self.list_entry_l1.as_ref()
-    }
-}
-
-// TODO
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PredWeightTable {
     /// The base 2 logarithm of the denominator for all luma weighting factors.
-    luma_log2_weight_denom: u8,
+    pub luma_log2_weight_denom: u8,
     /// The difference of the base 2 logarithm of the denominator for all chroma
     /// weighting factors.
-    delta_chroma_log2_weight_denom: i8,
+    pub delta_chroma_log2_weight_denom: i8,
     /// `luma_weight_l0_flag[ i ]` set specifies that weighting factors for the
     /// luma component of list 0 prediction using `RefPicList0[ i ]` are present.
     /// `luma_weight_l0_flag[ i ]` not set specifies that these weighting factors
     /// are not present.
-    luma_weight_l0_flag: [bool; 15],
+    pub luma_weight_l0_flag: [bool; 15],
     /// `chroma_weight_l0_flag[ i ]` set specifies that weighting factors for the
     /// chroma prediction values of list 0 prediction using `RefPicList0[ i ]` are
     /// present. `chroma_weight_l0_flag[ i ]` not set specifies that these
     /// weighting factors are not present.
-    chroma_weight_l0_flag: [bool; 15],
+    pub chroma_weight_l0_flag: [bool; 15],
     /// `delta_luma_weight_l0[ i ]` is the difference of the weighting factor
     /// applied to the luma prediction value for list 0 prediction using
     /// `RefPicList0[ i ]`.
-    delta_luma_weight_l0: [i8; 15],
+    pub delta_luma_weight_l0: [i8; 15],
     /// `luma_offset_l0[ i ]` is the additive offset applied to the luma
     /// prediction value for list 0 prediction using `RefPicList0[ i ]`.
-    luma_offset_l0: [i8; 15],
+    pub luma_offset_l0: [i8; 15],
     /// `delta_chroma_weight_l0[ i ][ j ]` is the difference of the weighting
     /// factor applied to the chroma prediction values for list 0 prediction
     /// using `RefPicList0[ i ]` with j equal to 0 for Cb and j equal to 1 for Cr.
-    delta_chroma_weight_l0: [[i8; 2]; 15],
+    pub delta_chroma_weight_l0: [[i8; 2]; 15],
     /// `delta_chroma_offset_l0[ i ][ j ]` is the difference of the additive
     /// offset applied to the chroma prediction values for list 0 prediction
     /// using `RefPicList0[ i ]` with j equal to 0 for Cb and j equal to 1 for Cr.
-    delta_chroma_offset_l0: [[i16; 2]; 15],
+    pub delta_chroma_offset_l0: [[i16; 2]; 15],
 
     // `luma_weight_l1_flag[ i ]`, `chroma_weight_l1_flag[ i ]`,
     // `delta_luma_weight_l1[ i ]`, `luma_offset_l1[ i ]`, delta_chroma_weight_l1[ i
@@ -1414,162 +1367,53 @@ pub struct PredWeightTable {
     // `delta_luma_weight_l0[ i ]`, `luma_offset_l0[ i ]`, `delta_chroma_weight_l0[ i
     // ][ j ]` and `delta_chroma_offset_l0[ i ][ j ]`, respectively, with `l0`, `L0`,
     // `list 0` and `List0` replaced by `l1`, `L1`, `list 1` and `List1`, respectively.
-    luma_weight_l1_flag: [bool; 15],
-    chroma_weight_l1_flag: [bool; 15],
-    delta_luma_weight_l1: [i8; 15],
-    luma_offset_l1: [i8; 15],
+    pub luma_weight_l1_flag: [bool; 15],
+    pub chroma_weight_l1_flag: [bool; 15],
+    pub delta_luma_weight_l1: [i8; 15],
+    pub luma_offset_l1: [i8; 15],
 
-    delta_chroma_weight_l1: [[i8; 2]; 15],
-    delta_chroma_offset_l1: [[i16; 2]; 15],
+    pub delta_chroma_weight_l1: [[i8; 2]; 15],
+    pub delta_chroma_offset_l1: [[i16; 2]; 15],
 
     // Calculated.
     /// Same as ChromaLog2WeightDenom in the specification.
-    chroma_log2_weight_denom: u8,
+    pub chroma_log2_weight_denom: u8,
 }
 
-impl PredWeightTable {
-    pub fn luma_log2_weight_denom(&self) -> u8 {
-        self.luma_log2_weight_denom
-    }
-
-    pub fn delta_chroma_log2_weight_denom(&self) -> i8 {
-        self.delta_chroma_log2_weight_denom
-    }
-
-    pub fn luma_weight_l0_flag(&self) -> [bool; 15] {
-        self.luma_weight_l0_flag
-    }
-
-    pub fn chroma_weight_l0_flag(&self) -> [bool; 15] {
-        self.chroma_weight_l0_flag
-    }
-
-    pub fn delta_luma_weight_l0(&self) -> [i8; 15] {
-        self.delta_luma_weight_l0
-    }
-
-    pub fn luma_offset_l0(&self) -> [i8; 15] {
-        self.luma_offset_l0
-    }
-
-    pub fn delta_chroma_weight_l0(&self) -> [[i8; 2]; 15] {
-        self.delta_chroma_weight_l0
-    }
-
-    pub fn delta_chroma_offset_l0(&self) -> [[i16; 2]; 15] {
-        self.delta_chroma_offset_l0
-    }
-
-    pub fn luma_weight_l1_flag(&self) -> [bool; 15] {
-        self.luma_weight_l1_flag
-    }
-
-    pub fn chroma_weight_l1_flag(&self) -> [bool; 15] {
-        self.chroma_weight_l1_flag
-    }
-
-    pub fn delta_luma_weight_l1(&self) -> [i8; 15] {
-        self.delta_luma_weight_l1
-    }
-
-    pub fn luma_offset_l1(&self) -> [i8; 15] {
-        self.luma_offset_l1
-    }
-
-    pub fn delta_chroma_weight_l1(&self) -> [[i8; 2]; 15] {
-        self.delta_chroma_weight_l1
-    }
-
-    pub fn delta_chroma_offset_l1(&self) -> [[i16; 2]; 15] {
-        self.delta_chroma_offset_l1
-    }
-
-    pub fn chroma_log2_weight_denom(&self) -> u8 {
-        self.chroma_log2_weight_denom
-    }
-}
-
-// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShortTermRefPicSet {
     /// When set, specifies that the stRpsIdx-th candidate short-term RPS is
     /// predicted from another candidate short-term RPS, which is referred to as
     /// the source candidate short-term RPS.
-    inter_ref_pic_set_prediction_flag: bool,
+    pub inter_ref_pic_set_prediction_flag: bool,
     /// delta_idx_minus1 plus 1 specifies the difference between the value of
     /// stRpsIdx and the index, into the list of the candidate short-term RPSs
     /// specified in the SPS, of the source candidate short-term RPS.
-    delta_idx_minus1: u8,
+    pub delta_idx_minus1: u8,
     /// delta_rps_sign and abs_delta_rps_minus1 together specify the value of
     /// the variable deltaRps.
-    delta_rps_sign: bool,
+    pub delta_rps_sign: bool,
     /// delta_rps_sign and abs_delta_rps_minus1 together specify the value of
     /// the variable deltaRps.
-    abs_delta_rps_minus1: u16,
+    pub abs_delta_rps_minus1: u16,
     /// specifies the number of entries in the stRpsIdx-th candidate short-term
     /// RPS that have picture order count values less than the picture order
     /// count value of the current picture.
-    num_negative_pics: u8,
+    pub num_negative_pics: u8,
     /// specifies the number of entries in the stRpsIdx-th candidate short-term
     /// RPS that have picture order count values greater than the picture order
     /// count value of the current picture.
-    num_positive_pics: u8,
+    pub num_positive_pics: u8,
     /// Same as UsedByCurrPicS0 in the specification.
-    used_by_curr_pic_s0: [bool; MAX_SHORT_TERM_REF_PIC_SETS],
+    pub used_by_curr_pic_s0: [bool; MAX_SHORT_TERM_REF_PIC_SETS],
     /// Same as UsedByCurrPicS1 in the specification.
-    used_by_curr_pic_s1: [bool; MAX_SHORT_TERM_REF_PIC_SETS],
+    pub used_by_curr_pic_s1: [bool; MAX_SHORT_TERM_REF_PIC_SETS],
     /// Same as DeltaPocS0 in the specification.
-    delta_poc_s0: [i32; MAX_SHORT_TERM_REF_PIC_SETS],
+    pub delta_poc_s0: [i32; MAX_SHORT_TERM_REF_PIC_SETS],
     /// Same as DeltaPocS1 in the specification.
-    delta_poc_s1: [i32; MAX_SHORT_TERM_REF_PIC_SETS],
+    pub delta_poc_s1: [i32; MAX_SHORT_TERM_REF_PIC_SETS],
     /// Same as NumDeltaPocs in the specification.
-    num_delta_pocs: u32,
-}
-
-impl ShortTermRefPicSet {
-    pub fn inter_ref_pic_set_prediction_flag(&self) -> bool {
-        self.inter_ref_pic_set_prediction_flag
-    }
-
-    pub fn delta_idx_minus1(&self) -> u8 {
-        self.delta_idx_minus1
-    }
-
-    pub fn delta_rps_sign(&self) -> bool {
-        self.delta_rps_sign
-    }
-
-    pub fn abs_delta_rps_minus1(&self) -> u16 {
-        self.abs_delta_rps_minus1
-    }
-
-    pub fn num_negative_pics(&self) -> u8 {
-        self.num_negative_pics
-    }
-
-    pub fn num_positive_pics(&self) -> u8 {
-        self.num_positive_pics
-    }
-
-    pub fn used_by_curr_pic_s0(&self) -> [bool; MAX_SHORT_TERM_REF_PIC_SETS] {
-        self.used_by_curr_pic_s0
-    }
-
-    pub fn used_by_curr_pic_s1(&self) -> [bool; MAX_SHORT_TERM_REF_PIC_SETS] {
-        self.used_by_curr_pic_s1
-    }
-
-    pub fn delta_poc_s0(&self) -> [i32; MAX_SHORT_TERM_REF_PIC_SETS] {
-        self.delta_poc_s0
-    }
-
-    pub fn delta_poc_s1(&self) -> [i32; MAX_SHORT_TERM_REF_PIC_SETS] {
-        self.delta_poc_s1
-    }
-
-    pub fn num_delta_pocs(&self) -> u32 {
-        self.num_delta_pocs
-    }
+    pub num_delta_pocs: u32,
 }
 
 impl Default for ShortTermRefPicSet {
@@ -1590,7 +1434,6 @@ impl Default for ShortTermRefPicSet {
     }
 }
 
-// TODO
 #[derive(N, Clone, Copy, Debug, PartialEq, Eq)]
 /// See table 7-7 in the specification.
 pub enum SliceType {
@@ -1622,40 +1465,39 @@ impl Default for SliceType {
     }
 }
 
-// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SliceHeader {
     /// When set, specifies that the slice segment is the first slice segment of
     /// the picture in decoding order. When not set, specifies that the slice
     /// segment is not the first slice segment of the picture in decoding order.
-    first_slice_segment_in_pic_flag: bool,
+    pub first_slice_segment_in_pic_flag: bool,
     /// Affects the output of previously-decoded pictures in the decoded picture
     /// buffer after the decoding of an IDR or a BLA picture that is not the
     /// first picture in the bitstream as specified in Annex C.
-    no_output_of_prior_pics_flag: bool,
+    pub no_output_of_prior_pics_flag: bool,
     /// Specifies the value of pps_pic_parameter_set_id for the PPS in use.
-    pic_parameter_set_id: u8,
+    pub pic_parameter_set_id: u8,
     /// When set, specifies that the value of each slice segment header syntax
     /// element that is not present is inferred to be equal to the value of the
     /// corresponding slice segment header syntax element in the slice header.
-    dependent_slice_segment_flag: bool,
+    pub dependent_slice_segment_flag: bool,
     /// Specifies the address of the first CTB in the slice segment, in CTB
     /// raster scan of a picture.
-    segment_address: u32,
+    pub segment_address: u32,
     /// Specifies the coding type of the slice according to Table 7-7.
-    type_: SliceType,
+    pub type_: SliceType,
     /// Affects the decoded picture output and removal processes as specified in
     /// Annex C.
-    pic_output_flag: bool,
+    pub pic_output_flag: bool,
     /// Specifies the colour plane associated with the current slice RBSP when
     /// separate_colour_plane_flag is set. The value of colour_plane_id shall be
     /// in the range of 0 to 2, inclusive. colour_plane_id values 0, 1 and 2
     /// correspond to the Y, Cb and Cr planes, respectively.
-    colour_plane_id: u8,
+    pub colour_plane_id: u8,
     /// Specifies the picture order count modulo MaxPicOrderCntLsb for the
     /// current picture. The length of the slice_pic_order_cnt_lsb syntax
     /// element is log2_max_pic_order_cnt_lsb_minus4 + 4 bits.
-    pic_order_cnt_lsb: u16,
+    pub pic_order_cnt_lsb: u16,
     /// When set, specifies that the short-term RPS of the current picture is
     /// derived based on one of the st_ref_pic_set( ) syntax structures in the
     /// active SPS that is identified by the syntax element
@@ -1663,373 +1505,155 @@ pub struct SliceHeader {
     /// that the short-term RPS of the current picture is derived based on the
     /// st_ref_pic_set( ) syntax structure that is directly included in the
     /// slice headers of the current picture.
-    short_term_ref_pic_set_sps_flag: bool,
+    pub short_term_ref_pic_set_sps_flag: bool,
     /// The st_ref_pic_set() data.
-    short_term_ref_pic_set: ShortTermRefPicSet,
+    pub short_term_ref_pic_set: ShortTermRefPicSet,
     /// Specifies the index, into the list of the st_ref_pic_set( ) syntax
     /// structures included in the active SPS, of the st_ref_pic_set( ) syntax
     /// structure that is used for derivation of the short-term RPS of the
     /// current picture.
-    short_term_ref_pic_set_idx: u8,
+    pub short_term_ref_pic_set_idx: u8,
     /// Specifies the number of entries in the long-term RPS of the current
     /// picture that are derived based on the candidate long-term reference
     /// pictures specified in the active SPS.
-    num_long_term_sps: u8,
+    pub num_long_term_sps: u8,
     /// Specifies the number of entries in the long-term RPS of the current
     /// picture that are directly signalled in the slice header.
-    num_long_term_pics: u8,
+    pub num_long_term_pics: u8,
     /// `lt_idx_sps[ i ]` specifies an index, into the list of candidate long-term
     /// reference pictures specified in the active SPS, of the i-th entry in the
     /// long-term RPS of the current picture.
-    lt_idx_sps: [u8; 16],
+    pub lt_idx_sps: [u8; 16],
     /// Same as PocLsbLt in the specification.
-    poc_lsb_lt: [u32; 16],
+    pub poc_lsb_lt: [u32; 16],
     /// Same as UsedByCurrPicLt in the specification.
-    used_by_curr_pic_lt: [bool; 16],
+    pub used_by_curr_pic_lt: [bool; 16],
     /// When set, specifies that that `delta_poc_msb_cycle_lt[i]` is present.
-    delta_poc_msb_present_flag: [bool; 16],
+    pub delta_poc_msb_present_flag: [bool; 16],
     /// Same as DeltaPocMsbCycleLt in the specification.
-    delta_poc_msb_cycle_lt: [u32; 16],
+    pub delta_poc_msb_cycle_lt: [u32; 16],
     /// Specifies whether temporal motion vector predictors can be used for
     /// inter prediction. If slice_temporal_mvp_enabled_flag is not set, the
     /// syntax elements of the current picture shall be constrained such that no
     /// temporal motion vector predictor is used in decoding of the current
     /// picture. Otherwise (slice_temporal_mvp_enabled_flag is set), temporal
     /// motion vector predictors may be used in decoding of the current picture.
-    temporal_mvp_enabled_flag: bool,
+    pub temporal_mvp_enabled_flag: bool,
     /// When set, specifies that SAO is enabled for the luma component in the
     /// current slice; slice_sao_luma_flag not set specifies that SAO is
     /// disabled for the luma component in the current slice.
-    sao_luma_flag: bool,
+    pub sao_luma_flag: bool,
     /// When set, specifies that SAO is enabled for the chroma component in the
     /// current slice; When not set, specifies that SAO is disabled for the
     /// chroma component in the current slice.
-    sao_chroma_flag: bool,
+    pub sao_chroma_flag: bool,
     /// When set, specifies that the syntax element num_ref_idx_l0_active_minus1
     /// is present for P and B slices and that the syntax element
     /// num_ref_idx_l1_active_minus1 is present for B slices. When not set,
     /// specifies that the syntax elements num_ref_idx_l0_active_minus1 and
     /// num_ref_idx_l1_active_minus1 are not present.
-    num_ref_idx_active_override_flag: bool,
+    pub num_ref_idx_active_override_flag: bool,
     /// Specifies the maximum reference index for
     /// reference picture list 0 that may be used to decode the slice.
-    num_ref_idx_l0_active_minus1: u8,
+    pub num_ref_idx_l0_active_minus1: u8,
     /// Specifies the maximum reference index for reference picture list 1 that
     /// may be used to decode the slice.
-    num_ref_idx_l1_active_minus1: u8,
+    pub num_ref_idx_l1_active_minus1: u8,
     /// The RefPicListModification data.
-    ref_pic_list_modification: RefPicListModification,
+    pub ref_pic_list_modification: RefPicListModification,
     /// When set, indicates that the mvd_coding( x0, y0, 1 ) syntax structure is
     /// not parsed and `MvdL1[ x0 ]`[ y0 `][ compIdx ]` is set equal to 0 for
     /// compIdx = 0..1. When not set, indicates that the mvd_coding( x0, y0, 1 )
     /// syntax structure is parsed.
-    mvd_l1_zero_flag: bool,
+    pub mvd_l1_zero_flag: bool,
     /// Specifies the method for determining the initialization table used in
     /// the initialization process for context variables.
-    cabac_init_flag: bool,
+    pub cabac_init_flag: bool,
     /// When set, specifies that the collocated picture used for temporal motion
     /// vector prediction is derived from reference picture list 0.  When not
     /// set, specifies that the collocated picture used for temporal motion
     /// vector prediction is derived from reference picture list 1.
-    collocated_from_l0_flag: bool,
+    pub collocated_from_l0_flag: bool,
     /// Specifies the reference index of the collocated picture used for
     /// temporal motion vector prediction.
-    collocated_ref_idx: u8,
+    pub collocated_ref_idx: u8,
     /// The PredWeightTable data.
-    pred_weight_table: PredWeightTable,
+    pub pred_weight_table: PredWeightTable,
     /// Specifies the maximum number of merging motion vector prediction (MVP)
     /// candidates supported in the slice subtracted from 5.
-    five_minus_max_num_merge_cand: u8,
+    pub five_minus_max_num_merge_cand: u8,
     /// Specifies that the resolution of motion vectors for inter prediction in
     /// the current slice is integer. When not set, specifies
     /// that the resolution of motion vectors for inter prediction in the
     /// current slice that refer to pictures other than the current picture is
     /// fractional with quarter-sample precision in units of luma samples.
-    use_integer_mv_flag: bool,
+    pub use_integer_mv_flag: bool,
     /// Specifies the initial value of QpY to be used for the coding blocks in
     /// the slice until modified by the value of CuQpDeltaVal in the coding unit
     /// layer.
-    qp_delta: i8,
+    pub qp_delta: i8,
     /// Specifies a difference to be added to the value of pps_cb_qp_offset when
     /// determining the value of the Qp′Cb quantization parameter.
-    cb_qp_offset: i8,
+    pub cb_qp_offset: i8,
     /// Specifies a difference to be added to the value of pps_cb_qr_offset when
     /// determining the value of the Qp′Cr quantization parameter.
-    cr_qp_offset: i8,
+    pub cr_qp_offset: i8,
     /// Specifies offsets to the quantization parameter values qP derived in
     /// clause 8.6.2 for luma, Cb, and Cr components, respectively.
-    slice_act_y_qp_offset: i8,
+    pub slice_act_y_qp_offset: i8,
     /// Specifies offsets to the quantization parameter values qP derived in
     /// clause 8.6.2 for luma, Cb, and Cr components, respectively.
-    slice_act_cb_qp_offset: i8,
+    pub slice_act_cb_qp_offset: i8,
     /// Specifies offsets to the quantization parameter values qP derived in
     /// clause 8.6.2 for luma, Cb, and Cr components, respectively.
-    slice_act_cr_qp_offset: i8,
+    pub slice_act_cr_qp_offset: i8,
     /// When set, specifies that the cu_chroma_qp_offset_flag may be present in
     /// the transform unit syntax. When not set, specifies that the
     /// cu_chroma_qp_offset_flag is not present in the transform unit syntax.
-    cu_chroma_qp_offset_enabled_flag: bool,
+    pub cu_chroma_qp_offset_enabled_flag: bool,
     /// When set, specifies that deblocking parameters are present in the slice
     /// header. When not set, specifies that deblocking parameters are not
     /// present in the slice header.
-    deblocking_filter_override_flag: bool,
+    pub deblocking_filter_override_flag: bool,
     /// When set, specifies that the operation of the deblocking filter is not
     /// applied for the current slice. When not set, specifies that the
     /// operation of the deblocking filter is applied for the current slice.
-    deblocking_filter_disabled_flag: bool,
+    pub deblocking_filter_disabled_flag: bool,
     /// Specifies the deblocking parameter offsets for β and tC (divided by 2)
     /// for the current slice.
-    beta_offset_div2: i8,
+    pub beta_offset_div2: i8,
     /// Specifies the deblocking parameter offsets for β and tC (divided by 2)
     /// for the current slice.
-    tc_offset_div2: i8,
+    pub tc_offset_div2: i8,
     /// When set, specifies that in-loop filtering operations may be performed
     /// across the left and upper boundaries of the current slice.  When not
     /// set, specifies that in-loop operations are not performed across left and
     /// upper boundaries of the current slice. The in-loop filtering operations
     /// include the deblocking filter and sample adaptive offset filter.
-    loop_filter_across_slices_enabled_flag: bool,
+    pub loop_filter_across_slices_enabled_flag: bool,
     /// Specifies the number of `entry_point_offset_minus1[ i ]` syntax elements
     /// in the slice header.
-    num_entry_point_offsets: u32,
+    pub num_entry_point_offsets: u32,
     /// offset_len_minus1 plus 1 specifies the length, in bits, of the
     /// `entry_point_offset_minus1[ i ]` syntax elements.
-    offset_len_minus1: u8,
+    pub offset_len_minus1: u8,
     /// `entry_point_offset_minus1[ i ]` plus 1 specifies the i-th entry point
     /// offset in bytes, and is represented by offset_len_minus1 plus 1 bits.
     /// The slice segment data that follow the slice segment header consists of
     /// num_entry_point_offsets + 1 subsets, with subset index values ranging
     /// from 0 to num_entry_point_offsets, inclusive. See the specification for
     /// more details.
-    entry_point_offset_minus1: [u32; 32],
+    pub entry_point_offset_minus1: [u32; 32],
     /// Same as NumPicTotalCurr in the specification.
-    num_pic_total_curr: u32,
+    pub num_pic_total_curr: u32,
     // Size of slice_header() in bits.
-    header_bit_size: u32,
+    pub header_bit_size: u32,
     // Number of emulation prevention bytes (EPB) in this slice_header().
-    n_emulation_prevention_bytes: u32,
+    pub n_emulation_prevention_bytes: u32,
     /// Same as CurrRpsIdx in the specification.
-    curr_rps_idx: u8,
+    pub curr_rps_idx: u8,
     /// Number of bits taken by st_ref_pic_set minus Emulation Prevention Bytes.
-    st_rps_bits: u32,
-}
-
-impl SliceHeader {
-    pub fn first_slice_segment_in_pic_flag(&self) -> bool {
-        self.first_slice_segment_in_pic_flag
-    }
-
-    pub fn no_output_of_prior_pics_flag(&self) -> bool {
-        self.no_output_of_prior_pics_flag
-    }
-
-    pub fn pic_parameter_set_id(&self) -> u8 {
-        self.pic_parameter_set_id
-    }
-
-    pub fn dependent_slice_segment_flag(&self) -> bool {
-        self.dependent_slice_segment_flag
-    }
-
-    pub fn segment_address(&self) -> u32 {
-        self.segment_address
-    }
-
-    pub fn type_(&self) -> SliceType {
-        self.type_
-    }
-
-    pub fn pic_output_flag(&self) -> bool {
-        self.pic_output_flag
-    }
-
-    pub fn colour_plane_id(&self) -> u8 {
-        self.colour_plane_id
-    }
-
-    pub fn pic_order_cnt_lsb(&self) -> u16 {
-        self.pic_order_cnt_lsb
-    }
-
-    pub fn short_term_ref_pic_set_sps_flag(&self) -> bool {
-        self.short_term_ref_pic_set_sps_flag
-    }
-
-    pub fn short_term_ref_pic_sets(&self) -> &ShortTermRefPicSet {
-        &self.short_term_ref_pic_set
-    }
-
-    pub fn short_term_ref_pic_set_idx(&self) -> u8 {
-        self.short_term_ref_pic_set_idx
-    }
-
-    pub fn num_long_term_sps(&self) -> u8 {
-        self.num_long_term_sps
-    }
-
-    pub fn num_long_term_pics(&self) -> u8 {
-        self.num_long_term_pics
-    }
-
-    pub fn lt_idx_sps(&self) -> [u8; 16] {
-        self.lt_idx_sps
-    }
-
-    pub fn poc_lsb_lt(&self) -> [u32; 16] {
-        self.poc_lsb_lt
-    }
-
-    pub fn used_by_curr_pic_lt(&self) -> [bool; 16] {
-        self.used_by_curr_pic_lt
-    }
-
-    pub fn delta_poc_msb_present_flag(&self) -> [bool; 16] {
-        self.delta_poc_msb_present_flag
-    }
-
-    pub fn delta_poc_msb_cycle_lt(&self) -> [u32; 16] {
-        self.delta_poc_msb_cycle_lt
-    }
-
-    pub fn temporal_mvp_enabled_flag(&self) -> bool {
-        self.temporal_mvp_enabled_flag
-    }
-
-    pub fn sao_luma_flag(&self) -> bool {
-        self.sao_luma_flag
-    }
-
-    pub fn sao_chroma_flag(&self) -> bool {
-        self.sao_chroma_flag
-    }
-
-    pub fn num_ref_idx_active_override_flag(&self) -> bool {
-        self.num_ref_idx_active_override_flag
-    }
-
-    pub fn num_ref_idx_l0_active_minus1(&self) -> u8 {
-        self.num_ref_idx_l0_active_minus1
-    }
-
-    pub fn num_ref_idx_l1_active_minus1(&self) -> u8 {
-        self.num_ref_idx_l1_active_minus1
-    }
-
-    pub fn ref_pic_list_modification(&self) -> &RefPicListModification {
-        &self.ref_pic_list_modification
-    }
-
-    pub fn mvd_l1_zero_flag(&self) -> bool {
-        self.mvd_l1_zero_flag
-    }
-
-    pub fn cabac_init_flag(&self) -> bool {
-        self.cabac_init_flag
-    }
-
-    pub fn collocated_from_l0_flag(&self) -> bool {
-        self.collocated_from_l0_flag
-    }
-
-    pub fn collocated_ref_idx(&self) -> u8 {
-        self.collocated_ref_idx
-    }
-
-    pub fn pred_weight_table(&self) -> &PredWeightTable {
-        &self.pred_weight_table
-    }
-
-    pub fn five_minus_max_num_merge_cand(&self) -> u8 {
-        self.five_minus_max_num_merge_cand
-    }
-
-    pub fn use_integer_mv_flag(&self) -> bool {
-        self.use_integer_mv_flag
-    }
-
-    pub fn qp_delta(&self) -> i8 {
-        self.qp_delta
-    }
-
-    pub fn cb_qp_offset(&self) -> i8 {
-        self.cb_qp_offset
-    }
-
-    pub fn cr_qp_offset(&self) -> i8 {
-        self.cr_qp_offset
-    }
-
-    pub fn slice_act_y_qp_offset(&self) -> i8 {
-        self.slice_act_y_qp_offset
-    }
-
-    pub fn slice_act_cb_qp_offset(&self) -> i8 {
-        self.slice_act_cb_qp_offset
-    }
-
-    pub fn slice_act_cr_qp_offset(&self) -> i8 {
-        self.slice_act_cr_qp_offset
-    }
-
-    pub fn cu_chroma_qp_offset_enabled_flag(&self) -> bool {
-        self.cu_chroma_qp_offset_enabled_flag
-    }
-
-    pub fn deblocking_filter_override_flag(&self) -> bool {
-        self.deblocking_filter_override_flag
-    }
-
-    pub fn deblocking_filter_disabled_flag(&self) -> bool {
-        self.deblocking_filter_disabled_flag
-    }
-
-    pub fn beta_offset_div2(&self) -> i8 {
-        self.beta_offset_div2
-    }
-
-    pub fn tc_offset_div2(&self) -> i8 {
-        self.tc_offset_div2
-    }
-
-    pub fn loop_filter_across_slices_enabled_flag(&self) -> bool {
-        self.loop_filter_across_slices_enabled_flag
-    }
-
-    pub fn num_entry_point_offsets(&self) -> u32 {
-        self.num_entry_point_offsets
-    }
-
-    pub fn offset_len_minus1(&self) -> u8 {
-        self.offset_len_minus1
-    }
-
-    pub fn entry_point_offset_minus1(&self) -> [u32; 32] {
-        self.entry_point_offset_minus1
-    }
-
-    pub fn num_pic_total_curr(&self) -> u32 {
-        self.num_pic_total_curr
-    }
-
-    pub fn header_bit_size(&self) -> u32 {
-        self.header_bit_size
-    }
-
-    pub fn n_emulation_prevention_bytes(&self) -> u32 {
-        self.n_emulation_prevention_bytes
-    }
-
-    pub fn curr_rps_idx(&self) -> u8 {
-        self.curr_rps_idx
-    }
-
-    pub fn short_term_ref_pic_set(&self) -> &ShortTermRefPicSet {
-        &self.short_term_ref_pic_set
-    }
-
-    pub fn st_rps_bits(&self) -> u32 {
-        self.st_rps_bits
-    }
+    pub st_rps_bits: u32,
 }
 
 impl Default for SliceHeader {
@@ -2096,22 +1720,12 @@ impl Default for SliceHeader {
 /// consecutively in the raster scan within a particular slice group
 pub struct Slice<'a> {
     /// The slice header.
-    header: SliceHeader,
+    pub header: SliceHeader,
     /// The NAL unit backing this slice.
-    nalu: Nalu<'a>,
+    pub nalu: Nalu<'a>,
 }
 
 impl<'a> Slice<'a> {
-    /// Get a reference to the slice's header.
-    pub fn header(&self) -> &SliceHeader {
-        &self.header
-    }
-
-    /// Get a reference to the slice's nalu.
-    pub fn nalu(&self) -> &Nalu {
-        &self.nalu
-    }
-
     /// Sets the header for dependent slices by copying from an independent
     /// slice.
     pub fn replace_header(&mut self, header: SliceHeader) -> anyhow::Result<()> {
@@ -2154,7 +1768,6 @@ impl<'a> Slice<'a> {
     }
 }
 
-// TODO
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SublayerHrdParameters {
     // NOTE: The value of CpbCnt is cpb_cnt_minus1[i] + 1, and cpb_cnt_minus1
@@ -2162,69 +1775,50 @@ pub struct SublayerHrdParameters {
     /// `bit_rate_value_minus1[ i ]` (together with bit_rate_scale) specifies the
     /// maximum input bit rate for the i-th CPB when the CPB operates at the
     /// access unit level
-    bit_rate_value_minus1: [u32; 32],
+    pub bit_rate_value_minus1: [u32; 32],
     /// `cpb_size_value_minus1[ i ]` is used together with cpb_size_scale to
     /// specify the i-th CPB size when the CPB operates at the access unit
     /// level.
-    cpb_size_value_minus1: [u32; 32],
+    pub cpb_size_value_minus1: [u32; 32],
     /// `cpb_size_du_value_minus1[ i ]` is used together with cpb_size_du_scale to
     /// specify the i-th CPB size when the CPB operates at sub-picture level.
-    cpb_size_du_value_minus1: [u32; 32],
+    pub cpb_size_du_value_minus1: [u32; 32],
     /// `bit_rate_du_value_minus1[ i ]` (together with bit_rate_scale) specifies
     /// the maximum input bit rate for the i-th CPB when the CPB operates at the
     /// sub-picture level.
-    bit_rate_du_value_minus1: [u32; 32],
+    pub bit_rate_du_value_minus1: [u32; 32],
     /// `cbr_flag[ i ]` not set specifies that to decode this CVS by the HRD using
     /// the i-th CPB specification.
-    cbr_flag: [bool; 32],
+    pub cbr_flag: [bool; 32],
 }
 
-impl SublayerHrdParameters {
-    pub fn cpb_size_value_minus1(&self) -> [u32; 32] {
-        self.cpb_size_value_minus1
-    }
-
-    pub fn cpb_size_du_value_minus1(&self) -> [u32; 32] {
-        self.cpb_size_du_value_minus1
-    }
-
-    pub fn bit_rate_du_value_minus1(&self) -> [u32; 32] {
-        self.bit_rate_du_value_minus1
-    }
-
-    pub fn cbr_flag(&self) -> [bool; 32] {
-        self.cbr_flag
-    }
-}
-
-// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HrdParams {
     /// When set, specifies that NAL HRD parameters (pertaining to the Type II
     /// bitstream conformance point) are present in the hrd_parameters( ) syntax
     /// structure. When not set, specifies that NAL HRD parameters are not
     /// present in the hrd_parameters( ) syntax structure.
-    nal_hrd_parameters_present_flag: bool,
+    pub nal_hrd_parameters_present_flag: bool,
     /// When set, specifies that VCL HRD parameters (pertaining to the Type I
     /// bitstream conformance point) are present in the hrd_parameters( ) syntax
     /// structure. When not set, specifies that VCL HRD parameters are not
     /// present in the hrd_parameters( ) syntax structure.
-    vcl_hrd_parameters_present_flag: bool,
+    pub vcl_hrd_parameters_present_flag: bool,
     /// When set, specifies that sub-picture level HRD parameters are present
     /// and the HRD may operate at access unit level or sub-picture level. When
     /// not set, specifies that sub-picture level HRD parameters are not present
     /// and the HRD operates at access unit level.
-    sub_pic_hrd_params_present_flag: bool,
+    pub sub_pic_hrd_params_present_flag: bool,
     /// Used to specify the clock sub-tick. A clock sub-tick is the minimum
     /// interval of time that can be represented in the coded data when
     /// sub_pic_hrd_params_present_flag is set.
-    tick_divisor_minus2: u8,
+    pub tick_divisor_minus2: u8,
     /// du_cpb_removal_delay_increment_length_minus1 plus 1 specifies the
     /// length, in bits, of the `du_cpb_removal_delay_increment_minus1[ i ]` and
     /// du_common_cpb_removal_delay_increment_minus1 syntax elements of the
     /// picture timing SEI message and the du_spt_cpb_removal_delay_increment
     /// syntax element in the decoding unit information SEI message.
-    du_cpb_removal_delay_increment_length_minus1: u8,
+    pub du_cpb_removal_delay_increment_length_minus1: u8,
     /// When set, specifies that sub-picture level CPB removal delay parameters
     /// are present in picture timing SEI messages and no decoding unit
     /// information SEI message is available (in the CVS or provided through
@@ -2232,147 +1826,65 @@ pub struct HrdParams {
     /// specifies that sub-picture level CPB removal delay parameters are
     /// present in decoding unit information SEI messages and picture timing SEI
     /// messages do not include sub-picture level CPB removal delay parameters.
-    sub_pic_cpb_params_in_pic_timing_sei_flag: bool,
+    pub sub_pic_cpb_params_in_pic_timing_sei_flag: bool,
     /// dpb_output_delay_du_length_minus1 plus 1 specifies the length, in bits,
     /// of the pic_dpb_output_du_delay syntax element in the picture timing SEI
     /// message and the pic_spt_dpb_output_du_delay syntax element in the
     /// decoding unit information SEI message.
-    dpb_output_delay_du_length_minus1: u8,
+    pub dpb_output_delay_du_length_minus1: u8,
     /// Together with `bit_rate_value_minus1[ i ]`, specifies the maximum input
     /// bit rate of the i-th CPB.
-    bit_rate_scale: u8,
+    pub bit_rate_scale: u8,
     /// Together with `cpb_size_du_value_minus1[ i ]`, specifies the CPB size of
     /// the i-th CPB when the CPB operates at sub-picture level.
-    cpb_size_scale: u8,
+    pub cpb_size_scale: u8,
     /// Together with `cpb_size_du_value_minus1[ i ]`, specifies the CPB size of
     /// the i-th CPB when the CPB operates at sub-picture level.
-    cpb_size_du_scale: u8,
+    pub cpb_size_du_scale: u8,
     /// initial_cpb_removal_delay_length_minus1 plus 1 specifies the length, in
     /// bits, of the `nal_initial_cpb_removal_delay[ i ]`,
     /// `nal_initial_cpb_removal_offset[ i ]`, `vcl_initial_cpb_removal_delay[ i ]`
     /// and `vcl_initial_cpb_removal_offset[ i ]` syntax elements of the buffering
     /// period SEI message.
-    initial_cpb_removal_delay_length_minus1: u8,
+    pub initial_cpb_removal_delay_length_minus1: u8,
     /// au_cpb_removal_delay_length_minus1 plus 1 specifies the length, in bits,
     /// of the cpb_delay_offset syntax element in the buffering period SEI
     /// message and the au_cpb_removal_delay_minus1 syntax element in the
     /// picture timing SEI message.
-    au_cpb_removal_delay_length_minus1: u8,
+    pub au_cpb_removal_delay_length_minus1: u8,
     /// dpb_output_delay_length_minus1 plus 1 specifies the length, in bits, of
     /// the dpb_delay_offset syntax element in the buffering period SEI message
     /// and the pic_dpb_output_delay syntax element in the picture timing SEI
     /// message.
-    dpb_output_delay_length_minus1: u8,
+    pub dpb_output_delay_length_minus1: u8,
     /// `fixed_pic_rate_general_flag[ i ]` set indicates that, when HighestTid is
     /// equal to i, the temporal distance between the HRD output times of
     /// consecutive pictures in output order is constrained as specified in the
     /// specification. `fixed_pic_rate_general_flag[ i ]` not set indicates that
     /// this constraint may not apply.
-    fixed_pic_rate_general_flag: [bool; 7],
+    pub fixed_pic_rate_general_flag: [bool; 7],
     /// `fixed_pic_rate_within_cvs_flag[ i ]` set indicates that, when HighestTid
     /// is equal to i, the temporal distance between the HRD output times of
     /// consecutive pictures in output order is constrained as specified in the
     /// specification. `fixed_pic_rate_within_cvs_flag[ i ]` not set indicates
     /// that this constraint may not apply.
-    fixed_pic_rate_within_cvs_flag: [bool; 7],
+    pub fixed_pic_rate_within_cvs_flag: [bool; 7],
     /// `elemental_duration_in_tc_minus1[ i ]` plus 1 (when present) specifies,
     /// when HighestTid is equal to i, the temporal distance, in clock ticks,
     /// between the elemental units that specify the HRD output times of
     /// consecutive pictures in output order as specified in the specification.
-    elemental_duration_in_tc_minus1: [u32; 7],
+    pub elemental_duration_in_tc_minus1: [u32; 7],
     /// `low_delay_hrd_flag[ i ]` specifies the HRD operational mode, when
     /// HighestTid is equal to i, as specified in Annex C or clause F.13.
-    low_delay_hrd_flag: [bool; 7],
+    pub low_delay_hrd_flag: [bool; 7],
     /// `cpb_cnt_minus1[ i ]` plus 1 specifies the number of alternative CPB
     /// specifications in the bitstream of the CVS when HighestTid is equal to
     /// i.
-    cpb_cnt_minus1: [u32; 7],
+    pub cpb_cnt_minus1: [u32; 7],
     /// The NAL HRD data.
-    nal_hrd: [SublayerHrdParameters; 7],
+    pub nal_hrd: [SublayerHrdParameters; 7],
     /// The VCL HRD data.
-    vcl_hrd: [SublayerHrdParameters; 7],
-}
-
-impl HrdParams {
-    pub fn nal_hrd_parameters_present_flag(&self) -> bool {
-        self.nal_hrd_parameters_present_flag
-    }
-
-    pub fn vcl_hrd_parameters_present_flag(&self) -> bool {
-        self.vcl_hrd_parameters_present_flag
-    }
-
-    pub fn sub_pic_hrd_params_present_flag(&self) -> bool {
-        self.sub_pic_hrd_params_present_flag
-    }
-
-    pub fn tick_divisor_minus2(&self) -> u8 {
-        self.tick_divisor_minus2
-    }
-
-    pub fn du_cpb_removal_delay_increment_length_minus1(&self) -> u8 {
-        self.du_cpb_removal_delay_increment_length_minus1
-    }
-
-    pub fn sub_pic_cpb_params_in_pic_timing_sei_flag(&self) -> bool {
-        self.sub_pic_cpb_params_in_pic_timing_sei_flag
-    }
-
-    pub fn dpb_output_delay_du_length_minus1(&self) -> u8 {
-        self.dpb_output_delay_du_length_minus1
-    }
-
-    pub fn bit_rate_scale(&self) -> u8 {
-        self.bit_rate_scale
-    }
-
-    pub fn cpb_size_scale(&self) -> u8 {
-        self.cpb_size_scale
-    }
-
-    pub fn cpb_size_du_scale(&self) -> u8 {
-        self.cpb_size_du_scale
-    }
-
-    pub fn initial_cpb_removal_delay_length_minus1(&self) -> u8 {
-        self.initial_cpb_removal_delay_length_minus1
-    }
-
-    pub fn au_cpb_removal_delay_length_minus1(&self) -> u8 {
-        self.au_cpb_removal_delay_length_minus1
-    }
-
-    pub fn dpb_output_delay_length_minus1(&self) -> u8 {
-        self.dpb_output_delay_length_minus1
-    }
-
-    pub fn fixed_pic_rate_general_flag(&self) -> [bool; 7] {
-        self.fixed_pic_rate_general_flag
-    }
-
-    pub fn fixed_pic_rate_within_cvs_flag(&self) -> [bool; 7] {
-        self.fixed_pic_rate_within_cvs_flag
-    }
-
-    pub fn elemental_duration_in_tc_minus1(&self) -> [u32; 7] {
-        self.elemental_duration_in_tc_minus1
-    }
-
-    pub fn low_delay_hrd_flag(&self) -> [bool; 7] {
-        self.low_delay_hrd_flag
-    }
-
-    pub fn cpb_cnt_minus1(&self) -> [u32; 7] {
-        self.cpb_cnt_minus1
-    }
-
-    pub fn nal_hrd(&self) -> &[SublayerHrdParameters; 7] {
-        &self.nal_hrd
-    }
-
-    pub fn vcl_hrd(&self) -> &[SublayerHrdParameters; 7] {
-        &self.vcl_hrd
-    }
+    pub vcl_hrd: [SublayerHrdParameters; 7],
 }
 
 impl Default for HrdParams {
@@ -2402,117 +1914,116 @@ impl Default for HrdParams {
     }
 }
 
-// TODO
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VuiParams {
     /// When set, specifies that aspect_ratio_idc is present.  When not set,
     /// specifies that aspect_ratio_idc is not present.
-    aspect_ratio_info_present_flag: bool,
+    pub aspect_ratio_info_present_flag: bool,
     /// Specifies the value of the sample aspect ratio of the luma samples.
-    aspect_ratio_idc: u32,
+    pub aspect_ratio_idc: u32,
     /// Indicates the horizontal size of the sample aspect ratio (in arbitrary
     /// units).
-    sar_width: u32,
+    pub sar_width: u32,
     /// Indicates the vertical size of the sample aspect ratio (in arbitrary
     /// units).
-    sar_height: u32,
+    pub sar_height: u32,
     /// When set, specifies that the overscan_appropriate_flag is present. When
     /// not set, the preferred display method for the video signal is
     /// unspecified.
-    overscan_info_present_flag: bool,
+    pub overscan_info_present_flag: bool,
     /// When set indicates that the cropped decoded pictures output are suitable
     /// for display using overscan. When not set, indicates that the cropped
     /// decoded pictures output contain visually important information in the
     /// entire region out to the edges of the conformance cropping window of the
     /// picture, such that the cropped decoded pictures output should not be
     /// displayed using overscan.
-    overscan_appropriate_flag: bool,
+    pub overscan_appropriate_flag: bool,
     /// When set, specifies that video_format, video_full_range_flag and
     /// colour_description_present_flag are present.  When not set, specify that
     /// video_format, video_full_range_flag and colour_description_present_flag
     /// are not present.
-    video_signal_type_present_flag: bool,
+    pub video_signal_type_present_flag: bool,
     /// Indicates the representation of the pictures as specified in Table E.2,
     /// before being coded in accordance with this Specification.
-    video_format: u8,
+    pub video_format: u8,
     /// Indicates the black level and range of the luma and chroma signals as
     /// derived from E′Y, E′PB, and E′PR or E′R, E′G, and E′B real-valued
     /// component signals.
-    video_full_range_flag: bool,
+    pub video_full_range_flag: bool,
     /// When set, specifies that colour_primaries, transfer_characteristics, and
     /// matrix_coeffs are present. When not set, specifies that
     /// colour_primaries, transfer_characteristics, and matrix_coeffs are not
     /// present.
-    colour_description_present_flag: bool,
+    pub colour_description_present_flag: bool,
     /// Indicates the chromaticity coordinates of the source primaries as
     /// specified in Table E.3 in terms of the CIE 1931 definition of x and y as
     /// specified in ISO 11664-1.
-    colour_primaries: u32,
+    pub colour_primaries: u32,
     /// See table E.4 in the specification.
-    transfer_characteristics: u32,
+    pub transfer_characteristics: u32,
     /// Describes the matrix coefficients used in deriving luma and chroma
     /// signals from the green, blue, and red, or Y, Z, and X primaries, as
     /// specified in Table E.5.
-    matrix_coeffs: u32,
+    pub matrix_coeffs: u32,
     /// When true, specifies that chroma_sample_loc_type_top_field and
     /// chroma_sample_loc_type_bottom_field are present. When false, specifies
     /// that chroma_sample_loc_type_top_field and
     /// chroma_sample_loc_type_bottom_field are not present.
-    chroma_loc_info_present_flag: bool,
+    pub chroma_loc_info_present_flag: bool,
     /// See the specification for more details.
-    chroma_sample_loc_type_top_field: u32,
+    pub chroma_sample_loc_type_top_field: u32,
     /// See the specification for more details.
-    chroma_sample_loc_type_bottom_field: u32,
+    pub chroma_sample_loc_type_bottom_field: u32,
     /// When true, indicates that the value of all decoded chroma samples is
     /// equal to 1 << ( BitDepthC − 1 ). When false, provides no indication of
     /// decoded chroma sample values.
-    neutral_chroma_indication_flag: bool,
+    pub neutral_chroma_indication_flag: bool,
     /// When true, indicates that the CVS conveys pictures that represent
     /// fields, and specifies that a picture timing SEI message shall be present
     /// in every access unit of the current CVS. When false, indicates that the
     /// CVS conveys pictures that represent frames and that a picture timing SEI
     /// message may or may not be present in any access unit of the current CVS.
-    field_seq_flag: bool,
+    pub field_seq_flag: bool,
     /// When true, specifies that picture timing SEI messages are present for
     /// every picture and include the pic_struct, source_scan_type and
     /// duplicate_flag syntax elements. When false, specifies that the
     /// pic_struct syntax element is not present in picture timing SEI messages.
-    frame_field_info_present_flag: bool,
+    pub frame_field_info_present_flag: bool,
     /// When true, indicates that the default display window parameters follow
     /// next in the VUI. When false, indicates that the default display window
     /// parameters are not present.
-    default_display_window_flag: bool,
+    pub default_display_window_flag: bool,
     /// Specifies the samples of the pictures in the CVS that are within the
     /// default display window, in terms of a rectangular region specified in
     /// picture coordinates for display.
-    def_disp_win_left_offset: u32,
+    pub def_disp_win_left_offset: u32,
     /// Specifies the samples of the pictures in the CVS that are within the
     /// default display window, in terms of a rectangular region specified in
     /// picture coordinates for display.
-    def_disp_win_right_offset: u32,
+    pub def_disp_win_right_offset: u32,
     /// Specifies the samples of the pictures in the CVS that are within the
     /// default display window, in terms of a rectangular region specified in
     /// picture coordinates for display.
-    def_disp_win_top_offset: u32,
+    pub def_disp_win_top_offset: u32,
     /// Specifies the samples of the pictures in the CVS that are within the
     /// default display window, in terms of a rectangular region specified in
     /// picture coordinates for display.
-    def_disp_win_bottom_offset: u32,
+    pub def_disp_win_bottom_offset: u32,
     /// When set, specifies that vui_num_units_in_tick, vui_time_scale,
     /// vui_poc_proportional_to_timing_flag and vui_hrd_parameters_present_flag
     /// are present in the vui_parameters( ) syntax structure.  When not set,
     /// specifies that vui_num_units_in_tick, vui_time_scale,
     /// vui_poc_proportional_to_timing_flag and vui_hrd_parameters_present_flag
     /// are not present in the vui_parameters( ) syntax structure
-    timing_info_present_flag: bool,
+    pub timing_info_present_flag: bool,
     /// The number of time units of a clock operating at the frequency
     /// vui_time_scale Hz that corresponds to one increment (called a clock
     /// tick) of a clock tick counter.
-    num_units_in_tick: u32,
+    pub num_units_in_tick: u32,
     /// Is the number of time units that pass in one second. For example, a time
     /// coordinate system that measures time using a 27 MHz clock has a
     /// vui_time_scale of 27 000 000.
-    time_scale: u32,
+    pub time_scale: u32,
     /// When set, indicates that the picture order count value for each picture
     /// in the CVS that is not the first picture in the CVS, in decoding order,
     /// is proportional to the output time of the picture relative to the output
@@ -2521,220 +2032,58 @@ pub struct VuiParams {
     /// first picture in the CVS, in decoding order, may or may not be
     /// proportional to the output time of the picture relative to the output
     /// time of the first picture in the CVS.
-    poc_proportional_to_timing_flag: bool,
+    pub poc_proportional_to_timing_flag: bool,
     /// vui_num_ticks_poc_diff_one_minus1 plus 1 specifies the number of clock
     /// ticks corresponding to a difference of picture order count values equal
     /// to 1.
-    num_ticks_poc_diff_one_minus1: u32,
+    pub num_ticks_poc_diff_one_minus1: u32,
     /// When set, specifies that the syntax structure hrd_parameters( ) is
     /// present in the vui_parameters( ) syntax structure.  When not set,
     /// specifies that the syntax structure hrd_parameters( ) is not present in
     /// the vui_parameters( ) syntax structure.
-    hrd_parameters_present_flag: bool,
+    pub hrd_parameters_present_flag: bool,
     /// The hrd_parameters() data.
-    hrd: HrdParams,
+    pub hrd: HrdParams,
     /// When set, specifies that the bitstream restriction parameters for the
     /// CVS are present. When not set, specifies that the bitstream restriction
     /// parameters for the CVS are not present.
-    bitstream_restriction_flag: bool,
+    pub bitstream_restriction_flag: bool,
     /// When set, indicates that each PPS that is active in the CVS has the same
     /// value of the syntax elements num_tile_columns_minus1,
     /// num_tile_rows_minus1, uniform_spacing_flag, `column_width_minus1[ i ]`,
     /// `row_height_minus1[ i ]` and loop_filter_across_tiles_enabled_flag, when
     /// present. When not set, indicates that tiles syntax elements in different
     /// PPSs may or may not have the same value
-    tiles_fixed_structure_flag: bool,
+    pub tiles_fixed_structure_flag: bool,
     /// When not set, indicates that no sample outside the picture boundaries
     /// and no sample at a fractional sample position for which the sample value
     /// is derived using one or more samples outside the picture boundaries is
     /// used for inter prediction of any sample.  When set, indicates that one
     /// or more samples outside the picture boundaries may be used in inter
     /// prediction.
-    motion_vectors_over_pic_boundaries_flag: bool,
+    pub motion_vectors_over_pic_boundaries_flag: bool,
     /// When set, indicates that all P and B slices (when present) that belong
     /// to the same picture have an identical reference picture list 0 and that
     /// all B slices (when present) that belong to the same picture have an
     /// identical reference picture list 1.
-    restricted_ref_pic_lists_flag: bool,
+    pub restricted_ref_pic_lists_flag: bool,
     /// When not equal to 0, establishes a bound on the maximum possible size of
     /// distinct coded spatial segmentation regions in the pictures of the CVS.
-    min_spatial_segmentation_idc: u32,
+    pub min_spatial_segmentation_idc: u32,
     /// Indicates a number of bytes not exceeded by the sum of the sizes of the
     /// VCL NAL units associated with any coded picture in the CVS.
-    max_bytes_per_pic_denom: u32,
+    pub max_bytes_per_pic_denom: u32,
     /// Indicates an upper bound for the number of coded bits of coding_unit( )
     /// data for anycoding block in any picture of the CVS.
-    max_bits_per_min_cu_denom: u32,
+    pub max_bits_per_min_cu_denom: u32,
     /// Indicate the maximum absolute value of a decoded horizontal and vertical
     /// motion vector component, respectively, in quarter luma sample units, for
     /// all pictures in the CVS.
-    log2_max_mv_length_horizontal: u32,
+    pub log2_max_mv_length_horizontal: u32,
     /// Indicate the maximum absolute value of a decoded horizontal and vertical
     /// motion vector component, respectively, in quarter luma sample units, for
     /// all pictures in the CVS.
-    log2_max_mv_length_vertical: u32,
-}
-
-impl VuiParams {
-    pub fn aspect_ratio_info_present_flag(&self) -> bool {
-        self.aspect_ratio_info_present_flag
-    }
-
-    pub fn aspect_ratio_idc(&self) -> u32 {
-        self.aspect_ratio_idc
-    }
-
-    pub fn sar_width(&self) -> u32 {
-        self.sar_width
-    }
-
-    pub fn sar_height(&self) -> u32 {
-        self.sar_height
-    }
-
-    pub fn overscan_info_present_flag(&self) -> bool {
-        self.overscan_info_present_flag
-    }
-
-    pub fn overscan_appropriate_flag(&self) -> bool {
-        self.overscan_appropriate_flag
-    }
-
-    pub fn video_signal_type_present_flag(&self) -> bool {
-        self.video_signal_type_present_flag
-    }
-
-    pub fn video_format(&self) -> u8 {
-        self.video_format
-    }
-
-    pub fn video_full_range_flag(&self) -> bool {
-        self.video_full_range_flag
-    }
-
-    pub fn colour_description_present_flag(&self) -> bool {
-        self.colour_description_present_flag
-    }
-
-    pub fn colour_primaries(&self) -> u32 {
-        self.colour_primaries
-    }
-
-    pub fn transfer_characteristics(&self) -> u32 {
-        self.transfer_characteristics
-    }
-
-    pub fn matrix_coeffs(&self) -> u32 {
-        self.matrix_coeffs
-    }
-
-    pub fn chroma_loc_info_present_flag(&self) -> bool {
-        self.chroma_loc_info_present_flag
-    }
-
-    pub fn chroma_sample_loc_type_top_field(&self) -> u32 {
-        self.chroma_sample_loc_type_top_field
-    }
-
-    pub fn chroma_sample_loc_type_bottom_field(&self) -> u32 {
-        self.chroma_sample_loc_type_bottom_field
-    }
-
-    pub fn neutral_chroma_indication_flag(&self) -> bool {
-        self.neutral_chroma_indication_flag
-    }
-
-    pub fn field_seq_flag(&self) -> bool {
-        self.field_seq_flag
-    }
-
-    pub fn frame_field_info_present_flag(&self) -> bool {
-        self.frame_field_info_present_flag
-    }
-
-    pub fn default_display_window_flag(&self) -> bool {
-        self.default_display_window_flag
-    }
-
-    pub fn def_disp_win_left_offset(&self) -> u32 {
-        self.def_disp_win_left_offset
-    }
-
-    pub fn def_disp_win_right_offset(&self) -> u32 {
-        self.def_disp_win_right_offset
-    }
-
-    pub fn def_disp_win_top_offset(&self) -> u32 {
-        self.def_disp_win_top_offset
-    }
-
-    pub fn def_disp_win_bottom_offset(&self) -> u32 {
-        self.def_disp_win_bottom_offset
-    }
-
-    pub fn timing_info_present_flag(&self) -> bool {
-        self.timing_info_present_flag
-    }
-
-    pub fn num_units_in_tick(&self) -> u32 {
-        self.num_units_in_tick
-    }
-
-    pub fn time_scale(&self) -> u32 {
-        self.time_scale
-    }
-
-    pub fn poc_proportional_to_timing_flag(&self) -> bool {
-        self.poc_proportional_to_timing_flag
-    }
-
-    pub fn num_ticks_poc_diff_one_minus1(&self) -> u32 {
-        self.num_ticks_poc_diff_one_minus1
-    }
-
-    pub fn hrd_parameters_present_flag(&self) -> bool {
-        self.hrd_parameters_present_flag
-    }
-
-    pub fn hrd(&self) -> &HrdParams {
-        &self.hrd
-    }
-
-    pub fn bitstream_restriction_flag(&self) -> bool {
-        self.bitstream_restriction_flag
-    }
-
-    pub fn tiles_fixed_structure_flag(&self) -> bool {
-        self.tiles_fixed_structure_flag
-    }
-
-    pub fn motion_vectors_over_pic_boundaries_flag(&self) -> bool {
-        self.motion_vectors_over_pic_boundaries_flag
-    }
-
-    pub fn restricted_ref_pic_lists_flag(&self) -> bool {
-        self.restricted_ref_pic_lists_flag
-    }
-
-    pub fn min_spatial_segmentation_idc(&self) -> u32 {
-        self.min_spatial_segmentation_idc
-    }
-
-    pub fn max_bytes_per_pic_denom(&self) -> u32 {
-        self.max_bytes_per_pic_denom
-    }
-
-    pub fn max_bits_per_min_cu_denom(&self) -> u32 {
-        self.max_bits_per_min_cu_denom
-    }
-
-    pub fn log2_max_mv_length_horizontal(&self) -> u32 {
-        self.log2_max_mv_length_horizontal
-    }
-
-    pub fn log2_max_mv_length_vertical(&self) -> u32 {
-        self.log2_max_mv_length_vertical
-    }
+    pub log2_max_mv_length_vertical: u32,
 }
 
 impl Default for VuiParams {
@@ -2794,16 +2143,16 @@ pub struct Parser {
 impl Parser {
     /// Parse a VPS NALU.
     pub fn parse_vps(&mut self, nalu: &Nalu) -> anyhow::Result<&Vps> {
-        if !matches!(nalu.header().type_, NaluType::VpsNut) {
+        if !matches!(nalu.header.type_, NaluType::VpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
                 NaluType::VpsNut,
-                nalu.header().type_
+                nalu.header.type_
             ));
         }
 
         let data = nalu.as_ref();
-        let header = nalu.header();
+        let header = &nalu.header;
         let hdr_len = header.len();
         // Skip the header
         let mut r = NaluReader::new(&data[hdr_len..]);
@@ -3663,16 +3012,16 @@ impl Parser {
 
     /// Parse a SPS NALU.
     pub fn parse_sps(&mut self, nalu: &Nalu) -> anyhow::Result<&Sps> {
-        if !matches!(nalu.header().type_, NaluType::SpsNut) {
+        if !matches!(nalu.header.type_, NaluType::SpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
                 NaluType::SpsNut,
-                nalu.header().type_
+                nalu.header.type_
             ));
         }
 
         let data = nalu.as_ref();
-        let header = nalu.header();
+        let header = &nalu.header;
         let hdr_len = header.len();
         // Skip the header
         let mut r = NaluReader::new(&data[hdr_len..]);
@@ -3865,7 +3214,7 @@ impl Parser {
             sps.seq_parameter_set_id,
             sps.width(),
             sps.height(),
-            nalu.size()
+            nalu.size
         );
 
         let key = sps.seq_parameter_set_id;
@@ -3960,16 +3309,16 @@ impl Parser {
 
     /// Parse a PPS NALU.
     pub fn parse_pps(&mut self, nalu: &Nalu) -> anyhow::Result<&Pps> {
-        if !matches!(nalu.header().type_, NaluType::PpsNut) {
+        if !matches!(nalu.header.type_, NaluType::PpsNut) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
                 NaluType::PpsNut,
-                nalu.header().type_
+                nalu.header.type_
             ));
         }
 
         let data = nalu.as_ref();
-        let header = nalu.header();
+        let header = &nalu.header;
         let hdr_len = header.len();
         // Skip the header
         let mut r = NaluReader::new(&data[hdr_len..]);
@@ -4127,12 +3476,12 @@ impl Parser {
             r.skip_bits(4)?; // pps_extension_4bits
         }
 
-        pps.temporal_id = nalu.header().nuh_temporal_id_plus1 - 1;
+        pps.temporal_id = nalu.header.nuh_temporal_id_plus1 - 1;
 
         log::debug!(
             "Parsed PPS({}), NAL size was {}",
             pps.pic_parameter_set_id,
-            nalu.size()
+            nalu.size
         );
 
         let key = pps.pic_parameter_set_id;
@@ -4284,7 +3633,7 @@ impl Parser {
     /// Parses a slice header from a slice NALU.
     pub fn parse_slice_header<'a>(&mut self, nalu: Nalu<'a>) -> anyhow::Result<Slice<'a>> {
         if !matches!(
-            nalu.header().type_,
+            nalu.header.type_,
             NaluType::TrailN
                 | NaluType::TrailR
                 | NaluType::TsaN
@@ -4304,12 +3653,12 @@ impl Parser {
         ) {
             return Err(anyhow!(
                 "Invalid NALU type: {:?} is not a slice NALU",
-                nalu.header().type_
+                nalu.header.type_
             ));
         }
 
         let data = nalu.as_ref();
-        let nalu_header = nalu.header();
+        let nalu_header = &nalu.header;
         let hdr_len = nalu_header.len();
         // Skip the header
         let mut r = NaluReader::new(&data[hdr_len..]);
@@ -4319,7 +3668,7 @@ impl Parser {
             ..Default::default()
         };
 
-        if nalu.header().type_.is_irap() {
+        if nalu.header.type_.is_irap() {
             hdr.no_output_of_prior_pics_flag = r.read_bit()?;
         }
 
@@ -4681,14 +4030,14 @@ impl Parser {
         r.skip_bits(num_bits)?;
 
         let epb = r.num_epb();
-        hdr.header_bit_size = ((nalu.size() - epb) * 8 - r.num_bits_left()) as u32;
+        hdr.header_bit_size = ((nalu.size - epb) * 8 - r.num_bits_left()) as u32;
 
         hdr.n_emulation_prevention_bytes = epb as u32;
 
         log::debug!(
             "Parsed slice {:?}, NAL size was {}",
             nalu_header.type_,
-            nalu.size()
+            nalu.size
         );
 
         Ok(Slice { header: hdr, nalu })
@@ -4736,7 +4085,7 @@ mod tests {
         include_bytes!("test_data/test-25fps-h265-slice-data-1.bin");
 
     fn dispatch_parse_call(parser: &mut Parser, nalu: Nalu<NaluHeader>) -> anyhow::Result<()> {
-        match nalu.header().type_ {
+        match nalu.header.type_ {
             NaluType::TrailN
             | NaluType::TrailR
             | NaluType::TsaN
@@ -4776,7 +4125,7 @@ mod tests {
     ) -> Option<Nalu<NaluHeader>> {
         let mut cursor = Cursor::new(bitstream);
         while let Ok(nalu) = Nalu::<NaluHeader>::next(&mut cursor) {
-            if nalu.header().type_ == nalu_type {
+            if nalu.header.type_ == nalu_type {
                 if nskip == 0 {
                     return Some(nalu);
                 } else {
@@ -4997,7 +4346,7 @@ mod tests {
         // Just like the Chromium test, do an IDR slice, then a non IDR slice.
         let slice_nalu = find_nalu_by_type(STREAM_BEAR, NaluType::IdrWRadl, 0).unwrap();
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
-        let hdr = slice.header();
+        let hdr = &slice.header;
         assert!(hdr.first_slice_segment_in_pic_flag);
         assert!(!hdr.no_output_of_prior_pics_flag);
         assert_eq!(hdr.pic_parameter_set_id, 0);
@@ -5010,7 +4359,7 @@ mod tests {
 
         let slice_nalu = find_nalu_by_type(STREAM_BEAR, NaluType::TrailR, 0).unwrap();
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
-        let hdr = slice.header();
+        let hdr = &slice.header;
         assert!(hdr.first_slice_segment_in_pic_flag);
         assert_eq!(hdr.pic_parameter_set_id, 0);
         assert!(!hdr.dependent_slice_segment_flag);
@@ -5282,7 +4631,7 @@ mod tests {
 
         let slice_nalu = find_nalu_by_type(STREAM_TEST25FPS, NaluType::IdrNLp, 0).unwrap();
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
-        let hdr = slice.header();
+        let hdr = &slice.header;
 
         assert!(hdr.first_slice_segment_in_pic_flag);
         assert!(!hdr.no_output_of_prior_pics_flag);
@@ -5330,7 +4679,7 @@ mod tests {
         // Next slice
         let slice_nalu = find_nalu_by_type(STREAM_TEST25FPS, NaluType::TrailR, 0).unwrap();
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
-        let hdr = slice.header();
+        let hdr = &slice.header;
 
         assert!(hdr.first_slice_segment_in_pic_flag);
         assert!(!hdr.no_output_of_prior_pics_flag);
@@ -5375,18 +4724,18 @@ mod tests {
         assert_eq!(hdr.offset_len_minus1, 10);
         assert_eq!(hdr.num_pic_total_curr, 1);
 
-        assert_eq!(slice.nalu.size(), 2983);
+        assert_eq!(slice.nalu.size, 2983);
         // Subtract 2 bytes to account for the header size.
-        assert_eq!(hdr.header_bit_size() - 16, 96);
+        assert_eq!(hdr.header_bit_size - 16, 96);
         assert_eq!(slice.nalu.as_ref(), STREAM_TEST_25_FPS_SLICE_1);
 
         // Next slice
         let slice_nalu = find_nalu_by_type(STREAM_TEST25FPS, NaluType::TrailR, 1).unwrap();
         let slice = parser.parse_slice_header(slice_nalu).unwrap();
-        let hdr = slice.header();
+        let hdr = &slice.header;
 
-        assert_eq!(slice.nalu.size(), 290);
+        assert_eq!(slice.nalu.size, 290);
         // Subtract 2 bytes to account for the header size.
-        assert_eq!(hdr.header_bit_size() - 16, 80);
+        assert_eq!(hdr.header_bit_size - 16, 80);
     }
 }

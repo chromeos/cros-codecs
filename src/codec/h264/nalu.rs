@@ -19,14 +19,14 @@ pub trait Header: Sized {
 
 #[derive(Debug)]
 pub struct Nalu<'a, U> {
-    header: U,
+    pub header: U,
     /// The mapping that backs this NALU. Possibly shared with the other NALUs
     /// in the Access Unit.
-    data: &'a [u8],
+    pub data: &'a [u8],
 
-    size: usize,
-    offset: usize,
-    sc_offset: usize,
+    pub size: usize,
+    pub offset: usize,
+    pub sc_offset: usize,
 }
 
 impl<'a, U> Nalu<'a, U>
@@ -97,31 +97,6 @@ where
         data.get_ref()[offset..]
             .windows(3)
             .position(|window| window == [0x00, 0x00, 0x01])
-    }
-
-    /// Get a reference to the nalu's header.
-    pub fn header(&self) -> &U {
-        &self.header
-    }
-
-    /// Get a reference to the nalu's data.
-    pub fn data(&self) -> &'a [u8] {
-        self.data
-    }
-
-    /// Get a reference to the nalu's size.
-    pub fn size(&self) -> usize {
-        self.size
-    }
-
-    /// Get a reference to the nalu's offset.
-    pub fn offset(&self) -> usize {
-        self.offset
-    }
-
-    /// Get a reference to the nalu's sc offset.
-    pub fn sc_offset(&self) -> usize {
-        self.sc_offset
     }
 }
 
