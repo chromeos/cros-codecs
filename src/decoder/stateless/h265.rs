@@ -28,6 +28,7 @@ use crate::codec::h265::picture::PictureData;
 use crate::codec::h265::picture::Reference;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -922,7 +923,15 @@ where
         timestamp: u64,
         slice: &Slice,
     ) -> Result<Option<CurrentPicState<B>>, DecodeError> {
-        if self.backend.frame_pool().num_free_frames() == 0 {
+        let layer = PoolLayer::Layer(self.coded_resolution);
+        if self
+            .backend
+            .frame_pool(layer)
+            .pop()
+            .ok_or(anyhow!("Pool not found"))?
+            .num_free_frames()
+            == 0
+        {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
@@ -1313,8 +1322,11 @@ where
             })
     }
 
-    fn frame_pool(&mut self) -> &mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor> {
-        self.backend.frame_pool()
+    fn frame_pool(
+        &mut self,
+        layer: PoolLayer,
+    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>> {
+        self.backend.frame_pool(layer)
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

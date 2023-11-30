@@ -26,6 +26,8 @@ use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
+use crate::decoder::FramePool;
+use crate::decoder::PoolLayer;
 
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::StatelessCodec;
@@ -316,7 +318,16 @@ where
         let mut consumed = 0;
 
         let nframes = self.count_frames(bitstream);
-        let num_free_frames = self.backend.frame_pool().num_free_frames();
+        /* we do not know the resolution at this point, as we haven't parsed the
+         * frames yet. Be conservative and check whether we have enough frames
+         * across all layers */
+        let num_free_frames = self
+            .backend
+            .frame_pool(PoolLayer::All)
+            .iter()
+            .map(|x| x.num_free_frames())
+            .min()
+            .ok_or(anyhow!("No pool found"))?;
 
         if matches!(self.decoding_state, DecodingState::Decoding) && num_free_frames < nframes {
             return Err(DecodeError::NotEnoughOutputBuffers(
@@ -481,8 +492,9 @@ where
 
     fn frame_pool(
         &mut self,
-    ) -> &mut dyn crate::decoder::FramePool<<B::Handle as DecodedHandle>::Descriptor> {
-        self.backend.frame_pool()
+        layer: PoolLayer,
+    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>> {
+        self.backend.frame_pool(layer)
     }
 
     fn stream_info(&self) -> Option<&crate::decoder::StreamInfo> {

@@ -241,9 +241,15 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
             libva::constants::VA_INVALID_SURFACE
         };
 
+        let highest_pool = self.highest_pool();
+        let surface = highest_pool
+            .borrow_mut()
+            .get_surface(highest_pool)
+            .ok_or(StatelessBackendError::OutOfResources)?;
+
+        let coded_resolution = self.highest_pool().borrow().coded_resolution();
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
-        let coded_resolution = self.surface_pool.borrow().coded_resolution();
 
         let iq_buffer = context
             .create_buffer(build_iq_matrix(picture, segmentation)?)
@@ -272,12 +278,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
         let slice_data = context
             .create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))
             .context("while creating slice data buffer")?;
-
-        let surface = self
-            .surface_pool
-            .borrow_mut()
-            .get_surface(&self.surface_pool)
-            .ok_or(StatelessBackendError::OutOfResources)?;
 
         let mut va_picture = VaPicture::new(timestamp, Rc::clone(context), surface);
 

@@ -263,6 +263,12 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
             .try_into()
             .unwrap();
 
+        let highest_pool = self.highest_pool();
+        let surface = highest_pool
+            .borrow_mut()
+            .get_surface(highest_pool)
+            .ok_or(StatelessBackendError::OutOfResources)?;
+
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
@@ -277,12 +283,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
         let slice_data = context
             .create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))
             .context("while creating slice data buffer")?;
-
-        let surface = self
-            .surface_pool
-            .borrow_mut()
-            .get_surface(&self.surface_pool)
-            .ok_or(StatelessBackendError::OutOfResources)?;
 
         let mut va_picture = VaPicture::new(timestamp, Rc::clone(context), surface);
 

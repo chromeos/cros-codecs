@@ -549,12 +549,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         _: &PictureData,
         timestamp: u64,
     ) -> StatelessBackendResult<Self::Picture> {
-        let metadata = self.metadata_state.get_parsed()?;
-        let surface = self
-            .surface_pool
+        let highest_pool = self.highest_pool();
+        let surface = highest_pool
             .borrow_mut()
-            .get_surface(&self.surface_pool)
+            .get_surface(highest_pool)
             .ok_or(StatelessBackendError::OutOfResources)?;
+
+        let metadata = self.metadata_state.get_parsed()?;
 
         Ok(VaPicture::new(
             timestamp,
