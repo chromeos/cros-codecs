@@ -13,6 +13,7 @@ pub mod stateless;
 
 use std::collections::VecDeque;
 
+use crate::decoder::stateless::PoolLayer;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -62,7 +63,7 @@ pub struct StreamInfo {
     pub coded_resolution: Resolution,
     /// Display resolution of the stream, i.e. the part of the decoded frames we want to display.
     pub display_resolution: Resolution,
-    /// Minimum number of output frames required for decoding to proceed.
+    /// Minimum number of output frames per layer required for decoding to proceed.
     ///
     /// Codecs keep some frames as references and cannot decode immediately into them again after
     /// they are returned. Allocating at least this number of frames guarantees that the decoder
@@ -81,8 +82,9 @@ pub struct StreamInfo {
 pub trait DecoderFormatNegotiator<'a, M> {
     /// Returns the current decoding parameters, as extracted from the stream.
     fn stream_info(&self) -> &StreamInfo;
-    /// Returns the frame pool in use for the decoder, set up for the new format.
-    fn frame_pool(&mut self) -> &mut dyn FramePool<M>;
+    /// Returns the frame pool in use for the decoder for `layer` set up for the
+    /// new format.
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>>;
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
 

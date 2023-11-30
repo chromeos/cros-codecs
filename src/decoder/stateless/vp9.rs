@@ -7,6 +7,7 @@ mod dummy;
 #[cfg(feature = "vaapi")]
 mod vaapi;
 
+use anyhow::anyhow;
 use log::debug;
 
 use crate::codec::vp9::parser::BitDepth;
@@ -19,6 +20,7 @@ use crate::codec::vp9::parser::MAX_SEGMENTS;
 use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -212,7 +214,13 @@ where
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let frames = self.codec.parser.parse_chunk(bitstream)?;
 
-        let num_free_frames = self.backend.frame_pool().num_free_frames();
+        let num_free_frames = self
+            .backend
+            .frame_pool(PoolLayer::Highest)
+            .pop()
+            .ok_or(DecodeError::DecoderError(anyhow!("No pool found")))?
+            .num_free_frames();
+
         if matches!(self.decoding_state, DecodingState::Decoding) && num_free_frames < frames.len()
         {
             return Err(DecodeError::NotEnoughOutputBuffers(
@@ -292,8 +300,11 @@ where
             })
     }
 
-    fn frame_pool(&mut self) -> &mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor> {
-        self.backend.frame_pool()
+    fn frame_pool(
+        &mut self,
+        layer: PoolLayer,
+    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>> {
+        self.backend.frame_pool(layer)
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

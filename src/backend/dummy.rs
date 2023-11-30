@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
@@ -141,7 +142,7 @@ impl<Codec: StatelessCodec> StatelessDecoderBackend<Codec> for Backend {
         Some(&self.stream_info)
     }
 
-    fn frame_pool(&mut self) -> &mut dyn FramePool<()> {
-        self
+    fn frame_pool(&mut self, _: PoolLayer) -> Vec<&mut dyn FramePool<()>> {
+        vec![self]
     }
 }

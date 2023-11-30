@@ -582,13 +582,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
         timestamp: u64,
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
-        let metadata = self.metadata_state.get_parsed()?;
-        let surface = self
-            .surface_pool
+        let highest_pool = self.highest_pool();
+        let surface = highest_pool
             .borrow_mut()
-            .get_surface(&self.surface_pool)
+            .get_surface(highest_pool)
             .ok_or(StatelessBackendError::OutOfResources)?;
 
+        let metadata = self.metadata_state.get_parsed()?;
         let mut picture = VaPicture::new(timestamp, Rc::clone(&metadata.context), surface);
 
         let surface_id = picture.surface().id();

@@ -112,8 +112,11 @@ pub trait StatelessDecoderBackend<Codec: StatelessCodec>:
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;
 
-    /// Returns the frame pool currently in use by the backend.
-    fn frame_pool(&mut self) -> &mut dyn FramePool<<Self::Handle as DecodedHandle>::Descriptor>;
+    /// Returns the frame pool currently in use by the backend for `layer`.
+    fn frame_pool(
+        &mut self,
+        layer: PoolLayer,
+    ) -> Vec<&mut dyn FramePool<<Self::Handle as DecodedHandle>::Descriptor>>;
 
     /// Try altering the decoded format.
     fn try_format(
@@ -171,8 +174,8 @@ where
         self.decoder.try_format(format)
     }
 
-    fn frame_pool(&mut self) -> &mut dyn FramePool<M> {
-        self.decoder.frame_pool()
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>> {
+        self.decoder.frame_pool(layer)
     }
 
     fn stream_info(&self) -> &StreamInfo {
@@ -188,6 +191,17 @@ where
     fn drop(&mut self) {
         (self.apply_format)(self.decoder, &self.format_hint)
     }
+}
+
+/// Controls the pool returned by [`StatelessVideoDecoder::frame_pool`].
+#[derive(Debug, Clone, Copy)]
+pub enum PoolLayer {
+    /// The pool for the highest spatial layer.
+    Highest,
+    /// The pool for the given resolution.
+    Layer(Resolution),
+    /// All pools.
+    All,
 }
 
 /// Stateless video decoder interface.
@@ -228,9 +242,14 @@ pub trait StatelessVideoDecoder<M> {
     /// [`next_event`]: StatelessVideoDecoder::next_event
     fn flush(&mut self) -> Result<(), DecodeError>;
 
-    /// Returns the frame pool in use with the decoder. Useful to add new frames as decode.
-    /// targets.
-    fn frame_pool(&mut self) -> &mut dyn FramePool<M>;
+    /// Returns the frame pool for `resolution` in use with the decoder. If
+    /// `resolution` is None, the pool of the highest resolution is returned.
+    ///
+    /// Multiple pools may be in use for SVC streams, since each spatial layer
+    /// will receive its frames from a separate pool.
+    ///
+    /// Useful to add new frames as decode targets.
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>>;
 
     fn stream_info(&self) -> Option<&StreamInfo>;
 
@@ -311,8 +330,11 @@ where
     C: StatelessCodec,
     B: StatelessDecoderBackend<C>,
 {
-    fn frame_pool(&mut self) -> &mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor> {
-        self.backend.frame_pool()
+    fn frame_pool(
+        &mut self,
+        layer: PoolLayer,
+    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>> {
+        self.backend.frame_pool(layer)
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

@@ -17,6 +17,7 @@ use bytes::Buf;
 use crate::codec::h264::parser::Nalu as H264Nalu;
 use crate::codec::h265::parser::Nalu as H265Nalu;
 use crate::decoder::stateless::DecodeError;
+use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
@@ -130,16 +131,21 @@ where
                 }
                 DecoderEvent::FormatChanged(mut format_setter) => {
                     format_setter.try_format(output_format).unwrap();
-                    // Allocate the missing number of buffers in our pool for decoding to succeed.
-                    let min_num_frames = format_setter.stream_info().min_num_frames;
-                    let pool_num_frames = format_setter.frame_pool().num_managed_frames();
-                    if pool_num_frames < min_num_frames {
-                        let frames = allocate_new_frames(
-                            format_setter.stream_info(),
-                            min_num_frames - pool_num_frames,
-                        )?;
-                        let pool = format_setter.frame_pool();
-                        pool.add_frames(frames).unwrap();
+                    let stream_info = format_setter.stream_info().clone();
+                    let min_num_frames = stream_info.min_num_frames;
+                    /* we need to account for multiple layers if applicable for
+                     * the stream */
+                    let pools = format_setter.frame_pool(PoolLayer::All);
+                    for pool in pools {
+                        // Allocate the missing number of buffers in our pool for decoding to succeed.
+                        let pool_num_frames = pool.num_managed_frames();
+                        if pool_num_frames < min_num_frames {
+                            let frames = allocate_new_frames(
+                                &stream_info,
+                                min_num_frames - pool_num_frames,
+                            )?;
+                            pool.add_frames(frames).unwrap();
+                        }
                     }
                 }
             }

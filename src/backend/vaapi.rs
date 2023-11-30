@@ -29,6 +29,7 @@ use libva::VAConfigAttribType;
 use libva::VaError;
 
 use crate::backend::vaapi::surface_pool::SurfacePool;
+use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
@@ -534,9 +535,9 @@ impl StreamMetadataState {
         hdr: S,
         format_map: Option<&FormatMap>,
         old_metadata_state: StreamMetadataState,
-        old_surface_pool: Rc<RefCell<SurfacePool<M>>>,
+        old_surface_pools: Vec<Rc<RefCell<SurfacePool<M>>>>,
         supports_context_reuse: bool,
-    ) -> anyhow::Result<(StreamMetadataState, Rc<RefCell<SurfacePool<M>>>)> {
+    ) -> anyhow::Result<(StreamMetadataState, Vec<Rc<RefCell<SurfacePool<M>>>>)> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
 
@@ -577,7 +578,7 @@ impl StreamMetadataState {
             height: visible_rect.1 .1 - visible_rect.0 .1,
         };
 
-        let (config, context, surface_pool) = match old_metadata_state {
+        let (config, context, surface_pools) = match old_metadata_state {
             // Nothing has changed for VAAPI, reuse current context.
             //
             // This can happen as the decoder cannot possibly know whether a
@@ -588,7 +589,7 @@ impl StreamMetadataState {
                     && old_state.rt_format == rt_format
                     && old_state.profile == va_profile =>
             {
-                (old_state.config, old_state.context, old_surface_pool)
+                (old_state.config, old_state.context, old_surface_pools)
             }
             // The resolution has changed, but we support context reuse. Reuse
             // current context.
@@ -597,7 +598,7 @@ impl StreamMetadataState {
                     && old_state.rt_format == rt_format
                     && old_state.profile == va_profile =>
             {
-                (old_state.config, old_state.context, old_surface_pool)
+                (old_state.config, old_state.context, old_surface_pools)
             }
             // Create new context.
             _ => {
@@ -618,18 +619,20 @@ impl StreamMetadataState {
                     true,
                 )?;
 
-                let surface_pool = Rc::new(RefCell::new(SurfacePool::new(
+                let surface_pools = vec![Rc::new(RefCell::new(SurfacePool::new(
                     Rc::clone(display),
                     rt_format,
                     Some(libva::UsageHint::USAGE_HINT_DECODER),
                     coded_resolution,
-                )));
+                )))];
 
-                (config, context, surface_pool)
+                (config, context, surface_pools)
             }
         };
 
-        if !surface_pool
+        /* for now, we are sure to have at least one pool, so unwrapping will not
+         * panic */
+        if !&surface_pools[0]
             .borrow()
             .coded_resolution()
             .can_contain(coded_resolution)
@@ -641,7 +644,7 @@ impl StreamMetadataState {
             // video-conferencing applications, which are subject to bandwidth
             // fluctuations, this can be very advantageous as it avoid
             // reallocating all the time.
-            surface_pool
+            surface_pools[0]
                 .borrow_mut()
                 .set_coded_resolution(coded_resolution);
         }
@@ -671,7 +674,7 @@ impl StreamMetadataState {
                 rt_format,
                 profile: va_profile,
             }),
-            surface_pool,
+            surface_pools,
         ))
     }
 }
@@ -914,8 +917,10 @@ where
 {
     /// VA display in use for this stream.
     display: Rc<Display>,
-    /// A pool of surfaces. We reuse surfaces as they are expensive to allocate.
-    pub(crate) surface_pool: Rc<RefCell<SurfacePool<M>>>,
+    /// Pools of surfaces. We reuse surfaces as they are expensive to allocate.
+    /// We allow for multiple pools so as to support one spatial layer per pool
+    /// when needed.
+    pub(crate) surface_pools: Vec<Rc<RefCell<SurfacePool<M>>>>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
     /// Whether the codec supports context reuse on DRC. This is only supported
@@ -929,16 +934,16 @@ where
 {
     pub(crate) fn new(display: Rc<libva::Display>, supports_context_reuse: bool) -> Self {
         // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
-        let surface_pool = Rc::new(RefCell::new(SurfacePool::new(
+        let surface_pools = vec![Rc::new(RefCell::new(SurfacePool::new(
             Rc::clone(&display),
             libva::constants::VA_RT_FORMAT_YUV420,
             Some(libva::UsageHint::USAGE_HINT_DECODER),
             Resolution::from((16, 16)),
-        )));
+        )))];
 
         Self {
             display,
-            surface_pool,
+            surface_pools,
             metadata_state: StreamMetadataState::Unparsed,
             supports_context_reuse,
         }
@@ -954,12 +959,13 @@ where
         let old_metadata_state =
             std::mem::replace(&mut self.metadata_state, StreamMetadataState::Unparsed);
 
-        (self.metadata_state, self.surface_pool) = StreamMetadataState::open(
+        let old_surface_pools = self.surface_pools.drain(..).collect();
+        (self.metadata_state, self.surface_pools) = StreamMetadataState::open(
             &self.display,
             stream_params,
             None,
             old_metadata_state,
-            Rc::clone(&self.surface_pool),
+            old_surface_pools,
             self.supports_context_reuse,
         )?;
 
@@ -999,6 +1005,14 @@ where
         )?;
 
         Ok(formats.into_iter().map(|f| f.decoded_format).collect())
+    }
+
+    pub(crate) fn highest_pool(&mut self) -> &Rc<RefCell<SurfacePool<M>>> {
+        /* we guarantee that there is at least one pool, at minimum */
+        self.surface_pools
+            .iter()
+            .max_by_key(|p| p.borrow().coded_resolution().height)
+            .unwrap()
     }
 }
 
@@ -1044,12 +1058,13 @@ where
             //
             // This does not apply to other (future) backends, like V4L2, which
             // need to reallocate on format change.
-            (self.metadata_state, self.surface_pool) = StreamMetadataState::open(
+            let old_surface_pools = self.surface_pools.drain(..).collect();
+            (self.metadata_state, self.surface_pools) = StreamMetadataState::open(
                 &self.display,
                 format_info,
                 Some(map_format),
                 old_metadata_state,
-                Rc::clone(&self.surface_pool),
+                old_surface_pools,
                 self.supports_context_reuse,
             )?;
 
@@ -1059,8 +1074,29 @@ where
         }
     }
 
-    fn frame_pool(&mut self) -> &mut dyn FramePool<M> {
-        &mut self.surface_pool
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>> {
+        if let PoolLayer::Highest = layer {
+            return vec![self
+                .surface_pools
+                .iter_mut()
+                .max_by_key(|other| other.coded_resolution().height)
+                .unwrap()];
+        }
+
+        self.surface_pools
+            .iter_mut()
+            .filter(|pool| {
+                match layer {
+                    PoolLayer::Highest => unreachable!(),
+                    PoolLayer::Layer(resolution) => pool.coded_resolution() == resolution,
+                    PoolLayer::All => {
+                        /* let all through */
+                        true
+                    }
+                }
+            })
+            .map(|x| x as &mut dyn FramePool<M>)
+            .collect()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {
