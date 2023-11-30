@@ -55,15 +55,15 @@ impl PictureData {
         max_pic_order_cnt_lsb: i32,
         _timestamp: u64,
     ) -> Self {
-        let hdr = slice.header();
-        let nalu_type = slice.nalu().header().type_;
+        let hdr = &slice.header;
+        let nalu_type = slice.nalu.header.type_;
         let is_irap = nalu_type.is_irap();
 
         // We assume HandleCraAsBlafFLag == 0, as it is only set through
         // external means, which we do not provide.
 
         let mut pic_order_cnt_msb = 0;
-        let slice_pic_order_cnt_lsb: i32 = hdr.pic_order_cnt_lsb().into();
+        let slice_pic_order_cnt_lsb: i32 = hdr.pic_order_cnt_lsb.into();
 
         // Compute the output flags:
         // The value of NoRaslOutputFlag is equal to 1 for each IDR access
@@ -76,10 +76,10 @@ impl PictureData {
             || (nalu_type.is_cra() && first_picture_in_bitstream)
             || first_picture_after_eos;
 
-        let pic_output_flag = if slice.nalu().header().type_.is_rasl() && no_rasl_output_flag {
+        let pic_output_flag = if slice.nalu.header.type_.is_rasl() && no_rasl_output_flag {
             false
         } else {
-            hdr.pic_output_flag()
+            hdr.pic_output_flag
         };
 
         // Compute the Picture Order Count. See 8.3.1 Decoding Process for
@@ -119,7 +119,7 @@ impl PictureData {
 
         let no_output_of_prior_pics_flag =
             if nalu_type.is_irap() && no_rasl_output_flag && !first_picture_in_bitstream {
-                nalu_type.is_cra() || hdr.no_output_of_prior_pics_flag()
+                nalu_type.is_cra() || hdr.no_output_of_prior_pics_flag
             } else {
                 false
             };
@@ -139,7 +139,7 @@ impl PictureData {
             reference: Default::default(),
             pic_latency_cnt: 0,
             needed_for_output: false,
-            short_term_ref_pic_set_size_bits: hdr.st_rps_bits(),
+            short_term_ref_pic_set_size_bits: hdr.st_rps_bits,
         }
     }
 

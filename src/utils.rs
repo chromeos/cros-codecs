@@ -84,9 +84,9 @@ impl<'a> Iterator for NalIterator<'a, H264Nalu<'a>> {
     fn next(&mut self) -> Option<Self::Item> {
         H264Nalu::next(&mut self.0)
             .map(|n| {
-                let start = n.sc_offset();
-                let end = n.offset() + n.size();
-                &n.data()[start..end]
+                let start = n.sc_offset;
+                let end = n.offset + n.size;
+                &n.data[start..end]
             })
             .ok()
     }
@@ -98,9 +98,9 @@ impl<'a> Iterator for NalIterator<'a, H265Nalu<'a>> {
     fn next(&mut self) -> Option<Self::Item> {
         H265Nalu::next(&mut self.0)
             .map(|n| {
-                let start = n.sc_offset();
-                let end = n.offset() + n.size();
-                &n.data()[start..end]
+                let start = n.sc_offset;
+                let end = n.offset + n.size;
+                &n.data[start..end]
             })
             .ok()
     }

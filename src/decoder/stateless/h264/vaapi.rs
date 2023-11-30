@@ -199,11 +199,11 @@ fn build_iq_matrix(pps: &Pps) -> BufferType {
     let mut scaling_list8x8 = [[0; 64]; 2];
 
     (0..6).for_each(|i| {
-        super::get_raster_from_zigzag_4x4(pps.scaling_lists_4x4()[i], &mut scaling_list4x4[i]);
+        super::get_raster_from_zigzag_4x4(pps.scaling_lists_4x4[i], &mut scaling_list4x4[i]);
     });
 
     (0..2).for_each(|i| {
-        super::get_raster_from_zigzag_8x8(pps.scaling_lists_8x8()[i], &mut scaling_list8x8[i]);
+        super::get_raster_from_zigzag_8x8(pps.scaling_lists_8x8[i], &mut scaling_list8x8[i]);
     });
 
     BufferType::IQMatrix(IQMatrix::H264(IQMatrixBufferH264::new(
@@ -276,15 +276,15 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     let picture_height_in_mbs_minus1 = ((sps.pic_height_in_map_units_minus1 + 1) << interlaced) - 1;
 
     let pic_fields = libva::H264PicFields::new(
-        pps.entropy_coding_mode_flag() as u32,
-        pps.weighted_pred_flag() as u32,
-        pps.weighted_bipred_idc() as u32,
-        pps.transform_8x8_mode_flag() as u32,
+        pps.entropy_coding_mode_flag as u32,
+        pps.weighted_pred_flag as u32,
+        pps.weighted_bipred_idc as u32,
+        pps.transform_8x8_mode_flag as u32,
         hdr.field_pic_flag as u32,
-        pps.constrained_intra_pred_flag() as u32,
-        pps.bottom_field_pic_order_in_frame_present_flag() as u32,
-        pps.deblocking_filter_control_present_flag() as u32,
-        pps.redundant_pic_cnt_present_flag() as u32,
+        pps.constrained_intra_pred_flag as u32,
+        pps.bottom_field_pic_order_in_frame_present_flag as u32,
+        pps.deblocking_filter_control_present_flag as u32,
+        pps.redundant_pic_cnt_present_flag as u32,
         (current_picture.nal_ref_idc != 0) as u32,
     );
 
@@ -308,10 +308,10 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         0, /* FMO not supported by VA */
         0, /* FMO not supported by VA */
         0, /* FMO not supported by VA */
-        pps.pic_init_qp_minus26(),
-        pps.pic_init_qs_minus26(),
-        pps.chroma_qp_index_offset(),
-        pps.second_chroma_qp_index_offset(),
+        pps.pic_init_qp_minus26,
+        pps.pic_init_qs_minus26,
+        pps.chroma_qp_index_offset,
+        pps.second_chroma_qp_index_offset,
         &pic_fields,
         hdr.frame_num,
     );
@@ -379,9 +379,9 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
     let mut fill_l0 = false;
     let mut fill_l1 = false;
 
-    if pps.weighted_pred_flag() && (hdr.slice_type.is_p() || hdr.slice_type.is_sp()) {
+    if pps.weighted_pred_flag && (hdr.slice_type.is_p() || hdr.slice_type.is_sp()) {
         fill_l0 = true;
-    } else if pps.weighted_bipred_idc() == 1 && hdr.slice_type.is_b() {
+    } else if pps.weighted_bipred_idc == 1 && hdr.slice_type.is_b() {
         fill_l0 = true;
         fill_l1 = true;
     }
@@ -390,16 +390,16 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
         luma_weight_l0_flag = true;
 
         for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
-            luma_weight_l0[i] = pwt.luma_weight_l0()[i];
-            luma_offset_l0[i] = i16::from(pwt.luma_offset_l0()[i]);
+            luma_weight_l0[i] = pwt.luma_weight_l0[i];
+            luma_offset_l0[i] = i16::from(pwt.luma_offset_l0[i]);
         }
 
         chroma_weight_l0_flag = sps.chroma_array_type != 0;
         if chroma_weight_l0_flag {
             for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
                 for j in 0..2 {
-                    chroma_weight_l0[i][j] = pwt.chroma_weight_l0()[i][j];
-                    chroma_offset_l0[i][j] = i16::from(pwt.chroma_offset_l0()[i][j]);
+                    chroma_weight_l0[i][j] = pwt.chroma_weight_l0[i][j];
+                    chroma_offset_l0[i][j] = i16::from(pwt.chroma_offset_l0[i][j]);
                 }
             }
         }
@@ -409,18 +409,18 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
         luma_weight_l1_flag = true;
 
         luma_weight_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)].clone_from_slice(
-            &pwt.luma_weight_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
+            &pwt.luma_weight_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
         );
         luma_offset_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)].clone_from_slice(
-            &pwt.luma_offset_l1()[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
+            &pwt.luma_offset_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
         );
 
         chroma_weight_l1_flag = sps.chroma_array_type != 0;
         if chroma_weight_l1_flag {
             for i in 0..=hdr.num_ref_idx_l1_active_minus1 as usize {
                 for j in 0..2 {
-                    chroma_weight_l1[i][j] = pwt.chroma_weight_l1()[i][j];
-                    chroma_offset_l1[i][j] = i16::from(pwt.chroma_offset_l1()[i][j]);
+                    chroma_weight_l1[i][j] = pwt.chroma_weight_l1[i][j];
+                    chroma_offset_l1[i][j] = i16::from(pwt.chroma_offset_l1[i][j]);
                 }
             }
         }
@@ -443,8 +443,8 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
         hdr.slice_beta_offset_div2,
         ref_list_0,
         ref_list_1,
-        pwt.luma_log2_weight_denom(),
-        pwt.chroma_log2_weight_denom(),
+        pwt.luma_log2_weight_denom,
+        pwt.chroma_log2_weight_denom,
         luma_weight_l0_flag as u8,
         luma_weight_l0,
         luma_offset_l0,
@@ -520,8 +520,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
 
         let slice_param = context
             .create_buffer(build_slice_param(
-                slice.header(),
-                slice.nalu().size(),
+                &slice.header,
+                slice.nalu.size,
                 ref_pic_list0,
                 ref_pic_list1,
                 sps,
@@ -532,7 +532,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         picture.add_buffer(slice_param);
 
         let slice_data = context
-            .create_buffer(BufferType::SliceData(Vec::from(slice.nalu().as_ref())))
+            .create_buffer(BufferType::SliceData(Vec::from(slice.nalu.as_ref())))
             .context("while creating slice data buffer")?;
 
         picture.add_buffer(slice_data);

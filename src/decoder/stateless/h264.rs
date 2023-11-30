@@ -566,7 +566,7 @@ where
             }
         }
 
-        if !slice.header().field_pic_flag {
+        if !slice.header.field_pic_flag {
             if let Some(prev_field) = prev_field {
                 let field = prev_field.0.borrow().field;
                 return Err(anyhow!(
@@ -582,14 +582,14 @@ where
             Some(prev_field) => {
                 let prev_field_pic = prev_field.0.borrow();
 
-                if prev_field_pic.frame_num != i32::from(slice.header().frame_num) {
+                if prev_field_pic.frame_num != i32::from(slice.header.frame_num) {
                     return Err(anyhow!(
                 "The previous field differs in frame_num value wrt. the current field. {:?} vs {:?}",
                 prev_field_pic.frame_num,
-                slice.header().frame_num
+                slice.header.frame_num
             ));
                 } else {
-                    let cur_field = if slice.header().bottom_field_flag {
+                    let cur_field = if slice.header.bottom_field_flag {
                         Field::Bottom
                     } else {
                         Field::Top
@@ -1132,7 +1132,7 @@ where
     fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         let markings = pic.ref_pic_marking.clone();
 
-        for (i, marking) in markings.inner().iter().enumerate() {
+        for (i, marking) in markings.inner.iter().enumerate() {
             match marking.memory_management_control_operation {
                 0 => break,
                 1 => self.codec.dpb.mmco_op_1(pic, i)?,
@@ -1176,7 +1176,7 @@ where
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             self.codec.dpb.mark_all_as_unused_for_ref();
 
-            if pic.ref_pic_marking.long_term_reference_flag() {
+            if pic.ref_pic_marking.long_term_reference_flag {
                 pic.set_reference(Reference::LongTerm, false);
                 pic.long_term_frame_idx = 0;
                 self.codec.max_long_term_frame_idx = 0;
@@ -1188,7 +1188,7 @@ where
             return Ok(());
         }
 
-        if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag() {
+        if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag {
             self.handle_memory_management_ops(pic)?;
         } else {
             self.codec.sliding_window_marking(pic, pps)?;
@@ -1429,7 +1429,7 @@ where
         let pps = self
             .codec
             .parser
-            .get_pps(slice.header().pic_parameter_set_id)
+            .get_pps(slice.header.pic_parameter_set_id)
             .context("Invalid SPS in init_current_pic")?;
 
         let sps = Rc::clone(&pps.sps);
@@ -1450,7 +1450,7 @@ where
             // The current picture is an IDR picture and
             // no_output_of_prior_pics_flag is not equal to 1 and is not
             // inferred to be equal to 1, as specified in clause C.4.4.
-            if !pic.ref_pic_marking.no_output_of_prior_pics_flag() {
+            if !pic.ref_pic_marking.no_output_of_prior_pics_flag {
                 self.drain()?;
             } else {
                 // C.4.4 When no_output_of_prior_pics_flag is equal to 1 or is
@@ -1463,7 +1463,7 @@ where
 
         self.codec
             .dpb
-            .update_pic_nums(i32::from(slice.header().frame_num), max_frame_num, &pic);
+            .update_pic_nums(i32::from(slice.header.frame_num), max_frame_num, &pic);
 
         Ok(pic)
     }
@@ -1474,13 +1474,13 @@ where
         timestamp: u64,
         slice: &Slice,
     ) -> Result<CurrentPicState<B>, DecodeError> {
-        let nalu_hdr = slice.nalu().header();
+        let nalu_hdr = &slice.nalu.header;
 
-        if nalu_hdr.idr_pic_flag() {
+        if nalu_hdr.idr_pic_flag {
             self.codec.prev_ref_pic_info.frame_num = 0;
         }
 
-        let hdr = slice.header();
+        let hdr = &slice.header;
         let frame_num = i32::from(hdr.frame_num);
 
         let pps = Rc::clone(
@@ -1527,7 +1527,7 @@ where
             pps.sps.as_ref(),
             pps.as_ref(),
             &self.codec.dpb,
-            slice.header(),
+            &slice.header,
         )?;
 
         Ok(CurrentPicState {
@@ -1568,8 +1568,8 @@ where
         ref_idx_lx: &mut usize,
     ) -> anyhow::Result<()> {
         let pic_num_lx_no_wrap;
-        let abs_diff_pic_num = rplm.abs_diff_pic_num_minus1() as i32 + 1;
-        let modification_of_pic_nums_idc = rplm.modification_of_pic_nums_idc();
+        let abs_diff_pic_num = rplm.abs_diff_pic_num_minus1 as i32 + 1;
+        let modification_of_pic_nums_idc = rplm.modification_of_pic_nums_idc;
 
         if modification_of_pic_nums_idc == 0 {
             if *pic_num_lx_pred - abs_diff_pic_num < 0 {
@@ -1586,7 +1586,7 @@ where
         } else {
             anyhow::bail!(
                 "unexpected value for modification_of_pic_nums_idc {:?}",
-                rplm.modification_of_pic_nums_idc()
+                rplm.modification_of_pic_nums_idc
             );
         }
 
@@ -1635,7 +1635,7 @@ where
         rplm: &RefPicListModification,
         ref_idx_lx: &mut usize,
     ) -> anyhow::Result<()> {
-        let long_term_pic_num = rplm.long_term_pic_num();
+        let long_term_pic_num = rplm.long_term_pic_num;
 
         let handle = dpb
             .find_long_term_with_long_term_pic_num(long_term_pic_num as i32)
@@ -1705,7 +1705,7 @@ where
         let mut ref_idx_lx = 0;
 
         for modification in rplm {
-            let idc = modification.modification_of_pic_nums_idc();
+            let idc = modification.modification_of_pic_nums_idc;
 
             match idc {
                 0 | 1 => {
@@ -1785,7 +1785,7 @@ where
         let pps = self
             .codec
             .parser
-            .get_pps(slice.header().pic_parameter_set_id)
+            .get_pps(slice.header.pic_parameter_set_id)
             .context("Invalid PPS")?;
         cur_pic.pps = Rc::clone(pps);
 
@@ -1798,7 +1798,7 @@ where
         let RefPicLists {
             ref_pic_list0,
             ref_pic_list1,
-        } = self.create_ref_pic_lists(&cur_pic.pic, slice.header(), &cur_pic.ref_pic_lists)?;
+        } = self.create_ref_pic_lists(&cur_pic.pic, &slice.header, &cur_pic.ref_pic_lists)?;
 
         self.backend.decode_slice(
             &mut cur_pic.backend_pic,
@@ -1825,7 +1825,7 @@ where
     }
 
     fn process_nalu(&mut self, timestamp: u64, nalu: Nalu) -> Result<(), DecodeError> {
-        match nalu.header().nalu_type() {
+        match nalu.header.type_ {
             NaluType::Sps => {
                 self.codec.parser.parse_sps(&nalu)?;
             }
@@ -1849,8 +1849,8 @@ where
                         if (self.codec.dpb.interlaced()
                             && matches!(cur_pic.pic.field, Field::Frame)
                             && !cur_pic.pic.is_second_field()
-                            && cur_pic.pic.field != slice.header().field())
-                            || (slice.header().first_mb_in_slice == 0) =>
+                            && cur_pic.pic.field != slice.header.field())
+                            || (slice.header.first_mb_in_slice == 0) =>
                     {
                         self.finish_picture(cur_pic)?;
                         self.begin_picture(timestamp, &slice)?
@@ -1881,7 +1881,7 @@ where
         let mut cursor = Cursor::new(bitstream);
         let nalu = Nalu::next(&mut cursor)?;
 
-        if nalu.header().nalu_type() == NaluType::Sps {
+        if nalu.header.type_ == NaluType::Sps {
             let sps = self.codec.parser.parse_sps(&nalu)?.clone();
             if matches!(self.decoding_state, DecodingState::AwaitingStreamInfo) {
                 // If more SPS come along we will renegotiate in begin_picture().
@@ -1895,20 +1895,20 @@ where
 
             while let Ok(nalu) = Nalu::next(&mut cursor) {
                 // In the Reset state we can resume decoding from any key frame.
-                if matches!(nalu.header().nalu_type(), NaluType::SliceIdr) {
+                if matches!(nalu.header.type_, NaluType::SliceIdr) {
                     self.decoding_state = DecodingState::Decoding;
                     break;
                 }
             }
         }
 
-        let nalu_len = nalu.offset() + nalu.size();
+        let nalu_len = nalu.offset + nalu.size;
 
         match &mut self.decoding_state {
             // Process parameter sets, but skip input until we get information
             // from the stream.
             DecodingState::AwaitingStreamInfo | DecodingState::Reset => {
-                if matches!(nalu.header().nalu_type(), NaluType::Pps) {
+                if matches!(nalu.header.type_, NaluType::Pps) {
                     self.process_nalu(timestamp, nalu)?;
                 }
             }

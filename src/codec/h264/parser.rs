@@ -85,82 +85,34 @@ pub enum NaluType {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RefPicListModification {
-    modification_of_pic_nums_idc: u8,
+    pub modification_of_pic_nums_idc: u8,
     /* if modification_of_pic_nums_idc == 0 || 1 */
-    abs_diff_pic_num_minus1: u32,
+    pub abs_diff_pic_num_minus1: u32,
     /* if modification_of_pic_nums_idc == 2 */
-    long_term_pic_num: u32,
+    pub long_term_pic_num: u32,
     /* if modification_of_pic_nums_idc == 4 || 5 */
-    abs_diff_view_idx_minus1: u32,
-}
-
-impl RefPicListModification {
-    pub fn modification_of_pic_nums_idc(&self) -> u8 {
-        self.modification_of_pic_nums_idc
-    }
-    pub fn abs_diff_pic_num_minus1(&self) -> u32 {
-        self.abs_diff_pic_num_minus1
-    }
-    pub fn long_term_pic_num(&self) -> u32 {
-        self.long_term_pic_num
-    }
-    pub fn abs_diff_view_idx_minus1(&self) -> u32 {
-        self.abs_diff_view_idx_minus1
-    }
+    pub abs_diff_view_idx_minus1: u32,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PredWeightTable {
-    luma_log2_weight_denom: u8,
-    chroma_log2_weight_denom: u8,
+    pub luma_log2_weight_denom: u8,
+    pub chroma_log2_weight_denom: u8,
 
-    luma_weight_l0: [i16; 32],
-    luma_offset_l0: [i8; 32],
+    pub luma_weight_l0: [i16; 32],
+    pub luma_offset_l0: [i8; 32],
 
     /* if seq->ChromaArrayType != 0 */
-    chroma_weight_l0: [[i16; 2]; 32],
-    chroma_offset_l0: [[i8; 2]; 32],
+    pub chroma_weight_l0: [[i16; 2]; 32],
+    pub chroma_offset_l0: [[i8; 2]; 32],
 
     /* if slice->slice_type % 5 == 1 */
-    luma_weight_l1: [i16; 32],
-    luma_offset_l1: [i16; 32],
+    pub luma_weight_l1: [i16; 32],
+    pub luma_offset_l1: [i16; 32],
 
     /* and if seq->ChromaArrayType != 0 */
-    chroma_weight_l1: [[i16; 2]; 32],
-    chroma_offset_l1: [[i8; 2]; 32],
-}
-
-impl PredWeightTable {
-    pub fn luma_log2_weight_denom(&self) -> u8 {
-        self.luma_log2_weight_denom
-    }
-    pub fn chroma_log2_weight_denom(&self) -> u8 {
-        self.chroma_log2_weight_denom
-    }
-    pub fn luma_weight_l0(&self) -> [i16; 32] {
-        self.luma_weight_l0
-    }
-    pub fn luma_offset_l0(&self) -> [i8; 32] {
-        self.luma_offset_l0
-    }
-    pub fn chroma_weight_l0(&self) -> [[i16; 2]; 32] {
-        self.chroma_weight_l0
-    }
-    pub fn chroma_offset_l0(&self) -> [[i8; 2]; 32] {
-        self.chroma_offset_l0
-    }
-    pub fn luma_weight_l1(&self) -> [i16; 32] {
-        self.luma_weight_l1
-    }
-    pub fn luma_offset_l1(&self) -> [i16; 32] {
-        self.luma_offset_l1
-    }
-    pub fn chroma_weight_l1(&self) -> [[i16; 2]; 32] {
-        self.chroma_weight_l1
-    }
-    pub fn chroma_offset_l1(&self) -> [[i8; 2]; 32] {
-        self.chroma_offset_l1
-    }
+    pub chroma_weight_l1: [[i16; 2]; 32],
+    pub chroma_offset_l1: [[i8; 2]; 32],
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -196,7 +148,7 @@ pub struct RefPicMarkingInner {
 pub struct RefPicMarking {
     /// Specifies how the previously-decoded pictures in the decoded picture
     /// buffer are treated after decoding of an IDR picture. See Annex C.
-    no_output_of_prior_pics_flag: bool,
+    pub no_output_of_prior_pics_flag: bool,
 
     /// If unset, specifies that the MaxLongTermFrameIdx variable is set equal
     /// to "no long-term frame indices" and that the IDR picture is marked as
@@ -204,29 +156,14 @@ pub struct RefPicMarking {
     /// MaxLongTermFrameIdx variable is set equal to 0 and that the current IDR
     /// picture is marked "used for long-term reference" and is assigned
     /// LongTermFrameIdx equal to 0.
-    long_term_reference_flag: bool,
+    pub long_term_reference_flag: bool,
 
     /// Selects the reference picture marking mode of the currently decoded
     /// picture as specified in Table 7-8.
-    adaptive_ref_pic_marking_mode_flag: bool,
+    pub adaptive_ref_pic_marking_mode_flag: bool,
 
     /// An Vec with additional data used in the marking process.
-    inner: Vec<RefPicMarkingInner>,
-}
-
-impl RefPicMarking {
-    pub fn no_output_of_prior_pics_flag(&self) -> bool {
-        self.no_output_of_prior_pics_flag
-    }
-    pub fn long_term_reference_flag(&self) -> bool {
-        self.long_term_reference_flag
-    }
-    pub fn adaptive_ref_pic_marking_mode_flag(&self) -> bool {
-        self.adaptive_ref_pic_marking_mode_flag
-    }
-    pub fn inner(&self) -> &Vec<RefPicMarkingInner> {
-        &self.inner
-    }
+    pub inner: Vec<RefPicMarkingInner>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -393,21 +330,9 @@ impl SliceHeader {
 /// consecutively in the raster scan within a particular slice group
 pub struct Slice<'a> {
     /// The slice header.
-    header: SliceHeader,
+    pub header: SliceHeader,
     /// The NAL unit backing this slice.
-    nalu: Nalu<'a>,
-}
-
-impl<'a> Slice<'a> {
-    /// Get a reference to the slice's header.
-    pub fn header(&self) -> &SliceHeader {
-        &self.header
-    }
-
-    /// Get a reference to the slice's nalu.
-    pub fn nalu(&self) -> &Nalu<'a> {
-        &self.nalu
-    }
+    pub nalu: Nalu<'a>,
 }
 
 #[derive(N, Clone, Copy, Debug, PartialEq, Eq)]
@@ -773,9 +698,8 @@ impl Sps {
 
         let mut max_dpb_frames = std::cmp::max(max_dpb_frames, self.max_num_ref_frames as usize);
 
-        if self.vui_parameters_present_flag && self.vui_parameters.bitstream_restriction_flag() {
-            max_dpb_frames =
-                std::cmp::max(1, self.vui_parameters.max_dec_frame_buffering() as usize);
+        if self.vui_parameters_present_flag && self.vui_parameters.bitstream_restriction_flag {
+            max_dpb_frames = std::cmp::max(1, self.vui_parameters.max_dec_frame_buffering as usize);
         }
 
         max_dpb_frames
@@ -783,10 +707,10 @@ impl Sps {
 
     pub fn max_num_order_frames(&self) -> u32 {
         let vui = &self.vui_parameters;
-        let present = self.vui_parameters_present_flag && vui.bitstream_restriction_flag();
+        let present = self.vui_parameters_present_flag && vui.bitstream_restriction_flag;
 
         if present {
-            vui.max_num_reorder_frames()
+            vui.max_num_reorder_frames
         } else {
             let profile = self.profile_idc;
             if (profile == 44
@@ -864,96 +788,63 @@ pub struct HrdParams {
     /// Plus 1 specifies the number of alternative CPB specifications in the
     /// bitstream. The value of `cpb_cnt_minus1` shall be in the range of 0 to 31,
     /// inclusive
-    cpb_cnt_minus1: u8,
+    pub cpb_cnt_minus1: u8,
     /// Together with `bit_rate_value_minus1[ SchedSelIdx ]` specifies the
     /// maximum input bit rate of the `SchedSelIdx`-th CPB.
-    bit_rate_scale: u8,
+    pub bit_rate_scale: u8,
     /// Together with `cpb_size_value_minus1[ SchedSelIdx ]` specifies the CPB
     /// size of the SchedSelIdx-th CPB.
-    cpb_size_scale: u8,
+    pub cpb_size_scale: u8,
 
     /// `[ SchedSelIdx ]` (together with bit_rate_scale) specifies the maximum
     /// input bit rate for the SchedSelIdx-th CPB.
-    bit_rate_value_minus1: [u32; 32],
+    pub bit_rate_value_minus1: [u32; 32],
     /// `[ SchedSelIdx ]` is used together with cpb_size_scale to specify the
     /// SchedSelIdx-th CPB size.
-    cpb_size_value_minus1: [u32; 32],
+    pub cpb_size_value_minus1: [u32; 32],
     /// `[ SchedSelIdx ]` equal to 0 specifies that to decode this bitstream by
     /// the HRD using the `SchedSelIdx`-th CPB specification, the hypothetical
     /// stream delivery scheduler (HSS) operates in an intermittent bit rate
     /// mode. `cbr_flag[ SchedSelIdx ]` equal to 1 specifies that the HSS operates
     /// in a constant bit rate (CBR) mode
-    cbr_flag: [bool; 32],
+    pub cbr_flag: [bool; 32],
 
     /// Specifies the length in bits of the `initial_cpb_removal_delay[
     /// SchedSelIdx ]` and `initial_cpb_removal_delay_offset[ SchedSelIdx ]` syntax
     /// elements of the buffering period SEI message.
-    initial_cpb_removal_delay_length_minus1: u8,
+    pub initial_cpb_removal_delay_length_minus1: u8,
     /// Specifies the length in bits of the `cpb_removal_delay` syntax element.
-    cpb_removal_delay_length_minus1: u8,
+    pub cpb_removal_delay_length_minus1: u8,
     /// Specifies the length in bits of the `dpb_output_delay` syntax element.
-    dpb_output_delay_length_minus1: u8,
+    pub dpb_output_delay_length_minus1: u8,
     /// If greater than 0, specifies the length in bits of the `time_offset`
     /// syntax element. `time_offset_length` equal to 0 specifies that the
     /// `time_offset` syntax element is not present
-    time_offset_length: u8,
-}
-
-impl HrdParams {
-    pub fn cpb_cnt_minus1(&self) -> u8 {
-        self.cpb_cnt_minus1
-    }
-    pub fn bit_rate_scale(&self) -> u8 {
-        self.bit_rate_scale
-    }
-    pub fn cpb_size_scale(&self) -> u8 {
-        self.cpb_size_scale
-    }
-    pub fn bit_rate_value_minus1(&self) -> [u32; 32] {
-        self.bit_rate_value_minus1
-    }
-    pub fn cpb_size_value_minus1(&self) -> [u32; 32] {
-        self.cpb_size_value_minus1
-    }
-    pub fn cbr_flag(&self) -> [bool; 32] {
-        self.cbr_flag
-    }
-    pub fn initial_cpb_removal_delay_length_minus1(&self) -> u8 {
-        self.initial_cpb_removal_delay_length_minus1
-    }
-    pub fn cpb_removal_delay_length_minus1(&self) -> u8 {
-        self.cpb_removal_delay_length_minus1
-    }
-    pub fn dpb_output_delay_length_minus1(&self) -> u8 {
-        self.dpb_output_delay_length_minus1
-    }
-    pub fn time_offset_length(&self) -> u8 {
-        self.time_offset_length
-    }
+    pub time_offset_length: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VuiParams {
     /// Specifies whether `aspect_ratio_idc` is present.
-    aspect_ratio_info_present_flag: bool,
+    pub aspect_ratio_info_present_flag: bool,
     /// Specifies the value of the sample aspect ratio of the luma samples.
     /// Table E-1 shows the meaning of the code. When aspect_ratio_idc indicates
     /// Extended_SAR, the sample aspect ratio is represented by sar_width :
     /// sar_height. When the aspect_ratio_idc syntax element is not present,
     /// aspect_ratio_idc value shall be inferred to be equal to 0
-    aspect_ratio_idc: u8,
+    pub aspect_ratio_idc: u8,
 
     /* if aspect_ratio_idc == 255 */
     /// Indicates the horizontal size of the sample aspect ratio (in arbitrary
     /// units)
-    sar_width: u16,
+    pub sar_width: u16,
     /// Indicates the vertical size of the sample aspect ratio (in the same
     /// arbitrary units as sar_width).
-    sar_height: u16,
+    pub sar_height: u16,
 
     /// If true specifies that the overscan_appropriate_flag is present. Else,
     /// the preferred display method for the video signal is unspecified
-    overscan_info_present_flag: bool,
+    pub overscan_info_present_flag: bool,
     /* if overscan_info_present_flag */
     /// If true, indicates that the cropped decoded pictures output are suitable
     /// for display using overscan. Else, indicates that the cropped decoded
@@ -961,80 +852,80 @@ pub struct VuiParams {
     /// region out to the edges of the cropping rectangle of the picture, such
     /// that the cropped decoded pictures output should not be displayed using
     /// overscan.
-    overscan_appropriate_flag: bool,
+    pub overscan_appropriate_flag: bool,
 
     /// Specifies that video_format, video_full_range_flag and
     /// colour_description_present_flag are present
-    video_signal_type_present_flag: bool,
+    pub video_signal_type_present_flag: bool,
     /// Indicates the representation of the pictures as specified in Table E-2,
     /// before being coded in accordance with this Recommendation |
     /// International Standard. When the video_format syntax element is not
     /// present, video_format value shall be inferred to be equal to 5.
-    video_format: u8,
+    pub video_format: u8,
     /// Indicates the black level and range of the luma and chroma signals as
     /// derived from E′Y, E′PB, and E′PR or E′ R, E′G, and E′B real-valued
     /// component signals.
-    video_full_range_flag: bool,
+    pub video_full_range_flag: bool,
     /// Specifies that colour_primaries, transfer_characteristics and
     /// matrix_coefficients are present.
-    colour_description_present_flag: bool,
+    pub colour_description_present_flag: bool,
     /// Indicates the chromaticity coordinates of the source primaries as
     /// specified in Table E-3 in terms of the CIE 1931 definition of x and y as
     /// specified by ISO 11664-1.
-    colour_primaries: u8,
+    pub colour_primaries: u8,
     /// Retains same meaning as in the specification.
-    transfer_characteristics: u8,
+    pub transfer_characteristics: u8,
     /// Describes the matrix coefficients used in deriving luma and chroma
     /// signals from the green, blue, and red, or Y, Z, and X primaries, as
     /// specified in Table E-5.
-    matrix_coefficients: u8,
+    pub matrix_coefficients: u8,
 
     /// Specifies that chroma_sample_loc_type_top_field and
     /// chroma_sample_loc_type_bottom_field are present
-    chroma_loc_info_present_flag: bool,
+    pub chroma_loc_info_present_flag: bool,
     /// Specify the location of chroma samples. See the spec for more details.
-    chroma_sample_loc_type_top_field: u8,
+    pub chroma_sample_loc_type_top_field: u8,
     /// Specify the location of chroma samples. See the spec for more details.
-    chroma_sample_loc_type_bottom_field: u8,
+    pub chroma_sample_loc_type_bottom_field: u8,
 
     /// Specifies that num_units_in_tick, time_scale and fixed_frame_rate_flag
     /// are present in the bitstream
-    timing_info_present_flag: bool,
+    pub timing_info_present_flag: bool,
     /* if timing_info_present_flag */
     /// The number of time units of a clock operating at the frequency
     /// time_scale Hz that corresponds to one increment (called a clock tick) of
     /// a clock tick counter
-    num_units_in_tick: u32,
+    pub num_units_in_tick: u32,
     /// The number of time units that pass in one second. For example, a time
     /// coordinate system that measures time using a 27 MHz clock has a
     /// time_scale of 27 000 000. time_scale shall be greater than 0.
-    time_scale: u32,
+    pub time_scale: u32,
     /// Retains the same meaning as the specification.
-    fixed_frame_rate_flag: bool,
+    pub fixed_frame_rate_flag: bool,
 
     /// Specifies that NAL HRD parameters (pertaining to Type II bitstream
     /// conformance) are present.
-    nal_hrd_parameters_present_flag: bool,
+    pub nal_hrd_parameters_present_flag: bool,
     /* if nal_hrd_parameters_present_flag */
     /// The NAL HDR parameters
-    nal_hrd_parameters: HrdParams,
+    pub nal_hrd_parameters: HrdParams,
     /// Specifies that VCL HRD parameters (pertaining to all bitstream
     /// conformance) are present.
-    vcl_hrd_parameters_present_flag: bool,
+    pub vcl_hrd_parameters_present_flag: bool,
     /* if vcl_hrd_parameters_present_flag */
     /// The VCL HRD parameters
-    vcl_hrd_parameters: HrdParams,
+    pub vcl_hrd_parameters: HrdParams,
 
     /// Specifies the HRD operational mode as specified in Annex C.
-    low_delay_hrd_flag: bool,
+    pub low_delay_hrd_flag: bool,
 
     /// Specifies that picture timing SEI messages (clause D.2.3) are present
     /// that include the pic_struct syntax element.
-    pic_struct_present_flag: bool,
+    pub pic_struct_present_flag: bool,
 
     /// Specifies that the following coded video sequence bitstream restriction
     /// parameters are present
-    bitstream_restriction_flag: bool,
+    pub bitstream_restriction_flag: bool,
     /*  if bitstream_restriction_flag */
     /// If false, indicates that no sample outside the picture boundaries and no
     /// sample at a fractional sample position for which the sample value is
@@ -1044,19 +935,19 @@ pub struct VuiParams {
     /// the motion_vectors_over_pic_boundaries_flag syntax element is not
     /// present, motion_vectors_over_pic_boundaries_flag value shall be inferred
     /// to be true.
-    motion_vectors_over_pic_boundaries_flag: bool,
+    pub motion_vectors_over_pic_boundaries_flag: bool,
     /// Indicates a number of bytes not exceeded by the sum of the sizes of the
     /// VCL NAL units associated with any coded picture in the coded video
     /// sequence.
-    max_bytes_per_pic_denom: u32,
+    pub max_bytes_per_pic_denom: u32,
     /// Indicates an upper bound for the number of coded bits of
     /// macroblock_layer( ) data for any macroblock in any picture of the coded
     /// video sequence
-    max_bits_per_mb_denom: u32,
+    pub max_bits_per_mb_denom: u32,
     /// Retains the same meaning as the specification.
-    log2_max_mv_length_horizontal: u32,
+    pub log2_max_mv_length_horizontal: u32,
     /// Retains the same meaning as the specification.
-    log2_max_mv_length_vertical: u32,
+    pub log2_max_mv_length_vertical: u32,
     /// Indicates an upper bound for the number of frames buffers, in the
     /// decoded picture buffer (DPB), that are required for storing frames,
     /// complementary field pairs, and non-paired fields before output. It is a
@@ -1077,7 +968,7 @@ pub struct VuiParams {
     /// Otherwise (profile_idc is not equal to 44, 86, 100, 110, 122, or 244 or
     /// constraint_set3_flag is equal to 0), the value of max_num_reorder_frames
     /// shall be inferred to be equal to MaxDpbFrames.
-    max_num_reorder_frames: u32,
+    pub max_num_reorder_frames: u32,
     /// Specifies the required size of the HRD decoded picture buffer (DPB) in
     /// units of frame buffers. It is a requirement of bitstream conformance
     /// that the coded video sequence shall not require a decoded picture buffer
@@ -1099,112 +990,7 @@ pub struct VuiParams {
     /// Otherwise (profile_idc is not equal to 44, 86, 100, 110, 122, or 244 or
     /// constraint_set3_flag is equal to 0), the value of
     /// max_dec_frame_buffering shall be inferred to be equal to MaxDpbFrames.
-    max_dec_frame_buffering: u32,
-}
-
-impl VuiParams {
-    pub fn aspect_ratio_info_present_flag(&self) -> bool {
-        self.aspect_ratio_info_present_flag
-    }
-    pub fn aspect_ratio_idc(&self) -> u8 {
-        self.aspect_ratio_idc
-    }
-    pub fn sar_width(&self) -> u16 {
-        self.sar_width
-    }
-    pub fn sar_height(&self) -> u16 {
-        self.sar_height
-    }
-    pub fn overscan_info_present_flag(&self) -> bool {
-        self.overscan_info_present_flag
-    }
-    pub fn overscan_appropriate_flag(&self) -> bool {
-        self.overscan_appropriate_flag
-    }
-    pub fn video_signal_type_present_flag(&self) -> bool {
-        self.video_signal_type_present_flag
-    }
-    pub fn video_format(&self) -> u8 {
-        self.video_format
-    }
-    pub fn video_full_range_flag(&self) -> bool {
-        self.video_full_range_flag
-    }
-    pub fn colour_description_present_flag(&self) -> bool {
-        self.colour_description_present_flag
-    }
-    pub fn colour_primaries(&self) -> u8 {
-        self.colour_primaries
-    }
-    pub fn transfer_characteristics(&self) -> u8 {
-        self.transfer_characteristics
-    }
-    pub fn matrix_coefficients(&self) -> u8 {
-        self.matrix_coefficients
-    }
-    pub fn chroma_loc_info_present_flag(&self) -> bool {
-        self.chroma_loc_info_present_flag
-    }
-    pub fn chroma_sample_loc_type_top_field(&self) -> u8 {
-        self.chroma_sample_loc_type_top_field
-    }
-    pub fn chroma_sample_loc_type_bottom_field(&self) -> u8 {
-        self.chroma_sample_loc_type_bottom_field
-    }
-    pub fn timing_info_present_flag(&self) -> bool {
-        self.timing_info_present_flag
-    }
-    pub fn num_units_in_tick(&self) -> u32 {
-        self.num_units_in_tick
-    }
-    pub fn time_scale(&self) -> u32 {
-        self.time_scale
-    }
-    pub fn fixed_frame_rate_flag(&self) -> bool {
-        self.fixed_frame_rate_flag
-    }
-    pub fn nal_hrd_parameters_present_flag(&self) -> bool {
-        self.nal_hrd_parameters_present_flag
-    }
-    pub fn nal_hrd_parameters(&self) -> &HrdParams {
-        &self.nal_hrd_parameters
-    }
-    pub fn vcl_hrd_parameters_present_flag(&self) -> bool {
-        self.vcl_hrd_parameters_present_flag
-    }
-    pub fn vcl_hrd_parameters(&self) -> &HrdParams {
-        &self.vcl_hrd_parameters
-    }
-    pub fn low_delay_hrd_flag(&self) -> bool {
-        self.low_delay_hrd_flag
-    }
-    pub fn pic_struct_present_flag(&self) -> bool {
-        self.pic_struct_present_flag
-    }
-    pub fn bitstream_restriction_flag(&self) -> bool {
-        self.bitstream_restriction_flag
-    }
-    pub fn motion_vectors_over_pic_boundaries_flag(&self) -> bool {
-        self.motion_vectors_over_pic_boundaries_flag
-    }
-    pub fn max_bytes_per_pic_denom(&self) -> u32 {
-        self.max_bytes_per_pic_denom
-    }
-    pub fn max_bits_per_mb_denom(&self) -> u32 {
-        self.max_bits_per_mb_denom
-    }
-    pub fn log2_max_mv_length_horizontal(&self) -> u32 {
-        self.log2_max_mv_length_horizontal
-    }
-    pub fn log2_max_mv_length_vertical(&self) -> u32 {
-        self.log2_max_mv_length_vertical
-    }
-    pub fn max_num_reorder_frames(&self) -> u32 {
-        self.max_num_reorder_frames
-    }
-    pub fn max_dec_frame_buffering(&self) -> u32 {
-        self.max_dec_frame_buffering
-    }
+    pub max_dec_frame_buffering: u32,
 }
 
 impl Default for VuiParams {
@@ -1254,10 +1040,10 @@ impl Default for VuiParams {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pps {
     /// Identifies the picture parameter set that is referred to in the slice header.
-    pic_parameter_set_id: u8,
+    pub pic_parameter_set_id: u8,
 
     /// Refers to the active sequence parameter set.
-    seq_parameter_set_id: u8,
+    pub seq_parameter_set_id: u8,
 
     /// Selects the entropy decoding method to be applied for the syntax
     /// elements for which two descriptors appear in the syntax tables as
@@ -1266,7 +1052,7 @@ pub struct Pps {
     /// see clause 9.1 or CAVLC, see clause 9.2). Otherwise
     /// (`entropy_coding_mode_flag` is true), the method specified by the right
     /// descriptor in the syntax table is applied (CABAC, see clause 9.3).
-    entropy_coding_mode_flag: bool,
+    pub entropy_coding_mode_flag: bool,
 
     /// If true, specifies that the syntax elements delta_pic_order_cnt_bottom
     /// (when `pic_order_cnt_type` is equal to 0) or `delta_pic_order_cnt[1]`
@@ -1275,55 +1061,55 @@ pub struct Pps {
     /// slice headers for coded frames as specified in clause 7.3.3. Otherwise,
     /// specifies that the syntax elements `delta_pic_order_cnt_bottom` and
     /// `delta_pic_order_cnt[1]` are not present in the slice headers.
-    bottom_field_pic_order_in_frame_present_flag: bool,
+    pub bottom_field_pic_order_in_frame_present_flag: bool,
 
     /// Plus 1 specifies the number of slice groups for a picture. When
     /// `num_slice_groups_minus1` is equal to 0, all slices of the picture
     /// belong to the same slice group. The allowed range of
     /// `num_slice_groups_minus1` is specified in Annex A.
-    num_slice_groups_minus1: u32,
+    pub num_slice_groups_minus1: u32,
 
     /// Specifies how `num_ref_idx_l0_active_minus1` is inferred for P, SP, and
     /// B slices with `num_ref_idx_active_override_flag` not set.
-    num_ref_idx_l0_default_active_minus1: u8,
+    pub num_ref_idx_l0_default_active_minus1: u8,
 
     /// Specifies how `num_ref_idx_l1_active_minus1` is inferred for B slices
     /// with `num_ref_idx_active_override_flag` not set.
-    num_ref_idx_l1_default_active_minus1: u8,
+    pub num_ref_idx_l1_default_active_minus1: u8,
 
     /// If not set, specifies that the default weighted prediction shall be
     /// applied to P and SP slices. If set, specifies that explicit weighted
     /// prediction shall be applied to P and SP slices.
-    weighted_pred_flag: bool,
+    pub weighted_pred_flag: bool,
 
     /// `weighted_bipred_idc` equal to 0 specifies that the default weighted
     /// prediction shall be applied to B slices. `weighted_bipred_idc` equal to
     /// 1 specifies that explicit weighted prediction shall be applied to B
     /// slices. `weighted_bipred_idc` equal to 2 specifies that implicit
     /// weighted prediction shall be applied to B slices
-    weighted_bipred_idc: u8,
+    pub weighted_bipred_idc: u8,
 
     /// Specifies the initial value minus 26 of SliceQPY for each slice. The
     /// initial value is modified at the slice layer when a non-zero value of
     /// `slice_qp_delta` is decoded, and is modified further when a non-zero
     /// value of `mb_qp_delta` is decoded at the macroblock layer.
-    pic_init_qp_minus26: i8,
+    pub pic_init_qp_minus26: i8,
 
     /// Specifies the initial value minus 26 of SliceQSY for all macroblocks in
     /// SP or SI slices. The initial value is modified at the slice layer when a
     /// non-zero value of `slice_qs_delta` is decoded.
-    pic_init_qs_minus26: i8,
+    pub pic_init_qs_minus26: i8,
 
     /// Specifies the offset that shall be added to QP Y and QSY for addressing
     /// the table of QPC values for the Cb chroma component.
-    chroma_qp_index_offset: i8,
+    pub chroma_qp_index_offset: i8,
 
     /// If set, specifies that a set of syntax elements controlling the
     /// characteristics of the deblocking filter is present in the slice header.
     /// If not set, specifies that the set of syntax elements controlling the
     /// characteristics of the deblocking filter is not present in the slice
     /// headers and their inferred values are in effect.
-    deblocking_filter_control_present_flag: bool,
+    pub deblocking_filter_control_present_flag: bool,
 
     /// If not set, specifies that intra prediction allows usage of residual
     /// data and decoded samples of neighbouring macroblocks coded using Inter
@@ -1332,7 +1118,7 @@ pub struct Pps {
     /// intra prediction, in which case prediction of macroblocks coded using
     /// Intra macroblock prediction modes only uses residual data and decoded
     /// samples from I or SI macroblock types.
-    constrained_intra_pred_flag: bool,
+    pub constrained_intra_pred_flag: bool,
 
     /// If not set, specifies that the `redundant_pic_cnt` syntax element is not
     /// present in slice headers, coded slice data partition B NAL units, and
@@ -1344,95 +1130,32 @@ pub struct Pps {
     /// NAL units that refer (either directly or by association with a
     /// corresponding coded slice data partition A NAL unit) to the picture
     /// parameter set.
-    redundant_pic_cnt_present_flag: bool,
+    pub redundant_pic_cnt_present_flag: bool,
 
     /// If set, specifies that the 8x8 transform decoding process may be in use
     /// (see clause 8.5). If not set, specifies that the 8x8 transform decoding
     /// process is not in use.
-    transform_8x8_mode_flag: bool,
+    pub transform_8x8_mode_flag: bool,
 
     ///  If set, specifies that parameters are present to modify the scaling
     ///  lists specified in the sequence parameter set. If not set, specifies
     ///  that the scaling lists used for the picture shall be inferred to be
     ///  equal to those specified by the sequence parameter set.
-    pic_scaling_matrix_present_flag: bool,
+    pub pic_scaling_matrix_present_flag: bool,
 
     /// 4x4 Scaling list as read with 7.3.2.1.1.1
-    scaling_lists_4x4: [[u8; 16]; 6],
+    pub scaling_lists_4x4: [[u8; 16]; 6],
     /// 8x8 Scaling list as read with 7.3.2.1.1.1
-    scaling_lists_8x8: [[u8; 64]; 6],
+    pub scaling_lists_8x8: [[u8; 64]; 6],
 
     /// Specifies the offset that shall be added to QPY and QSY for addressing
     /// the table of QPC values for the Cr chroma component. When
     /// `second_chroma_qp_index_offset` is not present, it shall be inferred to be
     /// equal to `chroma_qp_index_offset`.
-    second_chroma_qp_index_offset: i8,
+    pub second_chroma_qp_index_offset: i8,
 
     /// The SPS referenced by this PPS.
     pub sps: Rc<Sps>,
-}
-
-impl Pps {
-    pub fn pic_parameter_set_id(&self) -> u8 {
-        self.pic_parameter_set_id
-    }
-    pub fn seq_parameter_set_id(&self) -> u8 {
-        self.seq_parameter_set_id
-    }
-    pub fn entropy_coding_mode_flag(&self) -> bool {
-        self.entropy_coding_mode_flag
-    }
-    pub fn bottom_field_pic_order_in_frame_present_flag(&self) -> bool {
-        self.bottom_field_pic_order_in_frame_present_flag
-    }
-    pub fn num_slice_groups_minus1(&self) -> u32 {
-        self.num_slice_groups_minus1
-    }
-    pub fn num_ref_idx_l0_default_active_minus1(&self) -> u8 {
-        self.num_ref_idx_l0_default_active_minus1
-    }
-    pub fn num_ref_idx_l1_default_active_minus1(&self) -> u8 {
-        self.num_ref_idx_l1_default_active_minus1
-    }
-    pub fn weighted_pred_flag(&self) -> bool {
-        self.weighted_pred_flag
-    }
-    pub fn weighted_bipred_idc(&self) -> u8 {
-        self.weighted_bipred_idc
-    }
-    pub fn pic_init_qp_minus26(&self) -> i8 {
-        self.pic_init_qp_minus26
-    }
-    pub fn pic_init_qs_minus26(&self) -> i8 {
-        self.pic_init_qs_minus26
-    }
-    pub fn chroma_qp_index_offset(&self) -> i8 {
-        self.chroma_qp_index_offset
-    }
-    pub fn deblocking_filter_control_present_flag(&self) -> bool {
-        self.deblocking_filter_control_present_flag
-    }
-    pub fn constrained_intra_pred_flag(&self) -> bool {
-        self.constrained_intra_pred_flag
-    }
-    pub fn redundant_pic_cnt_present_flag(&self) -> bool {
-        self.redundant_pic_cnt_present_flag
-    }
-    pub fn transform_8x8_mode_flag(&self) -> bool {
-        self.transform_8x8_mode_flag
-    }
-    pub fn pic_scaling_matrix_present_flag(&self) -> bool {
-        self.pic_scaling_matrix_present_flag
-    }
-    pub fn scaling_lists_4x4(&self) -> [[u8; 16]; 6] {
-        self.scaling_lists_4x4
-    }
-    pub fn scaling_lists_8x8(&self) -> [[u8; 64]; 6] {
-        self.scaling_lists_8x8
-    }
-    pub fn second_chroma_qp_index_offset(&self) -> i8 {
-        self.second_chroma_qp_index_offset
-    }
 }
 
 #[derive(Debug, Default)]
@@ -1770,17 +1493,17 @@ impl Parser {
     ///
     /// Returns a reference to the new SPS.
     pub fn parse_sps(&mut self, nalu: &Nalu) -> anyhow::Result<&Rc<Sps>> {
-        if !matches!(nalu.header().type_, NaluType::Sps) {
+        if !matches!(nalu.header.type_, NaluType::Sps) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
                 NaluType::Sps,
-                nalu.header().type_
+                nalu.header.type_
             ));
         }
 
         let data = nalu.as_ref();
         // Skip the header
-        let mut r = NaluReader::new(&data[nalu.header().len()..]);
+        let mut r = NaluReader::new(&data[nalu.header.len()..]);
         let mut sps = Sps {
             profile_idc: r.read_bits(8)?,
             constraint_set0_flag: r.read_bit()?,
@@ -1939,17 +1662,17 @@ impl Parser {
     }
 
     pub fn parse_pps(&mut self, nalu: &Nalu) -> anyhow::Result<&Pps> {
-        if !matches!(nalu.header().type_, NaluType::Pps) {
+        if !matches!(nalu.header.type_, NaluType::Pps) {
             return Err(anyhow!(
                 "Invalid NALU type, expected {:?}, got {:?}",
                 NaluType::Pps,
-                nalu.header().type_
+                nalu.header.type_
             ));
         }
 
         let data = nalu.as_ref();
         // Skip the header
-        let mut r = NaluReader::new(&data[nalu.header().len()..]);
+        let mut r = NaluReader::new(&data[nalu.header.len()..]);
         let pic_parameter_set_id = r.read_ue_max(MAX_PPS_COUNT as u32 - 1)?;
         let seq_parameter_set_id = r.read_ue_max(MAX_SPS_COUNT as u32 - 1)?;
         let sps = self.get_sps(seq_parameter_set_id).context(
@@ -2204,7 +1927,7 @@ impl Parser {
     ) -> anyhow::Result<()> {
         let rpm = &mut header.dec_ref_pic_marking;
 
-        if nalu.header().idr_pic_flag {
+        if nalu.header.idr_pic_flag {
             rpm.no_output_of_prior_pics_flag = r.read_bit()?;
             rpm.long_term_reference_flag = r.read_bit()?;
         } else {
@@ -2247,7 +1970,7 @@ impl Parser {
 
     pub fn parse_slice_header<'a>(&self, nalu: Nalu<'a>) -> anyhow::Result<Slice<'a>> {
         if !matches!(
-            nalu.header().type_,
+            nalu.header.type_,
             NaluType::Slice
                 | NaluType::SliceDpa
                 | NaluType::SliceDpb
@@ -2257,13 +1980,13 @@ impl Parser {
         ) {
             return Err(anyhow!(
                 "Invalid NALU type: {:?} is not a slice NALU",
-                nalu.header().type_
+                nalu.header.type_
             ));
         }
 
         let data = nalu.as_ref();
         // Skip the header
-        let mut r = NaluReader::new(&data[nalu.header().len()..]);
+        let mut r = NaluReader::new(&data[nalu.header.len()..]);
 
         let mut header = SliceHeader {
             first_mb_in_slice: r.read_ue()?,
@@ -2301,7 +2024,7 @@ impl Parser {
             header.max_pic_num = sps.max_frame_num();
         }
 
-        if nalu.header().idr_pic_flag {
+        if nalu.header.idr_pic_flag {
             header.idr_pic_id = r.read_ue_max(0xffff)?;
         }
 
@@ -2355,7 +2078,7 @@ impl Parser {
             return Err(anyhow!("Broken Data"));
         }
 
-        if let NaluType::SliceExt = nalu.header().type_ {
+        if let NaluType::SliceExt = nalu.header.type_ {
             return Err(anyhow!("Stream contain unsupported/unimplemented NALs"));
         }
 
@@ -2367,7 +2090,7 @@ impl Parser {
             Parser::parse_pred_weight_table(&mut r, sps, &mut header)?;
         }
 
-        if nalu.header().ref_idc != 0 {
+        if nalu.header.ref_idc != 0 {
             Parser::parse_dec_ref_pic_marking(&mut r, &nalu, &mut header)?;
         }
 
@@ -2399,7 +2122,7 @@ impl Parser {
         }
 
         let epb = r.num_epb();
-        header.header_bit_size = (nalu.size() - epb) * 8 - r.num_bits_left();
+        header.header_bit_size = (nalu.size - epb) * 8 - r.num_bits_left();
 
         header.n_emulation_prevention_bytes = epb;
 
@@ -2417,26 +2140,9 @@ impl Parser {
 
 #[derive(Debug)]
 pub struct NaluHeader {
-    ref_idc: u8,
-    type_: NaluType,
-    idr_pic_flag: bool,
-}
-
-impl NaluHeader {
-    /// Get a reference to the nalu header's ref idc.
-    pub fn ref_idc(&self) -> u8 {
-        self.ref_idc
-    }
-
-    /// Get a reference to the nalu header's type.
-    pub fn nalu_type(&self) -> NaluType {
-        self.type_
-    }
-
-    /// Get a reference to the nalu header's idr pic flag.
-    pub fn idr_pic_flag(&self) -> bool {
-        self.idr_pic_flag
-    }
+    pub ref_idc: u8,
+    pub type_: NaluType,
+    pub idr_pic_flag: bool,
 }
 
 impl Header for NaluHeader {
@@ -2517,7 +2223,7 @@ mod tests {
         let mut parser = Parser::default();
 
         while let Ok(nalu) = Nalu::next(&mut cursor) {
-            match nalu.header().type_ {
+            match nalu.header.type_ {
                 NaluType::Slice
                 | NaluType::SliceDpa
                 | NaluType::SliceDpb
@@ -2824,7 +2530,7 @@ mod tests {
         let mut parser = Parser::default();
 
         while let Ok(nalu) = Nalu::next(&mut cursor) {
-            assert_eq!(nalu.header().type_, NaluType::Sps);
+            assert_eq!(nalu.header.type_, NaluType::Sps);
             parser.parse_sps(&nalu).unwrap_err();
         }
     }

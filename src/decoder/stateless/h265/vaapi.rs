@@ -486,14 +486,14 @@ fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
 
     for i in (0..6).step_by(3) {
         for j in 0..64 {
-            scaling_list_32x32[i / 3][j] = scaling_lists.scaling_list_32x32()[i][j];
+            scaling_list_32x32[i / 3][j] = scaling_lists.scaling_list_32x32[i][j];
         }
     }
 
     let mut scaling_list_dc_32x32 = [0; 2];
     for i in (0..6).step_by(3) {
         scaling_list_dc_32x32[i / 3] =
-            (scaling_lists.scaling_list_dc_coef_minus8_32x32()[i] + 8) as u8;
+            (scaling_lists.scaling_list_dc_coef_minus8_32x32[i] + 8) as u8;
     }
 
     let mut scaling_list_4x4 = [[0; 16]; 6];
@@ -503,17 +503,17 @@ fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
 
     (0..6).for_each(|i| {
         super::get_raster_from_up_right_diagonal_4x4(
-            scaling_lists.scaling_list_4x4()[i],
+            scaling_lists.scaling_list_4x4[i],
             &mut scaling_list_4x4[i],
         );
 
         super::get_raster_from_up_right_diagonal_8x8(
-            scaling_lists.scaling_list_8x8()[i],
+            scaling_lists.scaling_list_8x8[i],
             &mut scaling_list_8x8[i],
         );
 
         super::get_raster_from_up_right_diagonal_8x8(
-            scaling_lists.scaling_list_16x16()[i],
+            scaling_lists.scaling_list_16x16[i],
             &mut scaling_list_16x16[i],
         );
     });
@@ -531,7 +531,7 @@ fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
         scaling_list_16x16,
         scaling_list_32x32_r,
         scaling_lists
-            .scaling_list_dc_coef_minus8_16x16()
+            .scaling_list_dc_coef_minus8_16x16
             .map(|x| (x + 8) as u8),
         scaling_list_dc_32x32,
     )))
@@ -681,7 +681,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         ref_pic_list1: &[Option<RefPicListEntry<Self::Handle>>; 16],
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
         self.submit_last_slice(picture)?;
-        let hdr = slice.header();
+        let hdr = &slice.header;
 
         let va_references = &picture.va_references;
         let ref_pic_list0 = build_slice_ref_pic_list(ref_pic_list0, va_references);
@@ -689,26 +689,26 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
 
         let long_slice_flags = libva::HevcLongSliceFlags::new(
             0,
-            hdr.dependent_slice_segment_flag() as u32,
-            hdr.type_() as u32,
-            hdr.colour_plane_id() as u32,
-            hdr.sao_luma_flag() as u32,
-            hdr.sao_chroma_flag() as u32,
-            hdr.mvd_l1_zero_flag() as u32,
-            hdr.cabac_init_flag() as u32,
-            hdr.temporal_mvp_enabled_flag() as u32,
-            hdr.deblocking_filter_disabled_flag() as u32,
-            hdr.collocated_from_l0_flag() as u32,
-            hdr.loop_filter_across_slices_enabled_flag() as u32,
+            hdr.dependent_slice_segment_flag as u32,
+            hdr.type_ as u32,
+            hdr.colour_plane_id as u32,
+            hdr.sao_luma_flag as u32,
+            hdr.sao_chroma_flag as u32,
+            hdr.mvd_l1_zero_flag as u32,
+            hdr.cabac_init_flag as u32,
+            hdr.temporal_mvp_enabled_flag as u32,
+            hdr.deblocking_filter_disabled_flag as u32,
+            hdr.collocated_from_l0_flag as u32,
+            hdr.loop_filter_across_slices_enabled_flag as u32,
         );
 
-        let collocated_ref_idx = if hdr.temporal_mvp_enabled_flag() {
-            hdr.collocated_ref_idx()
+        let collocated_ref_idx = if hdr.temporal_mvp_enabled_flag {
+            hdr.collocated_ref_idx
         } else {
             0xff
         };
 
-        let pwt = hdr.pred_weight_table();
+        let pwt = &hdr.pred_weight_table;
 
         let mut delta_luma_weight_l0: [i8; 15usize] = Default::default();
         let mut luma_offset_l0: [i8; 15usize] = Default::default();
@@ -720,24 +720,24 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         let mut chroma_offset_l1: [[i8; 2usize]; 15usize] = Default::default();
 
         for i in 0..15 {
-            delta_luma_weight_l0[i] = pwt.delta_luma_weight_l0()[i];
-            luma_offset_l0[i] = pwt.luma_offset_l0()[i];
+            delta_luma_weight_l0[i] = pwt.delta_luma_weight_l0[i];
+            luma_offset_l0[i] = pwt.luma_offset_l0[i];
 
-            if hdr.type_().is_b() {
-                delta_luma_weight_l1[i] = pwt.delta_luma_weight_l1()[i];
-                luma_offset_l1[i] = pwt.luma_offset_l1()[i];
+            if hdr.type_.is_b() {
+                delta_luma_weight_l1[i] = pwt.delta_luma_weight_l1[i];
+                luma_offset_l1[i] = pwt.luma_offset_l1[i];
             }
 
             for j in 0..2 {
-                delta_chroma_weight_l0[i][j] = pwt.delta_chroma_weight_l0()[i][j];
-                let delta_chroma_offset = pwt.delta_chroma_offset_l0()[i][j];
+                delta_chroma_weight_l0[i][j] = pwt.delta_chroma_weight_l0[i][j];
+                let delta_chroma_offset = pwt.delta_chroma_offset_l0[i][j];
 
-                let chroma_weight_l0 = (1 << pwt.chroma_log2_weight_denom())
-                    + i32::from(pwt.delta_chroma_weight_l0()[i][j]);
+                let chroma_weight_l0 = (1 << pwt.chroma_log2_weight_denom)
+                    + i32::from(pwt.delta_chroma_weight_l0[i][j]);
 
                 let offset = sps.wp_offset_half_range_c as i32 + delta_chroma_offset as i32
                     - ((sps.wp_offset_half_range_c as i32 * chroma_weight_l0)
-                        >> pwt.chroma_log2_weight_denom());
+                        >> pwt.chroma_log2_weight_denom);
 
                 chroma_offset_l0[i][j] = clip3(
                     -(sps.wp_offset_half_range_c as i32),
@@ -745,16 +745,16 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
                     offset,
                 ) as _;
 
-                if hdr.type_().is_b() {
-                    delta_chroma_weight_l1[i][j] = pwt.delta_chroma_weight_l1()[i][j];
-                    let delta_chroma_offset = pwt.delta_chroma_offset_l1()[i][j];
+                if hdr.type_.is_b() {
+                    delta_chroma_weight_l1[i][j] = pwt.delta_chroma_weight_l1[i][j];
+                    let delta_chroma_offset = pwt.delta_chroma_offset_l1[i][j];
 
-                    let chroma_weight_l1 = (1 << pwt.chroma_log2_weight_denom())
-                        + i32::from(pwt.delta_chroma_weight_l1()[i][j]);
+                    let chroma_weight_l1 = (1 << pwt.chroma_log2_weight_denom)
+                        + i32::from(pwt.delta_chroma_weight_l1[i][j]);
 
                     let offset = sps.wp_offset_half_range_c as i32 + delta_chroma_offset as i32
                         - ((sps.wp_offset_half_range_c as i32 * chroma_weight_l1)
-                            >> pwt.chroma_log2_weight_denom());
+                            >> pwt.chroma_log2_weight_denom);
 
                     chroma_offset_l1[i][j] = clip3(
                         -(sps.wp_offset_half_range_c as i32),
@@ -766,23 +766,23 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         }
 
         let slice_param = SliceParameterBufferHEVC::new(
-            slice.nalu().size() as u32,
+            slice.nalu.size as u32,
             0,
             libva::constants::VA_SLICE_DATA_FLAG_ALL,
-            (hdr.header_bit_size() / 8) as _,
-            hdr.segment_address(),
+            (hdr.header_bit_size / 8) as _,
+            hdr.segment_address,
             [ref_pic_list0, ref_pic_list1],
             &long_slice_flags,
             collocated_ref_idx,
-            hdr.num_ref_idx_l0_active_minus1(),
-            hdr.num_ref_idx_l1_active_minus1(),
-            hdr.qp_delta(),
-            hdr.cb_qp_offset(),
-            hdr.cr_qp_offset(),
-            hdr.beta_offset_div2(),
-            hdr.tc_offset_div2(),
-            pwt.luma_log2_weight_denom(),
-            pwt.delta_chroma_log2_weight_denom(),
+            hdr.num_ref_idx_l0_active_minus1,
+            hdr.num_ref_idx_l1_active_minus1,
+            hdr.qp_delta,
+            hdr.cb_qp_offset,
+            hdr.cr_qp_offset,
+            hdr.beta_offset_div2,
+            hdr.tc_offset_div2,
+            pwt.luma_log2_weight_denom,
+            pwt.delta_chroma_log2_weight_denom,
             delta_luma_weight_l0,
             luma_offset_l0,
             delta_chroma_weight_l0,
@@ -791,10 +791,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
             luma_offset_l1,
             delta_chroma_weight_l1,
             chroma_offset_l1,
-            hdr.five_minus_max_num_merge_cand(),
-            hdr.num_entry_point_offsets() as _,
+            hdr.five_minus_max_num_merge_cand,
+            hdr.num_entry_point_offsets as _,
             0,
-            hdr.n_emulation_prevention_bytes() as _,
+            hdr.n_emulation_prevention_bytes as _,
         );
 
         let va_profile = sps.va_profile()?;
@@ -802,8 +802,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         let slice_param_ext =
             if is_range_extension_profile(va_profile) || is_scc_ext_profile(va_profile) {
                 let slice_ext_flags = HevcSliceExtFlags::new(
-                    hdr.cu_chroma_qp_offset_enabled_flag() as u32,
-                    hdr.use_integer_mv_flag() as u32,
+                    hdr.cu_chroma_qp_offset_enabled_flag as u32,
+                    hdr.use_integer_mv_flag as u32,
                 );
 
                 let slice_param_ext = SliceParameterBufferHEVCRext::new(
@@ -812,9 +812,9 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
                     luma_offset_l1.map(i16::from),
                     chroma_offset_l1.map(|outer| outer.map(i16::from)),
                     &slice_ext_flags,
-                    hdr.slice_act_y_qp_offset(),
-                    hdr.slice_act_cb_qp_offset(),
-                    hdr.slice_act_cr_qp_offset(),
+                    hdr.slice_act_y_qp_offset,
+                    hdr.slice_act_cb_qp_offset,
+                    hdr.slice_act_cr_qp_offset,
                 );
 
                 Some(slice_param_ext)
@@ -822,7 +822,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
                 None
             };
 
-        let slice_data = Vec::from(slice.nalu().as_ref());
+        let slice_data = Vec::from(slice.nalu.as_ref());
 
         picture.last_slice = Some((slice_param, slice_param_ext, slice_data));
 
