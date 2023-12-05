@@ -8,8 +8,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::backend::dummy::Backend;
-use crate::backend::dummy::Handle;
+use crate::backend::dummy::decoder::Backend;
+use crate::backend::dummy::decoder::Handle;
 use crate::decoder::stateless::h265::H265;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::BlockingMode;

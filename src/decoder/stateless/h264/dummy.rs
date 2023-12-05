@@ -8,7 +8,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::backend::dummy::*;
+use crate::backend::dummy::decoder::Backend;
+use crate::backend::dummy::decoder::Handle;
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::parser::Pps;

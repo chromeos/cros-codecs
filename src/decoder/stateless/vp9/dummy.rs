@@ -8,7 +8,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::backend::dummy::*;
+use crate::backend::dummy::decoder::Backend;
+use crate::backend::dummy::decoder::Handle;
 use crate::codec::vp9::parser::Header;
 use crate::codec::vp9::parser::MAX_SEGMENTS;
 use crate::codec::vp9::parser::NUM_REF_FRAMES;

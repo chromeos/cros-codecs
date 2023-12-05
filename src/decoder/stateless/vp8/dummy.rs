@@ -8,7 +8,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::backend::dummy::*;
+use crate::backend::dummy::decoder::Backend;
+use crate::backend::dummy::decoder::Handle;
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;

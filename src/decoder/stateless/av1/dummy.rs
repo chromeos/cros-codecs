@@ -8,7 +8,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::backend::dummy::{Backend, Handle};
+use crate::backend::dummy::decoder::Backend;
+use crate::backend::dummy::decoder::Handle;
 
 use crate::decoder::stateless::av1::Av1;
 use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
