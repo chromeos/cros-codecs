@@ -14,8 +14,8 @@ use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 use libva::SurfaceMemoryDescriptor;
 
-use crate::backend::vaapi::VaStreamInfo;
-use crate::backend::vaapi::VaapiBackend;
+use crate::backend::vaapi::decoder::VaStreamInfo;
+use crate::backend::vaapi::decoder::VaapiBackend;
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;

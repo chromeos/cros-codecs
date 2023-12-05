@@ -11,8 +11,8 @@ use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
 use libva::SurfaceMemoryDescriptor;
 
-use crate::backend::vaapi::VaStreamInfo;
-use crate::backend::vaapi::VaapiBackend;
+use crate::backend::vaapi::decoder::VaStreamInfo;
+use crate::backend::vaapi::decoder::VaapiBackend;
 use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::Header;
 use crate::codec::vp9::parser::Profile;

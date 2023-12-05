@@ -10,10 +10,10 @@ use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SurfaceMemoryDescriptor;
 
-use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::VaStreamInfo;
-use crate::backend::vaapi::VaapiBackend;
-use crate::backend::vaapi::VaapiPicture;
+use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::decoder::VaStreamInfo;
+use crate::backend::vaapi::decoder::VaapiBackend;
+use crate::backend::vaapi::decoder::VaapiPicture;
 use crate::codec::av1::parser::BitDepth;
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::Profile;

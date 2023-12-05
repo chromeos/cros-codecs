@@ -19,10 +19,10 @@ use libva::SliceParameterBufferHEVC;
 use libva::SliceParameterBufferHEVCRext;
 use libva::SurfaceMemoryDescriptor;
 
-use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::VaStreamInfo;
-use crate::backend::vaapi::VaapiBackend;
-use crate::backend::vaapi::VaapiPicture;
+use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::decoder::VaStreamInfo;
+use crate::backend::vaapi::decoder::VaapiBackend;
+use crate::backend::vaapi::decoder::VaapiPicture;
 use crate::codec::h265::dpb::Dpb;
 use crate::codec::h265::parser::NaluType;
 use crate::codec::h265::parser::Pps;

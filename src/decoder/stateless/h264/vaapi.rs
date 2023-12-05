@@ -16,10 +16,10 @@ use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
 use libva::SurfaceMemoryDescriptor;
 
-use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::VaStreamInfo;
-use crate::backend::vaapi::VaapiBackend;
-use crate::backend::vaapi::VaapiPicture;
+use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::decoder::VaStreamInfo;
+use crate::backend::vaapi::decoder::VaapiBackend;
+use crate::backend::vaapi::decoder::VaapiPicture;
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::parser::Level;
