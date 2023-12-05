@@ -39,8 +39,15 @@ mod vaapi;
 
 /// Stateless backend methods specific to AV1.
 pub trait StatelessAV1DecoderBackend: StatelessDecoderBackend<Av1> {
-    /// Called when a new Sequence Header OBU is parsed.
-    fn new_sequence(&mut self, sequence: &Rc<SequenceHeaderObu>) -> StatelessBackendResult<()>;
+    /// Called when a new Sequence Header OBU is parsed. The
+    /// `highest_spatial_layer` argument refers to the maximum layer selected by
+    /// the client through `set_operating_point()` and the scalability
+    /// information present in the stream, if any.
+    fn new_sequence(
+        &mut self,
+        sequence: &Rc<SequenceHeaderObu>,
+        highest_spatial_layer: Option<u32>,
+    ) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a new picture was found.
     fn new_picture(
@@ -421,10 +428,11 @@ where
                             sequence.bit_depth
                         );
                         /* there is nothing to drain, much like vp8 and vp9 */
-                        self.backend.new_sequence(&sequence)?;
-                        self.decoding_state = DecodingState::AwaitingFormat(sequence);
                         self.codec.highest_spatial_layer =
                             self.codec.parser.highest_operating_point();
+                        self.backend
+                            .new_sequence(&sequence, self.codec.highest_spatial_layer)?;
+                        self.decoding_state = DecodingState::AwaitingFormat(sequence);
                     }
                 }
                 ObuType::TemporalDelimiter => {

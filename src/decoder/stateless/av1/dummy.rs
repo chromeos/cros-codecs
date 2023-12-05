@@ -19,6 +19,7 @@ impl StatelessAV1DecoderBackend for Backend {
     fn new_sequence(
         &mut self,
         _: &std::rc::Rc<crate::codec::av1::parser::SequenceHeaderObu>,
+        _: Option<u32>,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
         Ok(())
     }

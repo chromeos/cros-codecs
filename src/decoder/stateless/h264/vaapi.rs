@@ -17,6 +17,7 @@ use libva::SliceParameter;
 use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::PoolCreationMode;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::backend::vaapi::VaapiPicture;
@@ -472,7 +473,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H264>
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<M> {
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()> {
-        self.new_sequence(sps)
+        self.new_sequence(sps, PoolCreationMode::Highest)
     }
 
     fn start_picture(

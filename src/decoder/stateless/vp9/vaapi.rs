@@ -11,6 +11,7 @@ use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
 use libva::SurfaceMemoryDescriptor;
 
+use crate::backend::vaapi::PoolCreationMode;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::codec::vp9::parser::BitDepth;
@@ -239,7 +240,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp9> f
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiBackend<M> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
-        self.new_sequence(header)
+        self.new_sequence(header, PoolCreationMode::Highest)
     }
 
     fn submit_picture(
