@@ -628,6 +628,12 @@ where
             .max_by_key(|p| p.borrow().coded_resolution().height)
             .unwrap()
     }
+
+    pub(crate) fn pool(&mut self, layer: Resolution) -> Option<&Rc<RefCell<SurfacePool<M>>>> {
+        self.surface_pools
+            .iter()
+            .find(|p| p.borrow().coded_resolution() == layer)
+    }
 }
 
 /// Shortcut for pictures used for the VAAPI backend.
