@@ -56,6 +56,7 @@ pub trait StatelessAV1DecoderBackend: StatelessDecoderBackend<Av1> {
         picture: &FrameHeaderObu,
         timestamp: u64,
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
+        highest_spatial_layer: Option<u32>,
     ) -> StatelessBackendResult<Self::Picture>;
 
     /// Called to dispatch a decode operation to the backend.
@@ -203,6 +204,7 @@ where
                 &frame_header,
                 timestamp,
                 &self.codec.reference_frames,
+                self.codec.highest_spatial_layer,
             )?;
 
             self.codec.current_pic = Some(CurrentPicState::RegularFrame {

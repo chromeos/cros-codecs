@@ -30,6 +30,7 @@ impl StatelessAV1DecoderBackend for Backend {
         _: &crate::codec::av1::parser::FrameHeaderObu,
         _: u64,
         _: &[Option<Self::Handle>; crate::codec::av1::parser::NUM_REF_FRAMES],
+        _: Option<u32>,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
         Ok(())
     }
