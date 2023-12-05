@@ -11,6 +11,7 @@ use libva::Picture as VaPicture;
 use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
 use crate::backend::vaapi::decoder::VaapiPicture;
@@ -32,6 +33,7 @@ use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::Resolution;
 
 /// The number of surfaces to allocate for this codec.
 const NUM_SURFACES: usize = 16;
@@ -571,8 +573,22 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
     fn new_sequence(
         &mut self,
         sequence: &Rc<SequenceHeaderObu>,
+        highest_spatial_layer: Option<u32>,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
-        self.new_sequence(sequence)
+        let pool_creation_mode = match highest_spatial_layer {
+            Some(highest_layer) => {
+                /* The spec mandates a 2:1 or 1.5:1 ratio, let's go with 2:1 to
+                 * accomodate the other case. See 6.7.5 in the spec */
+                let layers = (0..=highest_layer).map(|layer| Resolution {
+                    width: (sequence.max_frame_width_minus_1 + 1) / (layer + 1),
+                    height: (sequence.max_frame_height_minus_1 + 1) / (layer + 1),
+                });
+
+                PoolCreationMode::Layers(layers.collect())
+            }
+            None => PoolCreationMode::Highest,
+        };
+        self.new_sequence(sequence, pool_creation_mode)
     }
 
     fn new_picture(

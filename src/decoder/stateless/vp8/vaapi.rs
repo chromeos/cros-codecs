@@ -14,6 +14,7 @@ use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 use libva::SurfaceMemoryDescriptor;
 
+use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
 use crate::codec::vp8::parser::Header;
@@ -209,7 +210,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp8> f
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiBackend<M> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
-        self.new_sequence(header)
+        self.new_sequence(header, PoolCreationMode::Highest)
     }
 
     fn submit_picture(

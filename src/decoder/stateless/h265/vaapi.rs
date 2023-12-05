@@ -20,6 +20,7 @@ use libva::SliceParameterBufferHEVCRext;
 use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
+use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
 use crate::backend::vaapi::decoder::VaapiPicture;
@@ -589,7 +590,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H265>
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for VaapiBackend<M> {
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
-        self.new_sequence(sps)
+        self.new_sequence(sps, PoolCreationMode::Highest)
     }
 
     fn new_picture(
