@@ -24,6 +24,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
+use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 
 use crate::decoder::stateless::DecodeError;
@@ -246,7 +247,14 @@ where
             Some(CurrentPicState::RegularFrame {
                 header,
                 backend_picture,
-            }) => (self.backend.submit_picture(backend_picture)?, header),
+            }) => {
+                let handle = self.backend.submit_picture(backend_picture)?;
+
+                if self.blocking_mode == BlockingMode::Blocking {
+                    handle.sync()?;
+                }
+                (handle, header)
+            }
             Some(CurrentPicState::ShowExistingFrame { header, handle }) => (handle, header),
             None => return Err(anyhow!("Broken stream: no picture to submit")),
         };
