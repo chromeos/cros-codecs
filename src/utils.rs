@@ -136,10 +136,11 @@ where
                     /* we need to account for multiple layers if applicable for
                      * the stream */
                     let pools = format_setter.frame_pool(PoolLayer::All);
+                    let nb_pools = pools.len();
                     for pool in pools {
                         // Allocate the missing number of buffers in our pool for decoding to succeed.
                         let pool_num_frames = pool.num_managed_frames();
-                        if pool_num_frames < min_num_frames {
+                        if pool_num_frames < (min_num_frames / nb_pools) {
                             let frames = allocate_new_frames(
                                 &stream_info,
                                 min_num_frames - pool_num_frames,
