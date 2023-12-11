@@ -379,6 +379,10 @@ where
 
         let max_dpb_size = std::cmp::min(sps.max_dpb_size(), 16);
         self.codec.dpb.set_max_num_pics(max_dpb_size);
+        self.coded_resolution = Resolution {
+            width: u32::from(sps.width()),
+            height: u32::from(sps.height()),
+        };
         Ok(())
     }
 
