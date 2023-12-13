@@ -536,11 +536,12 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     ))
 }
 
-fn build_slice_params_for_tg(tg: &TileGroupObu) -> anyhow::Result<Vec<libva::BufferType>> {
-    let mut slice_params = vec![];
+fn build_slice_params_for_tg(tg: &TileGroupObu) -> anyhow::Result<libva::BufferType> {
+    let mut slice_params = libva::SliceParameterBufferAV1::new();
 
     for tile in &tg.tiles {
-        let slice_param = libva::SliceParameterBufferAV1::new(
+        /* all tiles must be submitted in the same slice parameter array */
+        slice_params.add_slice_parameter(
             tile.tile_size,
             tile.tile_offset,
             0,
@@ -551,13 +552,11 @@ fn build_slice_params_for_tg(tg: &TileGroupObu) -> anyhow::Result<Vec<libva::Buf
             0,
             0,
         );
-
-        slice_params.push(libva::BufferType::SliceParameter(
-            libva::SliceParameter::AV1(slice_param),
-        ));
     }
 
-    Ok(slice_params)
+    Ok(libva::BufferType::SliceParameter(
+        libva::SliceParameter::AV1(slice_params),
+    ))
 }
 
 fn build_slice_data_for_tg(tg: TileGroupObu) -> libva::BufferType {
@@ -652,13 +651,11 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
-        for slice_param in slice_params {
-            let buffer = context
-                .create_buffer(slice_param)
-                .context("Failed to create slice parameter buffer")?;
+        let buffer = context
+            .create_buffer(slice_params)
+            .context("Failed to create slice parameter buffer")?;
 
-            picture.add_buffer(buffer)
-        }
+        picture.add_buffer(buffer);
 
         let buffer = context
             .create_buffer(slice_data)
