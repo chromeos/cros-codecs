@@ -347,7 +347,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         .iter()
         .map(|h| {
             if let Some(h) = h {
-                h.borrow().surface_id()
+                h.borrow().decoded_surface_id()
             } else {
                 libva::constants::VA_INVALID_SURFACE
             }

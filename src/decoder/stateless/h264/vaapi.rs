@@ -116,7 +116,7 @@ fn surface_id<M: SurfaceMemoryDescriptor>(
 ) -> libva::VASurfaceID {
     match handle {
         None => libva::constants::VA_INVALID_SURFACE,
-        Some(handle) => handle.borrow().surface_id(),
+        Some(handle) => handle.borrow().decoded_surface_id(),
     }
 }
 

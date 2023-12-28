@@ -174,22 +174,60 @@ fn supported_formats_for_rt_format(
     Ok(supported_formats)
 }
 
-/// A decoded frame handle.
-pub(crate) type DecodedHandle<M> = Rc<RefCell<GenericBackendHandle<M>>>;
+pub(crate) type DecodedHandle<M> = Rc<RefCell<VaDecodedHandle<M>>>;
 
-impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
+/// The handle type used by the decoder backend that takes into account whether
+/// post processing is needed.
+pub enum VaDecodedHandle<M: SurfaceMemoryDescriptor> {
+    Generic(GenericBackendHandle<M>),
+    PostProcessed(PostProcessedHandle<M>),
+}
+
+impl<M: SurfaceMemoryDescriptor> VaDecodedHandle<M> {
+    fn handle(&self) -> &GenericBackendHandle<M> {
+        match self {
+            VaDecodedHandle::Generic(h) => h,
+            VaDecodedHandle::PostProcessed(h) => &h.decode_handle,
+        }
+    }
+
+    fn handle_mut(&mut self) -> &mut GenericBackendHandle<M> {
+        match self {
+            VaDecodedHandle::Generic(h) => h,
+            VaDecodedHandle::PostProcessed(h) => &mut h.decode_handle,
+        }
+    }
+
+    pub(crate) fn decoded_surface_id(&self) -> libva::VASurfaceID {
+        match &self.handle().state {
+            PictureState::Ready(picture) => picture.surface().id(),
+            PictureState::Pending(picture) => picture.surface().id(),
+            PictureState::Invalid => unreachable!(),
+        }
+    }
+
+    /// Returns the picture of this handle.
+    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledSurface<M>>> {
+        match self {
+            VaDecodedHandle::Generic(h) => h.picture(),
+            VaDecodedHandle::PostProcessed(h) => h.picture(),
+        }
+    }
+}
+
+impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for Rc<RefCell<VaDecodedHandle<M>>> {
     type Descriptor = M;
 
     fn coded_resolution(&self) -> Resolution {
-        self.borrow().coded_resolution
+        self.borrow().handle().coded_resolution
     }
 
     fn display_resolution(&self) -> Resolution {
-        self.borrow().display_resolution
+        self.borrow().handle().display_resolution
     }
 
     fn timestamp(&self) -> u64 {
-        self.borrow().timestamp()
+        self.borrow().handle().timestamp()
     }
 
     fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a> {
@@ -197,21 +235,85 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
     }
 
     fn is_ready(&self) -> bool {
-        self.borrow().is_va_ready().unwrap_or(true)
+        let borrow = self.borrow();
+        let handle = borrow.handle();
+
+        let decode_is_ready = match &handle.state {
+            PictureState::Ready(_) => Ok(true),
+            PictureState::Pending(picture) => picture
+                .surface()
+                .query_status()
+                .map(|s| s == libva::VASurfaceStatus::VASurfaceReady),
+            PictureState::Invalid => unreachable!(),
+        }
+        .unwrap_or(true);
+
+        match &*self.borrow() {
+            VaDecodedHandle::Generic(_) => decode_is_ready,
+            VaDecodedHandle::PostProcessed(h) => {
+                use std::borrow::Borrow;
+                let display_surface: &libva::Surface<M> = h.display_surface.borrow();
+
+                let display_is_ready = display_surface
+                    .query_status()
+                    .map(|s| s == libva::VASurfaceStatus::VASurfaceReady)
+                    .unwrap_or(true);
+
+                decode_is_ready && display_is_ready
+            }
+        }
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        self.borrow_mut().sync().context("while syncing picture")?;
+        let mut borrow = self.borrow_mut();
+        let handle = borrow.handle_mut();
+        handle.sync().context("while syncing picture")?;
 
-        Ok(())
+        match &*borrow {
+            VaDecodedHandle::Generic(_) => Ok(()),
+            VaDecodedHandle::PostProcessed(h) => {
+                use std::borrow::Borrow;
+                let display_surface: &libva::Surface<M> = h.display_surface.borrow();
+                display_surface
+                    .sync()
+                    .context("while syncing the display surface")
+            }
+        }
     }
 
     fn resource(&self) -> std::cell::Ref<M> {
-        std::cell::Ref::map(self.borrow(), |r| match &r.state {
-            PictureState::Ready(p) => p.surface().as_ref(),
-            PictureState::Pending(p) => p.surface().as_ref(),
-            PictureState::Invalid => unreachable!(),
+        std::cell::Ref::map(self.borrow(), |r| match r {
+            VaDecodedHandle::Generic(h) => match &h.state {
+                PictureState::Ready(p) => p.surface().as_ref(),
+                PictureState::Pending(p) => p.surface().as_ref(),
+                PictureState::Invalid => unreachable!(),
+            },
+            VaDecodedHandle::PostProcessed(h) => {
+                /* return the display resource, as this is what most clients care about */
+                h.display_surface.as_ref()
+            }
         })
+    }
+}
+
+impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::Ref<'a, VaDecodedHandle<M>> {
+    fn dyn_mappable_handle<'b>(&'b self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
+        match &**self {
+            VaDecodedHandle::Generic(h) => {
+                h.image().map(|i| Box::new(i) as Box<dyn MappableHandle>)
+            }
+            VaDecodedHandle::PostProcessed(h) => {
+                use std::borrow::Borrow;
+                let surface: &libva::Surface<M> = h.display_surface.borrow();
+                let image = libva::Image::create_from(
+                    surface,
+                    *h.decode_handle.map_format,
+                    h.decode_handle.coded_resolution.into(),
+                    h.decode_handle.display_resolution.into(),
+                )?;
+                Ok(Box::new(image) as Box<dyn MappableHandle>)
+            }
+        }
     }
 }
 
@@ -691,6 +793,35 @@ impl StreamMetadataState {
     }
 }
 
+/// A handle that can be post processed. One surface holds the non-filtered data
+/// and is fed to the decode process, the other holds the filtered data and is
+/// meant to be displayed.
+pub struct PostProcessedHandle<M: SurfaceMemoryDescriptor> {
+    /// The non-filtered handle. All decoding happens here.
+    decode_handle: GenericBackendHandle<M>,
+    /// The filtered surface. We merely display it.
+    display_surface: PooledSurface<M>,
+}
+
+impl<M: SurfaceMemoryDescriptor> PostProcessedHandle<M> {
+    /// Creates a new pending handle on `surface_id`.
+    fn new(
+        picture: Picture<PictureNew, PooledSurface<M>>,
+        metadata: &ParsedStreamMetadata,
+        display_surface: PooledSurface<M>,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            decode_handle: GenericBackendHandle::new(picture, metadata)?,
+            display_surface,
+        })
+    }
+
+    /// Returns the picture of this handle.
+    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledSurface<M>>> {
+        self.decode_handle.picture()
+    }
+}
+
 /// VA-API backend handle.
 ///
 /// This includes the VA picture which can be pending rendering or complete, as well as useful
@@ -776,32 +907,6 @@ impl<M: SurfaceMemoryDescriptor> GenericBackendHandle<M> {
             PictureState::Pending(picture) => picture.timestamp(),
             PictureState::Invalid => unreachable!(),
         }
-    }
-
-    /// Returns the id of the VA surface backing this handle.
-    pub(crate) fn surface_id(&self) -> libva::VASurfaceID {
-        match &self.state {
-            PictureState::Ready(picture) => picture.surface().id(),
-            PictureState::Pending(picture) => picture.surface().id(),
-            PictureState::Invalid => unreachable!(),
-        }
-    }
-
-    fn is_va_ready(&self) -> Result<bool, VaError> {
-        match &self.state {
-            PictureState::Ready(_) => Ok(true),
-            PictureState::Pending(picture) => picture
-                .surface()
-                .query_status()
-                .map(|s| s == libva::VASurfaceStatus::VASurfaceReady),
-            PictureState::Invalid => unreachable!(),
-        }
-    }
-}
-
-impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::Ref<'a, GenericBackendHandle<M>> {
-    fn dyn_mappable_handle<'b>(&'b self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
-        self.image().map(|i| Box::new(i) as Box<dyn MappableHandle>)
     }
 }
 
@@ -1000,9 +1105,27 @@ where
     {
         let metadata = self.metadata_state.get_parsed()?;
 
-        Ok(Rc::new(RefCell::new(GenericBackendHandle::new(
-            picture, metadata,
-        )?)))
+        let handle = GenericBackendHandle::new(picture, metadata)?;
+        let handle = Rc::new(RefCell::new(VaDecodedHandle::Generic(handle)));
+        Ok(handle)
+    }
+
+    /// Process an AV1 picture. AV1 supports film grain, and its use requires a
+    /// different type of Handle.
+    pub(crate) fn process_av1_picture<Codec: StatelessCodec>(
+        &mut self,
+        picture: Picture<PictureNew, PooledSurface<M>>,
+        display_surface: PooledSurface<M>,
+    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<Codec>>::Handle>
+    where
+        Self: StatelessDecoderBackendPicture<Codec>,
+        for<'a> &'a Codec::FormatInfo: VaStreamInfo,
+    {
+        let metadata = self.metadata_state.get_parsed()?;
+
+        let handle = PostProcessedHandle::new(picture, metadata, display_surface)?;
+        let handle = Rc::new(RefCell::new(VaDecodedHandle::PostProcessed(handle)));
+        Ok(handle)
     }
 
     /// Gets a set of supported formats for the particular stream being
