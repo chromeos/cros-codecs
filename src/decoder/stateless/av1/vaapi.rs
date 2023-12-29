@@ -12,6 +12,7 @@ use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::PoolCreationMode;
+use crate::backend::vaapi::PooledSurface;
 use crate::backend::vaapi::VaStreamInfo;
 use crate::backend::vaapi::VaapiBackend;
 use crate::backend::vaapi::VaapiPicture;
@@ -87,7 +88,13 @@ impl VaStreamInfo for &Rc<SequenceHeaderObu> {
     }
 
     fn min_num_surfaces(&self) -> usize {
-        NUM_SURFACES
+        if self.film_grain_params_present {
+            /* assume grain will be applied. We need twice the number of surfaces
+             * for that. */
+            NUM_SURFACES * 2
+        } else {
+            NUM_SURFACES
+        }
     }
 
     fn coded_size(&self) -> (u32, u32) {
@@ -271,6 +278,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     hdr: &FrameHeaderObu,
     seq: &SequenceHeaderObu,
     current_frame: libva::VASurfaceID,
+    current_display_picture: libva::VASurfaceID,
     reference_frames: &[Option<VADecodedHandle<M>>; NUM_REF_FRAMES],
 ) -> anyhow::Result<libva::BufferType> {
     let seq_info_fields = libva::AV1SeqFields::new(
@@ -487,8 +495,8 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
             .context("Invalid matrix_coefficients")?,
         &seq_info_fields,
         current_frame,
-        libva::constants::VA_INVALID_SURFACE, /* film grain is unsupported for now */
-        vec![],                               /* anchor_frames_list */
+        current_display_picture,
+        vec![], /* anchor_frames_list */
         u16::try_from(hdr.upscaled_width - 1).context("Invalid frame width")?,
         u16::try_from(hdr.frame_height - 1).context("Invalid frame height")?,
         0, /* output_frame_width_in_tiles_minus_1 */
@@ -564,8 +572,14 @@ fn build_slice_data_for_tg(tg: TileGroupObu) -> libva::BufferType {
     libva::BufferType::SliceData(Vec::from(obu.as_ref()))
 }
 
+pub struct Picture<M: SurfaceMemoryDescriptor + 'static> {
+    va_picture: VaapiPicture<M>,
+    /// Some if film grain is to be applied.
+    display_surface: Option<PooledSurface<M>>,
+}
+
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Av1> for VaapiBackend<M> {
-    type Picture = VaapiPicture<M>;
+    type Picture = Picture<M>;
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiBackend<M> {
@@ -598,7 +612,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
         highest_spatial_layer: Option<u32>,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
-        let surface = match highest_spatial_layer {
+        let (decode_surface, display_surface) = match highest_spatial_layer {
             Some(_) => {
                 let layer = Resolution {
                     width: hdr.upscaled_width,
@@ -611,33 +625,77 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
                         "No pool available for this layer"
                     )))?;
 
-                pool.borrow_mut()
+                let decode_surface = pool
+                    .borrow_mut()
                     .get_surface(pool)
-                    .ok_or(StatelessBackendError::OutOfResources)?
+                    .ok_or(StatelessBackendError::OutOfResources)?;
+
+                let display_surface = if hdr.film_grain_params.apply_grain {
+                    Some(
+                        pool.borrow_mut()
+                            .get_surface(pool)
+                            .ok_or(StatelessBackendError::OutOfResources)?,
+                    )
+                } else {
+                    None
+                };
+
+                (decode_surface, display_surface)
             }
             None => {
                 let highest_pool = self.highest_pool();
-                highest_pool
+
+                let decode_surface = highest_pool
                     .borrow_mut()
                     .get_surface(highest_pool)
-                    .ok_or(StatelessBackendError::OutOfResources)?
+                    .ok_or(StatelessBackendError::OutOfResources)?;
+
+                let display_surface = if hdr.film_grain_params.apply_grain {
+                    Some(
+                        highest_pool
+                            .borrow_mut()
+                            .get_surface(highest_pool)
+                            .ok_or(StatelessBackendError::OutOfResources)?,
+                    )
+                } else {
+                    None
+                };
+
+                (decode_surface, display_surface)
             }
         };
 
         let metadata = self.metadata_state.get_parsed()?;
-        let mut picture = VaPicture::new(timestamp, Rc::clone(&metadata.context), surface);
+        let mut picture = VaPicture::new(timestamp, Rc::clone(&metadata.context), decode_surface);
 
         let surface_id = picture.surface().id();
+        let display_surface_id = match display_surface {
+            Some(ref pooled_surface) => {
+                use std::borrow::Borrow;
+                let display_surface: &libva::Surface<M> = pooled_surface.borrow();
+                display_surface.id()
+            }
+            None => libva::constants::VA_INVALID_SURFACE,
+        };
 
-        let pic_param = build_pic_param(hdr, sequence, surface_id, reference_frames)
-            .context("Failed to build picture parameter")?;
+        let pic_param = build_pic_param(
+            hdr,
+            sequence,
+            surface_id,
+            display_surface_id,
+            reference_frames,
+        )
+        .context("Failed to build picture parameter")?;
         let pic_param = metadata
             .context
             .create_buffer(pic_param)
             .context("Failed to create picture parameter buffer")?;
         picture.add_buffer(pic_param);
 
-        Ok(picture)
+        Ok(Picture {
+            va_picture: picture,
+            display_surface,
+        })
     }
 
     fn decode_tile_group(
@@ -655,13 +713,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
             .create_buffer(slice_params)
             .context("Failed to create slice parameter buffer")?;
 
-        picture.add_buffer(buffer);
+        picture.va_picture.add_buffer(buffer);
 
         let buffer = context
             .create_buffer(slice_data)
             .context("Failed to create slice data buffer")?;
 
-        picture.add_buffer(buffer);
+        picture.va_picture.add_buffer(buffer);
 
         Ok(())
     }
@@ -670,7 +728,16 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
         &mut self,
         picture: Self::Picture,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Handle> {
-        self.process_picture::<Av1>(picture)
+        let Picture {
+            va_picture,
+            display_surface,
+        } = picture;
+
+        if let Some(display_surface) = display_surface {
+            self.process_av1_picture::<Av1>(va_picture, display_surface)
+        } else {
+            self.process_picture::<Av1>(va_picture)
+        }
     }
 }
 
