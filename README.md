@@ -1,5 +1,8 @@
 # Cros-codecs
 
+[<img alt="crates.io" src="https://img.shields.io/crates/v/cros-codecs">](https://crates.io/crates/cros-codecs)
+[<img alt="docs.rs" src="https://img.shields.io/docsrs/cros-codecs">](https://docs.rs/cros-codecs/latest/cros_codecs/)
+
 A lightweight, simple, low-dependency, and hopefully safe crate for hardware-accelerated video
 decoding and encoding on Linux.
 
