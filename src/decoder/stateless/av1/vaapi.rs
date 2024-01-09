@@ -396,8 +396,8 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
 
     let lf_fields = libva::AV1LoopFilterFields::new(
         u8::try_from(lf.loop_filter_sharpness).context("Invalid loop_filter_sharpness")?,
-        u8::try_from(lf.loop_filter_delta_enabled).context("Invalid loop_filter_delta_enabled")?,
-        u8::try_from(lf.loop_filter_delta_update).context("Invalid loop_filter_delta_update")?,
+        u8::from(lf.loop_filter_delta_enabled),
+        u8::from(lf.loop_filter_delta_update),
     );
 
     let (lf_ref_deltas, lf_mode_deltas) = {
@@ -419,7 +419,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
 
     let quant = &hdr.quantization_params;
     let qmatrix_fields = libva::AV1QMatrixFields::new(
-        u16::try_from(quant.using_qmatrix).context("Invalid using_qmatrix")?,
+        u16::from(quant.using_qmatrix),
         u16::try_from(quant.qm_y).context("Invalid qm_y")?,
         u16::try_from(quant.qm_u).context("Invalid qm_u")?,
         u16::try_from(quant.qm_v).context("Invalid qm_v")?,
