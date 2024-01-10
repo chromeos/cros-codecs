@@ -13,6 +13,8 @@ pub mod stateless;
 
 use std::collections::VecDeque;
 
+pub use crate::BlockingMode;
+
 use crate::decoder::stateless::PoolLayer;
 use crate::DecodedFormat;
 use crate::Resolution;
@@ -140,20 +142,6 @@ pub trait DecodedHandle {
     fn sync(&self) -> anyhow::Result<()>;
 
     fn resource(&self) -> std::cell::Ref<Self::Descriptor>;
-}
-
-/// Instructs the decoder on whether it should block on the decode operations.
-/// Nonblocking mode is conditional on backend support.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlockingMode {
-    Blocking,
-    NonBlocking,
-}
-
-impl Default for BlockingMode {
-    fn default() -> Self {
-        Self::Blocking
-    }
 }
 
 /// A queue where decoding jobs wait until they are completed, at which point they can be
