@@ -1933,7 +1933,27 @@ where
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let mut cursor = Cursor::new(bitstream);
-        let nalu = Nalu::next(&mut cursor)?;
+        let nalu = match Nalu::next(&mut cursor) {
+            Ok(nalu) => nalu,
+
+            // Check if the buffer is just filled with zeros, which we can skip immediately.
+            // This is likely a left over padding from previous packet.
+            Err(_) if bitstream.iter().all(|&b| b == 0) => {
+                let mut ignore = bitstream.len();
+
+                // H.264 Annex B can have a 3 or 4 bytes start code ie. 00 00 00 01 or 00 00 01,
+                // Therefore we leave the two last zero bytes of the padding in cause there were
+                // first two bytes of start code.
+                if ignore > 2 {
+                    ignore -= 2;
+                }
+
+                debug!("Ignored a bitstream buffer padding of size {}", ignore);
+                return Ok(ignore);
+            }
+
+            Err(err) => return Err(err.into()),
+        };
 
         if nalu.header.type_ == NaluType::Sps {
             let sps = self.codec.parser.parse_sps(&nalu)?.clone();
