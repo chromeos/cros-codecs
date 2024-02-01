@@ -142,6 +142,8 @@ pub(crate) enum StreamMetadataState {
     Parsed(ParsedStreamMetadata),
 }
 
+type StreamStateWithPool<M> = (StreamMetadataState, Vec<Rc<RefCell<SurfacePool<M>>>>);
+
 impl StreamMetadataState {
     /// Returns a reference to the parsed metadata state or an error if we haven't reached that
     /// state yet.
@@ -161,7 +163,7 @@ impl StreamMetadataState {
         old_surface_pools: Vec<Rc<RefCell<SurfacePool<M>>>>,
         supports_context_reuse: bool,
         pool_creation_mode: PoolCreationMode,
-    ) -> anyhow::Result<(StreamMetadataState, Vec<Rc<RefCell<SurfacePool<M>>>>)> {
+    ) -> anyhow::Result<StreamStateWithPool<M>> {
         let va_profile = hdr.va_profile()?;
         let rt_format = hdr.rt_format()?;
 
