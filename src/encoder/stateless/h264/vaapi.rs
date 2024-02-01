@@ -489,6 +489,8 @@ pub(super) mod tests {
     use crate::Resolution;
 
     #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
     fn test_simple_encode_slice() {
         type Descriptor = ();
         type Surface = libva::Surface<Descriptor>;
@@ -629,6 +631,8 @@ pub(super) mod tests {
     }
 
     #[test]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[ignore]
     fn test_vaapi_encoder() {
         type VaapiH264Encoder<'l> =
             StatelessEncoder<PooledSurface<()>, VaapiBackend<(), PooledSurface<()>>>;
