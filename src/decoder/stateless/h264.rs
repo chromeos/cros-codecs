@@ -923,6 +923,23 @@ where
 
         Ok(())
     }
+
+    // Apply the parameters of `sps` to the decoding state.
+    fn apply_sps(&mut self, sps: &Sps) {
+        self.negotiation_info = NegotiationInfo::from(sps);
+
+        let max_dpb_frames = sps.max_dpb_frames();
+        let interlaced = !sps.frame_mbs_only_flag;
+        let max_num_order_frames = sps.max_num_order_frames() as usize;
+        let max_num_reorder_frames = if max_num_order_frames > max_dpb_frames {
+            0
+        } else {
+            max_num_order_frames
+        };
+
+        self.dpb.set_limits(max_dpb_frames, max_num_reorder_frames);
+        self.dpb.set_interlaced(interlaced);
+    }
 }
 
 impl<B> StatelessDecoder<H264, B>
@@ -948,28 +965,12 @@ where
 
     // Apply the parameters of `sps` to the decoder.
     fn apply_sps(&mut self, sps: &Sps) {
-        self.codec.negotiation_info = NegotiationInfo::from(sps);
+        self.codec.apply_sps(sps);
 
-        let max_dpb_frames = sps.max_dpb_frames();
-        let interlaced = !sps.frame_mbs_only_flag;
-        let resolution = Resolution {
+        self.coded_resolution = Resolution {
             width: sps.width,
             height: sps.height,
         };
-
-        let max_num_order_frames = sps.max_num_order_frames() as usize;
-        let max_num_reorder_frames = if max_num_order_frames > max_dpb_frames {
-            0
-        } else {
-            max_num_order_frames
-        };
-
-        self.coded_resolution = resolution;
-
-        self.codec
-            .dpb
-            .set_limits(max_dpb_frames, max_num_reorder_frames);
-        self.codec.dpb.set_interlaced(interlaced);
     }
 
     fn drain(&mut self) -> anyhow::Result<()> {
