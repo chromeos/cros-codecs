@@ -201,6 +201,20 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
     }
 }
 
+impl<T: AsRef<[u8]>> From<BoolDecoder<T>> for BoolDecoderState {
+    fn from(mut bd: BoolDecoder<T>) -> Self {
+        if bd.count < 0 {
+            let _ = bd.fill();
+        }
+
+        Self {
+            value: bd.value >> (BD_VALUE_SIZE - U8_BITS),
+            count: (U8_BITS as isize + bd.count) % U8_BITS as isize,
+            range: bd.range,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,20 +299,6 @@ mod tests {
             } else {
                 assert!(bit);
             }
-        }
-    }
-}
-
-impl<T: AsRef<[u8]>> From<BoolDecoder<T>> for BoolDecoderState {
-    fn from(mut bd: BoolDecoder<T>) -> Self {
-        if bd.count < 0 {
-            let _ = bd.fill();
-        }
-
-        Self {
-            value: bd.value >> (BD_VALUE_SIZE - U8_BITS),
-            count: (U8_BITS as isize + bd.count) % U8_BITS as isize,
-            range: bd.range,
         }
     }
 }
