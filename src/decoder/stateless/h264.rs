@@ -618,6 +618,262 @@ where
             }
         }
     }
+
+    fn pic_num_f(pic: &PictureData, max_pic_num: i32) -> i32 {
+        if !matches!(pic.reference(), Reference::LongTerm) {
+            pic.pic_num
+        } else {
+            max_pic_num
+        }
+    }
+
+    fn long_term_pic_num_f(pic: &PictureData, max_long_term_frame_idx: i32) -> i32 {
+        if matches!(pic.reference(), Reference::LongTerm) {
+            pic.long_term_pic_num
+        } else {
+            2 * (max_long_term_frame_idx + 1)
+        }
+    }
+
+    // 8.2.4.3.1 Modification process of reference picture lists for short-term
+    // reference pictures
+    #[allow(clippy::too_many_arguments)]
+    fn short_term_pic_list_modification(
+        cur_pic: &PictureData,
+        dpb: &Dpb<B::Handle>,
+        ref_pic_list_x: &mut DpbPicList<B::Handle>,
+        num_ref_idx_lx_active_minus1: u8,
+        max_pic_num: i32,
+        rplm: &RefPicListModification,
+        pic_num_lx_pred: &mut i32,
+        ref_idx_lx: &mut usize,
+    ) -> anyhow::Result<()> {
+        let pic_num_lx_no_wrap;
+        let abs_diff_pic_num = rplm.abs_diff_pic_num_minus1 as i32 + 1;
+        let modification_of_pic_nums_idc = rplm.modification_of_pic_nums_idc;
+
+        if modification_of_pic_nums_idc == 0 {
+            if *pic_num_lx_pred - abs_diff_pic_num < 0 {
+                pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num + max_pic_num;
+            } else {
+                pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num;
+            }
+        } else if modification_of_pic_nums_idc == 1 {
+            if *pic_num_lx_pred + abs_diff_pic_num >= max_pic_num {
+                pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num - max_pic_num;
+            } else {
+                pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num;
+            }
+        } else {
+            anyhow::bail!(
+                "unexpected value for modification_of_pic_nums_idc {:?}",
+                rplm.modification_of_pic_nums_idc
+            );
+        }
+
+        *pic_num_lx_pred = pic_num_lx_no_wrap;
+
+        let pic_num_lx = if pic_num_lx_no_wrap > cur_pic.pic_num {
+            pic_num_lx_no_wrap - max_pic_num
+        } else {
+            pic_num_lx_no_wrap
+        };
+
+        let handle = dpb
+            .find_short_term_with_pic_num(pic_num_lx)
+            .with_context(|| format!("No ShortTerm reference found with pic_num {}", pic_num_lx))?;
+
+        ref_pic_list_x.insert(*ref_idx_lx, handle);
+        *ref_idx_lx += 1;
+
+        let mut nidx = *ref_idx_lx;
+
+        for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) + 1 {
+            if cidx == ref_pic_list_x.len() {
+                break;
+            }
+
+            let target = &ref_pic_list_x[cidx].0.clone();
+
+            if Self::pic_num_f(&target.borrow(), max_pic_num) != pic_num_lx {
+                ref_pic_list_x[nidx] = ref_pic_list_x[cidx].clone();
+                nidx += 1;
+            }
+        }
+
+        while ref_pic_list_x.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
+            ref_pic_list_x.pop();
+        }
+
+        Ok(())
+    }
+
+    fn long_term_pic_list_modification(
+        dpb: &Dpb<B::Handle>,
+        ref_pic_list_x: &mut DpbPicList<B::Handle>,
+        num_ref_idx_lx_active_minus1: u8,
+        max_long_term_frame_idx: i32,
+        rplm: &RefPicListModification,
+        ref_idx_lx: &mut usize,
+    ) -> anyhow::Result<()> {
+        let long_term_pic_num = rplm.long_term_pic_num;
+
+        let handle = dpb
+            .find_long_term_with_long_term_pic_num(long_term_pic_num as i32)
+            .with_context(|| {
+                format!(
+                    "No LongTerm reference found with long_term_pic_num {}",
+                    long_term_pic_num
+                )
+            })?;
+
+        ref_pic_list_x.insert(*ref_idx_lx, handle);
+        *ref_idx_lx += 1;
+
+        let mut nidx = *ref_idx_lx;
+
+        for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) + 1 {
+            if cidx == ref_pic_list_x.len() {
+                break;
+            }
+
+            let target = ref_pic_list_x[cidx].0.clone();
+            if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
+                != long_term_pic_num as i32
+            {
+                ref_pic_list_x[nidx] = ref_pic_list_x[cidx].clone();
+                nidx += 1;
+            }
+        }
+
+        while ref_pic_list_x.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
+            ref_pic_list_x.pop();
+        }
+
+        Ok(())
+    }
+
+    fn modify_ref_pic_list(
+        &self,
+        cur_pic: &PictureData,
+        hdr: &SliceHeader,
+        ref_pic_list: RefPicList,
+        mut ref_pic_list_x: DpbPicList<B::Handle>,
+    ) -> anyhow::Result<DpbPicList<B::Handle>> {
+        let (ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
+            match ref_pic_list {
+                RefPicList::RefPicList0 => (
+                    hdr.ref_pic_list_modification_flag_l0,
+                    hdr.num_ref_idx_l0_active_minus1,
+                    &hdr.ref_pic_list_modification_l0,
+                ),
+                RefPicList::RefPicList1 => (
+                    hdr.ref_pic_list_modification_flag_l1,
+                    hdr.num_ref_idx_l1_active_minus1,
+                    &hdr.ref_pic_list_modification_l1,
+                ),
+            };
+
+        while ref_pic_list_x.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
+            ref_pic_list_x.pop();
+        }
+
+        if !ref_pic_list_modification_flag_lx {
+            return Ok(ref_pic_list_x);
+        }
+
+        let mut pic_num_lx_pred = cur_pic.pic_num;
+        let mut ref_idx_lx = 0;
+
+        for modification in rplm {
+            let idc = modification.modification_of_pic_nums_idc;
+
+            match idc {
+                0 | 1 => {
+                    Self::short_term_pic_list_modification(
+                        cur_pic,
+                        &self.dpb,
+                        &mut ref_pic_list_x,
+                        num_ref_idx_lx_active_minus1,
+                        hdr.max_pic_num as i32,
+                        modification,
+                        &mut pic_num_lx_pred,
+                        &mut ref_idx_lx,
+                    )?;
+                }
+                2 => Self::long_term_pic_list_modification(
+                    &self.dpb,
+                    &mut ref_pic_list_x,
+                    num_ref_idx_lx_active_minus1,
+                    self.max_long_term_frame_idx,
+                    modification,
+                    &mut ref_idx_lx,
+                )?,
+                3 => break,
+                _ => anyhow::bail!("unexpected modification_of_pic_nums_idc {:?}", idc),
+            }
+        }
+
+        Ok(ref_pic_list_x)
+    }
+
+    /// Generate RefPicList0 and RefPicList1 in the specification. Computed for every slice, points
+    /// to the pictures in the DPB.
+    fn create_ref_pic_lists(
+        &mut self,
+        cur_pic: &PictureData,
+        hdr: &SliceHeader,
+        ref_pic_lists: &ReferencePicLists<B::Handle>,
+    ) -> anyhow::Result<RefPicLists<B::Handle>> {
+        let mut ref_pic_list0 = Vec::new();
+        let mut ref_pic_list1 = Vec::new();
+
+        if let SliceType::P | SliceType::Sp = hdr.slice_type {
+            ref_pic_list0 = self.modify_ref_pic_list(
+                cur_pic,
+                hdr,
+                RefPicList::RefPicList0,
+                ref_pic_lists.ref_pic_list_p0.clone(),
+            )?;
+        } else if let SliceType::B = hdr.slice_type {
+            ref_pic_list0 = self.modify_ref_pic_list(
+                cur_pic,
+                hdr,
+                RefPicList::RefPicList0,
+                ref_pic_lists.ref_pic_list_b0.clone(),
+            )?;
+            ref_pic_list1 = self.modify_ref_pic_list(
+                cur_pic,
+                hdr,
+                RefPicList::RefPicList1,
+                ref_pic_lists.ref_pic_list_b1.clone(),
+            )?;
+        }
+
+        Ok(RefPicLists {
+            ref_pic_list0,
+            ref_pic_list1,
+        })
+    }
+
+    fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
+        let markings = pic.ref_pic_marking.clone();
+
+        for (i, marking) in markings.inner.iter().enumerate() {
+            match marking.memory_management_control_operation {
+                0 => break,
+                1 => self.dpb.mmco_op_1(pic, i)?,
+                2 => self.dpb.mmco_op_2(pic, i)?,
+                3 => self.dpb.mmco_op_3(pic, i)?,
+                4 => self.max_long_term_frame_idx = self.dpb.mmco_op_4(pic, i),
+                5 => self.max_long_term_frame_idx = self.dpb.mmco_op_5(pic),
+                6 => self.dpb.mmco_op_6(pic, i),
+                other => anyhow::bail!("unknown MMCO={}", other),
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<B> StatelessDecoder<H264, B>
@@ -1138,25 +1394,6 @@ where
         }
     }
 
-    fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
-        let markings = pic.ref_pic_marking.clone();
-
-        for (i, marking) in markings.inner.iter().enumerate() {
-            match marking.memory_management_control_operation {
-                0 => break,
-                1 => self.codec.dpb.mmco_op_1(pic, i)?,
-                2 => self.codec.dpb.mmco_op_2(pic, i)?,
-                3 => self.codec.dpb.mmco_op_3(pic, i)?,
-                4 => self.codec.max_long_term_frame_idx = self.codec.dpb.mmco_op_4(pic, i),
-                5 => self.codec.max_long_term_frame_idx = self.codec.dpb.mmco_op_5(pic),
-                6 => self.codec.dpb.mmco_op_6(pic, i),
-                other => anyhow::bail!("unknown MMCO={}", other),
-            }
-        }
-
-        Ok(())
-    }
-
     /// Store some variables related to the previous reference picture. These
     /// will be used in the decoding of future pictures.
     fn fill_prev_ref_info(&mut self, pic: &PictureData) {
@@ -1198,7 +1435,7 @@ where
         }
 
         if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag {
-            self.handle_memory_management_ops(pic)?;
+            self.codec.handle_memory_management_ops(pic)?;
         } else {
             self.codec.sliding_window_marking(pic, pps)?;
         }
@@ -1560,243 +1797,6 @@ where
         })
     }
 
-    fn pic_num_f(pic: &PictureData, max_pic_num: i32) -> i32 {
-        if !matches!(pic.reference(), Reference::LongTerm) {
-            pic.pic_num
-        } else {
-            max_pic_num
-        }
-    }
-
-    fn long_term_pic_num_f(pic: &PictureData, max_long_term_frame_idx: i32) -> i32 {
-        if matches!(pic.reference(), Reference::LongTerm) {
-            pic.long_term_pic_num
-        } else {
-            2 * (max_long_term_frame_idx + 1)
-        }
-    }
-
-    // 8.2.4.3.1 Modification process of reference picture lists for short-term
-    // reference pictures
-    #[allow(clippy::too_many_arguments)]
-    fn short_term_pic_list_modification(
-        cur_pic: &PictureData,
-        dpb: &Dpb<B::Handle>,
-        ref_pic_list_x: &mut DpbPicList<B::Handle>,
-        num_ref_idx_lx_active_minus1: u8,
-        max_pic_num: i32,
-        rplm: &RefPicListModification,
-        pic_num_lx_pred: &mut i32,
-        ref_idx_lx: &mut usize,
-    ) -> anyhow::Result<()> {
-        let pic_num_lx_no_wrap;
-        let abs_diff_pic_num = rplm.abs_diff_pic_num_minus1 as i32 + 1;
-        let modification_of_pic_nums_idc = rplm.modification_of_pic_nums_idc;
-
-        if modification_of_pic_nums_idc == 0 {
-            if *pic_num_lx_pred - abs_diff_pic_num < 0 {
-                pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num + max_pic_num;
-            } else {
-                pic_num_lx_no_wrap = *pic_num_lx_pred - abs_diff_pic_num;
-            }
-        } else if modification_of_pic_nums_idc == 1 {
-            if *pic_num_lx_pred + abs_diff_pic_num >= max_pic_num {
-                pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num - max_pic_num;
-            } else {
-                pic_num_lx_no_wrap = *pic_num_lx_pred + abs_diff_pic_num;
-            }
-        } else {
-            anyhow::bail!(
-                "unexpected value for modification_of_pic_nums_idc {:?}",
-                rplm.modification_of_pic_nums_idc
-            );
-        }
-
-        *pic_num_lx_pred = pic_num_lx_no_wrap;
-
-        let pic_num_lx = if pic_num_lx_no_wrap > cur_pic.pic_num {
-            pic_num_lx_no_wrap - max_pic_num
-        } else {
-            pic_num_lx_no_wrap
-        };
-
-        let handle = dpb
-            .find_short_term_with_pic_num(pic_num_lx)
-            .with_context(|| format!("No ShortTerm reference found with pic_num {}", pic_num_lx))?;
-
-        ref_pic_list_x.insert(*ref_idx_lx, handle);
-        *ref_idx_lx += 1;
-
-        let mut nidx = *ref_idx_lx;
-
-        for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) + 1 {
-            if cidx == ref_pic_list_x.len() {
-                break;
-            }
-
-            let target = &ref_pic_list_x[cidx].0.clone();
-
-            if Self::pic_num_f(&target.borrow(), max_pic_num) != pic_num_lx {
-                ref_pic_list_x[nidx] = ref_pic_list_x[cidx].clone();
-                nidx += 1;
-            }
-        }
-
-        while ref_pic_list_x.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
-            ref_pic_list_x.pop();
-        }
-
-        Ok(())
-    }
-
-    fn long_term_pic_list_modification(
-        dpb: &Dpb<B::Handle>,
-        ref_pic_list_x: &mut DpbPicList<B::Handle>,
-        num_ref_idx_lx_active_minus1: u8,
-        max_long_term_frame_idx: i32,
-        rplm: &RefPicListModification,
-        ref_idx_lx: &mut usize,
-    ) -> anyhow::Result<()> {
-        let long_term_pic_num = rplm.long_term_pic_num;
-
-        let handle = dpb
-            .find_long_term_with_long_term_pic_num(long_term_pic_num as i32)
-            .with_context(|| {
-                format!(
-                    "No LongTerm reference found with long_term_pic_num {}",
-                    long_term_pic_num
-                )
-            })?;
-
-        ref_pic_list_x.insert(*ref_idx_lx, handle);
-        *ref_idx_lx += 1;
-
-        let mut nidx = *ref_idx_lx;
-
-        for cidx in *ref_idx_lx..=usize::from(num_ref_idx_lx_active_minus1) + 1 {
-            if cidx == ref_pic_list_x.len() {
-                break;
-            }
-
-            let target = ref_pic_list_x[cidx].0.clone();
-            if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
-                != long_term_pic_num as i32
-            {
-                ref_pic_list_x[nidx] = ref_pic_list_x[cidx].clone();
-                nidx += 1;
-            }
-        }
-
-        while ref_pic_list_x.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
-            ref_pic_list_x.pop();
-        }
-
-        Ok(())
-    }
-
-    fn modify_ref_pic_list(
-        &mut self,
-        cur_pic: &PictureData,
-        hdr: &SliceHeader,
-        ref_pic_list: RefPicList,
-        mut ref_pic_list_x: DpbPicList<B::Handle>,
-    ) -> anyhow::Result<DpbPicList<B::Handle>> {
-        let (ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
-            match ref_pic_list {
-                RefPicList::RefPicList0 => (
-                    hdr.ref_pic_list_modification_flag_l0,
-                    hdr.num_ref_idx_l0_active_minus1,
-                    &hdr.ref_pic_list_modification_l0,
-                ),
-                RefPicList::RefPicList1 => (
-                    hdr.ref_pic_list_modification_flag_l1,
-                    hdr.num_ref_idx_l1_active_minus1,
-                    &hdr.ref_pic_list_modification_l1,
-                ),
-            };
-
-        while ref_pic_list_x.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
-            ref_pic_list_x.pop();
-        }
-
-        if !ref_pic_list_modification_flag_lx {
-            return Ok(ref_pic_list_x);
-        }
-
-        let mut pic_num_lx_pred = cur_pic.pic_num;
-        let mut ref_idx_lx = 0;
-
-        for modification in rplm {
-            let idc = modification.modification_of_pic_nums_idc;
-
-            match idc {
-                0 | 1 => {
-                    Self::short_term_pic_list_modification(
-                        cur_pic,
-                        &self.codec.dpb,
-                        &mut ref_pic_list_x,
-                        num_ref_idx_lx_active_minus1,
-                        hdr.max_pic_num as i32,
-                        modification,
-                        &mut pic_num_lx_pred,
-                        &mut ref_idx_lx,
-                    )?;
-                }
-                2 => Self::long_term_pic_list_modification(
-                    &self.codec.dpb,
-                    &mut ref_pic_list_x,
-                    num_ref_idx_lx_active_minus1,
-                    self.codec.max_long_term_frame_idx,
-                    modification,
-                    &mut ref_idx_lx,
-                )?,
-                3 => break,
-                _ => anyhow::bail!("unexpected modification_of_pic_nums_idc {:?}", idc),
-            }
-        }
-
-        Ok(ref_pic_list_x)
-    }
-
-    /// Generate RefPicList0 and RefPicList1 in the specification. Computed for every slice, points
-    /// to the pictures in the DPB.
-    fn create_ref_pic_lists(
-        &mut self,
-        cur_pic: &PictureData,
-        hdr: &SliceHeader,
-        ref_pic_lists: &ReferencePicLists<B::Handle>,
-    ) -> anyhow::Result<RefPicLists<B::Handle>> {
-        let mut ref_pic_list0 = Vec::new();
-        let mut ref_pic_list1 = Vec::new();
-
-        if let SliceType::P | SliceType::Sp = hdr.slice_type {
-            ref_pic_list0 = self.modify_ref_pic_list(
-                cur_pic,
-                hdr,
-                RefPicList::RefPicList0,
-                ref_pic_lists.ref_pic_list_p0.clone(),
-            )?;
-        } else if let SliceType::B = hdr.slice_type {
-            ref_pic_list0 = self.modify_ref_pic_list(
-                cur_pic,
-                hdr,
-                RefPicList::RefPicList0,
-                ref_pic_lists.ref_pic_list_b0.clone(),
-            )?;
-            ref_pic_list1 = self.modify_ref_pic_list(
-                cur_pic,
-                hdr,
-                RefPicList::RefPicList1,
-                ref_pic_lists.ref_pic_list_b1.clone(),
-            )?;
-        }
-
-        Ok(RefPicLists {
-            ref_pic_list0,
-            ref_pic_list1,
-        })
-    }
-
     // Check whether first_mb_in_slice increases monotonically for the current
     // picture as required by the specification.
     fn check_first_mb_in_slice(&mut self, cur_pic: &mut CurrentPicState<B>, slice: &Slice) {
@@ -1851,7 +1851,9 @@ where
         let RefPicLists {
             ref_pic_list0,
             ref_pic_list1,
-        } = self.create_ref_pic_lists(&cur_pic.pic, &slice.header, &cur_pic.ref_pic_lists)?;
+        } = self
+            .codec
+            .create_ref_pic_lists(&cur_pic.pic, &slice.header, &cur_pic.ref_pic_lists)?;
 
         self.backend.decode_slice(
             &mut cur_pic.backend_pic,
