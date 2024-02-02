@@ -460,6 +460,7 @@ pub(crate) mod tests {
 
         // Luma
         for row in 0..height {
+            #[allow(clippy::needless_range_loop)]
             for col in 0..width {
                 let dist = (dot_col - col as f32).powi(2) + (dot_row - row as f32).powi(2);
 
@@ -495,7 +496,7 @@ pub(crate) mod tests {
                     )
                 };
 
-                dst[col + 0] = c.0 as u8;
+                dst[col] = c.0 as u8;
                 dst[col + 1] = c.1 as u8;
             }
 
@@ -508,7 +509,7 @@ pub(crate) mod tests {
         surface: &Surface<M>,
         t: f32,
     ) {
-        let mut image = map_surface_nv12(&display, surface);
+        let mut image = map_surface_nv12(display, surface);
 
         let (width, height) = image.display_resolution();
 
@@ -573,7 +574,7 @@ pub(crate) mod tests {
             let surface: &Surface<()> = handle.borrow();
 
             let t = 2.0 * std::f32::consts::PI * (meta.timestamp as f32) / (self.max_count as f32);
-            upload_test_frame(&self.display, &surface, t);
+            upload_test_frame(&self.display, surface, t);
 
             Some((meta, handle))
         }
