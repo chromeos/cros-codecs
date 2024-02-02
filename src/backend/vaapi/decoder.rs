@@ -27,7 +27,6 @@ use crate::backend::vaapi::y21x_to_i21x;
 use crate::backend::vaapi::FormatMap;
 use crate::backend::vaapi::FORMAT_MAP;
 use crate::decoder::stateless::PoolLayer;
-use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -503,7 +502,12 @@ impl<'a> MappableHandle for Image<'a> {
             libva::constants::VA_FOURCC_Y412 => {
                 y412_to_i412(self.as_ref(), buffer, width, height, pitches, offsets);
             }
-            _ => return Err(StatelessBackendError::UnsupportedFormat.into()),
+            _ => {
+                return Err(anyhow!(
+                    "unsupported format 0x{:x}",
+                    image_inner.format.fourcc
+                ))
+            }
         }
 
         Ok(())
