@@ -1398,8 +1398,7 @@ where
     }
 }
 
-impl<B> StatelessVideoDecoder<<B::Handle as DecodedHandle>::Descriptor>
-    for StatelessDecoder<H264, B>
+impl<B> StatelessVideoDecoder<B::Handle> for StatelessDecoder<H264, B>
 where
     B: StatelessH264DecoderBackend,
     B::Handle: Clone + 'static,
@@ -1456,12 +1455,12 @@ where
         Ok(())
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<<B::Handle as DecodedHandle>::Descriptor>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
             .next()
-            .map(|handle| DecoderEvent::FrameReady(Box::new(handle)))
+            .map(DecoderEvent::FrameReady)
             .or_else(|| {
                 if let DecodingState::AwaitingFormat(sps) = &self.decoding_state {
                     Some(DecoderEvent::FormatChanged(Box::new(

@@ -108,16 +108,18 @@ impl<'a> Iterator for NalIterator<'a, H265Nalu<'a>> {
 }
 
 /// Simple decoding loop that plays the stream once from start to finish.
-pub fn simple_playback_loop<D, R, I, M>(
+#[allow(clippy::type_complexity)]
+pub fn simple_playback_loop<D, R, I, H>(
     decoder: &mut D,
     stream_iter: I,
-    on_new_frame: &mut dyn FnMut(Box<dyn DecodedHandle<Descriptor = M>>),
-    allocate_new_frames: &mut dyn FnMut(&StreamInfo, usize) -> anyhow::Result<Vec<M>>,
+    on_new_frame: &mut dyn FnMut(H),
+    allocate_new_frames: &mut dyn FnMut(&StreamInfo, usize) -> anyhow::Result<Vec<H::Descriptor>>,
     output_format: DecodedFormat,
     blocking_mode: BlockingMode,
 ) -> anyhow::Result<()>
 where
-    D: StatelessVideoDecoder<M> + ?Sized,
+    H: DecodedHandle,
+    D: StatelessVideoDecoder<H> + ?Sized,
     R: AsRef<[u8]>,
     I: Iterator<Item = R>,
 {

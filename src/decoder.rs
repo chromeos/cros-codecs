@@ -91,11 +91,11 @@ pub trait DecoderFormatNegotiator<'a, M> {
 }
 
 /// Events that can be retrieved using the `next_event` method of a decoder.
-pub enum DecoderEvent<'a, M> {
+pub enum DecoderEvent<'a, H: DecodedHandle> {
     /// The next frame has been decoded.
-    FrameReady(Box<dyn DecodedHandle<Descriptor = M>>),
+    FrameReady(H),
     /// The format of the stream has changed and action is required.
-    FormatChanged(Box<dyn DecoderFormatNegotiator<'a, M> + 'a>),
+    FormatChanged(Box<dyn DecoderFormatNegotiator<'a, H::Descriptor> + 'a>),
 }
 
 pub trait DynHandle {

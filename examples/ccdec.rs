@@ -6,6 +6,7 @@
 //! input and writing the raw decoded frames to a file.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Cursor;
@@ -15,9 +16,11 @@ use std::os::fd::AsFd;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::str::FromStr;
 
 use argh::FromArgs;
+use cros_codecs::backend::vaapi::decoder::VaapiDecodedHandle;
 use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
 use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
 use cros_codecs::decoder::stateless::av1::Av1;
@@ -397,7 +400,7 @@ fn main() {
     let mut md5_context = md5::Context::new();
     let mut output_filename_idx = 0;
 
-    let mut on_new_frame = |handle: Box<dyn DecodedHandle<Descriptor = _>>| {
+    let mut on_new_frame = |handle: Rc<RefCell<VaapiDecodedHandle<_>>>| {
         if args.output.is_some() || args.compute_md5.is_some() {
             handle.sync().unwrap();
             let picture = handle.dyn_picture();

@@ -125,21 +125,23 @@ pub trait StatelessDecoderBackend<Codec: StatelessCodec>:
 }
 
 /// Helper to implement [`DecoderFormatNegotiator`] for stateless decoders.
-struct StatelessDecoderFormatNegotiator<'a, D, M, H, F>
+struct StatelessDecoderFormatNegotiator<'a, D, H, FH, F>
 where
-    D: StatelessVideoDecoder<M>,
-    F: Fn(&mut D, &H),
+    H: DecodedHandle,
+    D: StatelessVideoDecoder<H>,
+    F: Fn(&mut D, &FH),
 {
     decoder: &'a mut D,
-    format_hint: H,
+    format_hint: FH,
     apply_format: F,
-    _mem_desc: std::marker::PhantomData<M>,
+    _mem_desc: std::marker::PhantomData<H::Descriptor>,
 }
 
-impl<'a, D, M, H, F> StatelessDecoderFormatNegotiator<'a, D, M, H, F>
+impl<'a, D, H, FH, F> StatelessDecoderFormatNegotiator<'a, D, H, FH, F>
 where
-    D: StatelessVideoDecoder<M>,
-    F: Fn(&mut D, &H),
+    H: DecodedHandle,
+    D: StatelessVideoDecoder<H>,
+    F: Fn(&mut D, &FH),
 {
     /// Creates a new format negotiator.
     ///
@@ -150,7 +152,7 @@ where
     ///
     /// `apply_format` is a closure called when the object is dropped, and is responsible for
     /// applying the format and allowing decoding to resume.
-    fn new(decoder: &'a mut D, format_hint: H, apply_format: F) -> Self {
+    fn new(decoder: &'a mut D, format_hint: FH, apply_format: F) -> Self {
         Self {
             decoder,
             format_hint,
@@ -160,11 +162,12 @@ where
     }
 }
 
-impl<'a, D, M, H, F> DecoderFormatNegotiator<'a, M>
-    for StatelessDecoderFormatNegotiator<'a, D, M, H, F>
+impl<'a, D, H, FH, F> DecoderFormatNegotiator<'a, H::Descriptor>
+    for StatelessDecoderFormatNegotiator<'a, D, H, FH, F>
 where
-    D: StatelessVideoDecoder<M> + private::StatelessVideoDecoder,
-    F: Fn(&mut D, &H),
+    H: DecodedHandle,
+    D: StatelessVideoDecoder<H> + private::StatelessVideoDecoder,
+    F: Fn(&mut D, &FH),
 {
     /// Try to apply `format` to output frames. If successful, all frames emitted after the
     /// call will be in the new format.
@@ -172,7 +175,7 @@ where
         self.decoder.try_format(format)
     }
 
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>> {
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<H::Descriptor>> {
         self.decoder.frame_pool(layer)
     }
 
@@ -181,10 +184,11 @@ where
     }
 }
 
-impl<'a, D, M, H, F> Drop for StatelessDecoderFormatNegotiator<'a, D, M, H, F>
+impl<'a, D, H, FH, F> Drop for StatelessDecoderFormatNegotiator<'a, D, H, FH, F>
 where
-    D: StatelessVideoDecoder<M>,
-    F: Fn(&mut D, &H),
+    H: DecodedHandle,
+    D: StatelessVideoDecoder<H>,
+    F: Fn(&mut D, &FH),
 {
     fn drop(&mut self) {
         (self.apply_format)(self.decoder, &self.format_hint)
@@ -216,8 +220,8 @@ pub enum PoolLayer {
 /// The `M` generic parameter is the type of the memory descriptor backing the output frames.
 ///
 /// [`decode`]: StatelessVideoDecoder::decode
-pub trait StatelessVideoDecoder<M> {
-    /// Try to decode the `bitstream` represented by `timestamp`.
+pub trait StatelessVideoDecoder<H: DecodedHandle> {
+    /// Attempts to decode `bitstream` if the current conditions allow it.
     ///
     /// This method will return [`DecodeError::CheckEvents`] if processing cannot take place until
     /// pending events are handled. This could either be because a change of output format has
@@ -247,12 +251,12 @@ pub trait StatelessVideoDecoder<M> {
     /// will receive its frames from a separate pool.
     ///
     /// Useful to add new frames as decode targets.
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>>;
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<H::Descriptor>>;
 
     fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the next event, if there is any pending.
-    fn next_event(&mut self) -> Option<DecoderEvent<M>>;
+    fn next_event(&mut self) -> Option<DecoderEvent<H>>;
 }
 
 pub trait StatelessCodec {
@@ -377,19 +381,16 @@ pub(crate) mod tests {
     ///
     /// `dump_yuv` will dump all the decoded frames into `/tmp/framexxx.yuv`. Set this to true in
     /// order to debug the output of the test.
-    pub fn test_decode_stream<D, M, L>(
+    pub fn test_decode_stream<D, H, L>(
         decoding_loop: L,
         mut decoder: D,
         test: &TestStream,
         check_crcs: bool,
         dump_yuv: bool,
     ) where
-        D: StatelessVideoDecoder<M>,
-        L: Fn(
-            &mut D,
-            &[u8],
-            &mut dyn FnMut(Box<dyn DecodedHandle<Descriptor = M>>),
-        ) -> anyhow::Result<()>,
+        H: DecodedHandle,
+        D: StatelessVideoDecoder<H>,
+        L: Fn(&mut D, &[u8], &mut dyn FnMut(H)) -> anyhow::Result<()>,
     {
         let mut crcs = test.crcs.lines().enumerate();
 
