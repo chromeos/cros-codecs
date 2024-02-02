@@ -185,11 +185,34 @@ impl Default for PrevReferencePicInfo {
     }
 }
 
+impl PrevReferencePicInfo {
+    /// Store some variables related to the previous reference picture. These
+    /// will be used in the decoding of future pictures.
+    fn fill(&mut self, pic: &PictureData) {
+        self.has_mmco_5 = pic.has_mmco_5;
+        self.top_field_order_cnt = pic.top_field_order_cnt;
+        self.pic_order_cnt_msb = pic.pic_order_cnt_msb;
+        self.pic_order_cnt_lsb = pic.pic_order_cnt_lsb;
+        self.field = pic.field;
+        self.frame_num = pic.frame_num;
+    }
+}
+
 #[derive(Default)]
 pub struct PrevPicInfo {
     frame_num: i32,
     frame_num_offset: i32,
     has_mmco_5: bool,
+}
+
+impl PrevPicInfo {
+    /// Store some variables related to the previous picture. These will be used
+    /// in the decoding of future pictures.
+    fn fill(&mut self, pic: &PictureData) {
+        self.frame_num = pic.frame_num;
+        self.has_mmco_5 = pic.has_mmco_5;
+        self.frame_num_offset = pic.frame_num_offset;
+    }
 }
 
 /// All the reference picture lists used to decode a stream.
@@ -874,6 +897,32 @@ where
 
         Ok(())
     }
+
+    fn reference_pic_marking(&mut self, pic: &mut PictureData, pps: &Pps) -> anyhow::Result<()> {
+        /* 8.2.5.1 */
+        if matches!(pic.is_idr, IsIdr::Yes { .. }) {
+            self.dpb.mark_all_as_unused_for_ref();
+
+            if pic.ref_pic_marking.long_term_reference_flag {
+                pic.set_reference(Reference::LongTerm, false);
+                pic.long_term_frame_idx = 0;
+                self.max_long_term_frame_idx = 0;
+            } else {
+                pic.set_reference(Reference::ShortTerm, false);
+                self.max_long_term_frame_idx = -1;
+            }
+
+            return Ok(());
+        }
+
+        if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag {
+            self.handle_memory_management_ops(pic)?;
+        } else {
+            self.sliding_window_marking(pic, pps)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<B> StatelessDecoder<H264, B>
@@ -1394,55 +1443,6 @@ where
         }
     }
 
-    /// Store some variables related to the previous reference picture. These
-    /// will be used in the decoding of future pictures.
-    fn fill_prev_ref_info(&mut self, pic: &PictureData) {
-        let prev = &mut self.codec.prev_ref_pic_info;
-
-        prev.has_mmco_5 = pic.has_mmco_5;
-        prev.top_field_order_cnt = pic.top_field_order_cnt;
-        prev.pic_order_cnt_msb = pic.pic_order_cnt_msb;
-        prev.pic_order_cnt_lsb = pic.pic_order_cnt_lsb;
-        prev.field = pic.field;
-        prev.frame_num = pic.frame_num;
-    }
-
-    /// Store some variables related to the previous picture. These will be used
-    /// in the decoding of future pictures.
-    fn fill_prev_info(&mut self, pic: &PictureData) {
-        let prev = &mut self.codec.prev_pic_info;
-
-        prev.frame_num = pic.frame_num;
-        prev.has_mmco_5 = pic.has_mmco_5;
-        prev.frame_num_offset = pic.frame_num_offset;
-    }
-
-    fn reference_pic_marking(&mut self, pic: &mut PictureData, pps: &Pps) -> anyhow::Result<()> {
-        /* 8.2.5.1 */
-        if matches!(pic.is_idr, IsIdr::Yes { .. }) {
-            self.codec.dpb.mark_all_as_unused_for_ref();
-
-            if pic.ref_pic_marking.long_term_reference_flag {
-                pic.set_reference(Reference::LongTerm, false);
-                pic.long_term_frame_idx = 0;
-                self.codec.max_long_term_frame_idx = 0;
-            } else {
-                pic.set_reference(Reference::ShortTerm, false);
-                self.codec.max_long_term_frame_idx = -1;
-            }
-
-            return Ok(());
-        }
-
-        if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag {
-            self.codec.handle_memory_management_ops(pic)?;
-        } else {
-            self.codec.sliding_window_marking(pic, pps)?;
-        }
-
-        Ok(())
-    }
-
     fn add_to_dpb(
         dpb: &mut Dpb<B::Handle>,
         pic: Rc<RefCell<PictureData>>,
@@ -1520,11 +1520,11 @@ where
         let mut pic = pic.pic;
 
         if matches!(pic.reference(), Reference::ShortTerm | Reference::LongTerm) {
-            self.reference_pic_marking(&mut pic, &pps)?;
-            self.fill_prev_ref_info(&pic);
+            self.codec.reference_pic_marking(&mut pic, &pps)?;
+            self.codec.prev_ref_pic_info.fill(&pic);
         }
 
-        self.fill_prev_info(&pic);
+        self.codec.prev_pic_info.fill(&pic);
 
         self.codec.dpb.remove_unused();
 
