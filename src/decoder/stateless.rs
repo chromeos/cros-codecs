@@ -68,9 +68,9 @@ pub enum DecodeError {
     NotEnoughOutputBuffers(usize),
     #[error("cannot accept more input until pending events are processed")]
     CheckEvents,
-    #[error("decoder error: {0}")]
+    #[error(transparent)]
     DecoderError(#[from] anyhow::Error),
-    #[error("backend error: {0}")]
+    #[error(transparent)]
     BackendError(#[from] StatelessBackendError),
 }
 
