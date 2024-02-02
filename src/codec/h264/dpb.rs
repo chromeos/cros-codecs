@@ -459,7 +459,7 @@ impl<T: Clone> Dpb<T> {
         pics
     }
 
-    pub fn mmco_op_1(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
+    pub fn mmco_op_1(&mut self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
         let marking = &pic.ref_pic_marking.inner[marking];
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1).unwrap() + 1);
@@ -479,7 +479,7 @@ impl<T: Clone> Dpb<T> {
         Ok(())
     }
 
-    pub fn mmco_op_2(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
+    pub fn mmco_op_2(&mut self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
         let marking = &pic.ref_pic_marking.inner[marking];
 
         log::debug!(
@@ -503,7 +503,7 @@ impl<T: Clone> Dpb<T> {
         Ok(())
     }
 
-    pub fn mmco_op_3(&self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
+    pub fn mmco_op_3(&mut self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
         let marking = &pic.ref_pic_marking.inner[marking];
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1).unwrap() + 1);
@@ -526,21 +526,19 @@ impl<T: Clone> Dpb<T> {
 
         let long_term_frame_idx = i32::try_from(marking.long_term_frame_idx).unwrap();
 
-        for handle in self.entries() {
-            let mut dpb_pic = handle.0.borrow_mut();
-
-            let long_already_assigned = matches!(dpb_pic.reference(), Reference::LongTerm)
-                && dpb_pic.long_term_frame_idx == long_term_frame_idx;
+        for mut picture in self.pictures_mut() {
+            let long_already_assigned = matches!(picture.reference(), Reference::LongTerm)
+                && picture.long_term_frame_idx == long_term_frame_idx;
 
             if long_already_assigned {
-                let is_frame = matches!(dpb_pic.field, Field::Frame);
+                let is_frame = matches!(picture.field, Field::Frame);
 
-                let is_complementary_field_pair = dpb_pic.other_field().is_some()
+                let is_complementary_field_pair = picture.other_field().is_some()
                     && matches!(
-                        dpb_pic.other_field().unwrap().borrow().reference(),
+                        picture.other_field().unwrap().borrow().reference(),
                         Reference::LongTerm
                     )
-                    && dpb_pic.other_field().unwrap().borrow().long_term_frame_idx
+                    && picture.other_field().unwrap().borrow().long_term_frame_idx
                         == long_term_frame_idx;
 
                 // When LongTermFrameIdx equal to
@@ -550,7 +548,7 @@ impl<T: Clone> Dpb<T> {
                 // complementary field pair and both of its fields
                 // are marked as "unused for reference"
                 if is_frame || is_complementary_field_pair {
-                    dpb_pic.set_reference(Reference::None, true);
+                    picture.set_reference(Reference::None, true);
                     break;
                 }
 
@@ -559,22 +557,22 @@ impl<T: Clone> Dpb<T> {
                 // part of a complementary field pair that includes
                 // the picture specified by picNumX, that field is
                 // marked as "unused for reference".
-                let reference_field_is_not_part_of_pic_x = if dpb_pic.other_field().is_none() {
+                let reference_field_is_not_part_of_pic_x = if picture.other_field().is_none() {
                     true
                 } else {
                     let fields_do_not_reference_each_other =
-                        !Rc::ptr_eq(&dpb_pic.other_field().unwrap(), &to_mark_as_long)
+                        !Rc::ptr_eq(&picture.other_field().unwrap(), &to_mark_as_long)
                             && (to_mark_as_long.borrow().other_field().is_none()
-                                || !Rc::ptr_eq(
-                                    &to_mark_as_long.borrow().other_field().unwrap(),
-                                    &handle.0,
+                                || !std::ptr::eq(
+                                    &(*to_mark_as_long.borrow().other_field().unwrap().borrow()),
+                                    &(*picture),
                                 ));
 
                     fields_do_not_reference_each_other
                 };
 
                 if reference_field_is_not_part_of_pic_x {
-                    dpb_pic.set_reference(Reference::None, false);
+                    picture.set_reference(Reference::None, false);
                     break;
                 }
             }
