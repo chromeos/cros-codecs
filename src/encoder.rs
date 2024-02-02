@@ -18,7 +18,7 @@ pub struct FrameMetadata {
 
 /// Encoder's coded output with contained frame.
 pub struct CodedBitstreamBuffer {
-    /// [`FrameMetadata`] of the frame that is compressed in [`bitstream`]
+    /// [`FrameMetadata`] of the frame that is compressed in [`Self::bitstream`]
     pub metadata: FrameMetadata,
 
     /// Bitstream with compressed frame together with optionally other compressed control messages

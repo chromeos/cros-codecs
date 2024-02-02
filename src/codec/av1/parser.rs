@@ -189,7 +189,7 @@ pub struct OperatingPoint {
     /// 1/90000 seconds. The length of decoder_buffer_delay is specified by
     /// buffer_delay_length_minus_1 + 1, in bits.
     pub decoder_buffer_delay: u32,
-    /// Specifies, in combination with decoder_buffer_delay[ op ] syntax
+    /// Specifies, in combination with decoder_buffer_delay\[ op \] syntax
     /// element, the first bit arrival time of frames to be decoded to the
     /// smoothing buffer. encoder_buffer_delay is measured in units of 1/90000
     /// seconds.
@@ -207,7 +207,7 @@ pub struct OperatingPoint {
     /// that should be present in the buffer pool before the first presentable
     /// frame is displayed. This will ensure that all presentable frames in the
     /// sequence can be decoded at or before the time that they are scheduled
-    /// for display. If not signaled then initial_display_delay_minus_1[ i ] =
+    /// for display. If not signaled then initial_display_delay_minus_1\[ i \] =
     /// BUFFER_POOL_MAX_SIZE - 1.
     pub initial_display_delay_minus_1: u32,
 }
@@ -953,8 +953,8 @@ pub struct GlobalMotionParams {
     /// Specifies whether a particular reference frame uses translation global
     /// motion.
     pub is_translation: [bool; NUM_REF_FRAMES],
-    /// gm_params[ ref ][ j ] is set equal to SavedGmParams[
-    /// frame_to_show_map_idx ][ ref ][ j ] for ref = LAST_FRAME..ALTREF_FRAME,
+    /// gm_params\[ ref \]\[ j \] is set equal to SavedGmParams\[
+    /// frame_to_show_map_idx \]\[ ref \]\[ j \] for ref = LAST_FRAME..ALTREF_FRAME,
     /// for j = 0..5.
     pub gm_params: [[i32; 6]; NUM_REF_FRAMES],
     /// Whether the parameters are valid (see warpValid and section 7.11.3.6)

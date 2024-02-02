@@ -206,8 +206,8 @@ pub trait StatelessH264EncoderBackend<H>: StatelessVideoEncoderBackend<H> {
     type CodedPromise: BackendPromise<Output = Vec<u8>>;
     type ReconPromise: BackendPromise<Output = Self::Reference>;
 
-    /// Submit a [`BackendRequest`] to the backend. This operation shall return a [`Self::Promise`]
-    /// with resulting slice data.
+    /// Submit a [`BackendRequest`] to the backend. This operation returns both a
+    /// [`Self::CodedPromise`] and a [`Self::ReconPromise`] with resulting slice data.
     fn encode_slice(
         &mut self,
         request: BackendRequest<Self::Picture, Self::Reference>,
