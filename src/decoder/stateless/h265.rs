@@ -134,7 +134,6 @@ pub trait StatelessH265DecoderBackend: StatelessDecoderBackend<H265> {
         slice: &Slice,
         sps: &Sps,
         pps: &Pps,
-        dpb: &Dpb<Self::Handle>,
         ref_pic_list0: &[Option<RefPicListEntry<Self::Handle>>; 16],
         ref_pic_list1: &[Option<RefPicListEntry<Self::Handle>>; 16],
     ) -> StatelessBackendResult<()>;
@@ -1055,7 +1054,6 @@ where
                 .parser
                 .get_pps(self.codec.cur_pps_id)
                 .context("Invalid PPS id")?,
-            &self.codec.dpb,
             &pic.ref_pic_lists.ref_pic_list0,
             &pic.ref_pic_lists.ref_pic_list1,
         )?;

@@ -677,7 +677,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         slice: &Slice,
         sps: &Sps,
         _: &Pps,
-        _: &Dpb<Self::Handle>,
         ref_pic_list0: &[Option<RefPicListEntry<Self::Handle>>; 16],
         ref_pic_list1: &[Option<RefPicListEntry<Self::Handle>>; 16],
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {

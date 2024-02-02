@@ -512,7 +512,6 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         slice: &Slice,
         sps: &Sps,
         pps: &Pps,
-        _: &Dpb<Self::Handle>,
         ref_pic_list0: &[DpbEntry<Self::Handle>],
         ref_pic_list1: &[DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {

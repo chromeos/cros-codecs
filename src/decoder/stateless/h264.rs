@@ -111,7 +111,6 @@ pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<H264> {
         slice: &Slice,
         sps: &Sps,
         pps: &Pps,
-        dpb: &Dpb<Self::Handle>,
         ref_pic_list0: &[DpbEntry<Self::Handle>],
         ref_pic_list1: &[DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()>;
@@ -1859,7 +1858,6 @@ where
             slice,
             cur_pic.pps.sps.as_ref(),
             cur_pic.pps.as_ref(),
-            &self.codec.dpb,
             &ref_pic_list0,
             &ref_pic_list1,
         )?;

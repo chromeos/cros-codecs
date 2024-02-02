@@ -51,7 +51,6 @@ impl StatelessH265DecoderBackend for Backend {
         _: &crate::codec::h265::parser::Slice,
         _: &crate::codec::h265::parser::Sps,
         _: &crate::codec::h265::parser::Pps,
-        _: &crate::codec::h265::dpb::Dpb<Self::Handle>,
         _: &[Option<super::RefPicListEntry<Self::Handle>>; 16],
         _: &[Option<super::RefPicListEntry<Self::Handle>>; 16],
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
