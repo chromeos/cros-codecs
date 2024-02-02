@@ -53,7 +53,7 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
     type Descriptor = M;
 
     fn coded_resolution(&self) -> Resolution {
-        self.borrow().coded_resolution
+        self.borrow().surface().size().into()
     }
 
     fn display_resolution(&self) -> Resolution {
@@ -311,9 +311,6 @@ impl StreamMetadataState {
 /// meta-information.
 pub struct VaapiDecodedHandle<M: SurfaceMemoryDescriptor> {
     state: PictureState<M>,
-    /// The decoder resolution when this frame was processed. Not all codecs
-    /// send resolution data in every frame header.
-    coded_resolution: Resolution,
     /// Actual resolution of the visible rectangle in the decoded buffer.
     display_resolution: Resolution,
     /// Image format for this surface, taken from the pool it originates from.
@@ -329,7 +326,6 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
             state: PictureState::Pending(picture),
-            coded_resolution: metadata.stream_info.coded_resolution,
             display_resolution: metadata.stream_info.display_resolution,
             map_format: Rc::clone(&metadata.map_format),
         })
@@ -361,7 +357,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
                 // Map the VASurface onto our address space.
                 let image = picture.create_image(
                     *self.map_format,
-                    self.coded_resolution.into(),
+                    self.surface().size(),
                     self.display_resolution.into(),
                 )?;
 
@@ -383,6 +379,14 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
         }
     }
 
+    pub(crate) fn surface(&self) -> &libva::Surface<M> {
+        match &self.state {
+            PictureState::Ready(picture) => picture.surface(),
+            PictureState::Pending(picture) => picture.surface(),
+            PictureState::Invalid => unreachable!(),
+        }
+    }
+
     /// Returns the timestamp of this handle.
     fn timestamp(&self) -> u64 {
         match &self.state {
@@ -394,11 +398,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
 
     /// Returns the id of the VA surface backing this handle.
     pub(crate) fn surface_id(&self) -> libva::VASurfaceID {
-        match &self.state {
-            PictureState::Ready(picture) => picture.surface().id(),
-            PictureState::Pending(picture) => picture.surface().id(),
-            PictureState::Invalid => unreachable!(),
-        }
+        self.surface().id()
     }
 
     fn is_va_ready(&self) -> Result<bool, VaError> {
