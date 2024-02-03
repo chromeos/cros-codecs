@@ -223,14 +223,16 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
 ) -> anyhow::Result<BufferType> {
     let curr_pic = fill_va_h264_pic(current_picture, current_surface_id, false);
 
-    let mut refs = vec![];
-    let mut va_refs = vec![];
+    let mut refs: Vec<_> = dpb
+        .short_term_refs_iter()
+        .filter(|handle| {
+            let pic = handle.0.borrow();
+            !pic.nonexisting && !pic.is_second_field()
+        })
+        .cloned()
+        .collect();
 
-    dpb.get_short_term_refs(&mut refs);
-    refs.retain(|handle| {
-        let pic = handle.0.borrow();
-        !pic.nonexisting && !pic.is_second_field()
-    });
+    let mut va_refs = vec![];
 
     for handle in &refs {
         let ref_pic = handle.0.borrow();
@@ -241,11 +243,14 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
 
     refs.clear();
 
-    dpb.get_long_term_refs(&mut refs);
-    refs.retain(|handle| {
-        let pic = handle.0.borrow();
-        !pic.is_second_field()
-    });
+    let mut refs: Vec<_> = dpb
+        .long_term_refs_iter()
+        .filter(|handle| {
+            let pic = handle.0.borrow();
+            !pic.is_second_field()
+        })
+        .cloned()
+        .collect();
 
     for handle in &refs {
         let ref_pic = handle.0.borrow();
