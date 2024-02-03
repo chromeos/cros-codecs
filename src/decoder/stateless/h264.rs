@@ -757,11 +757,6 @@ where
         ref_pic_list_type: RefPicList,
         ref_pic_list_indices: &[usize],
     ) -> anyhow::Result<DpbPicRefList<B::Handle>> {
-        let mut ref_pic_list: Vec<_> = ref_pic_list_indices
-            .iter()
-            .map(|&i| &self.dpb.entries()[i])
-            .collect();
-
         let (ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
             match ref_pic_list_type {
                 RefPicList::RefPicList0 => (
@@ -776,9 +771,11 @@ where
                 ),
             };
 
-        while ref_pic_list.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
-            ref_pic_list.pop();
-        }
+        let mut ref_pic_list: Vec<_> = ref_pic_list_indices
+            .iter()
+            .map(|&i| &self.dpb.entries()[i])
+            .take(usize::from(num_ref_idx_lx_active_minus1) + 1)
+            .collect();
 
         if !ref_pic_list_modification_flag_lx {
             return Ok(ref_pic_list);
