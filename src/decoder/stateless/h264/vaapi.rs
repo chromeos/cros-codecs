@@ -328,7 +328,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
 }
 
 fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
-    ref_list_x: &[DpbEntry<VADecodedHandle<M>>],
+    ref_list_x: &[&DpbEntry<VADecodedHandle<M>>],
 ) -> [libva::PictureH264; 32] {
     let mut va_pics = vec![];
 
@@ -359,8 +359,8 @@ fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
 fn build_slice_param<M: SurfaceMemoryDescriptor>(
     hdr: &SliceHeader,
     slice_size: usize,
-    ref_list_0: &[DpbEntry<VADecodedHandle<M>>],
-    ref_list_1: &[DpbEntry<VADecodedHandle<M>>],
+    ref_list_0: &[&DpbEntry<VADecodedHandle<M>>],
+    ref_list_1: &[&DpbEntry<VADecodedHandle<M>>],
     sps: &Sps,
     pps: &Pps,
 ) -> anyhow::Result<BufferType> {
@@ -517,8 +517,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         slice: &Slice,
         sps: &Sps,
         pps: &Pps,
-        ref_pic_list0: &[DpbEntry<Self::Handle>],
-        ref_pic_list1: &[DpbEntry<Self::Handle>],
+        ref_pic_list0: &[&DpbEntry<Self::Handle>],
+        ref_pic_list1: &[&DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;

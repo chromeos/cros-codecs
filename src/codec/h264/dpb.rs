@@ -15,33 +15,23 @@ use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::Reference;
 
-pub type DpbPicList<H> = Vec<DpbEntry<H>>;
 pub type DpbPicRefList<'a, H> = Vec<&'a DpbEntry<H>>;
 
-/// All the reference picture lists used to decode a stream.
-pub struct ReferencePicLists<T> {
+/// All the reference picture lists used to decode a picture.
+#[derive(Default)]
+pub struct ReferencePicLists {
     /// Reference picture list for P slices. Retains the same meaning as in the
     /// specification. Points into the pictures stored in the DPB. Derived once
     /// per picture.
-    pub ref_pic_list_p0: DpbPicList<T>,
+    pub ref_pic_list_p0: Vec<usize>,
     /// Reference picture list 0 for B slices. Retains the same meaning as in
     /// the specification. Points into the pictures stored in the DPB. Derived
     /// once per picture.
-    pub ref_pic_list_b0: DpbPicList<T>,
+    pub ref_pic_list_b0: Vec<usize>,
     /// Reference picture list 1 for B slices. Retains the same meaning as in
     /// the specification. Points into the pictures stored in the DPB. Derived
     /// once per picture.
-    pub ref_pic_list_b1: DpbPicList<T>,
-}
-
-impl<T> Default for ReferencePicLists<T> {
-    fn default() -> Self {
-        Self {
-            ref_pic_list_p0: Default::default(),
-            ref_pic_list_b0: Default::default(),
-            ref_pic_list_b1: Default::default(),
-        }
-    }
+    pub ref_pic_list_b1: Vec<usize>,
 }
 
 // Shortcut to refer to a DPB entry.
@@ -192,7 +182,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Find a short term reference picture with the given `pic_num` value.
-    pub fn find_short_term_with_pic_num(&self, pic_num: i32) -> Option<DpbEntry<T>> {
+    pub fn find_short_term_with_pic_num(&self, pic_num: i32) -> Option<&DpbEntry<T>> {
         let position = self
             .pictures()
             .position(|p| matches!(p.reference(), Reference::ShortTerm) && p.pic_num == pic_num);
@@ -203,7 +193,7 @@ impl<T: Clone> Dpb<T> {
             position
         );
 
-        Some(self.entries[position?].clone())
+        Some(&self.entries[position?])
     }
 
     /// Find a long term reference picture with the given `long_term_pic_num`
@@ -211,7 +201,7 @@ impl<T: Clone> Dpb<T> {
     pub fn find_long_term_with_long_term_pic_num(
         &self,
         long_term_pic_num: i32,
-    ) -> Option<DpbEntry<T>> {
+    ) -> Option<&DpbEntry<T>> {
         let position = self.pictures().position(|p| {
             matches!(p.reference(), Reference::LongTerm) && p.long_term_pic_num == long_term_pic_num
         });
@@ -222,7 +212,7 @@ impl<T: Clone> Dpb<T> {
             position
         );
 
-        Some(self.entries[position?].clone())
+        Some(&self.entries[position?])
     }
 
     /// Store a picture and its backend handle in the DPB.
@@ -449,7 +439,7 @@ impl<T: Clone> Dpb<T> {
         self.interlaced = interlaced;
     }
 
-    /// Returns an iterator of short term refs. 
+    /// Returns an iterator of short term refs.
     pub fn short_term_refs_iter(&self) -> impl Iterator<Item = &DpbEntry<T>> {
         self.entries
             .iter()
@@ -523,6 +513,7 @@ impl<T: Clone> Dpb<T> {
 
         let to_mark = self
             .find_short_term_with_pic_num(pic_num_x)
+            .cloned()
             .ok_or(MmcoError::NoShortTermPic)?
             .0;
 
@@ -547,6 +538,7 @@ impl<T: Clone> Dpb<T> {
             .find_long_term_with_long_term_pic_num(
                 i32::try_from(marking.long_term_pic_num).unwrap(),
             )
+            .cloned()
             .ok_or(MmcoError::NoShortTermPic)?
             .0;
 
@@ -567,6 +559,7 @@ impl<T: Clone> Dpb<T> {
 
         let to_mark_as_long = self
             .find_short_term_with_pic_num(pic_num_x)
+            .cloned()
             .ok_or(MmcoError::NoShortTermPic)?
             .0;
 
@@ -1187,7 +1180,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Returns the lists of reference pictures for `pic`.
-    pub fn build_ref_pic_lists(&self, pic: &PictureData) -> ReferencePicLists<T> {
+    pub fn build_ref_pic_lists(&self, pic: &PictureData) -> ReferencePicLists {
         let num_refs = self
             .pictures()
             .filter(|p| p.is_ref() && !p.nonexisting)
@@ -1212,10 +1205,19 @@ impl<T: Clone> Dpb<T> {
                 )
             };
 
+        let dpb_start = self.entries.as_ptr();
+        let refs_to_index = |refs: Vec<_>| {
+            refs.into_iter()
+                .map(|r| r as *const DpbEntry<T>)
+                .map(|r| unsafe { r.offset_from(dpb_start) })
+                .map(|i| i as usize)
+                .collect()
+        };
+
         ReferencePicLists {
-            ref_pic_list_p0: ref_pic_list_p0.into_iter().cloned().collect(),
-            ref_pic_list_b0: ref_pic_list_b0.into_iter().cloned().collect(),
-            ref_pic_list_b1: ref_pic_list_b1.into_iter().cloned().collect(),
+            ref_pic_list_p0: refs_to_index(ref_pic_list_p0),
+            ref_pic_list_b0: refs_to_index(ref_pic_list_b0),
+            ref_pic_list_b1: refs_to_index(ref_pic_list_b1),
         }
     }
 }

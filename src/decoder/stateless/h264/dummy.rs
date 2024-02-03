@@ -55,8 +55,8 @@ impl StatelessH264DecoderBackend for Backend {
         _: &Slice,
         _: &Sps,
         _: &Pps,
-        _: &[DpbEntry<Self::Handle>],
-        _: &[DpbEntry<Self::Handle>],
+        _: &[&DpbEntry<Self::Handle>],
+        _: &[&DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {
         Ok(())
     }

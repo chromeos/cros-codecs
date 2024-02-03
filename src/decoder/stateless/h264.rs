@@ -18,7 +18,7 @@ use log::debug;
 
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
-use crate::codec::h264::dpb::DpbPicList;
+use crate::codec::h264::dpb::DpbPicRefList;
 use crate::codec::h264::dpb::ReferencePicLists;
 use crate::codec::h264::parser::Nalu;
 use crate::codec::h264::parser::NaluType;
@@ -111,8 +111,8 @@ pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<H264> {
         slice: &Slice,
         sps: &Sps,
         pps: &Pps,
-        ref_pic_list0: &[DpbEntry<Self::Handle>],
-        ref_pic_list1: &[DpbEntry<Self::Handle>],
+        ref_pic_list0: &[&DpbEntry<Self::Handle>],
+        ref_pic_list1: &[&DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()>;
 
     /// Called when the decoder wants the backend to finish the decoding
@@ -217,9 +217,9 @@ impl PrevPicInfo {
 
 /// Corresponds to RefPicList0 and RefPicList1 in the specification. Computed for every slice,
 /// points to the pictures in the DPB.
-struct RefPicLists<T> {
-    ref_pic_list0: DpbPicList<T>,
-    ref_pic_list1: DpbPicList<T>,
+struct RefPicLists<'a, T> {
+    ref_pic_list0: DpbPicRefList<'a, T>,
+    ref_pic_list1: DpbPicRefList<'a, T>,
 }
 
 /// Used to track that first_mb_in_slice increases monotonically.
@@ -239,7 +239,7 @@ struct CurrentPicState<B: StatelessDecoderBackend<H264>> {
     /// Backend-specific data for that picture.
     backend_pic: B::Picture,
     /// List of reference pictures, used once per slice.
-    ref_pic_lists: ReferencePicLists<B::Handle>,
+    ref_pic_lists: ReferencePicLists,
     /// The current macroblock we are processing
     current_macroblock: CurrentMacroblockTracking,
 }
@@ -635,10 +635,10 @@ where
     // 8.2.4.3.1 Modification process of reference picture lists for short-term
     // reference pictures
     #[allow(clippy::too_many_arguments)]
-    fn short_term_pic_list_modification(
+    fn short_term_pic_list_modification<'a>(
         cur_pic: &PictureData,
-        dpb: &Dpb<B::Handle>,
-        ref_pic_list_x: &mut DpbPicList<B::Handle>,
+        dpb: &'a Dpb<B::Handle>,
+        ref_pic_list_x: &mut DpbPicRefList<'a, B::Handle>,
         num_ref_idx_lx_active_minus1: u8,
         max_pic_num: i32,
         rplm: &RefPicListModification,
@@ -693,7 +693,7 @@ where
             let target = &ref_pic_list_x[cidx].0.clone();
 
             if Self::pic_num_f(&target.borrow(), max_pic_num) != pic_num_lx {
-                ref_pic_list_x[nidx] = ref_pic_list_x[cidx].clone();
+                ref_pic_list_x[nidx] = ref_pic_list_x[cidx];
                 nidx += 1;
             }
         }
@@ -705,9 +705,9 @@ where
         Ok(())
     }
 
-    fn long_term_pic_list_modification(
-        dpb: &Dpb<B::Handle>,
-        ref_pic_list_x: &mut DpbPicList<B::Handle>,
+    fn long_term_pic_list_modification<'a>(
+        dpb: &'a Dpb<B::Handle>,
+        ref_pic_list_x: &mut DpbPicRefList<'a, B::Handle>,
         num_ref_idx_lx_active_minus1: u8,
         max_long_term_frame_idx: i32,
         rplm: &RefPicListModification,
@@ -738,7 +738,7 @@ where
             if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
                 != long_term_pic_num as i32
             {
-                ref_pic_list_x[nidx] = ref_pic_list_x[cidx].clone();
+                ref_pic_list_x[nidx] = ref_pic_list_x[cidx];
                 nidx += 1;
             }
         }
@@ -754,11 +754,16 @@ where
         &self,
         cur_pic: &PictureData,
         hdr: &SliceHeader,
-        ref_pic_list: RefPicList,
-        mut ref_pic_list_x: DpbPicList<B::Handle>,
-    ) -> anyhow::Result<DpbPicList<B::Handle>> {
+        ref_pic_list_type: RefPicList,
+        ref_pic_list_indices: &[usize],
+    ) -> anyhow::Result<DpbPicRefList<B::Handle>> {
+        let mut ref_pic_list: Vec<_> = ref_pic_list_indices
+            .iter()
+            .map(|&i| &self.dpb.entries()[i])
+            .collect();
+
         let (ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
-            match ref_pic_list {
+            match ref_pic_list_type {
                 RefPicList::RefPicList0 => (
                     hdr.ref_pic_list_modification_flag_l0,
                     hdr.num_ref_idx_l0_active_minus1,
@@ -771,12 +776,12 @@ where
                 ),
             };
 
-        while ref_pic_list_x.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
-            ref_pic_list_x.pop();
+        while ref_pic_list.len() > (usize::from(num_ref_idx_lx_active_minus1) + 1) {
+            ref_pic_list.pop();
         }
 
         if !ref_pic_list_modification_flag_lx {
-            return Ok(ref_pic_list_x);
+            return Ok(ref_pic_list);
         }
 
         let mut pic_num_lx_pred = cur_pic.pic_num;
@@ -790,7 +795,7 @@ where
                     Self::short_term_pic_list_modification(
                         cur_pic,
                         &self.dpb,
-                        &mut ref_pic_list_x,
+                        &mut ref_pic_list,
                         num_ref_idx_lx_active_minus1,
                         hdr.max_pic_num as i32,
                         modification,
@@ -800,7 +805,7 @@ where
                 }
                 2 => Self::long_term_pic_list_modification(
                     &self.dpb,
-                    &mut ref_pic_list_x,
+                    &mut ref_pic_list,
                     num_ref_idx_lx_active_minus1,
                     self.max_long_term_frame_idx,
                     modification,
@@ -811,7 +816,7 @@ where
             }
         }
 
-        Ok(ref_pic_list_x)
+        Ok(ref_pic_list)
     }
 
     /// Generate RefPicList0 and RefPicList1 in the specification. Computed for every slice, points
@@ -820,20 +825,20 @@ where
         &mut self,
         cur_pic: &PictureData,
         hdr: &SliceHeader,
-        ref_pic_lists: &ReferencePicLists<B::Handle>,
+        ref_pic_lists: &ReferencePicLists,
     ) -> anyhow::Result<RefPicLists<B::Handle>> {
         let ref_pic_list0 = match hdr.slice_type {
             SliceType::P | SliceType::Sp => self.modify_ref_pic_list(
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList0,
-                ref_pic_lists.ref_pic_list_p0.clone(),
+                &ref_pic_lists.ref_pic_list_p0,
             )?,
             SliceType::B => self.modify_ref_pic_list(
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList0,
-                ref_pic_lists.ref_pic_list_b0.clone(),
+                &ref_pic_lists.ref_pic_list_b0,
             )?,
             _ => Vec::new(),
         };
@@ -843,7 +848,7 @@ where
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList1,
-                ref_pic_lists.ref_pic_list_b1.clone(),
+                &ref_pic_lists.ref_pic_list_b1,
             )?,
             _ => Vec::new(),
         };
