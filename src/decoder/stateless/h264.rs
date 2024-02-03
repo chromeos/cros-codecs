@@ -522,7 +522,10 @@ where
                 .find_short_term_lowest_frame_num_wrap()
                 .context("Could not find a ShortTerm picture to unmark in the DPB")?;
 
-            to_unmark.borrow_mut().set_reference(Reference::None, true);
+            to_unmark
+                .0
+                .borrow_mut()
+                .set_reference(Reference::None, true);
             num_ref_pics -= 1;
         }
 
@@ -690,7 +693,7 @@ where
                 break;
             }
 
-            let target = &ref_pic_list_x[cidx].0.clone();
+            let target = &ref_pic_list_x[cidx].0;
 
             if Self::pic_num_f(&target.borrow(), max_pic_num) != pic_num_lx {
                 ref_pic_list_x[nidx] = ref_pic_list_x[cidx];
@@ -734,7 +737,7 @@ where
                 break;
             }
 
-            let target = ref_pic_list_x[cidx].0.clone();
+            let target = &ref_pic_list_x[cidx].0;
             if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
                 != long_term_pic_num as i32
             {

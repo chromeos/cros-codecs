@@ -141,7 +141,7 @@ impl<T: Clone> Dpb<T> {
 
     /// Find the short term reference picture with the lowest `frame_num_wrap`
     /// value.
-    pub fn find_short_term_lowest_frame_num_wrap(&self) -> Option<Rc<RefCell<PictureData>>> {
+    pub fn find_short_term_lowest_frame_num_wrap(&self) -> Option<&DpbEntry<T>> {
         let lowest = self
             .entries
             .iter()
@@ -149,10 +149,8 @@ impl<T: Clone> Dpb<T> {
                 let p = h.0.borrow();
                 matches!(p.reference(), Reference::ShortTerm)
             })
-            .cloned()
-            .map(|h| h.0)
             .min_by_key(|h| {
-                let p = h.borrow();
+                let p = h.0.borrow();
                 p.frame_num_wrap
             });
 
@@ -182,7 +180,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Find a short term reference picture with the given `pic_num` value.
-    pub fn find_short_term_with_pic_num(&self, pic_num: i32) -> Option<&DpbEntry<T>> {
+    fn find_short_term_with_pic_num_pos(&self, pic_num: i32) -> Option<usize> {
         let position = self
             .pictures()
             .position(|p| matches!(p.reference(), Reference::ShortTerm) && p.pic_num == pic_num);
@@ -193,15 +191,18 @@ impl<T: Clone> Dpb<T> {
             position
         );
 
-        Some(&self.entries[position?])
+        position
+    }
+
+    /// Find a short term reference picture with the given `pic_num` value.
+    pub fn find_short_term_with_pic_num(&self, pic_num: i32) -> Option<&DpbEntry<T>> {
+        let position = self.find_short_term_with_pic_num_pos(pic_num)?;
+        Some(&self.entries[position])
     }
 
     /// Find a long term reference picture with the given `long_term_pic_num`
     /// value.
-    pub fn find_long_term_with_long_term_pic_num(
-        &self,
-        long_term_pic_num: i32,
-    ) -> Option<&DpbEntry<T>> {
+    fn find_long_term_with_long_term_pic_num_pos(&self, long_term_pic_num: i32) -> Option<usize> {
         let position = self.pictures().position(|p| {
             matches!(p.reference(), Reference::LongTerm) && p.long_term_pic_num == long_term_pic_num
         });
@@ -212,7 +213,17 @@ impl<T: Clone> Dpb<T> {
             position
         );
 
-        Some(&self.entries[position?])
+        position
+    }
+
+    /// Find a long term reference picture with the given `long_term_pic_num`
+    /// value.
+    pub fn find_long_term_with_long_term_pic_num(
+        &self,
+        long_term_pic_num: i32,
+    ) -> Option<&DpbEntry<T>> {
+        let position = self.find_long_term_with_long_term_pic_num_pos(long_term_pic_num)?;
+        Some(&self.entries[position])
     }
 
     /// Store a picture and its backend handle in the DPB.
@@ -513,11 +524,10 @@ impl<T: Clone> Dpb<T> {
 
         let to_mark = self
             .find_short_term_with_pic_num(pic_num_x)
-            .cloned()
-            .ok_or(MmcoError::NoShortTermPic)?
-            .0;
+            .ok_or(MmcoError::NoShortTermPic)?;
 
         to_mark
+            .0
             .borrow_mut()
             .set_reference(Reference::None, matches!(pic.field, Field::Frame));
 
@@ -538,11 +548,10 @@ impl<T: Clone> Dpb<T> {
             .find_long_term_with_long_term_pic_num(
                 i32::try_from(marking.long_term_pic_num).unwrap(),
             )
-            .cloned()
-            .ok_or(MmcoError::NoShortTermPic)?
-            .0;
+            .ok_or(MmcoError::NoShortTermPic)?;
 
         to_mark
+            .0
             .borrow_mut()
             .set_reference(Reference::None, matches!(pic.field, Field::Frame));
 
@@ -557,17 +566,19 @@ impl<T: Clone> Dpb<T> {
         log::debug!("MMCO op 3 for pic_num_x {}", pic_num_x);
         log::trace!("Dpb state before MMCO=3: {:#?}", self);
 
-        let to_mark_as_long = self
-            .find_short_term_with_pic_num(pic_num_x)
-            .cloned()
-            .ok_or(MmcoError::NoShortTermPic)?
-            .0;
+        let to_mark_as_long_pos = self
+            .find_short_term_with_pic_num_pos(pic_num_x)
+            .ok_or(MmcoError::NoShortTermPic)?;
+        let to_mark_as_long = &self.entries[to_mark_as_long_pos];
+        let to_mark_as_long_ptr = to_mark_as_long.0.as_ptr();
+        let to_mark_as_long_other_field_ptr =
+            to_mark_as_long.0.borrow().other_field().map(|f| f.as_ptr());
 
-        if !matches!(to_mark_as_long.borrow().reference(), Reference::ShortTerm) {
+        if !matches!(to_mark_as_long.0.borrow().reference(), Reference::ShortTerm) {
             return Err(MmcoError::ExpectedMarked);
         }
 
-        if to_mark_as_long.borrow().nonexisting {
+        if to_mark_as_long.0.borrow().nonexisting {
             return Err(MmcoError::ExpectedExisting);
         }
 
@@ -607,15 +618,11 @@ impl<T: Clone> Dpb<T> {
                 let reference_field_is_not_part_of_pic_x = if picture.other_field().is_none() {
                     true
                 } else {
-                    let fields_do_not_reference_each_other =
-                        !Rc::ptr_eq(&picture.other_field().unwrap(), &to_mark_as_long)
-                            && (to_mark_as_long.borrow().other_field().is_none()
-                                || !std::ptr::eq(
-                                    &(*to_mark_as_long.borrow().other_field().unwrap().borrow()),
-                                    &(*picture),
-                                ));
-
-                    fields_do_not_reference_each_other
+                    // Check that the fields do not reference one another.
+                    !std::ptr::eq(picture.other_field().unwrap().as_ptr(), to_mark_as_long_ptr)
+                        && to_mark_as_long_other_field_ptr
+                            .map(|p| !std::ptr::eq(p, &(*picture)))
+                            .unwrap_or(true)
                 };
 
                 if reference_field_is_not_part_of_pic_x {
@@ -626,12 +633,14 @@ impl<T: Clone> Dpb<T> {
         }
 
         let is_frame = matches!(pic.field, Field::Frame);
+        let to_mark_as_long = &self.entries[to_mark_as_long_pos];
         to_mark_as_long
+            .0
             .borrow_mut()
             .set_reference(Reference::LongTerm, is_frame);
-        to_mark_as_long.borrow_mut().long_term_frame_idx = long_term_frame_idx;
+        to_mark_as_long.0.borrow_mut().long_term_frame_idx = long_term_frame_idx;
 
-        if let Some(other_field) = to_mark_as_long.borrow().other_field() {
+        if let Some(other_field) = to_mark_as_long.0.borrow().other_field() {
             let mut other_field = other_field.borrow_mut();
             if matches!(other_field.reference(), Reference::LongTerm) {
                 other_field.long_term_frame_idx = long_term_frame_idx;
