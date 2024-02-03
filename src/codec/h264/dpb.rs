@@ -1243,7 +1243,7 @@ impl<T: Clone> Dpb<T> {
     }
 }
 
-impl<T: Clone> Default for Dpb<T> {
+impl<T> Default for Dpb<T> {
     fn default() -> Self {
         // See https://github.com/rust-lang/rust/issues/26925 on why this can't
         // be derived.
@@ -1256,7 +1256,7 @@ impl<T: Clone> Default for Dpb<T> {
     }
 }
 
-impl<T: Clone> std::fmt::Debug for Dpb<T> {
+impl<T> std::fmt::Debug for Dpb<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pics = self
             .entries
