@@ -822,30 +822,31 @@ where
         hdr: &SliceHeader,
         ref_pic_lists: &ReferencePicLists<B::Handle>,
     ) -> anyhow::Result<RefPicLists<B::Handle>> {
-        let mut ref_pic_list0 = Vec::new();
-        let mut ref_pic_list1 = Vec::new();
-
-        if let SliceType::P | SliceType::Sp = hdr.slice_type {
-            ref_pic_list0 = self.modify_ref_pic_list(
+        let ref_pic_list0 = match hdr.slice_type {
+            SliceType::P | SliceType::Sp => self.modify_ref_pic_list(
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList0,
                 ref_pic_lists.ref_pic_list_p0.clone(),
-            )?;
-        } else if let SliceType::B = hdr.slice_type {
-            ref_pic_list0 = self.modify_ref_pic_list(
+            )?,
+            SliceType::B => self.modify_ref_pic_list(
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList0,
                 ref_pic_lists.ref_pic_list_b0.clone(),
-            )?;
-            ref_pic_list1 = self.modify_ref_pic_list(
+            )?,
+            _ => Vec::new(),
+        };
+
+        let ref_pic_list1 = match hdr.slice_type {
+            SliceType::B => self.modify_ref_pic_list(
                 cur_pic,
                 hdr,
                 RefPicList::RefPicList1,
                 ref_pic_lists.ref_pic_list_b1.clone(),
-            )?;
-        }
+            )?,
+            _ => Vec::new(),
+        };
 
         Ok(RefPicLists {
             ref_pic_list0,
