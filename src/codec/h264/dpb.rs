@@ -41,7 +41,10 @@ pub struct ReferencePicLists {
 // The second member is the backend handle of the frame. It can be `None` if the inserted picture
 // is non-existing (i.e. `nonexisting` is true on the `PictureData`).
 #[derive(Clone)]
-pub struct DpbEntry<T>(pub Rc<RefCell<PictureData>>, pub Option<T>);
+pub struct DpbEntry<T> {
+    pub pic: Rc<RefCell<PictureData>>,
+    pub handle: Option<T>,
+}
 
 pub struct Dpb<T> {
     /// List of `PictureData` and backend handles to decoded pictures.
@@ -87,13 +90,13 @@ impl<T: Clone> Dpb<T> {
     /// Returns an iterator over the underlying H264 pictures stored in the
     /// DPB.
     pub fn pictures(&self) -> impl Iterator<Item = Ref<'_, PictureData>> {
-        self.entries.iter().map(|h| h.0.borrow())
+        self.entries.iter().map(|h| h.pic.borrow())
     }
 
     /// Returns a mutable iterator over the underlying H264 pictures stored in
     /// the DPB.
     pub fn pictures_mut(&mut self) -> impl Iterator<Item = RefMut<'_, PictureData>> {
-        self.entries.iter().map(|h| h.0.borrow_mut())
+        self.entries.iter().map(|h| h.pic.borrow_mut())
     }
 
     /// Returns the length of the DPB.
@@ -146,11 +149,11 @@ impl<T: Clone> Dpb<T> {
             .entries
             .iter()
             .filter(|h| {
-                let p = h.0.borrow();
+                let p = h.pic.borrow();
                 matches!(p.reference(), Reference::ShortTerm)
             })
             .min_by_key(|h| {
-                let p = h.0.borrow();
+                let p = h.pic.borrow();
                 p.frame_num_wrap
             });
 
@@ -168,7 +171,7 @@ impl<T: Clone> Dpb<T> {
     /// anymore if it's a) not a reference and b) not needed for output
     pub fn remove_unused(&mut self) {
         self.entries.retain(|handle| {
-            let pic = handle.0.borrow();
+            let pic = handle.pic.borrow();
             let discard = !pic.is_ref() && !pic.needed_for_output;
 
             if discard {
@@ -268,7 +271,10 @@ impl<T: Clone> Dpb<T> {
         );
         drop(pic);
 
-        self.entries.push(DpbEntry(picture, handle));
+        self.entries.push(DpbEntry {
+            pic: picture,
+            handle,
+        });
 
         Ok(())
     }
@@ -359,7 +365,7 @@ impl<T: Clone> Dpb<T> {
         }
 
         let lowest_poc = match self.find_lowest_poc_for_bumping() {
-            Some(handle) => handle.0.borrow().pic_order_cnt,
+            Some(handle) => handle.pic.borrow().pic_order_cnt,
             None => return false,
         };
 
@@ -372,7 +378,7 @@ impl<T: Clone> Dpb<T> {
         self.entries
             .iter()
             .filter(|handle| {
-                let pic = handle.0.borrow();
+                let pic = handle.pic.borrow();
 
                 if !pic.needed_for_output {
                     return false;
@@ -383,28 +389,28 @@ impl<T: Clone> Dpb<T> {
 
                 !skip
             })
-            .min_by_key(|handle| handle.0.borrow().pic_order_cnt)
+            .min_by_key(|handle| handle.pic.borrow().pic_order_cnt)
     }
 
     /// Gets the position of `needle` in the DPB, if any.
     fn get_position(&self, needle: &Rc<RefCell<PictureData>>) -> Option<usize> {
         self.entries
             .iter()
-            .position(|handle| Rc::ptr_eq(&handle.0, needle))
+            .position(|handle| Rc::ptr_eq(&handle.pic, needle))
     }
 
     /// Bump the dpb, returning a picture as per the bumping process described in C.4.5.3.
     /// Note that this picture will still be referenced by its pair, if any.
     fn bump(&mut self, flush: bool) -> Option<DpbEntry<T>> {
         let handle = self.find_lowest_poc_for_bumping()?.clone();
-        let mut pic = handle.0.borrow_mut();
+        let mut pic = handle.pic.borrow_mut();
 
         debug!("Bumping picture {:#?} from the dpb", pic);
 
         pic.needed_for_output = false;
 
         if !pic.is_ref() || flush {
-            let index = self.get_position(&handle.0).unwrap();
+            let index = self.get_position(&handle.pic).unwrap();
             log::debug!("removed picture {:#?} from dpb", pic);
             self.entries.remove(index);
         }
@@ -454,14 +460,14 @@ impl<T: Clone> Dpb<T> {
     pub fn short_term_refs_iter(&self) -> impl Iterator<Item = &DpbEntry<T>> {
         self.entries
             .iter()
-            .filter(|&handle| matches!(handle.0.borrow().reference(), Reference::ShortTerm))
+            .filter(|&handle| matches!(handle.pic.borrow().reference(), Reference::ShortTerm))
     }
 
     /// Returns an iterator of long term refs.
     pub fn long_term_refs_iter(&self) -> impl Iterator<Item = &DpbEntry<T>> {
         self.entries
             .iter()
-            .filter(|&handle| matches!(handle.0.borrow().reference(), Reference::LongTerm))
+            .filter(|&handle| matches!(handle.pic.borrow().reference(), Reference::LongTerm))
     }
 
     pub fn update_pic_nums(
@@ -527,7 +533,7 @@ impl<T: Clone> Dpb<T> {
             .ok_or(MmcoError::NoShortTermPic)?;
 
         to_mark
-            .0
+            .pic
             .borrow_mut()
             .set_reference(Reference::None, matches!(pic.field, Field::Frame));
 
@@ -551,7 +557,7 @@ impl<T: Clone> Dpb<T> {
             .ok_or(MmcoError::NoShortTermPic)?;
 
         to_mark
-            .0
+            .pic
             .borrow_mut()
             .set_reference(Reference::None, matches!(pic.field, Field::Frame));
 
@@ -570,15 +576,21 @@ impl<T: Clone> Dpb<T> {
             .find_short_term_with_pic_num_pos(pic_num_x)
             .ok_or(MmcoError::NoShortTermPic)?;
         let to_mark_as_long = &self.entries[to_mark_as_long_pos];
-        let to_mark_as_long_ptr = to_mark_as_long.0.as_ptr();
-        let to_mark_as_long_other_field_ptr =
-            to_mark_as_long.0.borrow().other_field().map(|f| f.as_ptr());
+        let to_mark_as_long_ptr = to_mark_as_long.pic.as_ptr();
+        let to_mark_as_long_other_field_ptr = to_mark_as_long
+            .pic
+            .borrow()
+            .other_field()
+            .map(|f| f.as_ptr());
 
-        if !matches!(to_mark_as_long.0.borrow().reference(), Reference::ShortTerm) {
+        if !matches!(
+            to_mark_as_long.pic.borrow().reference(),
+            Reference::ShortTerm
+        ) {
             return Err(MmcoError::ExpectedMarked);
         }
 
-        if to_mark_as_long.0.borrow().nonexisting {
+        if to_mark_as_long.pic.borrow().nonexisting {
             return Err(MmcoError::ExpectedExisting);
         }
 
@@ -635,12 +647,12 @@ impl<T: Clone> Dpb<T> {
         let is_frame = matches!(pic.field, Field::Frame);
         let to_mark_as_long = &self.entries[to_mark_as_long_pos];
         to_mark_as_long
-            .0
+            .pic
             .borrow_mut()
             .set_reference(Reference::LongTerm, is_frame);
-        to_mark_as_long.0.borrow_mut().long_term_frame_idx = long_term_frame_idx;
+        to_mark_as_long.pic.borrow_mut().long_term_frame_idx = long_term_frame_idx;
 
-        if let Some(other_field) = to_mark_as_long.0.borrow().other_field() {
+        if let Some(other_field) = to_mark_as_long.pic.borrow().other_field() {
             let mut other_field = other_field.borrow_mut();
             if matches!(other_field.reference(), Reference::LongTerm) {
                 other_field.long_term_frame_idx = long_term_frame_idx;
@@ -781,7 +793,7 @@ impl<T: Clone> Dpb<T> {
             ref_pic_list
                 .iter()
                 .map(|h| {
-                    let p = h.0.borrow();
+                    let p = h.pic.borrow();
                     let reference = match p.reference() {
                         Reference::None => panic!("Not a reference."),
                         Reference::ShortTerm => "ShortTerm",
@@ -819,7 +831,7 @@ impl<T: Clone> Dpb<T> {
             ref_pic_list
                 .iter()
                 .map(|h| {
-                    let p = h.0.borrow();
+                    let p = h.pic.borrow();
                     let reference = match p.reference() {
                         Reference::None => panic!("Not a reference."),
                         Reference::ShortTerm => "ShortTerm",
@@ -846,27 +858,27 @@ impl<T: Clone> Dpb<T> {
     }
 
     fn sort_pic_num_descending(pics: &mut [&DpbEntry<T>]) {
-        pics.sort_by_key(|h| std::cmp::Reverse(h.0.borrow().pic_num));
+        pics.sort_by_key(|h| std::cmp::Reverse(h.pic.borrow().pic_num));
     }
 
     fn sort_frame_num_wrap_descending(pics: &mut [&DpbEntry<T>]) {
-        pics.sort_by_key(|h| std::cmp::Reverse(h.0.borrow().frame_num_wrap));
+        pics.sort_by_key(|h| std::cmp::Reverse(h.pic.borrow().frame_num_wrap));
     }
 
     fn sort_long_term_pic_num_ascending(pics: &mut [&DpbEntry<T>]) {
-        pics.sort_by_key(|h| h.0.borrow().long_term_pic_num);
+        pics.sort_by_key(|h| h.pic.borrow().long_term_pic_num);
     }
 
     fn sort_long_term_frame_idx_ascending(pics: &mut [&DpbEntry<T>]) {
-        pics.sort_by_key(|h| h.0.borrow().long_term_frame_idx);
+        pics.sort_by_key(|h| h.pic.borrow().long_term_frame_idx);
     }
 
     fn sort_poc_descending(pics: &mut [&DpbEntry<T>]) {
-        pics.sort_by_key(|h| std::cmp::Reverse(h.0.borrow().pic_order_cnt));
+        pics.sort_by_key(|h| std::cmp::Reverse(h.pic.borrow().pic_order_cnt));
     }
 
     fn sort_poc_ascending(pics: &mut [&DpbEntry<T>]) {
-        pics.sort_by_key(|h| h.0.borrow().pic_order_cnt);
+        pics.sort_by_key(|h| h.pic.borrow().pic_order_cnt);
     }
 
     // When the reference picture list RefPicList1 has more than one entry
@@ -877,7 +889,7 @@ impl<T: Clone> Dpb<T> {
         if b1.len() > 1 && b0.len() == b1.len() {
             let mut equals = true;
             for (x1, x2) in b0.iter().zip(b1.iter()) {
-                if !Rc::ptr_eq(&x1.0, &x2.0) {
+                if !Rc::ptr_eq(&x1.pic, &x2.pic) {
                     equals = false;
                     break;
                 }
@@ -902,13 +914,13 @@ impl<T: Clone> Dpb<T> {
         // available stored reference field of the chosen parity from the ordered list of frames
         // refFrameListX(Short|Long)Term is inserted into RefPicListX.
         ref_frame_list.retain(|h| {
-            let p = h.0.borrow();
+            let p = h.pic.borrow();
             let skip = p.nonexisting || *p.reference() != reference_type;
             !skip
         });
 
         while let Some(position) = ref_frame_list.iter().position(|h| {
-            let p = h.0.borrow();
+            let p = h.pic.borrow();
             let found = p.field == field;
 
             if found {
@@ -929,7 +941,7 @@ impl<T: Clone> Dpb<T> {
     fn build_ref_pic_list_p(&self) -> DpbPicRefList<T> {
         let mut ref_pic_list_p0: Vec<_> = self
             .short_term_refs_iter()
-            .filter(|h| !h.0.borrow().is_second_field())
+            .filter(|h| !h.pic.borrow().is_second_field())
             .collect();
 
         Self::sort_pic_num_descending(&mut ref_pic_list_p0);
@@ -938,7 +950,7 @@ impl<T: Clone> Dpb<T> {
 
         ref_pic_list_p0.extend(self.long_term_refs_iter());
         // BUG what if we remove stuff here, aren't we going to invalidate `num_short_term_refs`?
-        ref_pic_list_p0.retain(|h| !h.0.borrow().is_second_field());
+        ref_pic_list_p0.retain(|h| !h.pic.borrow().is_second_field());
         Self::sort_long_term_pic_num_ascending(&mut ref_pic_list_p0[num_short_term_refs..]);
 
         #[cfg(debug_assertions)]
@@ -983,14 +995,14 @@ impl<T: Clone> Dpb<T> {
     fn build_ref_pic_list_b(&self, cur_pic: &PictureData) -> (DpbPicRefList<T>, DpbPicRefList<T>) {
         let mut short_term_refs: Vec<_> = self
             .short_term_refs_iter()
-            .filter(|h| !h.0.borrow().is_second_field())
+            .filter(|h| !h.pic.borrow().is_second_field())
             .collect();
 
         // When pic_order_cnt_type is equal to 0, reference pictures that are
         // marked as "non-existing" as specified in clause 8.2.5.2 are not
         // included in either RefPicList0 or RefPicList1.
         if cur_pic.pic_order_cnt_type == 0 {
-            short_term_refs.retain(|h| !h.0.borrow().nonexisting);
+            short_term_refs.retain(|h| !h.pic.borrow().nonexisting);
         }
 
         let mut ref_pic_list_b0 = vec![];
@@ -1001,7 +1013,7 @@ impl<T: Clone> Dpb<T> {
         // [1]: short term pictures with POC > current, sorted by ascending POC.
         // [2]: long term pictures sorted by ascending long_term_pic_num
         for &handle in &short_term_refs {
-            let pic = handle.0.borrow();
+            let pic = handle.pic.borrow();
 
             if pic.pic_order_cnt < cur_pic.pic_order_cnt {
                 ref_pic_list_b0.push(handle);
@@ -1016,8 +1028,8 @@ impl<T: Clone> Dpb<T> {
 
         let mut long_term_refs: Vec<_> = self
             .long_term_refs_iter()
-            .filter(|h| !h.0.borrow().nonexisting)
-            .filter(|h| !h.0.borrow().is_second_field())
+            .filter(|h| !h.pic.borrow().nonexisting)
+            .filter(|h| !h.pic.borrow().is_second_field())
             .collect();
         Self::sort_long_term_pic_num_ascending(&mut long_term_refs);
 
@@ -1028,7 +1040,7 @@ impl<T: Clone> Dpb<T> {
         // [1]: short term pictures with POC < current, sorted by descending POC.
         // [2]: long term pictures sorted by ascending long_term_pic_num
         for &handle in &short_term_refs {
-            let pic = handle.0.borrow();
+            let pic = handle.pic.borrow();
 
             if pic.pic_order_cnt > cur_pic.pic_order_cnt {
                 ref_pic_list_b1.push(handle);
@@ -1076,7 +1088,7 @@ impl<T: Clone> Dpb<T> {
         // marked as "non-existing" as specified in clause 8.2.5.2 are not
         // included in either RefPicList0 or RefPicList1.
         if cur_pic.pic_order_cnt_type == 0 {
-            short_term_refs.retain(|h| !h.0.borrow().nonexisting);
+            short_term_refs.retain(|h| !h.pic.borrow().nonexisting);
         }
 
         // refFrameList0ShortTerm is comprised of two inner lists, [[0] [1]]
@@ -1088,7 +1100,7 @@ impl<T: Clone> Dpb<T> {
         // using PicOrderCnt( fldPrev ) and the ordering method described in the
         // previous sentence is applied.
         for &handle in &short_term_refs {
-            let pic = handle.0.borrow();
+            let pic = handle.pic.borrow();
 
             if pic.pic_order_cnt <= cur_pic.pic_order_cnt {
                 ref_frame_list_0_short_term.push(handle);
@@ -1111,7 +1123,7 @@ impl<T: Clone> Dpb<T> {
         // previous sentence is applied.
 
         for &handle in &short_term_refs {
-            let pic = handle.0.borrow();
+            let pic = handle.pic.borrow();
 
             if pic.pic_order_cnt > cur_pic.pic_order_cnt {
                 ref_frame_list_1_short_term.push(handle);
@@ -1134,7 +1146,7 @@ impl<T: Clone> Dpb<T> {
         // reference" is included into the list refFrameListLongTerm
         let mut ref_frame_list_long_term: Vec<_> = self
             .long_term_refs_iter()
-            .filter(|h| !h.0.borrow().nonexisting)
+            .filter(|h| !h.pic.borrow().nonexisting)
             .collect();
 
         Self::sort_long_term_frame_idx_ascending(&mut ref_frame_list_long_term);
@@ -1249,7 +1261,7 @@ impl<T: Clone> std::fmt::Debug for Dpb<T> {
         let pics = self
             .entries
             .iter()
-            .map(|h| &h.0)
+            .map(|h| &h.pic)
             .enumerate()
             .collect::<Vec<_>>();
         f.debug_struct("Dpb")

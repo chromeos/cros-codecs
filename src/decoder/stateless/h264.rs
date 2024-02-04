@@ -523,7 +523,7 @@ where
                 .context("Could not find a ShortTerm picture to unmark in the DPB")?;
 
             to_unmark
-                .0
+                .pic
                 .borrow_mut()
                 .set_reference(Reference::None, true);
             num_ref_pics -= 1;
@@ -538,7 +538,7 @@ where
         self.dpb
             .bump_as_needed(current_pic)
             .into_iter()
-            .filter_map(|p| p.1)
+            .filter_map(|p| p.handle)
     }
 
     /// Returns an iterator of the handles of all the frames still present in the DPB.
@@ -548,7 +548,7 @@ where
         self.dpb.clear();
         self.last_field = None;
 
-        pics.into_iter().filter_map(|h| h.1)
+        pics.into_iter().filter_map(|h| h.handle)
     }
 
     /// Find the first field for the picture started by `slice`, if any.
@@ -564,12 +564,12 @@ where
                 prev_field = self.last_field.clone();
             } else if let Some(last_handle) = self.dpb.entries().last() {
                 // Use the last entry in the DPB
-                let prev_pic = last_handle.0.borrow();
+                let prev_pic = last_handle.pic.borrow();
 
                 if !matches!(prev_pic.field, Field::Frame) && prev_pic.other_field().is_none() {
-                    if let Some(handle) = &last_handle.1 {
+                    if let Some(handle) = &last_handle.handle {
                         // Still waiting for the second field
-                        prev_field = Some((last_handle.0.clone(), handle.clone()));
+                        prev_field = Some((last_handle.pic.clone(), handle.clone()));
                     }
                 }
             }
@@ -693,7 +693,7 @@ where
                 break;
             }
 
-            let target = &ref_pic_list_x[cidx].0;
+            let target = &ref_pic_list_x[cidx].pic;
 
             if Self::pic_num_f(&target.borrow(), max_pic_num) != pic_num_lx {
                 ref_pic_list_x[nidx] = ref_pic_list_x[cidx];
@@ -737,7 +737,7 @@ where
                 break;
             }
 
-            let target = &ref_pic_list_x[cidx].0;
+            let target = &ref_pic_list_x[cidx].pic;
             if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
                 != long_term_pic_num as i32
             {
