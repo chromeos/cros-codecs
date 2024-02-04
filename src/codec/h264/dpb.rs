@@ -345,8 +345,7 @@ impl<T: Clone> Dpb<T> {
             self.entries.remove(index);
         }
 
-        if pic.other_field().is_some() {
-            let other_field_rc = pic.other_field().unwrap();
+        if let Some(other_field_rc) = pic.other_field() {
             let mut other_field = other_field_rc.borrow_mut();
             other_field.needed_for_output = false;
 
