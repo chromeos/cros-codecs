@@ -305,9 +305,11 @@ impl<T: Clone> Dpb<T> {
 
     /// Find the lowest POC in the DPB that can be bumped.
     fn find_lowest_poc_for_bumping(&self) -> Option<&DpbEntry<T>> {
-        let lowest = self
-            .pictures()
-            .filter(|pic| {
+        self.entries
+            .iter()
+            .filter(|handle| {
+                let pic = handle.0.borrow();
+
                 if !pic.needed_for_output {
                     return false;
                 }
@@ -317,11 +319,7 @@ impl<T: Clone> Dpb<T> {
 
                 !skip
             })
-            .min_by_key(|pic| pic.pic_order_cnt)?;
-
-        self.entries
-            .iter()
-            .find(|handle| handle.0.borrow().pic_order_cnt == lowest.pic_order_cnt)
+            .min_by_key(|handle| handle.0.borrow().pic_order_cnt)
     }
 
     /// Gets the position of `needle` in the DPB, if any.
