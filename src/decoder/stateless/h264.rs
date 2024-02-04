@@ -560,8 +560,8 @@ where
         let mut prev_field = None;
 
         if self.dpb.interlaced() {
-            if self.last_field.is_some() {
-                prev_field = self.last_field.clone();
+            if let Some(last_field) = &self.last_field {
+                prev_field = Some((&last_field.0, &last_field.1));
             } else if let Some(last_handle) = self.dpb.entries().last() {
                 // Use the last entry in the DPB
                 let prev_pic = last_handle.pic.borrow();
@@ -569,7 +569,7 @@ where
                 if !matches!(prev_pic.field, Field::Frame) && prev_pic.other_field().is_none() {
                     if let Some(handle) = &last_handle.handle {
                         // Still waiting for the second field
-                        prev_field = Some((last_handle.pic.clone(), handle.clone()));
+                        prev_field = Some((&last_handle.pic, &handle));
                     }
                 }
             }
@@ -614,7 +614,8 @@ where
                     }
                 }
 
-                Ok(Some(prev_field.clone()))
+                drop(prev_field_pic);
+                Ok(Some((prev_field.0.clone(), prev_field.1.clone())))
             }
         }
     }
