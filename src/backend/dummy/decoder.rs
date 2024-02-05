@@ -121,10 +121,6 @@ impl<M> FramePool<M> for Backend {
     }
 
     fn clear(&mut self) {}
-
-    fn take_free_frame(&mut self) -> Option<Box<dyn AsRef<M>>> {
-        None
-    }
 }
 
 impl<Codec: StatelessCodec> StatelessDecoderBackendPicture<Codec> for Backend {

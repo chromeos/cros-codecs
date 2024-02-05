@@ -43,14 +43,6 @@ pub trait FramePool<M> {
     fn num_managed_frames(&self) -> usize;
     /// Remove all frames from this pool.
     fn clear(&mut self);
-    /// Returns an object holding one of the available frames from this pool.
-    /// The frame will be available for rendering again once the returned object
-    /// is dropped.
-    ///
-    /// This is useful to prevent decoding from happening by holding all the available frames.
-    ///
-    /// Returns `None` if there is no free frame at the time of calling.
-    fn take_free_frame(&mut self) -> Option<Box<dyn AsRef<M>>>;
 }
 
 /// Information about the current stream.

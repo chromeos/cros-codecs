@@ -235,11 +235,4 @@ impl<M: SurfaceMemoryDescriptor> FramePool<M> for VaSurfacePool<M> {
         pool.surfaces.clear();
         pool.managed_surfaces.clear();
     }
-
-    fn take_free_frame(&mut self) -> Option<Box<dyn AsRef<M>>> {
-        (**self)
-            .borrow_mut()
-            .get_surface(self)
-            .map(|s| Box::new(s) as Box<dyn AsRef<M>>)
-    }
 }
