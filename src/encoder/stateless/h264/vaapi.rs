@@ -468,8 +468,8 @@ pub(super) mod tests {
     use super::*;
     use crate::backend::vaapi::encoder::tests::upload_test_frame;
     use crate::backend::vaapi::encoder::tests::TestFrameGenerator;
-    use crate::backend::vaapi::surface_pool::PooledSurface;
-    use crate::backend::vaapi::surface_pool::SurfacePool;
+    use crate::backend::vaapi::surface_pool::PooledVaSurface;
+    use crate::backend::vaapi::surface_pool::VaSurfacePool;
     use crate::codec::h264::parser::Level;
     use crate::codec::h264::parser::PpsBuilder;
     use crate::codec::h264::parser::Profile;
@@ -635,7 +635,7 @@ pub(super) mod tests {
     #[ignore]
     fn test_vaapi_encoder() {
         type VaapiH264Encoder<'l> =
-            StatelessEncoder<PooledSurface<()>, VaapiBackend<(), PooledSurface<()>>>;
+            StatelessEncoder<PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
 
         const WIDTH: usize = 512;
         const HEIGHT: usize = 512;
@@ -687,7 +687,7 @@ pub(super) mod tests {
         )
         .unwrap();
 
-        let mut pool = SurfacePool::new(
+        let mut pool = VaSurfacePool::new(
             Rc::clone(&display),
             VA_RT_FORMAT_YUV420,
             Some(UsageHint::USAGE_HINT_ENCODER),

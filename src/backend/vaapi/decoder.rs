@@ -20,8 +20,8 @@ use libva::SurfaceMemoryDescriptor;
 use libva::VaError;
 
 use crate::backend::vaapi::p01x_to_i01x;
-use crate::backend::vaapi::surface_pool::PooledSurface;
-use crate::backend::vaapi::surface_pool::SurfacePool;
+use crate::backend::vaapi::surface_pool::PooledVaSurface;
+use crate::backend::vaapi::surface_pool::VaSurfacePool;
 use crate::backend::vaapi::va_rt_format_to_string;
 use crate::backend::vaapi::y21x_to_i21x;
 use crate::backend::vaapi::FormatMap;
@@ -141,7 +141,7 @@ pub(crate) enum StreamMetadataState {
     Parsed(ParsedStreamMetadata),
 }
 
-type StreamStateWithPool<M> = (StreamMetadataState, Vec<SurfacePool<M>>);
+type StreamStateWithPool<M> = (StreamMetadataState, Vec<VaSurfacePool<M>>);
 
 impl StreamMetadataState {
     /// Returns a reference to the parsed metadata state or an error if we haven't reached that
@@ -159,7 +159,7 @@ impl StreamMetadataState {
         hdr: S,
         format_map: Option<&FormatMap>,
         old_metadata_state: StreamMetadataState,
-        old_surface_pools: Vec<SurfacePool<M>>,
+        old_surface_pools: Vec<VaSurfacePool<M>>,
         supports_context_reuse: bool,
         pool_creation_mode: PoolCreationMode,
     ) -> anyhow::Result<StreamStateWithPool<M>> {
@@ -252,7 +252,7 @@ impl StreamMetadataState {
                 let surface_pools = layers
                     .iter()
                     .map(|layer| {
-                        SurfacePool::new(
+                        VaSurfacePool::new(
                             Rc::clone(display),
                             rt_format,
                             Some(libva::UsageHint::USAGE_HINT_DECODER),
@@ -319,7 +319,7 @@ pub struct VaapiDecodedHandle<M: SurfaceMemoryDescriptor> {
 impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
     /// Creates a new pending handle on `surface_id`.
     fn new(
-        picture: Picture<PictureNew, PooledSurface<M>>,
+        picture: Picture<PictureNew, PooledVaSurface<M>>,
         metadata: &ParsedStreamMetadata,
     ) -> anyhow::Result<Self> {
         let picture = picture.begin()?.render()?.end()?;
@@ -370,7 +370,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
     }
 
     /// Returns the picture of this handle.
-    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledSurface<M>>> {
+    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledVaSurface<M>>> {
         match &self.state {
             PictureState::Ready(picture) => Some(picture),
             PictureState::Pending(_) => None,
@@ -420,8 +420,8 @@ impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::Ref<'a, VaapiDecod
 
 /// Rendering state of a VA picture.
 enum PictureState<M: SurfaceMemoryDescriptor> {
-    Ready(Picture<PictureSync, PooledSurface<M>>),
-    Pending(Picture<PictureEnd, PooledSurface<M>>),
+    Ready(Picture<PictureSync, PooledVaSurface<M>>),
+    Pending(Picture<PictureEnd, PooledVaSurface<M>>),
     // Only set in the destructor when we take ownership of the VA picture.
     Invalid,
 }
@@ -532,7 +532,7 @@ where
     /// Pools of surfaces. We reuse surfaces as they are expensive to allocate.
     /// We allow for multiple pools so as to support one spatial layer per pool
     /// when needed.
-    pub(crate) surface_pools: Vec<SurfacePool<M>>,
+    pub(crate) surface_pools: Vec<VaSurfacePool<M>>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
     /// Whether the codec supports context reuse on DRC. This is only supported
@@ -548,7 +548,7 @@ where
 {
     pub(crate) fn new(display: Rc<libva::Display>, supports_context_reuse: bool) -> Self {
         // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
-        let surface_pools = vec![SurfacePool::new(
+        let surface_pools = vec![VaSurfacePool::new(
             Rc::clone(&display),
             libva::constants::VA_RT_FORMAT_YUV420,
             Some(libva::UsageHint::USAGE_HINT_DECODER),
@@ -593,7 +593,7 @@ where
 
     pub(crate) fn process_picture<Codec: StatelessCodec>(
         &mut self,
-        picture: Picture<PictureNew, PooledSurface<M>>,
+        picture: Picture<PictureNew, PooledVaSurface<M>>,
     ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<Codec>>::Handle>
     where
         Self: StatelessDecoderBackendPicture<Codec>,
@@ -626,7 +626,7 @@ where
         Ok(formats.into_iter().map(|f| f.decoded_format).collect())
     }
 
-    pub(crate) fn highest_pool(&mut self) -> &mut SurfacePool<M> {
+    pub(crate) fn highest_pool(&mut self) -> &mut VaSurfacePool<M> {
         /* we guarantee that there is at least one pool, at minimum */
         self.surface_pools
             .iter_mut()
@@ -634,7 +634,7 @@ where
             .unwrap()
     }
 
-    pub(crate) fn pool(&mut self, layer: Resolution) -> Option<&mut SurfacePool<M>> {
+    pub(crate) fn pool(&mut self, layer: Resolution) -> Option<&mut VaSurfacePool<M>> {
         self.surface_pools
             .iter_mut()
             .find(|p| p.coded_resolution() == layer)
@@ -642,7 +642,7 @@ where
 }
 
 /// Shortcut for pictures used for the VAAPI backend.
-pub type VaapiPicture<M> = Picture<PictureNew, PooledSurface<M>>;
+pub type VaapiPicture<M> = Picture<PictureNew, PooledVaSurface<M>>;
 
 impl<Codec: StatelessCodec, M> StatelessDecoderBackend<Codec> for VaapiBackend<M>
 where

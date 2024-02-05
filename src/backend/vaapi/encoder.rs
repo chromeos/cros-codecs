@@ -21,8 +21,8 @@ use libva::VAEntrypoint::VAEntrypointEncSliceLP;
 use libva::VAProfile;
 use libva::VASurfaceStatus;
 
-use crate::backend::vaapi::surface_pool::PooledSurface;
-use crate::backend::vaapi::surface_pool::SurfacePool;
+use crate::backend::vaapi::surface_pool::PooledVaSurface;
+use crate::backend::vaapi::surface_pool::VaSurfacePool;
 use crate::backend::vaapi::FORMAT_MAP;
 use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::StatelessBackendError;
@@ -38,7 +38,7 @@ const INITIAL_SCRATCH_POOL_SIZE: usize = 16;
 /// scratch frames.
 const MAX_SCRATCH_POOL_SIZE: usize = INITIAL_SCRATCH_POOL_SIZE * 4;
 
-pub struct Reference(PooledSurface<()>);
+pub struct Reference(PooledVaSurface<()>);
 
 impl Reference {
     pub(crate) fn surface(&self) -> &Surface<()> {
@@ -64,7 +64,7 @@ where
     context: Rc<Context>,
 
     _va_profile: VAProfile::Type,
-    scratch_pool: SurfacePool<()>,
+    scratch_pool: VaSurfacePool<()>,
     _phantom: PhantomData<(M, H)>,
 }
 
@@ -115,7 +115,7 @@ where
             true,
         )?;
 
-        let mut scratch_pool = SurfacePool::new(
+        let mut scratch_pool = VaSurfacePool::new(
             Rc::clone(&display),
             rt_format,
             Some(UsageHint::USAGE_HINT_ENCODER),
@@ -337,7 +337,7 @@ pub(crate) mod tests {
     pub struct PooledFrameIterator {
         counter: u64,
         display: Rc<Display>,
-        pool: SurfacePool<()>,
+        pool: VaSurfacePool<()>,
         display_resolution: Resolution,
         frame_layout: FrameLayout,
     }
@@ -345,7 +345,7 @@ pub(crate) mod tests {
     impl PooledFrameIterator {
         pub fn new(
             display: Rc<Display>,
-            pool: SurfacePool<()>,
+            pool: VaSurfacePool<()>,
             display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {
@@ -360,7 +360,7 @@ pub(crate) mod tests {
     }
 
     impl Iterator for PooledFrameIterator {
-        type Item = (FrameMetadata, PooledSurface<()>);
+        type Item = (FrameMetadata, PooledVaSurface<()>);
 
         fn next(&mut self) -> Option<Self::Item> {
             let handle = self.pool.get_surface().unwrap();
@@ -396,7 +396,7 @@ pub(crate) mod tests {
         pub fn new(
             raw_iterator: I,
             display: Rc<Display>,
-            pool: SurfacePool<()>,
+            pool: VaSurfacePool<()>,
             display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {
@@ -416,7 +416,7 @@ pub(crate) mod tests {
     where
         I: Iterator<Item = &'l [u8]>,
     {
-        type Item = (FrameMetadata, PooledSurface<()>);
+        type Item = (FrameMetadata, PooledVaSurface<()>);
 
         fn next(&mut self) -> Option<Self::Item> {
             let raw = match self.raw_iterator.next() {
@@ -537,7 +537,7 @@ pub(crate) mod tests {
         pub fn new(
             max_count: u64,
             display: Rc<Display>,
-            pool: SurfacePool<()>,
+            pool: VaSurfacePool<()>,
             display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {
@@ -556,7 +556,7 @@ pub(crate) mod tests {
     }
 
     impl Iterator for TestFrameGenerator {
-        type Item = (FrameMetadata, PooledSurface<()>);
+        type Item = (FrameMetadata, PooledVaSurface<()>);
 
         fn next(&mut self) -> Option<Self::Item> {
             if self.counter > self.max_count {

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use argh::FromArgs;
-use cros_codecs::backend::vaapi::surface_pool::SurfacePool;
+use cros_codecs::backend::vaapi::surface_pool::VaSurfacePool;
 use cros_codecs::codec::h264::parser::Profile;
 use cros_codecs::encoder::stateless::h264::Bitrate;
 use cros_codecs::encoder::stateless::h264::EncoderConfig;
@@ -166,7 +166,7 @@ fn main() {
     )
     .expect("Unable to crate encoder");
 
-    let mut pool = SurfacePool::new(
+    let mut pool = VaSurfacePool::new(
         Rc::clone(&display),
         libva::constants::VA_RT_FORMAT_YUV420,
         Some(libva::UsageHint::USAGE_HINT_ENCODER),

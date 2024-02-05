@@ -22,13 +22,13 @@ use crate::Resolution;
 ///
 /// The surface will automatically be returned to its pool upon dropping, provided the pool still
 /// exists and the surface is still compatible with it.
-pub struct PooledSurface<M: SurfaceMemoryDescriptor> {
+pub struct PooledVaSurface<M: SurfaceMemoryDescriptor> {
     surface: Option<Surface<M>>,
-    pool: Weak<RefCell<SurfacePoolInner<M>>>,
+    pool: Weak<RefCell<VaSurfacePoolInner<M>>>,
 }
 
-impl<M: SurfaceMemoryDescriptor> PooledSurface<M> {
-    fn new(surface: Surface<M>, pool: &Rc<RefCell<SurfacePoolInner<M>>>) -> Self {
+impl<M: SurfaceMemoryDescriptor> PooledVaSurface<M> {
+    fn new(surface: Surface<M>, pool: &Rc<RefCell<VaSurfacePoolInner<M>>>) -> Self {
         Self {
             surface: Some(surface),
             pool: Rc::downgrade(pool),
@@ -49,20 +49,20 @@ impl<M: SurfaceMemoryDescriptor> PooledSurface<M> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> Borrow<Surface<M>> for PooledSurface<M> {
+impl<M: SurfaceMemoryDescriptor> Borrow<Surface<M>> for PooledVaSurface<M> {
     fn borrow(&self) -> &Surface<M> {
         // `unwrap` will never fail as `surface` is `Some` until the object is dropped.
         self.surface.as_ref().unwrap()
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> AsRef<M> for PooledSurface<M> {
+impl<M: SurfaceMemoryDescriptor> AsRef<M> for PooledVaSurface<M> {
     fn as_ref(&self) -> &M {
         <Self as Borrow<Surface<M>>>::borrow(self).as_ref()
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> Drop for PooledSurface<M> {
+impl<M: SurfaceMemoryDescriptor> Drop for PooledVaSurface<M> {
     fn drop(&mut self) {
         // If the surface has not been detached...
         if let Some(surface) = self.surface.take() {
@@ -86,7 +86,7 @@ impl<M: SurfaceMemoryDescriptor> Drop for PooledSurface<M> {
     }
 }
 
-struct SurfacePoolInner<M: SurfaceMemoryDescriptor> {
+struct VaSurfacePoolInner<M: SurfaceMemoryDescriptor> {
     display: Rc<Display>,
     rt_format: u32,
     usage_hint: Option<libva::UsageHint>,
@@ -107,11 +107,11 @@ struct SurfacePoolInner<M: SurfaceMemoryDescriptor> {
 /// This means that this pool is suitable for inter-frame DRC, as the stale
 /// surfaces will gracefully be dropped, which is arguably better than the
 /// alternative of having more than one pool active at a time.
-pub struct SurfacePool<M: SurfaceMemoryDescriptor> {
-    inner: Rc<RefCell<SurfacePoolInner<M>>>,
+pub struct VaSurfacePool<M: SurfaceMemoryDescriptor> {
+    inner: Rc<RefCell<VaSurfacePoolInner<M>>>,
 }
 
-impl<M: SurfaceMemoryDescriptor> SurfacePool<M> {
+impl<M: SurfaceMemoryDescriptor> VaSurfacePool<M> {
     /// Create new surfaces and add them to the pool, using `descriptors` as backing memory.
     pub fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), VaError> {
         let mut inner = (*self.inner).borrow_mut();
@@ -184,7 +184,7 @@ impl<M: SurfaceMemoryDescriptor> SurfacePool<M> {
         coded_resolution: Resolution,
     ) -> Self {
         Self {
-            inner: Rc::new(RefCell::new(SurfacePoolInner {
+            inner: Rc::new(RefCell::new(VaSurfacePoolInner {
                 display,
                 rt_format,
                 usage_hint,
@@ -196,7 +196,7 @@ impl<M: SurfaceMemoryDescriptor> SurfacePool<M> {
     }
 
     /// Gets a free surface from the pool.
-    pub fn get_surface(&mut self) -> Option<PooledSurface<M>> {
+    pub fn get_surface(&mut self) -> Option<PooledVaSurface<M>> {
         let mut inner = (*self.inner).borrow_mut();
         let surface = inner.surfaces.pop_front();
 
@@ -209,11 +209,11 @@ impl<M: SurfaceMemoryDescriptor> SurfacePool<M> {
             }
         });
 
-        surface.map(|s| PooledSurface::new(s, &self.inner))
+        surface.map(|s| PooledVaSurface::new(s, &self.inner))
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> FramePool<M> for SurfacePool<M> {
+impl<M: SurfaceMemoryDescriptor> FramePool<M> for VaSurfacePool<M> {
     fn coded_resolution(&self) -> Resolution {
         (*self.inner).borrow().coded_resolution
     }
