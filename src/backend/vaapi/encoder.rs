@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use std::any::Any;
-use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -65,7 +64,7 @@ where
     context: Rc<Context>,
 
     _va_profile: VAProfile::Type,
-    scratch_pool: Rc<RefCell<SurfacePool<()>>>,
+    scratch_pool: SurfacePool<()>,
     _phantom: PhantomData<(M, H)>,
 }
 
@@ -116,7 +115,7 @@ where
             true,
         )?;
 
-        let scratch_pool = SurfacePool::new(
+        let mut scratch_pool = SurfacePool::new(
             Rc::clone(&display),
             rt_format,
             Some(UsageHint::USAGE_HINT_ENCODER),
@@ -124,9 +123,7 @@ where
         );
 
         // TODO: Allow initial size to be changed
-        scratch_pool
-            .borrow_mut()
-            .add_surfaces(vec![(); INITIAL_SCRATCH_POOL_SIZE])?;
+        scratch_pool.add_surfaces(vec![(); INITIAL_SCRATCH_POOL_SIZE])?;
 
         Ok(Self {
             va_config,
@@ -144,23 +141,22 @@ where
     // Creates an empty surface that will be filled with reconstructed picture during encoding
     // which will be later used as frame reference
     pub(crate) fn new_scratch_picture(&mut self) -> StatelessBackendResult<Reference> {
-        let mut scratch_pool = self.scratch_pool.borrow_mut();
-
-        if scratch_pool.num_surfaces_left() == 0 {
-            if scratch_pool.num_managed_surfaces() >= MAX_SCRATCH_POOL_SIZE {
+        if self.scratch_pool.num_surfaces_left() == 0 {
+            if self.scratch_pool.num_managed_surfaces() >= MAX_SCRATCH_POOL_SIZE {
                 log::error!("Scratch pool is exhausted and hit the size limit");
                 return Err(StatelessBackendError::OutOfResources);
             }
 
             log::debug!(
                 "Scratch pool empty, allocating one more surface. (previous pool size: {})",
-                scratch_pool.num_managed_surfaces()
+                self.scratch_pool.num_managed_surfaces()
             );
-            scratch_pool.add_surfaces(vec![()])?;
+            self.scratch_pool.add_surfaces(vec![()])?;
         }
 
-        let surface = scratch_pool
-            .get_surface(&self.scratch_pool)
+        let surface = self
+            .scratch_pool
+            .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
 
         Ok(Reference(surface))
@@ -341,7 +337,7 @@ pub(crate) mod tests {
     pub struct PooledFrameIterator {
         counter: u64,
         display: Rc<Display>,
-        pool: Rc<RefCell<SurfacePool<()>>>,
+        pool: SurfacePool<()>,
         display_resolution: Resolution,
         frame_layout: FrameLayout,
     }
@@ -349,7 +345,7 @@ pub(crate) mod tests {
     impl PooledFrameIterator {
         pub fn new(
             display: Rc<Display>,
-            pool: Rc<RefCell<SurfacePool<()>>>,
+            pool: SurfacePool<()>,
             display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {
@@ -367,7 +363,7 @@ pub(crate) mod tests {
         type Item = (FrameMetadata, PooledSurface<()>);
 
         fn next(&mut self) -> Option<Self::Item> {
-            let handle = self.pool.borrow_mut().get_surface(&self.pool).unwrap();
+            let handle = self.pool.get_surface().unwrap();
 
             let meta = FrameMetadata {
                 display_resolution: self.display_resolution,
@@ -400,7 +396,7 @@ pub(crate) mod tests {
         pub fn new(
             raw_iterator: I,
             display: Rc<Display>,
-            pool: Rc<RefCell<SurfacePool<()>>>,
+            pool: SurfacePool<()>,
             display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {
@@ -541,7 +537,7 @@ pub(crate) mod tests {
         pub fn new(
             max_count: u64,
             display: Rc<Display>,
-            pool: Rc<RefCell<SurfacePool<()>>>,
+            pool: SurfacePool<()>,
             display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {

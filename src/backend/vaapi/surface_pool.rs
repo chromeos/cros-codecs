@@ -24,11 +24,11 @@ use crate::Resolution;
 /// exists and the surface is still compatible with it.
 pub struct PooledSurface<M: SurfaceMemoryDescriptor> {
     surface: Option<Surface<M>>,
-    pool: Weak<RefCell<SurfacePool<M>>>,
+    pool: Weak<RefCell<SurfacePoolInner<M>>>,
 }
 
 impl<M: SurfaceMemoryDescriptor> PooledSurface<M> {
-    fn new(surface: Surface<M>, pool: &Rc<RefCell<SurfacePool<M>>>) -> Self {
+    fn new(surface: Surface<M>, pool: &Rc<RefCell<SurfacePoolInner<M>>>) -> Self {
         Self {
             surface: Some(surface),
             pool: Rc::downgrade(pool),
@@ -42,7 +42,7 @@ impl<M: SurfaceMemoryDescriptor> PooledSurface<M> {
         let surface = self.surface.take().unwrap();
 
         if let Some(pool) = self.pool.upgrade() {
-            pool.borrow_mut().managed_surfaces.remove(&surface.id());
+            (*pool).borrow_mut().managed_surfaces.remove(&surface.id());
         }
 
         surface
@@ -68,7 +68,7 @@ impl<M: SurfaceMemoryDescriptor> Drop for PooledSurface<M> {
         if let Some(surface) = self.surface.take() {
             // ... and the pool still exists...
             if let Some(pool) = self.pool.upgrade() {
-                let mut pool_borrowed = pool.borrow_mut();
+                let mut pool_borrowed = (*pool).borrow_mut();
                 // ... and the pool is still managing this surface, return it.
                 if pool_borrowed.managed_surfaces.contains_key(&surface.id()) {
                     pool_borrowed.surfaces.push_back(surface);
@@ -86,16 +86,7 @@ impl<M: SurfaceMemoryDescriptor> Drop for PooledSurface<M> {
     }
 }
 
-/// A surface pool to reduce the number of costly Surface allocations.
-///
-/// The pool only houses Surfaces that fits the pool's coded resolution.
-/// Stale surfaces are dropped when either the pool resolution changes, or when
-/// stale surfaces are retrieved.
-///
-/// This means that this pool is suitable for inter-frame DRC, as the stale
-/// surfaces will gracefully be dropped, which is arguably better than the
-/// alternative of having more than one pool active at a time.
-pub struct SurfacePool<M: SurfaceMemoryDescriptor> {
+struct SurfacePoolInner<M: SurfaceMemoryDescriptor> {
     display: Rc<Display>,
     rt_format: u32,
     usage_hint: Option<libva::UsageHint>,
@@ -107,7 +98,77 @@ pub struct SurfacePool<M: SurfaceMemoryDescriptor> {
     managed_surfaces: BTreeMap<VASurfaceID, Resolution>,
 }
 
+/// A surface pool to reduce the number of costly Surface allocations.
+///
+/// The pool only houses Surfaces that fits the pool's coded resolution.
+/// Stale surfaces are dropped when either the pool resolution changes, or when
+/// stale surfaces are retrieved.
+///
+/// This means that this pool is suitable for inter-frame DRC, as the stale
+/// surfaces will gracefully be dropped, which is arguably better than the
+/// alternative of having more than one pool active at a time.
+pub struct SurfacePool<M: SurfaceMemoryDescriptor> {
+    inner: Rc<RefCell<SurfacePoolInner<M>>>,
+}
+
 impl<M: SurfaceMemoryDescriptor> SurfacePool<M> {
+    /// Create new surfaces and add them to the pool, using `descriptors` as backing memory.
+    pub fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), VaError> {
+        let mut inner = (*self.inner).borrow_mut();
+
+        let surfaces = inner.display.create_surfaces(
+            inner.rt_format,
+            // Let the hardware decide the best internal format - we will get the desired fourcc
+            // when creating the image.
+            None,
+            inner.coded_resolution.width,
+            inner.coded_resolution.height,
+            inner.usage_hint,
+            descriptors,
+        )?;
+
+        for surface in &surfaces {
+            inner
+                .managed_surfaces
+                .insert(surface.id(), surface.size().into());
+        }
+        inner.surfaces.extend(surfaces);
+
+        Ok(())
+    }
+
+    /// Add a surface to the pool.
+    ///
+    /// This can be an entirely new surface, or one that has been previously obtained using
+    /// `get_surface` and is returned.
+    ///
+    /// Returns an error (and the passed `surface` back) if the surface is not at least as
+    /// large as the current coded resolution of the pool.
+    #[allow(dead_code)]
+    pub(crate) fn add_surface(&mut self, surface: Surface<M>) -> Result<(), Surface<M>> {
+        let mut inner = (*self.inner).borrow_mut();
+
+        if Resolution::from(surface.size()).can_contain(inner.coded_resolution) {
+            inner
+                .managed_surfaces
+                .insert(surface.id(), surface.size().into());
+            inner.surfaces.push_back(surface);
+            Ok(())
+        } else {
+            Err(surface)
+        }
+    }
+
+    /// Returns new number of surfaces left.
+    pub(crate) fn num_surfaces_left(&self) -> usize {
+        (*self.inner).borrow().surfaces.len()
+    }
+
+    /// Returns the total number of managed surfaces in this pool.
+    pub(crate) fn num_managed_surfaces(&self) -> usize {
+        (*self.inner).borrow().managed_surfaces.len()
+    }
+
     /// Create a new pool.
     ///
     /// # Arguments
@@ -121,129 +182,69 @@ impl<M: SurfaceMemoryDescriptor> SurfacePool<M> {
         rt_format: u32,
         usage_hint: Option<libva::UsageHint>,
         coded_resolution: Resolution,
-    ) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self {
-            display,
-            rt_format,
-            usage_hint,
-            coded_resolution,
-            surfaces: VecDeque::new(),
-            managed_surfaces: Default::default(),
-        }))
-    }
-
-    /// Create new surfaces and add them to the pool, using `descriptors` as backing memory.
-    pub fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), VaError> {
-        let surfaces = self.display.create_surfaces(
-            self.rt_format,
-            // Let the hardware decide the best internal format - we will get the desired fourcc
-            // when creating the image.
-            None,
-            self.coded_resolution.width,
-            self.coded_resolution.height,
-            self.usage_hint,
-            descriptors,
-        )?;
-
-        for surface in &surfaces {
-            self.managed_surfaces
-                .insert(surface.id(), surface.size().into());
-        }
-        self.surfaces.extend(surfaces);
-
-        Ok(())
-    }
-
-    /// Retrieve the current coded resolution of the pool
-    pub(crate) fn coded_resolution(&self) -> Resolution {
-        self.coded_resolution
-    }
-
-    /// Sets the coded resolution of the pool. Releases any stale surfaces.
-    pub(crate) fn set_coded_resolution(&mut self, resolution: Resolution) {
-        self.coded_resolution = resolution;
-        self.managed_surfaces
-            .retain(|_, res| res.can_contain(self.coded_resolution));
-        self.surfaces
-            .retain(|s| Resolution::from(s.size()).can_contain(self.coded_resolution));
-    }
-
-    /// Add a surface to the pool.
-    ///
-    /// This can be an entirely new surface, or one that has been previously obtained using
-    /// `get_surface` and is returned.
-    ///
-    /// Returns an error (and the passed `surface` back) if the surface is not at least as
-    /// large as the current coded resolution of the pool.
-    #[allow(dead_code)]
-    pub(crate) fn add_surface(&mut self, surface: Surface<M>) -> Result<(), Surface<M>> {
-        if Resolution::from(surface.size()).can_contain(self.coded_resolution) {
-            self.managed_surfaces
-                .insert(surface.id(), surface.size().into());
-            self.surfaces.push_back(surface);
-            Ok(())
-        } else {
-            Err(surface)
+    ) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(SurfacePoolInner {
+                display,
+                rt_format,
+                usage_hint,
+                coded_resolution,
+                surfaces: VecDeque::new(),
+                managed_surfaces: Default::default(),
+            })),
         }
     }
 
     /// Gets a free surface from the pool.
-    ///
-    /// `return_pool` is a reference to the smart pointer containing the pool. It is a bit
-    /// inelegant, but we unfortunately cannot declare `self` to be `&Rc<RefCell<Self>>` so we
-    /// have to use this workaround.
-    pub fn get_surface(&mut self, return_pool: &Rc<RefCell<Self>>) -> Option<PooledSurface<M>> {
-        let surface = self.surfaces.pop_front();
+    pub fn get_surface(&mut self) -> Option<PooledSurface<M>> {
+        let mut inner = (*self.inner).borrow_mut();
+        let surface = inner.surfaces.pop_front();
 
         // Make sure the invariant holds when debugging. Can save costly
         // debugging time during future refactors, if any.
         debug_assert!({
             match surface.as_ref() {
-                Some(s) => Resolution::from(s.size()).can_contain(self.coded_resolution),
+                Some(s) => Resolution::from(s.size()).can_contain(inner.coded_resolution),
                 None => true,
             }
         });
 
-        surface.map(|s| PooledSurface::new(s, return_pool))
-    }
-
-    /// Returns new number of surfaces left.
-    pub(crate) fn num_surfaces_left(&self) -> usize {
-        self.surfaces.len()
-    }
-
-    /// Returns the total number of managed surfaces in this pool.
-    pub(crate) fn num_managed_surfaces(&self) -> usize {
-        self.managed_surfaces.len()
+        surface.map(|s| PooledSurface::new(s, &self.inner))
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> FramePool<M> for Rc<RefCell<SurfacePool<M>>> {
+impl<M: SurfaceMemoryDescriptor> FramePool<M> for SurfacePool<M> {
     fn coded_resolution(&self) -> Resolution {
-        (**self).borrow().coded_resolution
+        (*self.inner).borrow().coded_resolution
     }
 
     fn set_coded_resolution(&mut self, resolution: Resolution) {
-        (**self).borrow_mut().set_coded_resolution(resolution)
+        let mut inner = (*self.inner).borrow_mut();
+
+        inner.coded_resolution = resolution;
+        inner
+            .managed_surfaces
+            .retain(|_, res| res.can_contain(resolution));
+        inner
+            .surfaces
+            .retain(|s| Resolution::from(s.size()).can_contain(resolution));
     }
 
     fn add_frames(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error> {
-        (**self)
-            .borrow_mut()
-            .add_surfaces(descriptors)
+        self.add_surfaces(descriptors)
             .map_err(|e| anyhow::anyhow!(e))
     }
 
     fn num_free_frames(&self) -> usize {
-        (**self).borrow().num_surfaces_left()
+        self.num_surfaces_left()
     }
 
     fn num_managed_frames(&self) -> usize {
-        (**self).borrow().num_managed_surfaces()
+        self.num_managed_surfaces()
     }
 
     fn clear(&mut self) {
-        let mut pool = (**self).borrow_mut();
+        let mut pool = (*self.inner).borrow_mut();
 
         pool.surfaces.clear();
         pool.managed_surfaces.clear();

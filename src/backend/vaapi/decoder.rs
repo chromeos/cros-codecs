@@ -141,7 +141,7 @@ pub(crate) enum StreamMetadataState {
     Parsed(ParsedStreamMetadata),
 }
 
-type StreamStateWithPool<M> = (StreamMetadataState, Vec<Rc<RefCell<SurfacePool<M>>>>);
+type StreamStateWithPool<M> = (StreamMetadataState, Vec<SurfacePool<M>>);
 
 impl StreamMetadataState {
     /// Returns a reference to the parsed metadata state or an error if we haven't reached that
@@ -159,7 +159,7 @@ impl StreamMetadataState {
         hdr: S,
         format_map: Option<&FormatMap>,
         old_metadata_state: StreamMetadataState,
-        old_surface_pools: Vec<Rc<RefCell<SurfacePool<M>>>>,
+        old_surface_pools: Vec<SurfacePool<M>>,
         supports_context_reuse: bool,
         pool_creation_mode: PoolCreationMode,
     ) -> anyhow::Result<StreamStateWithPool<M>> {
@@ -208,7 +208,7 @@ impl StreamMetadataState {
             PoolCreationMode::Layers(layers) => layers,
         };
 
-        let (config, context, surface_pools) = match old_metadata_state {
+        let (config, context, mut surface_pools) = match old_metadata_state {
             // Nothing has changed for VAAPI, reuse current context.
             //
             // This can happen as the decoder cannot possibly know whether a
@@ -267,8 +267,7 @@ impl StreamMetadataState {
 
         /* sanity check */
         assert!(surface_pools.len() == layers.len());
-        for (pool, layer) in surface_pools.iter().zip(layers.iter()) {
-            let mut pool = pool.borrow_mut();
+        for (pool, layer) in surface_pools.iter_mut().zip(layers.iter()) {
             if !pool.coded_resolution().can_contain(*layer) {
                 /* this will purge the old surfaces by not reclaiming them */
                 pool.set_coded_resolution(*layer);
@@ -533,7 +532,7 @@ where
     /// Pools of surfaces. We reuse surfaces as they are expensive to allocate.
     /// We allow for multiple pools so as to support one spatial layer per pool
     /// when needed.
-    pub(crate) surface_pools: Vec<Rc<RefCell<SurfacePool<M>>>>,
+    pub(crate) surface_pools: Vec<SurfacePool<M>>,
     /// The metadata state. Updated whenever the decoder reads new data from the stream.
     pub(crate) metadata_state: StreamMetadataState,
     /// Whether the codec supports context reuse on DRC. This is only supported
@@ -627,18 +626,18 @@ where
         Ok(formats.into_iter().map(|f| f.decoded_format).collect())
     }
 
-    pub(crate) fn highest_pool(&mut self) -> &Rc<RefCell<SurfacePool<M>>> {
+    pub(crate) fn highest_pool(&mut self) -> &mut SurfacePool<M> {
         /* we guarantee that there is at least one pool, at minimum */
         self.surface_pools
-            .iter()
-            .max_by_key(|p| p.borrow().coded_resolution().height)
+            .iter_mut()
+            .max_by_key(|p| p.coded_resolution().height)
             .unwrap()
     }
 
-    pub(crate) fn pool(&mut self, layer: Resolution) -> Option<&Rc<RefCell<SurfacePool<M>>>> {
+    pub(crate) fn pool(&mut self, layer: Resolution) -> Option<&mut SurfacePool<M>> {
         self.surface_pools
-            .iter()
-            .find(|p| p.borrow().coded_resolution() == layer)
+            .iter_mut()
+            .find(|p| p.coded_resolution() == layer)
     }
 }
 

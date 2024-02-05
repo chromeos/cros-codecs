@@ -166,7 +166,7 @@ fn main() {
     )
     .expect("Unable to crate encoder");
 
-    let pool = SurfacePool::new(
+    let mut pool = SurfacePool::new(
         Rc::clone(&display),
         libva::constants::VA_RT_FORMAT_YUV420,
         Some(libva::UsageHint::USAGE_HINT_ENCODER),
@@ -176,7 +176,7 @@ fn main() {
         },
     );
 
-    pool.borrow_mut().add_surfaces(vec![(); 16]).unwrap();
+    pool.add_surfaces(vec![(); 16]).unwrap();
 
     let frame_size: usize = (args.width * args.height + args.width * args.height / 2) as usize;
 
@@ -185,7 +185,7 @@ fn main() {
     let mut buf = vec![0u8; frame_size];
     for i in 0..args.count {
         input.read_exact(&mut buf[..]).unwrap();
-        let handle = pool.borrow_mut().get_surface(&pool).unwrap();
+        let handle = pool.get_surface().unwrap();
         let layout = upload_img(&display, handle.borrow(), args.width, args.height, &buf[..]);
 
         let input_frame = FrameMetadata {

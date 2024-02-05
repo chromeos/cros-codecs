@@ -266,8 +266,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
 
         let highest_pool = self.highest_pool();
         let surface = highest_pool
-            .borrow_mut()
-            .get_surface(highest_pool)
+            .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
 
         let metadata = self.metadata_state.get_parsed()?;

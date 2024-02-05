@@ -611,15 +611,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
                         "No pool available for this layer"
                     )))?;
 
-                pool.borrow_mut()
-                    .get_surface(pool)
+                pool.get_surface()
                     .ok_or(StatelessBackendError::OutOfResources)?
             }
             None => {
                 let highest_pool = self.highest_pool();
                 highest_pool
-                    .borrow_mut()
-                    .get_surface(highest_pool)
+                    .get_surface()
                     .ok_or(StatelessBackendError::OutOfResources)?
             }
         };

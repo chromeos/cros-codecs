@@ -27,6 +27,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::decoder::FramePool;
 use crate::Resolution;
 
 /// The number of surfaces to allocate for this codec. Same as GStreamer's vavp8dec.
@@ -244,11 +245,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
 
         let highest_pool = self.highest_pool();
         let surface = highest_pool
-            .borrow_mut()
-            .get_surface(highest_pool)
+            .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
 
-        let coded_resolution = self.highest_pool().borrow().coded_resolution();
+        let coded_resolution = highest_pool.coded_resolution();
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
