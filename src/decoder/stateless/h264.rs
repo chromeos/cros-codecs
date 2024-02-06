@@ -535,10 +535,7 @@ where
     /// Returns an iterator of the handles of the frames that need to be bumped into the ready
     /// queue.
     fn bump_as_needed(&mut self, current_pic: &PictureData) -> impl Iterator<Item = B::Handle> {
-        self.dpb
-            .bump_as_needed(current_pic)
-            .into_iter()
-            .filter_map(|p| p.handle)
+        self.dpb.bump_as_needed(current_pic).into_iter().flatten()
     }
 
     /// Returns an iterator of the handles of all the frames still present in the DPB.
@@ -548,7 +545,7 @@ where
         self.dpb.clear();
         self.last_field = None;
 
-        pics.into_iter().filter_map(|h| h.handle)
+        pics.into_iter().flatten()
     }
 
     /// Find the first field for the picture started by `slice`, if any.

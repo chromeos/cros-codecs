@@ -401,16 +401,16 @@ impl<T: Clone> Dpb<T> {
 
     /// Bump the dpb, returning a picture as per the bumping process described in C.4.5.3.
     /// Note that this picture will still be referenced by its pair, if any.
-    fn bump(&mut self, flush: bool) -> Option<DpbEntry<T>> {
-        let handle = self.find_lowest_poc_for_bumping()?.clone();
-        let mut pic = handle.pic.borrow_mut();
+    fn bump(&mut self, flush: bool) -> Option<Option<T>> {
+        let dpb_entry = self.find_lowest_poc_for_bumping()?.clone();
+        let mut pic = dpb_entry.pic.borrow_mut();
 
         debug!("Bumping picture {:#?} from the dpb", pic);
 
         pic.needed_for_output = false;
 
         if !pic.is_ref() || flush {
-            let index = self.get_position(&handle.pic).unwrap();
+            let index = self.get_position(&dpb_entry.pic).unwrap();
             log::debug!("removed picture {:#?} from dpb", pic);
             self.entries.remove(index);
         }
@@ -427,11 +427,11 @@ impl<T: Clone> Dpb<T> {
         }
 
         drop(pic);
-        Some(handle)
+        Some(dpb_entry.handle)
     }
 
     /// Drains the DPB by continuously invoking the bumping process.
-    pub fn drain(&mut self) -> Vec<DpbEntry<T>> {
+    pub fn drain(&mut self) -> Vec<Option<T>> {
         debug!("Draining the DPB.");
 
         let mut pics = vec![];
@@ -508,7 +508,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Bumps the DPB if needed. DPB bumping is described on C.4.5.3.
-    pub fn bump_as_needed(&mut self, current_pic: &PictureData) -> Vec<DpbEntry<T>> {
+    pub fn bump_as_needed(&mut self, current_pic: &PictureData) -> Vec<Option<T>> {
         let mut pics = vec![];
         while self.needs_bumping(current_pic) && self.len() >= self.max_num_reorder_frames {
             match self.bump(false) {
