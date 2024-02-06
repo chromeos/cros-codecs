@@ -322,7 +322,7 @@ where
     }
 }
 
-impl<B> StatelessVideoDecoder<B::Handle> for StatelessDecoder<Av1, B>
+impl<B> StatelessVideoDecoder<B> for StatelessDecoder<Av1, B>
 where
     B: StatelessAV1DecoderBackend + TryFormat<Av1>,
     B::Handle: Clone + 'static,

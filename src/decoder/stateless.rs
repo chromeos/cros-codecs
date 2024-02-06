@@ -125,22 +125,22 @@ pub trait StatelessDecoderBackend {
 }
 
 /// Helper to implement [`DecoderFormatNegotiator`] for stateless decoders.
-struct StatelessDecoderFormatNegotiator<'a, D, H, FH, F>
+struct StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
 where
-    H: DecodedHandle,
-    D: StatelessVideoDecoder<H>,
+    B: StatelessDecoderBackend,
+    D: StatelessVideoDecoder<B>,
     F: Fn(&mut D, &FH),
 {
     decoder: &'a mut D,
     format_hint: FH,
     apply_format: F,
-    _mem_desc: std::marker::PhantomData<H::Descriptor>,
+    _mem_desc: std::marker::PhantomData<<B::Handle as DecodedHandle>::Descriptor>,
 }
 
-impl<'a, D, H, FH, F> StatelessDecoderFormatNegotiator<'a, D, H, FH, F>
+impl<'a, D, B, FH, F> StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
 where
-    H: DecodedHandle,
-    D: StatelessVideoDecoder<H>,
+    B: StatelessDecoderBackend,
+    D: StatelessVideoDecoder<B>,
     F: Fn(&mut D, &FH),
 {
     /// Creates a new format negotiator.
@@ -162,11 +162,11 @@ where
     }
 }
 
-impl<'a, D, H, FH, F> DecoderFormatNegotiator<'a, H::Descriptor>
-    for StatelessDecoderFormatNegotiator<'a, D, H, FH, F>
+impl<'a, D, B, FH, F> DecoderFormatNegotiator<'a, <B::Handle as DecodedHandle>::Descriptor>
+    for StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
 where
-    H: DecodedHandle,
-    D: StatelessVideoDecoder<H> + private::StatelessVideoDecoder,
+    B: StatelessDecoderBackend,
+    D: StatelessVideoDecoder<B> + private::StatelessVideoDecoder,
     F: Fn(&mut D, &FH),
 {
     /// Try to apply `format` to output frames. If successful, all frames emitted after the
@@ -175,7 +175,10 @@ where
         self.decoder.try_format(format)
     }
 
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<H::Descriptor>> {
+    fn frame_pool(
+        &mut self,
+        layer: PoolLayer,
+    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>> {
         self.decoder.frame_pool(layer)
     }
 
@@ -184,10 +187,10 @@ where
     }
 }
 
-impl<'a, D, H, FH, F> Drop for StatelessDecoderFormatNegotiator<'a, D, H, FH, F>
+impl<'a, D, B, FH, F> Drop for StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
 where
-    H: DecodedHandle,
-    D: StatelessVideoDecoder<H>,
+    B: StatelessDecoderBackend,
+    D: StatelessVideoDecoder<B>,
     F: Fn(&mut D, &FH),
 {
     fn drop(&mut self) {
@@ -220,7 +223,7 @@ pub enum PoolLayer {
 /// The `M` generic parameter is the type of the memory descriptor backing the output frames.
 ///
 /// [`decode`]: StatelessVideoDecoder::decode
-pub trait StatelessVideoDecoder<H: DecodedHandle> {
+pub trait StatelessVideoDecoder<B: StatelessDecoderBackend> {
     /// Attempts to decode `bitstream` if the current conditions allow it.
     ///
     /// This method will return [`DecodeError::CheckEvents`] if processing cannot take place until
@@ -251,12 +254,15 @@ pub trait StatelessVideoDecoder<H: DecodedHandle> {
     /// will receive its frames from a separate pool.
     ///
     /// Useful to add new frames as decode targets.
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<H::Descriptor>>;
+    fn frame_pool(
+        &mut self,
+        layer: PoolLayer,
+    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>>;
 
     fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the next event, if there is any pending.
-    fn next_event(&mut self) -> Option<DecoderEvent<H>>;
+    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle>>;
 }
 
 pub trait StatelessCodec {
@@ -361,6 +367,7 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::decoder::stateless::StatelessDecoderBackend;
     use crate::decoder::stateless::StatelessVideoDecoder;
     use crate::decoder::DecodedHandle;
 
@@ -381,16 +388,16 @@ pub(crate) mod tests {
     ///
     /// `dump_yuv` will dump all the decoded frames into `/tmp/framexxx.yuv`. Set this to true in
     /// order to debug the output of the test.
-    pub fn test_decode_stream<D, H, L>(
+    pub fn test_decode_stream<D, B, L>(
         decoding_loop: L,
         mut decoder: D,
         test: &TestStream,
         check_crcs: bool,
         dump_yuv: bool,
     ) where
-        H: DecodedHandle,
-        D: StatelessVideoDecoder<H>,
-        L: Fn(&mut D, &[u8], &mut dyn FnMut(H)) -> anyhow::Result<()>,
+        B: StatelessDecoderBackend,
+        D: StatelessVideoDecoder<B>,
+        L: Fn(&mut D, &[u8], &mut dyn FnMut(B::Handle)) -> anyhow::Result<()>,
     {
         let mut crcs = test.crcs.lines().enumerate();
 
