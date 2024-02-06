@@ -16,6 +16,7 @@ use libva::PictureParameterBufferH264;
 use libva::SliceParameter;
 use libva::SurfaceMemoryDescriptor;
 
+use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
@@ -107,16 +108,6 @@ impl VaStreamInfo for &Rc<Sps> {
         let rect = self.visible_rectangle();
 
         ((rect.min.x, rect.min.y), (rect.max.x, rect.max.y))
-    }
-}
-
-/// Gets the VASurfaceID for the given `picture`.
-fn surface_id<M: SurfaceMemoryDescriptor>(
-    handle: &Option<VADecodedHandle<M>>,
-) -> libva::VASurfaceID {
-    match handle {
-        None => libva::constants::VA_INVALID_SURFACE,
-        Some(handle) => handle.borrow().surface().id(),
     }
 }
 
@@ -236,7 +227,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
 
     for handle in &refs {
         let ref_pic = handle.pic.borrow();
-        let surface_id = surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.handle);
         let pic = fill_va_h264_pic(&ref_pic, surface_id, true);
         va_refs.push(pic);
     }
@@ -254,7 +245,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
 
     for handle in &refs {
         let ref_pic = handle.pic.borrow();
-        let surface_id = surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.handle);
         let pic = fill_va_h264_pic(&ref_pic, surface_id, true);
         va_refs.push(pic);
     }
@@ -334,7 +325,7 @@ fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
 
     for handle in ref_list_x {
         let pic = handle.pic.borrow();
-        let surface_id = surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.handle);
         let merge = matches!(pic.field, Field::Frame);
         let va_pic = fill_va_h264_pic(&pic, surface_id, merge);
 

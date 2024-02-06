@@ -44,9 +44,9 @@ pub trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Vp8> {
     fn submit_picture(
         &mut self,
         picture: &Header,
-        last_ref: Option<&Self::Handle>,
-        golden_ref: Option<&Self::Handle>,
-        alt_ref: Option<&Self::Handle>,
+        last_ref: &Option<Self::Handle>,
+        golden_ref: &Option<Self::Handle>,
+        alt_ref: &Option<Self::Handle>,
         bitstream: &[u8],
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
@@ -187,9 +187,9 @@ where
 
         let decoded_handle = self.backend.submit_picture(
             &frame.header,
-            self.codec.last_picture.as_ref(),
-            self.codec.golden_ref_picture.as_ref(),
-            self.codec.alt_ref_picture.as_ref(),
+            &self.codec.last_picture,
+            &self.codec.golden_ref_picture,
+            &self.codec.alt_ref_picture,
             frame.as_ref(),
             self.codec.parser.segmentation(),
             self.codec.parser.mb_lf_adjust(),

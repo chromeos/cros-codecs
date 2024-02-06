@@ -11,6 +11,7 @@ use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
 use libva::SurfaceMemoryDescriptor;
 
+use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
@@ -253,13 +254,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
     ) -> StatelessBackendResult<Self::Handle> {
         let reference_frames: [u32; NUM_REF_FRAMES] = reference_frames
             .iter()
-            .map(|h| {
-                if let Some(h) = h {
-                    h.borrow().surface().id()
-                } else {
-                    libva::constants::VA_INVALID_SURFACE
-                }
-            })
+            .map(va_surface_id)
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();

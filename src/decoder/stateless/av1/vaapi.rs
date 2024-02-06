@@ -10,6 +10,7 @@ use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SurfaceMemoryDescriptor;
 
+use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
 use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
@@ -345,13 +346,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
 
     let ref_frame_map: [libva::VASurfaceID; NUM_REF_FRAMES] = reference_frames
         .iter()
-        .map(|h| {
-            if let Some(h) = h {
-                h.borrow().surface().id()
-            } else {
-                libva::constants::VA_INVALID_SURFACE
-            }
-        })
+        .map(va_surface_id)
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();

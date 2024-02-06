@@ -27,9 +27,9 @@ impl StatelessVp8DecoderBackend for Backend {
     fn submit_picture(
         &mut self,
         _: &Header,
-        _: Option<&Self::Handle>,
-        _: Option<&Self::Handle>,
-        _: Option<&Self::Handle>,
+        _: &Option<Self::Handle>,
+        _: &Option<Self::Handle>,
+        _: &Option<Self::Handle>,
         _: &[u8],
         _: &Segmentation,
         _: &MbLfAdjustments,

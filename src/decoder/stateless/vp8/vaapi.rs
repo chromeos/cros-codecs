@@ -14,6 +14,7 @@ use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
 use libva::SurfaceMemoryDescriptor;
 
+use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
@@ -217,32 +218,17 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
     fn submit_picture(
         &mut self,
         picture: &Header,
-        last_ref: Option<&Self::Handle>,
-        golden_ref: Option<&Self::Handle>,
-        alt_ref: Option<&Self::Handle>,
+        last_ref: &Option<Self::Handle>,
+        golden_ref: &Option<Self::Handle>,
+        alt_ref: &Option<Self::Handle>,
         bitstream: &[u8],
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
         timestamp: u64,
     ) -> StatelessBackendResult<Self::Handle> {
-        let last_ref = if let Some(last_ref) = last_ref {
-            last_ref.borrow().surface().id()
-        } else {
-            libva::constants::VA_INVALID_SURFACE
-        };
-
-        let golden_ref = if let Some(golden_ref) = golden_ref {
-            golden_ref.borrow().surface().id()
-        } else {
-            libva::constants::VA_INVALID_SURFACE
-        };
-
-        let alt_ref = if let Some(alt_ref) = alt_ref {
-            alt_ref.borrow().surface().id()
-        } else {
-            libva::constants::VA_INVALID_SURFACE
-        };
-
+        let last_ref = va_surface_id(last_ref);
+        let golden_ref = va_surface_id(golden_ref);
+        let alt_ref = va_surface_id(alt_ref);
         let highest_pool = self.highest_pool();
         let surface = highest_pool
             .get_surface()

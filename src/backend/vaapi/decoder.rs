@@ -49,6 +49,16 @@ use super::y412_to_i412;
 /// A decoded frame handle.
 pub(crate) type DecodedHandle<M> = Rc<RefCell<VaapiDecodedHandle<M>>>;
 
+/// Gets the VASurfaceID for the given `picture`.
+pub(crate) fn va_surface_id<M: SurfaceMemoryDescriptor>(
+    handle: &Option<DecodedHandle<M>>,
+) -> libva::VASurfaceID {
+    match handle {
+        None => libva::constants::VA_INVALID_SURFACE,
+        Some(handle) => handle.borrow().surface().id(),
+    }
+}
+
 impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
     type Descriptor = M;
 
