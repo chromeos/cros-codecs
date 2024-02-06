@@ -69,7 +69,7 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
     }
 
     fn is_ready(&self) -> bool {
-        self.borrow().is_va_ready().unwrap_or(true)
+        self.borrow().state.is_ready().unwrap_or(true)
     }
 
     fn sync(&self) -> anyhow::Result<()> {
@@ -304,6 +304,69 @@ impl StreamMetadataState {
     }
 }
 
+/// Rendering state of a VA picture.
+enum PictureState<M: SurfaceMemoryDescriptor> {
+    Ready(Picture<PictureSync, PooledVaSurface<M>>),
+    Pending(Picture<PictureEnd, PooledVaSurface<M>>),
+    // Only set in the destructor when we take ownership of the VA picture.
+    Invalid,
+}
+
+impl<M: SurfaceMemoryDescriptor> PictureState<M> {
+    /// Make sure that all pending operations on the picture have completed.
+    fn sync(&mut self) -> Result<(), VaError> {
+        let res;
+
+        (*self, res) = match std::mem::replace(self, PictureState::Invalid) {
+            state @ PictureState::Ready(_) => (state, Ok(())),
+            PictureState::Pending(picture) => match picture.sync() {
+                Ok(picture) => (PictureState::Ready(picture), Ok(())),
+                Err((e, picture)) => (PictureState::Pending(picture), Err(e)),
+            },
+            PictureState::Invalid => unreachable!(),
+        };
+
+        res
+    }
+
+    /// Returns the picture of this handle, if it is in the ready state (i.e. [`sync`] has been
+    /// successfully called on it).
+    fn ready_picture(&self) -> Option<&Picture<PictureSync, PooledVaSurface<M>>> {
+        match self {
+            PictureState::Ready(picture) => Some(picture),
+            PictureState::Pending(_) => None,
+            PictureState::Invalid => unreachable!(),
+        }
+    }
+
+    fn surface(&self) -> &libva::Surface<M> {
+        match self {
+            PictureState::Ready(picture) => picture.surface(),
+            PictureState::Pending(picture) => picture.surface(),
+            PictureState::Invalid => unreachable!(),
+        }
+    }
+
+    fn timestamp(&self) -> u64 {
+        match self {
+            PictureState::Ready(picture) => picture.timestamp(),
+            PictureState::Pending(picture) => picture.timestamp(),
+            PictureState::Invalid => unreachable!(),
+        }
+    }
+
+    fn is_ready(&self) -> Result<bool, VaError> {
+        match self {
+            PictureState::Ready(_) => Ok(true),
+            PictureState::Pending(picture) => picture
+                .surface()
+                .query_status()
+                .map(|s| s == libva::VASurfaceStatus::VASurfaceReady),
+            PictureState::Invalid => unreachable!(),
+        }
+    }
+}
+
 /// VA-API backend handle.
 ///
 /// This includes the VA picture which can be pending rendering or complete, as well as useful
@@ -331,18 +394,7 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
     }
 
     fn sync(&mut self) -> Result<(), VaError> {
-        let res;
-
-        (self.state, res) = match std::mem::replace(&mut self.state, PictureState::Invalid) {
-            state @ PictureState::Ready(_) => (state, Ok(())),
-            PictureState::Pending(picture) => match picture.sync() {
-                Ok(picture) => (PictureState::Ready(picture), Ok(())),
-                Err((e, picture)) => (PictureState::Pending(picture), Err(e)),
-            },
-            PictureState::Invalid => unreachable!(),
-        };
-
-        res
+        self.state.sync()
     }
 
     /// Returns a mapped VAImage. this maps the VASurface onto our address space.
@@ -371,39 +423,16 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
 
     /// Returns the picture of this handle.
     pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledVaSurface<M>>> {
-        match &self.state {
-            PictureState::Ready(picture) => Some(picture),
-            PictureState::Pending(_) => None,
-            PictureState::Invalid => unreachable!(),
-        }
+        self.state.ready_picture()
     }
 
     pub(crate) fn surface(&self) -> &libva::Surface<M> {
-        match &self.state {
-            PictureState::Ready(picture) => picture.surface(),
-            PictureState::Pending(picture) => picture.surface(),
-            PictureState::Invalid => unreachable!(),
-        }
+        self.state.surface()
     }
 
     /// Returns the timestamp of this handle.
     fn timestamp(&self) -> u64 {
-        match &self.state {
-            PictureState::Ready(picture) => picture.timestamp(),
-            PictureState::Pending(picture) => picture.timestamp(),
-            PictureState::Invalid => unreachable!(),
-        }
-    }
-
-    fn is_va_ready(&self) -> Result<bool, VaError> {
-        match &self.state {
-            PictureState::Ready(_) => Ok(true),
-            PictureState::Pending(picture) => picture
-                .surface()
-                .query_status()
-                .map(|s| s == libva::VASurfaceStatus::VASurfaceReady),
-            PictureState::Invalid => unreachable!(),
-        }
+        self.state.timestamp()
     }
 }
 
@@ -411,14 +440,6 @@ impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::Ref<'a, VaapiDecod
     fn dyn_mappable_handle<'b>(&'b self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
         self.image().map(|i| Box::new(i) as Box<dyn MappableHandle>)
     }
-}
-
-/// Rendering state of a VA picture.
-enum PictureState<M: SurfaceMemoryDescriptor> {
-    Ready(Picture<PictureSync, PooledVaSurface<M>>),
-    Pending(Picture<PictureEnd, PooledVaSurface<M>>),
-    // Only set in the destructor when we take ownership of the VA picture.
-    Invalid,
 }
 
 impl<'a> MappableHandle for Image<'a> {
