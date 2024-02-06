@@ -231,13 +231,13 @@ enum CurrentMacroblockTracking {
 /// State of the picture being currently decoded.
 ///
 /// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
-struct CurrentPicState<B: StatelessDecoderBackend<H264>> {
+struct CurrentPicState<P> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
     /// PPS at the time of the current picture.
     pps: Rc<Pps>,
     /// Backend-specific data for that picture.
-    backend_pic: B::Picture,
+    backend_pic: P,
     /// List of reference pictures, used once per slice.
     ref_pic_lists: ReferencePicLists,
     /// The current macroblock we are processing
@@ -274,7 +274,7 @@ pub struct H264DecoderState<B: StatelessDecoderBackend<H264>> {
 
     /// The picture currently being decoded. We need to preserve it between calls to `decode`
     /// because multiple slices will be processed in different calls to `decode`.
-    current_pic: Option<CurrentPicState<B>>,
+    current_pic: Option<CurrentPicState<B::Picture>>,
 }
 
 impl<B> Default for H264DecoderState<B>
@@ -997,7 +997,7 @@ where
         }
     }
 
-    fn finish_picture(&mut self, pic: CurrentPicState<B>) -> anyhow::Result<()> {
+    fn finish_picture(&mut self, pic: CurrentPicState<B::Picture>) -> anyhow::Result<()> {
         debug!("Finishing picture POC {:?}", pic.pic.pic_order_cnt);
 
         // Submit the picture to the backend.
@@ -1189,7 +1189,7 @@ where
         &mut self,
         timestamp: u64,
         slice: &Slice,
-    ) -> Result<CurrentPicState<B>, DecodeError> {
+    ) -> Result<CurrentPicState<B::Picture>, DecodeError> {
         let nalu_hdr = &slice.nalu.header;
 
         if nalu_hdr.idr_pic_flag {
@@ -1269,7 +1269,11 @@ where
 
     // Check whether first_mb_in_slice increases monotonically for the current
     // picture as required by the specification.
-    fn check_first_mb_in_slice(&mut self, cur_pic: &mut CurrentPicState<B>, slice: &Slice) {
+    fn check_first_mb_in_slice(
+        &mut self,
+        cur_pic: &mut CurrentPicState<B::Picture>,
+        slice: &Slice,
+    ) {
         match &mut cur_pic.current_macroblock {
             CurrentMacroblockTracking::SeparateColorPlane(current_macroblock) => {
                 match current_macroblock.entry(slice.header.colour_plane_id) {
@@ -1299,7 +1303,7 @@ where
     /// Handle a slice. Called once per slice NALU.
     fn handle_slice(
         &mut self,
-        cur_pic: &mut CurrentPicState<B>,
+        cur_pic: &mut CurrentPicState<B::Picture>,
         slice: &Slice,
     ) -> anyhow::Result<()> {
         self.check_first_mb_in_slice(cur_pic, slice);
