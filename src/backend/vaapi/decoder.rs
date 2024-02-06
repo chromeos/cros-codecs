@@ -395,11 +395,6 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
         }
     }
 
-    /// Returns the id of the VA surface backing this handle.
-    pub(crate) fn surface_id(&self) -> libva::VASurfaceID {
-        self.surface().id()
-    }
-
     fn is_va_ready(&self) -> Result<bool, VaError> {
         match &self.state {
             PictureState::Ready(_) => Ok(true),
