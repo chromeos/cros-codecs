@@ -42,12 +42,15 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
+use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
+
+use super::StatelessDecoderBackendPicture;
 
 fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
     const ZIGZAG_8X8: [usize; 64] = [
@@ -70,7 +73,9 @@ fn get_raster_from_zigzag_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
 }
 
 /// Stateless backend methods specific to H.264.
-pub trait StatelessH264DecoderBackend: StatelessDecoderBackend<H264> {
+pub trait StatelessH264DecoderBackend:
+    StatelessDecoderBackend + StatelessDecoderBackendPicture<H264>
+{
     /// Called when a new SPS is parsed.
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()>;
 
@@ -247,7 +252,7 @@ struct CurrentPicState<P> {
 /// State of the H.264 decoder.
 ///
 /// `B` is the backend used for this decoder.
-pub struct H264DecoderState<B: StatelessDecoderBackend<H264>> {
+pub struct H264DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H264>> {
     /// H.264 bitstream parser.
     parser: Parser,
     /// Keeps track of the last stream parameters seen for negotiation purposes.
@@ -279,7 +284,7 @@ pub struct H264DecoderState<B: StatelessDecoderBackend<H264>> {
 
 impl<B> Default for H264DecoderState<B>
 where
-    B: StatelessH264DecoderBackend,
+    B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H264>,
     B::Handle: Clone,
 {
     fn default() -> Self {
@@ -309,7 +314,8 @@ pub struct H264;
 
 impl StatelessCodec for H264 {
     type FormatInfo = Rc<Sps>;
-    type DecoderState<B: StatelessDecoderBackend<Self>> = H264DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Self>> =
+        H264DecoderState<B>;
 }
 
 impl<B> H264DecoderState<B>
@@ -1401,7 +1407,7 @@ where
 
 impl<B> StatelessVideoDecoder<B::Handle> for StatelessDecoder<H264, B>
 where
-    B: StatelessH264DecoderBackend,
+    B: StatelessH264DecoderBackend + TryFormat<H264>,
     B::Handle: Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {

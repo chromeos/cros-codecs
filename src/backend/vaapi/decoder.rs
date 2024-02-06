@@ -31,6 +31,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
+use crate::decoder::stateless::TryFormat;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
 use crate::decoder::FramePool;
@@ -622,7 +623,7 @@ where
     pub(crate) fn process_picture<Codec: StatelessCodec>(
         &mut self,
         picture: Picture<PictureNew, PooledVaSurface<M>>,
-    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend<Codec>>::Handle>
+    ) -> StatelessBackendResult<<Self as StatelessDecoderBackend>::Handle>
     where
         Self: StatelessDecoderBackendPicture<Codec>,
         for<'a> &'a Codec::FormatInfo: VaStreamInfo,
@@ -672,14 +673,51 @@ where
 /// Shortcut for pictures used for the VAAPI backend.
 pub type VaapiPicture<M> = Picture<PictureNew, PooledVaSurface<M>>;
 
-impl<Codec: StatelessCodec, M> StatelessDecoderBackend<Codec> for VaapiBackend<M>
+impl<M> StatelessDecoderBackend for VaapiBackend<M>
 where
-    VaapiBackend<M>: StatelessDecoderBackendPicture<Codec>,
-    for<'a> &'a Codec::FormatInfo: VaStreamInfo,
-    M: SurfaceMemoryDescriptor + 'static,
+    M: SurfaceMemoryDescriptor,
 {
     type Handle = DecodedHandle<M>;
 
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>> {
+        if let PoolLayer::Highest = layer {
+            return vec![self
+                .surface_pools
+                .iter_mut()
+                .max_by_key(|other| other.coded_resolution().height)
+                .unwrap()];
+        }
+
+        self.surface_pools
+            .iter_mut()
+            .filter(|pool| {
+                match layer {
+                    PoolLayer::Highest => unreachable!(),
+                    PoolLayer::Layer(resolution) => pool.coded_resolution() == resolution,
+                    PoolLayer::All => {
+                        /* let all through */
+                        true
+                    }
+                }
+            })
+            .map(|x| x as &mut dyn FramePool<M>)
+            .collect()
+    }
+
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        self.metadata_state
+            .get_parsed()
+            .ok()
+            .map(|m| &m.stream_info)
+    }
+}
+
+impl<Codec: StatelessCodec, M> TryFormat<Codec> for VaapiBackend<M>
+where
+    //VaapiBackend<M>: StatelessDecoderBackendPicture<Codec>,
+    for<'a> &'a Codec::FormatInfo: VaStreamInfo,
+    M: SurfaceMemoryDescriptor + 'static,
+{
     fn try_format(
         &mut self,
         format_info: &Codec::FormatInfo,
@@ -726,37 +764,5 @@ where
         } else {
             Err(anyhow!("Format {:?} is unsupported.", format))
         }
-    }
-
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>> {
-        if let PoolLayer::Highest = layer {
-            return vec![self
-                .surface_pools
-                .iter_mut()
-                .max_by_key(|other| other.coded_resolution().height)
-                .unwrap()];
-        }
-
-        self.surface_pools
-            .iter_mut()
-            .filter(|pool| {
-                match layer {
-                    PoolLayer::Highest => unreachable!(),
-                    PoolLayer::Layer(resolution) => pool.coded_resolution() == resolution,
-                    PoolLayer::All => {
-                        /* let all through */
-                        true
-                    }
-                }
-            })
-            .map(|x| x as &mut dyn FramePool<M>)
-            .collect()
-    }
-
-    fn stream_info(&self) -> Option<&StreamInfo> {
-        self.metadata_state
-            .get_parsed()
-            .ok()
-            .map(|m| &m.stream_info)
     }
 }

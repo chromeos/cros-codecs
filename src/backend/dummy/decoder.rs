@@ -12,6 +12,7 @@ use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
+use crate::decoder::stateless::TryFormat;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DynHandle;
 use crate::decoder::FramePool;
@@ -127,12 +128,14 @@ impl<Codec: StatelessCodec> StatelessDecoderBackendPicture<Codec> for Backend {
     type Picture = ();
 }
 
-impl<Codec: StatelessCodec> StatelessDecoderBackend<Codec> for Backend {
-    type Handle = Handle;
-
+impl<Codec: StatelessCodec> TryFormat<Codec> for Backend {
     fn try_format(&mut self, _: &Codec::FormatInfo, _: DecodedFormat) -> anyhow::Result<()> {
         Ok(())
     }
+}
+
+impl StatelessDecoderBackend for Backend {
+    type Handle = Handle;
 
     fn stream_info(&self) -> Option<&StreamInfo> {
         Some(&self.stream_info)

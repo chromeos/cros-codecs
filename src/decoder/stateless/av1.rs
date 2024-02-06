@@ -18,20 +18,21 @@ use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::Resolution;
 
 use crate::codec::av1::parser::TileGroupObu;
+use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecoderEvent;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessCodec;
+use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
+use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::FramePool;
 use crate::decoder::PoolLayer;
-
-use crate::decoder::stateless::DecodeError;
-use crate::decoder::stateless::StatelessCodec;
-use crate::decoder::stateless::StatelessDecoder;
 
 #[cfg(test)]
 mod dummy;
@@ -39,7 +40,9 @@ mod dummy;
 mod vaapi;
 
 /// Stateless backend methods specific to AV1.
-pub trait StatelessAV1DecoderBackend: StatelessDecoderBackend<Av1> {
+pub trait StatelessAV1DecoderBackend:
+    StatelessDecoderBackend + StatelessDecoderBackendPicture<Av1>
+{
     /// Called when a new Sequence Header OBU is parsed. The
     /// `highest_spatial_layer` argument refers to the maximum layer selected by
     /// the client through `set_operating_point()` and the scalability
@@ -78,7 +81,7 @@ pub trait StatelessAV1DecoderBackend: StatelessDecoderBackend<Av1> {
 ///
 /// Stored between calls to [`StatelessDecoder::handle_tile`] that belong to the
 /// same picture.
-enum CurrentPicState<B: StatelessDecoderBackend<Av1>> {
+enum CurrentPicState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Av1>> {
     /// A regular frame
     RegularFrame {
         /// Data for the current picture as extracted from the stream.
@@ -96,7 +99,7 @@ enum CurrentPicState<B: StatelessDecoderBackend<Av1>> {
     },
 }
 
-pub struct AV1DecoderState<B: StatelessDecoderBackend<Av1>> {
+pub struct AV1DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Av1>> {
     /// AV1 bitstream parser.
     parser: Parser,
 
@@ -147,7 +150,8 @@ pub struct Av1;
 
 impl StatelessCodec for Av1 {
     type FormatInfo = Rc<SequenceHeaderObu>;
-    type DecoderState<B: StatelessDecoderBackend<Self>> = AV1DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Self>> =
+        AV1DecoderState<B>;
 }
 
 impl<B> StatelessDecoder<Av1, B>
@@ -320,7 +324,7 @@ where
 
 impl<B> StatelessVideoDecoder<B::Handle> for StatelessDecoder<Av1, B>
 where
-    B: StatelessAV1DecoderBackend,
+    B: StatelessAV1DecoderBackend + TryFormat<Av1>,
     B::Handle: Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, super::DecodeError> {

@@ -27,6 +27,7 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
+use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
@@ -34,8 +35,12 @@ use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
 
+use super::StatelessDecoderBackendPicture;
+
 /// Stateless backend methods specific to VP9.
-pub trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Vp9> {
+pub trait StatelessVp9DecoderBackend:
+    StatelessDecoderBackend + StatelessDecoderBackendPicture<Vp9>
+{
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
@@ -54,7 +59,7 @@ pub trait StatelessVp9DecoderBackend: StatelessDecoderBackend<Vp9> {
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
-pub struct Vp9DecoderState<B: StatelessDecoderBackend<Vp9>> {
+pub struct Vp9DecoderState<B: StatelessDecoderBackend> {
     /// VP9 bitstream parser.
     parser: Parser,
 
@@ -68,7 +73,7 @@ pub struct Vp9DecoderState<B: StatelessDecoderBackend<Vp9>> {
     negotiation_info: NegotiationInfo,
 }
 
-impl<B: StatelessDecoderBackend<Vp9>> Default for Vp9DecoderState<B> {
+impl<B: StatelessDecoderBackend> Default for Vp9DecoderState<B> {
     fn default() -> Self {
         Self {
             parser: Default::default(),
@@ -114,7 +119,8 @@ pub struct Vp9;
 
 impl StatelessCodec for Vp9 {
     type FormatInfo = Header;
-    type DecoderState<B: StatelessDecoderBackend<Self>> = Vp9DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Vp9>> =
+        Vp9DecoderState<B>;
 }
 
 impl<B> StatelessDecoder<Vp9, B>
@@ -208,7 +214,7 @@ where
 
 impl<B> StatelessVideoDecoder<B::Handle> for StatelessDecoder<Vp9, B>
 where
-    B: StatelessVp9DecoderBackend,
+    B: StatelessVp9DecoderBackend + TryFormat<Vp9>,
     B::Handle: Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {

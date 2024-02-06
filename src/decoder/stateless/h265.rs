@@ -35,12 +35,15 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
+use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
+
+use super::StatelessDecoderBackendPicture;
 
 const MAX_DPB_SIZE: usize = 16;
 
@@ -102,7 +105,9 @@ fn get_raster_from_up_right_diagonal_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
 }
 
 /// Stateless backend methods specific to H.265.
-pub trait StatelessH265DecoderBackend: StatelessDecoderBackend<H265> {
+pub trait StatelessH265DecoderBackend:
+    StatelessDecoderBackend + StatelessDecoderBackendPicture<H265>
+{
     /// Called when a new SPS is parsed.
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()>;
 
@@ -240,7 +245,7 @@ impl<T: Clone> Default for RefPicSet<T> {
 /// State of the picture being currently decoded.
 ///
 /// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
-struct CurrentPicState<B: StatelessDecoderBackend<H265>> {
+struct CurrentPicState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H265>> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
     /// Backend-specific data for that picture.
@@ -270,7 +275,7 @@ impl<T> Default for ReferencePicLists<T> {
     }
 }
 
-pub struct H265DecoderState<B: StatelessDecoderBackend<H265>> {
+pub struct H265DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H265>> {
     /// A parser to extract bitstream metadata
     parser: Parser,
 
@@ -351,7 +356,8 @@ pub struct H265;
 
 impl StatelessCodec for H265 {
     type FormatInfo = Sps;
-    type DecoderState<B: StatelessDecoderBackend<Self>> = H265DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H265>> =
+        H265DecoderState<B>;
 }
 
 impl<B> StatelessDecoder<H265, B>
@@ -1238,7 +1244,7 @@ where
 
 impl<B> StatelessVideoDecoder<B::Handle> for StatelessDecoder<H265, B>
 where
-    B: StatelessH265DecoderBackend,
+    B: StatelessH265DecoderBackend + TryFormat<H265>,
     B::Handle: Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {

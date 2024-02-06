@@ -23,6 +23,7 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
+use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
@@ -30,8 +31,12 @@ use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
 
+use super::StatelessDecoderBackendPicture;
+
 /// Stateless backend methods specific to VP8.
-pub trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Vp8> {
+pub trait StatelessVp8DecoderBackend:
+    StatelessDecoderBackend + StatelessDecoderBackendPicture<Vp8>
+{
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
@@ -54,7 +59,7 @@ pub trait StatelessVp8DecoderBackend: StatelessDecoderBackend<Vp8> {
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
-pub struct Vp8DecoderState<B: StatelessDecoderBackend<Vp8>> {
+pub struct Vp8DecoderState<B: StatelessDecoderBackend> {
     /// VP8 bitstream parser.
     parser: Parser,
 
@@ -66,7 +71,7 @@ pub struct Vp8DecoderState<B: StatelessDecoderBackend<Vp8>> {
     alt_ref_picture: Option<B::Handle>,
 }
 
-impl<B: StatelessDecoderBackend<Vp8>> Default for Vp8DecoderState<B> {
+impl<B: StatelessDecoderBackend> Default for Vp8DecoderState<B> {
     fn default() -> Self {
         Self {
             parser: Default::default(),
@@ -89,12 +94,13 @@ pub struct Vp8;
 
 impl StatelessCodec for Vp8 {
     type FormatInfo = Header;
-    type DecoderState<B: StatelessDecoderBackend<Self>> = Vp8DecoderState<B>;
+    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Self>> =
+        Vp8DecoderState<B>;
 }
 
 impl<B> Vp8DecoderState<B>
 where
-    B: StatelessDecoderBackend<Vp8>,
+    B: StatelessDecoderBackend,
     B::Handle: Clone,
 {
     /// Replace a reference frame with `handle`.
@@ -223,7 +229,7 @@ where
 
 impl<B> StatelessVideoDecoder<B::Handle> for StatelessDecoder<Vp8, B>
 where
-    B: StatelessVp8DecoderBackend,
+    B: StatelessVp8DecoderBackend + TryFormat<Vp8>,
     B::Handle: Clone + 'static,
 {
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
