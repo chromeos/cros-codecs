@@ -13,7 +13,6 @@ use libva::Display;
 use libva::Surface;
 use libva::SurfaceMemoryDescriptor;
 use libva::VASurfaceID;
-use libva::VaError;
 
 use crate::decoder::FramePool;
 use crate::Resolution;
@@ -112,31 +111,6 @@ pub struct VaSurfacePool<M: SurfaceMemoryDescriptor> {
 }
 
 impl<M: SurfaceMemoryDescriptor> VaSurfacePool<M> {
-    /// Create new surfaces and add them to the pool, using `descriptors` as backing memory.
-    pub fn add_surfaces(&mut self, descriptors: Vec<M>) -> Result<(), VaError> {
-        let mut inner = (*self.inner).borrow_mut();
-
-        let surfaces = inner.display.create_surfaces(
-            inner.rt_format,
-            // Let the hardware decide the best internal format - we will get the desired fourcc
-            // when creating the image.
-            None,
-            inner.coded_resolution.width,
-            inner.coded_resolution.height,
-            inner.usage_hint,
-            descriptors,
-        )?;
-
-        for surface in &surfaces {
-            inner
-                .managed_surfaces
-                .insert(surface.id(), surface.size().into());
-        }
-        inner.surfaces.extend(surfaces);
-
-        Ok(())
-    }
-
     /// Add a surface to the pool.
     ///
     /// This can be an entirely new surface, or one that has been previously obtained using
@@ -145,7 +119,7 @@ impl<M: SurfaceMemoryDescriptor> VaSurfacePool<M> {
     /// Returns an error (and the passed `surface` back) if the surface is not at least as
     /// large as the current coded resolution of the pool.
     #[allow(dead_code)]
-    pub(crate) fn add_surface(&mut self, surface: Surface<M>) -> Result<(), Surface<M>> {
+    fn add_surface(&mut self, surface: Surface<M>) -> Result<(), Surface<M>> {
         let mut inner = (*self.inner).borrow_mut();
 
         if Resolution::from(surface.size()).can_contain(inner.coded_resolution) {
@@ -159,19 +133,9 @@ impl<M: SurfaceMemoryDescriptor> VaSurfacePool<M> {
         }
     }
 
-    /// Returns new number of surfaces left.
-    pub(crate) fn num_surfaces_left(&self) -> usize {
-        (*self.inner).borrow().surfaces.len()
-    }
-
-    /// Returns the total number of managed surfaces in this pool.
-    pub(crate) fn num_managed_surfaces(&self) -> usize {
-        (*self.inner).borrow().managed_surfaces.len()
-    }
-
     /// Create a new pool.
     ///
-    /// # Arguments
+    // # Arguments
     ///
     /// * `display` - the VA display to create the surfaces from.
     /// * `rt_format` - the VA RT format to use for the surfaces.
@@ -231,16 +195,38 @@ impl<M: SurfaceMemoryDescriptor> FramePool<M> for VaSurfacePool<M> {
     }
 
     fn add_frames(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error> {
-        self.add_surfaces(descriptors)
-            .map_err(|e| anyhow::anyhow!(e))
+        let mut inner = (*self.inner).borrow_mut();
+
+        let surfaces = inner
+            .display
+            .create_surfaces(
+                inner.rt_format,
+                // Let the hardware decide the best internal format - we will get the desired fourcc
+                // when creating the image.
+                None,
+                inner.coded_resolution.width,
+                inner.coded_resolution.height,
+                inner.usage_hint,
+                descriptors,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        for surface in &surfaces {
+            inner
+                .managed_surfaces
+                .insert(surface.id(), surface.size().into());
+        }
+        inner.surfaces.extend(surfaces);
+
+        Ok(())
     }
 
     fn num_free_frames(&self) -> usize {
-        self.num_surfaces_left()
+        (*self.inner).borrow().surfaces.len()
     }
 
     fn num_managed_frames(&self) -> usize {
-        self.num_managed_surfaces()
+        (*self.inner).borrow().managed_surfaces.len()
     }
 
     fn clear(&mut self) {

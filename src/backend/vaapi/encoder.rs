@@ -24,6 +24,7 @@ use libva::VASurfaceStatus;
 use crate::backend::vaapi::surface_pool::PooledVaSurface;
 use crate::backend::vaapi::surface_pool::VaSurfacePool;
 use crate::backend::vaapi::FORMAT_MAP;
+use crate::decoder::FramePool;
 use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::encoder::stateless::StatelessBackendResult;
@@ -123,7 +124,7 @@ where
         );
 
         // TODO: Allow initial size to be changed
-        scratch_pool.add_surfaces(vec![(); INITIAL_SCRATCH_POOL_SIZE])?;
+        scratch_pool.add_frames(vec![(); INITIAL_SCRATCH_POOL_SIZE])?;
 
         Ok(Self {
             va_config,
@@ -141,17 +142,17 @@ where
     // Creates an empty surface that will be filled with reconstructed picture during encoding
     // which will be later used as frame reference
     pub(crate) fn new_scratch_picture(&mut self) -> StatelessBackendResult<Reference> {
-        if self.scratch_pool.num_surfaces_left() == 0 {
-            if self.scratch_pool.num_managed_surfaces() >= MAX_SCRATCH_POOL_SIZE {
+        if self.scratch_pool.num_free_frames() == 0 {
+            if self.scratch_pool.num_managed_frames() >= MAX_SCRATCH_POOL_SIZE {
                 log::error!("Scratch pool is exhausted and hit the size limit");
                 return Err(StatelessBackendError::OutOfResources);
             }
 
             log::debug!(
                 "Scratch pool empty, allocating one more surface. (previous pool size: {})",
-                self.scratch_pool.num_managed_surfaces()
+                self.scratch_pool.num_managed_frames()
             );
-            self.scratch_pool.add_surfaces(vec![()])?;
+            self.scratch_pool.add_frames(vec![()])?;
         }
 
         let surface = self

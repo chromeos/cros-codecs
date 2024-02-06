@@ -12,6 +12,7 @@ use std::rc::Rc;
 use argh::FromArgs;
 use cros_codecs::backend::vaapi::surface_pool::VaSurfacePool;
 use cros_codecs::codec::h264::parser::Profile;
+use cros_codecs::decoder::FramePool;
 use cros_codecs::encoder::stateless::h264::Bitrate;
 use cros_codecs::encoder::stateless::h264::EncoderConfig;
 use cros_codecs::encoder::stateless::h264::StatelessEncoder;
@@ -176,7 +177,7 @@ fn main() {
         },
     );
 
-    pool.add_surfaces(vec![(); 16]).unwrap();
+    pool.add_frames(vec![(); 16]).unwrap();
 
     let frame_size: usize = (args.width * args.height + args.width * args.height / 2) as usize;
 
