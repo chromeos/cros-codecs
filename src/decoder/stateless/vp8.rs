@@ -59,19 +59,19 @@ pub trait StatelessVp8DecoderBackend:
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
-pub struct Vp8DecoderState<B: StatelessDecoderBackend> {
+pub struct Vp8DecoderState<H: DecodedHandle> {
     /// VP8 bitstream parser.
     parser: Parser,
 
     /// The picture used as the last reference picture.
-    last_picture: Option<B::Handle>,
+    last_picture: Option<H>,
     /// The picture used as the golden reference picture.
-    golden_ref_picture: Option<B::Handle>,
+    golden_ref_picture: Option<H>,
     /// The picture used as the alternate reference picture.
-    alt_ref_picture: Option<B::Handle>,
+    alt_ref_picture: Option<H>,
 }
 
-impl<B: StatelessDecoderBackend> Default for Vp8DecoderState<B> {
+impl<H: DecodedHandle> Default for Vp8DecoderState<H> {
     fn default() -> Self {
         Self {
             parser: Default::default(),
@@ -94,24 +94,22 @@ pub struct Vp8;
 
 impl StatelessCodec for Vp8 {
     type FormatInfo = Header;
-    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Self>> =
-        Vp8DecoderState<B>;
+    type DecoderState<H: DecodedHandle, P> = Vp8DecoderState<H>;
 }
 
-impl<B> Vp8DecoderState<B>
+impl<H> Vp8DecoderState<H>
 where
-    B: StatelessDecoderBackend,
-    B::Handle: Clone,
+    H: DecodedHandle + Clone,
 {
     /// Replace a reference frame with `handle`.
-    fn replace_reference(reference: &mut Option<B::Handle>, handle: &B::Handle) {
+    fn replace_reference(reference: &mut Option<H>, handle: &H) {
         *reference = Some(handle.clone());
     }
 
     pub(crate) fn update_references(
         &mut self,
         header: &Header,
-        decoded_handle: &B::Handle,
+        decoded_handle: &H,
     ) -> anyhow::Result<()> {
         if header.key_frame {
             Self::replace_reference(&mut self.last_picture, decoded_handle);

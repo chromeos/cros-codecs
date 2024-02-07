@@ -252,14 +252,14 @@ struct CurrentPicState<P> {
 /// State of the H.264 decoder.
 ///
 /// `B` is the backend used for this decoder.
-pub struct H264DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H264>> {
+pub struct H264DecoderState<H: DecodedHandle, P> {
     /// H.264 bitstream parser.
     parser: Parser,
     /// Keeps track of the last stream parameters seen for negotiation purposes.
     negotiation_info: NegotiationInfo,
 
     /// The decoded picture buffer.
-    dpb: Dpb<B::Handle>,
+    dpb: Dpb<H>,
 
     /// Cached variables from the previous reference picture.
     prev_ref_pic_info: PrevReferencePicInfo,
@@ -275,17 +275,16 @@ pub struct H264DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackend
     ///
     /// We are not using `DbpEntry<T>` as the type because contrary to a DPB entry,
     /// the handle of this member is always valid.
-    last_field: Option<(Rc<RefCell<PictureData>>, B::Handle)>,
+    last_field: Option<(Rc<RefCell<PictureData>>, H)>,
 
     /// The picture currently being decoded. We need to preserve it between calls to `decode`
     /// because multiple slices will be processed in different calls to `decode`.
-    current_pic: Option<CurrentPicState<B::Picture>>,
+    current_pic: Option<CurrentPicState<P>>,
 }
 
-impl<B> Default for H264DecoderState<B>
+impl<H, P> Default for H264DecoderState<H, P>
 where
-    B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H264>,
-    B::Handle: Clone,
+    H: DecodedHandle,
 {
     fn default() -> Self {
         H264DecoderState {
@@ -314,14 +313,12 @@ pub struct H264;
 
 impl StatelessCodec for H264 {
     type FormatInfo = Rc<Sps>;
-    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Self>> =
-        H264DecoderState<B>;
+    type DecoderState<H: DecodedHandle, P> = H264DecoderState<H, P>;
 }
 
-impl<B> H264DecoderState<B>
+impl<H, P> H264DecoderState<H, P>
 where
-    B: StatelessH264DecoderBackend,
-    B::Handle: Clone,
+    H: DecodedHandle + Clone,
 {
     fn compute_pic_order_count(&mut self, pic: &mut PictureData, sps: &Sps) -> anyhow::Result<()> {
         match pic.pic_order_cnt_type {
@@ -540,12 +537,12 @@ where
 
     /// Returns an iterator of the handles of the frames that need to be bumped into the ready
     /// queue.
-    fn bump_as_needed(&mut self, current_pic: &PictureData) -> impl Iterator<Item = B::Handle> {
+    fn bump_as_needed(&mut self, current_pic: &PictureData) -> impl Iterator<Item = H> {
         self.dpb.bump_as_needed(current_pic).into_iter().flatten()
     }
 
     /// Returns an iterator of the handles of all the frames still present in the DPB.
-    fn drain(&mut self) -> impl Iterator<Item = B::Handle> {
+    fn drain(&mut self) -> impl Iterator<Item = H> {
         let pics = self.dpb.drain();
 
         self.dpb.clear();
@@ -559,7 +556,7 @@ where
     fn find_first_field(
         &self,
         slice: &Slice,
-    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, B::Handle)>> {
+    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, H)>> {
         let mut prev_field = None;
 
         if self.dpb.interlaced() {
@@ -644,8 +641,8 @@ where
     #[allow(clippy::too_many_arguments)]
     fn short_term_pic_list_modification<'a>(
         cur_pic: &PictureData,
-        dpb: &'a Dpb<B::Handle>,
-        ref_pic_list_x: &mut DpbPicRefList<'a, B::Handle>,
+        dpb: &'a Dpb<H>,
+        ref_pic_list_x: &mut DpbPicRefList<'a, H>,
         num_ref_idx_lx_active_minus1: u8,
         max_pic_num: i32,
         rplm: &RefPicListModification,
@@ -713,8 +710,8 @@ where
     }
 
     fn long_term_pic_list_modification<'a>(
-        dpb: &'a Dpb<B::Handle>,
-        ref_pic_list_x: &mut DpbPicRefList<'a, B::Handle>,
+        dpb: &'a Dpb<H>,
+        ref_pic_list_x: &mut DpbPicRefList<'a, H>,
         num_ref_idx_lx_active_minus1: u8,
         max_long_term_frame_idx: i32,
         rplm: &RefPicListModification,
@@ -763,7 +760,7 @@ where
         hdr: &SliceHeader,
         ref_pic_list_type: RefPicList,
         ref_pic_list_indices: &[usize],
-    ) -> anyhow::Result<DpbPicRefList<B::Handle>> {
+    ) -> anyhow::Result<DpbPicRefList<H>> {
         let (ref_pic_list_modification_flag_lx, num_ref_idx_lx_active_minus1, rplm) =
             match ref_pic_list_type {
                 RefPicList::RefPicList0 => (
@@ -830,7 +827,7 @@ where
         cur_pic: &PictureData,
         hdr: &SliceHeader,
         ref_pic_lists: &ReferencePicLists,
-    ) -> anyhow::Result<RefPicLists<B::Handle>> {
+    ) -> anyhow::Result<RefPicLists<H>> {
         let ref_pic_list0 = match hdr.slice_type {
             SliceType::P | SliceType::Sp => self.modify_ref_pic_list(
                 cur_pic,

@@ -264,7 +264,7 @@ pub trait StatelessCodec {
     /// For H.264 this would be the Sps, for VP8 or VP9 the frame header.
     type FormatInfo;
     /// State that needs to be kept during a decoding operation, typed by backend.
-    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Self>>;
+    type DecoderState<H: DecodedHandle, P>;
 }
 
 /// A struct that serves as a basis to implement a stateless decoder.
@@ -305,14 +305,14 @@ where
     backend: B,
 
     /// Codec-specific state.
-    codec: C::DecoderState<B>,
+    codec: C::DecoderState<B::Handle, B::Picture>,
 }
 
 impl<C, B> StatelessDecoder<C, B>
 where
     C: StatelessCodec,
     B: StatelessDecoderBackend + StatelessDecoderBackendPicture<C>,
-    C::DecoderState<B>: Default,
+    C::DecoderState<B::Handle, B::Picture>: Default,
 {
     pub fn new(backend: B, blocking_mode: BlockingMode) -> Self {
         Self {

@@ -81,13 +81,13 @@ pub trait StatelessAV1DecoderBackend:
 ///
 /// Stored between calls to [`StatelessDecoder::handle_tile`] that belong to the
 /// same picture.
-enum CurrentPicState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Av1>> {
+enum CurrentPicState<H: DecodedHandle, P> {
     /// A regular frame
     RegularFrame {
         /// Data for the current picture as extracted from the stream.
         header: FrameHeaderObu,
         /// Backend-specific data for that picture.
-        backend_picture: B::Picture,
+        backend_picture: P,
     },
 
     /// A frame that has 'show_existing_frame' set.
@@ -95,16 +95,16 @@ enum CurrentPicState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture
         /// Data for the current picture as extracted from the stream.
         header: FrameHeaderObu,
         /// The handle of the reference frame that this frame points to.
-        handle: B::Handle,
+        handle: H,
     },
 }
 
-pub struct AV1DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Av1>> {
+pub struct AV1DecoderState<H: DecodedHandle, P> {
     /// AV1 bitstream parser.
     parser: Parser,
 
     /// The reference frames in use.
-    reference_frames: [Option<B::Handle>; NUM_REF_FRAMES],
+    reference_frames: [Option<H>; NUM_REF_FRAMES],
 
     /// Keeps track of the last values seen for negotiation purposes.
     sequence: Option<Rc<SequenceHeaderObu>>,
@@ -112,7 +112,7 @@ pub struct AV1DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendP
     /// The picture currently being decoded. We need to preserve it between
     /// calls to `decode` because multiple tiles will be processed in different
     /// calls to `decode`.
-    current_pic: Option<CurrentPicState<B>>,
+    current_pic: Option<CurrentPicState<H, P>>,
 
     /// Keep track of the number of frames we've processed for logging purposes.
     frame_count: u32,
@@ -122,10 +122,9 @@ pub struct AV1DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendP
     highest_spatial_layer: Option<u32>,
 }
 
-impl<B> Default for AV1DecoderState<B>
+impl<H, P> Default for AV1DecoderState<H, P>
 where
-    B: StatelessAV1DecoderBackend,
-    B::Handle: Clone,
+    H: DecodedHandle,
 {
     fn default() -> Self {
         Self {
@@ -150,8 +149,7 @@ pub struct Av1;
 
 impl StatelessCodec for Av1 {
     type FormatInfo = Rc<SequenceHeaderObu>;
-    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<Self>> =
-        AV1DecoderState<B>;
+    type DecoderState<H: DecodedHandle, P> = AV1DecoderState<H, P>;
 }
 
 impl<B> StatelessDecoder<Av1, B>

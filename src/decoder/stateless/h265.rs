@@ -245,13 +245,13 @@ impl<T: Clone> Default for RefPicSet<T> {
 /// State of the picture being currently decoded.
 ///
 /// Stored between calls to [`StatelessDecoder::handle_slice`] that belong to the same picture.
-struct CurrentPicState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H265>> {
+struct CurrentPicState<H: DecodedHandle, P> {
     /// Data for the current picture as extracted from the stream.
     pic: PictureData,
     /// Backend-specific data for that picture.
-    backend_pic: B::Picture,
+    backend_pic: P,
     /// List of reference pictures, used once per slice.
-    ref_pic_lists: ReferencePicLists<B::Handle>,
+    ref_pic_lists: ReferencePicLists<H>,
 }
 
 /// All the reference picture lists used to decode a stream.
@@ -275,17 +275,17 @@ impl<T> Default for ReferencePicLists<T> {
     }
 }
 
-pub struct H265DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H265>> {
+pub struct H265DecoderState<H: DecodedHandle, P> {
     /// A parser to extract bitstream metadata
     parser: Parser,
 
     /// Keeps track of the last values seen for negotiation purposes.
     negotiation_info: NegotiationInfo,
     /// The set of reference pictures.
-    rps: RefPicSet<B::Handle>,
+    rps: RefPicSet<H>,
 
     /// The decoded picture buffer
-    dpb: Dpb<B::Handle>,
+    dpb: Dpb<H>,
 
     /// The current active SPS id.
     cur_sps_id: u8,
@@ -313,15 +313,14 @@ pub struct H265DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackend
     /// The picture currently being decoded. We need to preserve it between
     /// calls to `decode` because multiple slices will be processed in different
     /// calls to `decode`.
-    current_pic: Option<CurrentPicState<B>>,
+    current_pic: Option<CurrentPicState<H, P>>,
 
     pending_pps: Vec<Vec<u8>>,
 }
 
-impl<B> Default for H265DecoderState<B>
+impl<H, P> Default for H265DecoderState<H, P>
 where
-    B: StatelessH265DecoderBackend,
-    B::Handle: Clone,
+    H: DecodedHandle + Clone,
 {
     fn default() -> Self {
         H265DecoderState {
@@ -356,8 +355,7 @@ pub struct H265;
 
 impl StatelessCodec for H265 {
     type FormatInfo = Sps;
-    type DecoderState<B: StatelessDecoderBackend + StatelessDecoderBackendPicture<H265>> =
-        H265DecoderState<B>;
+    type DecoderState<H: DecodedHandle, P> = H265DecoderState<H, P>;
 }
 
 impl<B> StatelessDecoder<H265, B>
@@ -927,7 +925,7 @@ where
         &mut self,
         timestamp: u64,
         slice: &Slice,
-    ) -> Result<Option<CurrentPicState<B>>, DecodeError> {
+    ) -> Result<Option<CurrentPicState<B::Handle, B::Picture>>, DecodeError> {
         let layer = PoolLayer::Layer(self.coded_resolution);
         if self
             .backend
@@ -1028,7 +1026,11 @@ where
     }
 
     /// Handle a slice. Called once per slice NALU.
-    fn handle_slice(&mut self, pic: &mut CurrentPicState<B>, slice: &Slice) -> anyhow::Result<()> {
+    fn handle_slice(
+        &mut self,
+        pic: &mut CurrentPicState<B::Handle, B::Picture>,
+        slice: &Slice,
+    ) -> anyhow::Result<()> {
         // A dependent slice may refer to a previous SPS which
         // is not the one currently in use.
         self.update_current_set_ids(slice.header.pic_parameter_set_id)?;
@@ -1067,7 +1069,10 @@ where
         Ok(())
     }
 
-    fn finish_picture(&mut self, pic: CurrentPicState<B>) -> anyhow::Result<()> {
+    fn finish_picture(
+        &mut self,
+        pic: CurrentPicState<B::Handle, B::Picture>,
+    ) -> anyhow::Result<()> {
         log::debug!("Finishing picture POC {:?}", pic.pic.pic_order_cnt_val);
 
         // Submit the picture to the backend.
