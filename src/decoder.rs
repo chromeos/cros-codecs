@@ -23,9 +23,10 @@ use crate::Resolution;
 ///
 /// This is mostly useful for the decoder where the user is expected to manage how the decoded
 /// frames buffers are allocated and when.
-///
-/// The `M` generic parameter is the type of the descriptors for the memory backing the frames.
-pub trait FramePool<M> {
+pub trait FramePool {
+    /// Type of descriptor for the memory backing the frames.
+    type Descriptor;
+
     /// Returns the coded resolution of the pool.
     ///
     /// All the frames maintained by this pool are guaranteed to be able to contain the coded
@@ -36,7 +37,7 @@ pub trait FramePool<M> {
     /// Frames managed by this pool that can not contain the new resolution are dropped.
     fn set_coded_resolution(&mut self, resolution: Resolution);
     /// Add new frames to the pool, using `descriptors` as backing memory.
-    fn add_frames(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error>;
+    fn add_frames(&mut self, descriptors: Vec<Self::Descriptor>) -> Result<(), anyhow::Error>;
     /// Returns new number of frames currently available in this pool.
     fn num_free_frames(&self) -> usize;
     /// Returns the total number of managed frames in this pool.
@@ -73,9 +74,9 @@ pub struct StreamInfo {
 /// the format change took place, and (in the future) negotiate its specifics.
 ///
 /// When the object is dropped, the decoder can accept and process new input again.
-pub trait DecoderFormatNegotiator<'a, M, P>
+pub trait DecoderFormatNegotiator<'a, P>
 where
-    P: FramePool<M>,
+    P: FramePool,
 {
     /// Returns the current decoding parameters, as extracted from the stream.
     fn stream_info(&self) -> &StreamInfo;
@@ -86,11 +87,11 @@ where
 }
 
 /// Events that can be retrieved using the `next_event` method of a decoder.
-pub enum DecoderEvent<'a, H: DecodedHandle, P: FramePool<H::Descriptor>> {
+pub enum DecoderEvent<'a, H: DecodedHandle, P: FramePool<Descriptor = H::Descriptor>> {
     /// The next frame has been decoded.
     FrameReady(H),
     /// The format of the stream has changed and action is required.
-    FormatChanged(Box<dyn DecoderFormatNegotiator<'a, H::Descriptor, P> + 'a>),
+    FormatChanged(Box<dyn DecoderFormatNegotiator<'a, P> + 'a>),
 }
 
 pub trait DynHandle {

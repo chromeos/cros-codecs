@@ -114,7 +114,7 @@ pub trait StatelessDecoderBackend {
     /// operation when it goes out of scope.
     type Handle: DecodedHandle;
 
-    type FramePool: FramePool<<Self::Handle as DecodedHandle>::Descriptor>;
+    type FramePool: FramePool<Descriptor = <Self::Handle as DecodedHandle>::Descriptor>;
 
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;
@@ -161,8 +161,7 @@ where
     }
 }
 
-impl<'a, D, B, FH, F>
-    DecoderFormatNegotiator<'a, <B::Handle as DecodedHandle>::Descriptor, B::FramePool>
+impl<'a, D, B, FH, F> DecoderFormatNegotiator<'a, B::FramePool>
     for StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
 where
     B: StatelessDecoderBackend,

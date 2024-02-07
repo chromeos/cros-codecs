@@ -177,7 +177,9 @@ impl<M: SurfaceMemoryDescriptor> VaSurfacePool<M> {
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> FramePool<M> for VaSurfacePool<M> {
+impl<M: SurfaceMemoryDescriptor> FramePool for VaSurfacePool<M> {
+    type Descriptor = M;
+
     fn coded_resolution(&self) -> Resolution {
         (*self.inner).borrow().coded_resolution
     }
@@ -194,7 +196,7 @@ impl<M: SurfaceMemoryDescriptor> FramePool<M> for VaSurfacePool<M> {
             .retain(|s| Resolution::from(s.size()).can_contain(resolution));
     }
 
-    fn add_frames(&mut self, descriptors: Vec<M>) -> Result<(), anyhow::Error> {
+    fn add_frames(&mut self, descriptors: Vec<Self::Descriptor>) -> Result<(), anyhow::Error> {
         let mut inner = (*self.inner).borrow_mut();
 
         let surfaces = inner

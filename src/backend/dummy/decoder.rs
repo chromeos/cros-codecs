@@ -102,14 +102,16 @@ impl Backend {
     }
 }
 
-impl<M> FramePool<M> for Backend {
+impl FramePool for Backend {
+    type Descriptor = ();
+
     fn coded_resolution(&self) -> Resolution {
         Resolution::from((320, 200))
     }
 
     fn set_coded_resolution(&mut self, _resolution: Resolution) {}
 
-    fn add_frames(&mut self, _descriptors: Vec<M>) -> Result<(), anyhow::Error> {
+    fn add_frames(&mut self, _descriptors: Vec<Self::Descriptor>) -> Result<(), anyhow::Error> {
         Ok(())
     }
 
