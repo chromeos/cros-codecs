@@ -137,11 +137,13 @@ impl<Codec: StatelessCodec> TryFormat<Codec> for Backend {
 impl StatelessDecoderBackend for Backend {
     type Handle = Handle;
 
+    type FramePool = Self;
+
     fn stream_info(&self) -> Option<&StreamInfo> {
         Some(&self.stream_info)
     }
 
-    fn frame_pool(&mut self, _: PoolLayer) -> Vec<&mut dyn FramePool<()>> {
+    fn frame_pool(&mut self, _: PoolLayer) -> Vec<&mut Self::FramePool> {
         vec![self]
     }
 }

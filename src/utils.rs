@@ -23,6 +23,7 @@ use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
+use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::DecodedFormat;
 use crate::Fourcc;

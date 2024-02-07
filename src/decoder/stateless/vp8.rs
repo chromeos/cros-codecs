@@ -268,7 +268,7 @@ where
         Ok(())
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle, B::FramePool>> {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
         (&mut self.ready_queue)
@@ -291,10 +291,7 @@ where
             })
     }
 
-    fn frame_pool(
-        &mut self,
-        layer: PoolLayer,
-    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>> {
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool> {
         self.backend.frame_pool(layer)
     }
 

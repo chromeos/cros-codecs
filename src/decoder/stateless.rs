@@ -114,14 +114,13 @@ pub trait StatelessDecoderBackend {
     /// operation when it goes out of scope.
     type Handle: DecodedHandle;
 
+    type FramePool: FramePool<<Self::Handle as DecodedHandle>::Descriptor>;
+
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the frame pool currently in use by the backend for `layer`.
-    fn frame_pool(
-        &mut self,
-        layer: PoolLayer,
-    ) -> Vec<&mut dyn FramePool<<Self::Handle as DecodedHandle>::Descriptor>>;
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut Self::FramePool>;
 }
 
 /// Helper to implement [`DecoderFormatNegotiator`] for stateless decoders.
@@ -162,7 +161,8 @@ where
     }
 }
 
-impl<'a, D, B, FH, F> DecoderFormatNegotiator<'a, <B::Handle as DecodedHandle>::Descriptor>
+impl<'a, D, B, FH, F>
+    DecoderFormatNegotiator<'a, <B::Handle as DecodedHandle>::Descriptor, B::FramePool>
     for StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
 where
     B: StatelessDecoderBackend,
@@ -175,10 +175,7 @@ where
         self.decoder.try_format(format)
     }
 
-    fn frame_pool(
-        &mut self,
-        layer: PoolLayer,
-    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>> {
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool> {
         self.decoder.frame_pool(layer)
     }
 
@@ -254,15 +251,12 @@ pub trait StatelessVideoDecoder<B: StatelessDecoderBackend> {
     /// will receive its frames from a separate pool.
     ///
     /// Useful to add new frames as decode targets.
-    fn frame_pool(
-        &mut self,
-        layer: PoolLayer,
-    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>>;
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool>;
 
     fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the next event, if there is any pending.
-    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle>>;
+    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle, B::FramePool>>;
 }
 
 pub trait StatelessCodec {
@@ -330,23 +324,6 @@ where
             ready_queue: Default::default(),
             codec: Default::default(),
         }
-    }
-}
-
-impl<C, B> StatelessDecoder<C, B>
-where
-    C: StatelessCodec,
-    B: StatelessDecoderBackend + StatelessDecoderBackendPicture<C>,
-{
-    fn frame_pool(
-        &mut self,
-        layer: PoolLayer,
-    ) -> Vec<&mut dyn FramePool<<B::Handle as DecodedHandle>::Descriptor>> {
-        self.backend.frame_pool(layer)
-    }
-
-    fn stream_info(&self) -> Option<&StreamInfo> {
-        self.backend.stream_info()
     }
 }
 

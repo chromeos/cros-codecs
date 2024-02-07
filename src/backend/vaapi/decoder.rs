@@ -679,7 +679,9 @@ where
 {
     type Handle = DecodedHandle<M>;
 
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut dyn FramePool<M>> {
+    type FramePool = VaSurfacePool<M>;
+
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut Self::FramePool> {
         if let PoolLayer::Highest = layer {
             return vec![self
                 .surface_pools
@@ -700,7 +702,6 @@ where
                     }
                 }
             })
-            .map(|x| x as &mut dyn FramePool<M>)
             .collect()
     }
 
