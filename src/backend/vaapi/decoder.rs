@@ -318,7 +318,7 @@ impl StreamMetadataState {
 enum PictureState<M: SurfaceMemoryDescriptor> {
     Ready(Picture<PictureSync, PooledVaSurface<M>>),
     Pending(Picture<PictureEnd, PooledVaSurface<M>>),
-    // Only set in the destructor when we take ownership of the VA picture.
+    // Only set in sync when we take ownership of the VA picture.
     Invalid,
 }
 
@@ -337,16 +337,6 @@ impl<M: SurfaceMemoryDescriptor> PictureState<M> {
         };
 
         res
-    }
-
-    /// Returns the picture of this handle, if it is in the ready state (i.e. [`sync`] has been
-    /// successfully called on it).
-    fn ready_picture(&self) -> Option<&Picture<PictureSync, PooledVaSurface<M>>> {
-        match self {
-            PictureState::Ready(picture) => Some(picture),
-            PictureState::Pending(_) => None,
-            PictureState::Invalid => unreachable!(),
-        }
     }
 
     fn surface(&self) -> &libva::Surface<M> {
@@ -372,6 +362,14 @@ impl<M: SurfaceMemoryDescriptor> PictureState<M> {
                 .surface()
                 .query_status()
                 .map(|s| s == libva::VASurfaceStatus::VASurfaceReady),
+            PictureState::Invalid => unreachable!(),
+        }
+    }
+
+    fn new_from_same_surface(&self, timestamp: u64) -> Picture<PictureNew, PooledVaSurface<M>> {
+        match &self {
+            PictureState::Ready(picture) => Picture::new_from_same_surface(timestamp, picture),
+            PictureState::Pending(picture) => Picture::new_from_same_surface(timestamp, picture),
             PictureState::Invalid => unreachable!(),
         }
     }
@@ -431,9 +429,13 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
         }
     }
 
-    /// Returns the picture of this handle.
-    pub(crate) fn picture(&self) -> Option<&Picture<PictureSync, PooledVaSurface<M>>> {
-        self.state.ready_picture()
+    /// Creates a new picture from the surface backing the current one. Useful for interlaced
+    /// decoding.
+    pub(crate) fn new_picture_from_same_surface(
+        &self,
+        timestamp: u64,
+    ) -> Picture<PictureNew, PooledVaSurface<M>> {
+        self.state.new_from_same_surface(timestamp)
     }
 
     pub(crate) fn surface(&self) -> &libva::Surface<M> {

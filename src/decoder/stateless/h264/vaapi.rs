@@ -40,7 +40,6 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
-use crate::decoder::DecodedHandle;
 
 impl VaStreamInfo for &Rc<Sps> {
     fn va_profile(&self) -> anyhow::Result<i32> {
@@ -565,16 +564,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         timestamp: u64,
         first_field: &Self::Handle,
     ) -> StatelessBackendResult<Self::Picture> {
-        // Block on the first field if it is not ready yet.
-        first_field.sync()?;
-
         // Decode to the same surface as the first field picture.
-        let first_va_handle = first_field.borrow();
-        let va_picture = first_va_handle
-            .picture()
-            .expect("no valid backend handle after blocking on it");
-
-        Ok(VaPicture::new_from_same_surface(timestamp, va_picture))
+        Ok(first_field
+            .borrow()
+            .new_picture_from_same_surface(timestamp))
     }
 }
 
