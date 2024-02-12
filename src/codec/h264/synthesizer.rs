@@ -469,8 +469,8 @@ mod tests {
 
         assert_eq!(buf, raw_sps_buf);
 
-        const WRITE_TO_FILE: bool = false;
-        if WRITE_TO_FILE {
+        let write_to_file = std::option_env!("CROS_CODECS_TEST_WRITE_TO_FILE") == Some("true");
+        if write_to_file {
             let mut out = std::fs::File::create("sps.h264").unwrap();
             out.write_all(&buf).unwrap();
             out.flush().unwrap();
@@ -519,8 +519,8 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         Synthesizer::<'_, Sps, _>::synthesize(0, &sps, &mut buf, false).unwrap();
 
-        const WRITE_TO_FILE: bool = false;
-        if WRITE_TO_FILE {
+        let write_to_file = std::option_env!("CROS_CODECS_TEST_WRITE_TO_FILE") == Some("true");
+        if write_to_file {
             let mut out = std::fs::File::create("sps.h264").unwrap();
             out.write_all(&buf).unwrap();
             out.flush().unwrap();
@@ -565,8 +565,8 @@ mod tests {
             }
         }
 
-        const WRITE_TO_FILE: bool = false;
-        if WRITE_TO_FILE {
+        let write_to_file = std::option_env!("CROS_CODECS_TEST_WRITE_TO_FILE") == Some("true");
+        if write_to_file {
             let mut out = std::fs::File::create("sps_pps.h264").unwrap();
             out.write_all(&buf).unwrap();
             out.flush().unwrap();

@@ -616,8 +616,8 @@ pub(super) mod tests {
         let (_, output) = backend.encode_slice(request).unwrap();
         let output = output.sync().unwrap();
 
-        const WRITE_TO_FILE: bool = false;
-        if WRITE_TO_FILE {
+        let write_to_file = std::option_env!("CROS_CODECS_TEST_WRITE_TO_FILE") == Some("true");
+        if write_to_file {
             use std::io::Write;
 
             use crate::codec::h264::synthesizer::Synthesizer;
@@ -717,8 +717,8 @@ pub(super) mod tests {
         })
         .unwrap();
 
-        const WRITE_TO_FILE: bool = false;
-        if WRITE_TO_FILE {
+        let write_to_file = std::option_env!("CROS_CODECS_TEST_WRITE_TO_FILE") == Some("true");
+        if write_to_file {
             use std::io::Write;
             let mut out = std::fs::File::create("test_vaapi_encoder.h264").unwrap();
             out.write_all(&bitstream).unwrap();
