@@ -170,24 +170,26 @@ pub trait StatelessVideoEncoder<H> {
     fn poll(&mut self) -> EncodeResult<Option<CodedBitstreamBuffer>>;
 }
 
-pub fn simple_encode_loop<E, H, P>(encoder: &mut E, frame_producer: &mut P) -> EncodeResult<Vec<u8>>
+pub fn simple_encode_loop<E, H, P>(
+    encoder: &mut E,
+    frame_producer: &mut P,
+    mut coded_consumer: impl FnMut(CodedBitstreamBuffer),
+) -> EncodeResult<()>
 where
     E: StatelessVideoEncoder<H>,
     P: Iterator<Item = (FrameMetadata, H)>,
 {
-    let mut bitstream = vec![];
-
     for (meta, handle) in frame_producer.by_ref() {
         encoder.encode(meta, handle)?;
         while let Some(coded) = encoder.poll()? {
-            bitstream.extend(coded.bitstream);
+            coded_consumer(coded);
         }
     }
 
     encoder.drain()?;
     while let Some(coded) = encoder.poll()? {
-        bitstream.extend(coded.bitstream);
+        coded_consumer(coded);
     }
 
-    Ok(bitstream)
+    Ok(())
 }

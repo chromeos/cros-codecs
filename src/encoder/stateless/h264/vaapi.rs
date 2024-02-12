@@ -710,7 +710,12 @@ pub(super) mod tests {
             frame_layout,
         );
 
-        let bitstream = simple_encode_loop(&mut encoder, &mut frame_producer).unwrap();
+        let mut bitstream = Vec::new();
+
+        simple_encode_loop(&mut encoder, &mut frame_producer, |coded| {
+            bitstream.extend(coded.bitstream)
+        })
+        .unwrap();
 
         const WRITE_TO_FILE: bool = false;
         if WRITE_TO_FILE {
