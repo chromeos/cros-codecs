@@ -72,6 +72,88 @@ impl<'a> Iterator for IvfIterator<'a> {
     }
 }
 
+/// Helper struct for synthesizing IVF file header
+pub struct IvfFileHeader {
+    pub magic: [u8; 4],
+    pub version: u16,
+    pub header_size: u16,
+    pub codec: [u8; 4],
+    pub width: u16,
+    pub height: u16,
+    pub framerate: u32,
+    pub timescale: u32,
+    pub frame_count: u32,
+    pub unused: u32,
+}
+
+impl Default for IvfFileHeader {
+    fn default() -> Self {
+        Self {
+            magic: Self::MAGIC,
+            version: 0,
+            header_size: 32,
+            codec: Self::CODEC_VP9,
+            width: 320,
+            height: 240,
+            framerate: 1,
+            timescale: 1000,
+            frame_count: 1,
+            unused: Default::default(),
+        }
+    }
+}
+
+impl IvfFileHeader {
+    pub const MAGIC: [u8; 4] = *b"DKIF";
+    pub const CODEC_VP9: [u8; 4] = *b"VP90";
+
+    pub fn new(codec: [u8; 4], width: u16, height: u16, framerate: u32, frame_count: u32) -> Self {
+        let default = Self::default();
+
+        Self {
+            codec,
+            width,
+            height,
+            framerate: framerate * default.timescale,
+            frame_count,
+            ..default
+        }
+    }
+}
+
+impl IvfFileHeader {
+    /// Writes header into writer
+    pub fn writo_into(&self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
+        writer.write_all(&self.magic)?;
+        writer.write_all(&self.version.to_le_bytes())?;
+        writer.write_all(&self.header_size.to_le_bytes())?;
+        writer.write_all(&self.codec)?;
+        writer.write_all(&self.width.to_le_bytes())?;
+        writer.write_all(&self.height.to_le_bytes())?;
+        writer.write_all(&self.framerate.to_le_bytes())?;
+        writer.write_all(&self.timescale.to_le_bytes())?;
+        writer.write_all(&self.frame_count.to_le_bytes())?;
+        writer.write_all(&self.unused.to_le_bytes())?;
+
+        Ok(())
+    }
+}
+
+/// Helper struct for synthesizing IVF frame header
+pub struct IvfFrameHeader {
+    pub frame_size: u32,
+    pub timestamp: u64,
+}
+
+impl IvfFrameHeader {
+    /// Writes header into writer
+    pub fn writo_into(&self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
+        writer.write_all(&self.frame_size.to_le_bytes())?;
+        writer.write_all(&self.timestamp.to_le_bytes())?;
+        Ok(())
+    }
+}
+
 /// Iterator NALUs in a bitstream.
 pub struct NalIterator<'a, Nalu>(Cursor<&'a [u8]>, PhantomData<Nalu>);
 
