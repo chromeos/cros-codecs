@@ -1177,6 +1177,7 @@ where
                 // emptied without output of the pictures they contain, and DPB
                 // fullness is set to 0.
                 self.codec.dpb.clear();
+                self.codec.last_field = None;
             }
         }
 
