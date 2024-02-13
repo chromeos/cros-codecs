@@ -401,7 +401,8 @@ impl<T: Clone> Dpb<T> {
     /// Bump the dpb, returning a picture as per the bumping process described in C.4.5.3.
     /// Note that this picture will still be referenced by its pair, if any.
     fn bump(&mut self) -> Option<Option<T>> {
-        let dpb_entry = self.find_lowest_poc_for_bumping()?.clone();
+        let dpb_entry = self.find_lowest_poc_for_bumping()?;
+        let handle = dpb_entry.handle.clone();
         let mut pic = dpb_entry.pic.borrow_mut();
 
         debug!("Bumping picture {:#?} from the dpb", pic);
@@ -411,8 +412,7 @@ impl<T: Clone> Dpb<T> {
             other_field_rc.borrow_mut().needed_for_output = false;
         }
 
-        drop(pic);
-        Some(dpb_entry.handle)
+        Some(handle)
     }
 
     /// Drains the DPB by continuously invoking the bumping process.
