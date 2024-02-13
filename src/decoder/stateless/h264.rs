@@ -345,17 +345,18 @@ where
 
                 let max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
 
-                if (pic.pic_order_cnt_lsb < self.prev_ref_pic_info.pic_order_cnt_lsb)
+                pic.pic_order_cnt_msb = if (pic.pic_order_cnt_lsb
+                    < self.prev_ref_pic_info.pic_order_cnt_lsb)
                     && (prev_pic_order_cnt_lsb - pic.pic_order_cnt_lsb >= max_pic_order_cnt_lsb / 2)
                 {
-                    pic.pic_order_cnt_msb = prev_pic_order_cnt_msb + max_pic_order_cnt_lsb;
+                    prev_pic_order_cnt_msb + max_pic_order_cnt_lsb
                 } else if (pic.pic_order_cnt_lsb > prev_pic_order_cnt_lsb)
                     && (pic.pic_order_cnt_lsb - prev_pic_order_cnt_lsb > max_pic_order_cnt_lsb / 2)
                 {
-                    pic.pic_order_cnt_msb = prev_pic_order_cnt_msb - max_pic_order_cnt_lsb;
+                    prev_pic_order_cnt_msb - max_pic_order_cnt_lsb
                 } else {
-                    pic.pic_order_cnt_msb = prev_pic_order_cnt_msb;
-                }
+                    prev_pic_order_cnt_msb
+                };
 
                 if !matches!(pic.field, Field::Bottom) {
                     pic.top_field_order_cnt = pic.pic_order_cnt_msb + pic.pic_order_cnt_lsb;
@@ -450,23 +451,19 @@ where
                     pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
 
-                let temp_pic_order_cnt;
-
-                if matches!(pic.is_idr, IsIdr::Yes { .. }) {
-                    temp_pic_order_cnt = 0;
+                let pic_order_cnt = if matches!(pic.is_idr, IsIdr::Yes { .. }) {
+                    0
                 } else if pic.nal_ref_idc == 0 {
-                    temp_pic_order_cnt = 2 * (pic.frame_num_offset + pic.frame_num) - 1;
+                    2 * (pic.frame_num_offset + pic.frame_num) - 1
                 } else {
-                    temp_pic_order_cnt = 2 * (pic.frame_num_offset + pic.frame_num);
-                }
+                    2 * (pic.frame_num_offset + pic.frame_num)
+                };
 
-                if matches!(pic.field, Field::Frame) {
-                    pic.top_field_order_cnt = temp_pic_order_cnt;
-                    pic.bottom_field_order_cnt = temp_pic_order_cnt;
-                } else if matches!(pic.field, Field::Bottom) {
-                    pic.bottom_field_order_cnt = temp_pic_order_cnt;
-                } else {
-                    pic.top_field_order_cnt = temp_pic_order_cnt;
+                if matches!(pic.field, Field::Frame | Field::Top) {
+                    pic.top_field_order_cnt = pic_order_cnt;
+                }
+                if matches!(pic.field, Field::Frame | Field::Bottom) {
+                    pic.bottom_field_order_cnt = pic_order_cnt;
                 }
             }
 
