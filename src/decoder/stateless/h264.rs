@@ -1157,12 +1157,10 @@ where
         let max_frame_num = sps.max_frame_num() as i32;
 
         let mut pic = PictureData::new_from_slice(slice, &sps, timestamp);
-
+        self.codec.compute_pic_order_count(&mut pic, &sps)?;
         if let Some(first_field) = first_field {
             pic.set_first_field_to(first_field);
         }
-
-        self.codec.compute_pic_order_count(&mut pic, &sps)?;
 
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             // C.4.5.3 "Bumping process"
