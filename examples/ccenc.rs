@@ -8,22 +8,46 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use argh::FromArgs;
+use cros_codecs::backend::vaapi::encoder::VaapiBackend;
+use cros_codecs::backend::vaapi::surface_pool::PooledVaSurface;
 use cros_codecs::backend::vaapi::surface_pool::VaSurfacePool;
-use cros_codecs::codec::h264::parser::Profile;
 use cros_codecs::decoder::FramePool;
-use cros_codecs::encoder::stateless::h264::EncoderConfig;
+use cros_codecs::encoder::stateless::h264;
 use cros_codecs::encoder::stateless::h264::H264;
+use cros_codecs::encoder::stateless::vp9;
+use cros_codecs::encoder::stateless::vp9::VP9;
 use cros_codecs::encoder::stateless::StatelessEncoder;
 use cros_codecs::encoder::stateless::StatelessVideoEncoder;
-use cros_codecs::encoder::Bitrate;
 use cros_codecs::encoder::FrameMetadata;
+use cros_codecs::utils::IvfFileHeader;
+use cros_codecs::utils::IvfFrameHeader;
 use cros_codecs::BlockingMode;
 use cros_codecs::Fourcc;
 use cros_codecs::FrameLayout;
 use cros_codecs::PlaneLayout;
 use cros_codecs::Resolution;
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Default)]
+enum Codec {
+    #[default]
+    H264,
+    VP9,
+}
+
+impl FromStr for Codec {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "h264" | "H264" => Ok(Self::H264),
+            "vp9" | "VP9" => Ok(Self::VP9),
+            _ => Err("unrecognized codec. Valid values: h264, vp9"),
+        }
+    }
+}
 
 /// Simple encoder
 #[derive(Debug, FromArgs)]
@@ -43,6 +67,10 @@ struct Args {
     /// input frames count
     #[argh(option)]
     count: usize,
+
+    /// codec
+    #[argh(option)]
+    codec: Option<Codec>,
 
     /// default quantization parameter
     #[argh(option)]
@@ -127,24 +155,20 @@ fn upload_img<M: libva::SurfaceMemoryDescriptor>(
     }
 }
 
-fn main() {
-    env_logger::init();
+type VaapiEncoder<Codec> =
+    StatelessEncoder<Codec, PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
 
-    let args: Args = argh::from_env();
-
-    let mut input = File::open(args.input).expect("error opening input file");
-
+fn new_h264_vaapi_encoder(
+    args: &Args,
+    display: &Rc<libva::Display>,
+) -> Box<dyn StatelessVideoEncoder<PooledVaSurface<()>>> {
     let resolution = Resolution {
         width: args.width,
         height: args.height,
     };
 
-    let mut config = EncoderConfig {
-        bitrate: Bitrate::Constant(2_000_000_000),
-        profile: Profile::Baseline,
-        framerate: 30,
+    let mut config = h264::EncoderConfig {
         resolution,
-
         ..Default::default()
     };
 
@@ -156,10 +180,9 @@ fn main() {
         config.framerate = framerate;
     }
 
-    let display = libva::Display::open().unwrap();
     let fourcc = b"NV12".into();
-    let mut encoder = StatelessEncoder::<H264, _, _>::new_vaapi(
-        Rc::clone(&display),
+    let encoder = VaapiEncoder::<H264>::new_vaapi(
+        Rc::clone(display),
         config,
         fourcc,
         resolution,
@@ -167,6 +190,57 @@ fn main() {
         BlockingMode::Blocking,
     )
     .expect("Unable to crate encoder");
+
+    Box::new(encoder)
+}
+
+fn new_vp9_vaapi_encoder(
+    args: &Args,
+    display: &Rc<libva::Display>,
+) -> Box<dyn StatelessVideoEncoder<PooledVaSurface<()>>> {
+    let resolution = Resolution {
+        width: args.width,
+        height: args.height,
+    };
+
+    let mut config = vp9::EncoderConfig {
+        resolution,
+        ..Default::default()
+    };
+
+    if let Some(framerate) = args.framerate {
+        config.framerate = framerate;
+    }
+
+    let fourcc = b"NV12".into();
+    let encoder = VaapiEncoder::<VP9>::new_vaapi(
+        Rc::clone(display),
+        config,
+        fourcc,
+        resolution,
+        args.low_power,
+        BlockingMode::Blocking,
+    )
+    .expect("Unable to crate encoder");
+
+    Box::new(encoder)
+}
+
+fn main() {
+    env_logger::init();
+
+    let args: Args = argh::from_env();
+
+    let mut input = File::open(&args.input).expect("error opening input file");
+
+    let display = libva::Display::open().unwrap();
+
+    let codec = args.codec.unwrap_or_default();
+
+    let mut encoder = match codec {
+        Codec::H264 => new_h264_vaapi_encoder(&args, &display),
+        Codec::VP9 => new_vp9_vaapi_encoder(&args, &display),
+    };
 
     let mut pool = VaSurfacePool::new(
         Rc::clone(&display),
@@ -183,6 +257,19 @@ fn main() {
     let frame_size: usize = (args.width * args.height + args.width * args.height / 2) as usize;
 
     let mut output = args.output.map(|output| File::create(output).unwrap());
+
+    if let Some(ref mut output) = output {
+        if codec == Codec::VP9 {
+            let hdr = IvfFileHeader::new(
+                IvfFileHeader::CODEC_VP9,
+                args.width as u16,
+                args.height as u16,
+                30,
+                args.count as u32,
+            );
+            hdr.writo_into(output).unwrap();
+        }
+    }
 
     let mut buf = vec![0u8; frame_size];
     for i in 0..args.count {
@@ -203,6 +290,15 @@ fn main() {
         encoder.encode(input_frame, handle).unwrap();
         while let Some(coded) = encoder.poll().unwrap() {
             if let Some(ref mut output) = output {
+                if codec == Codec::VP9 {
+                    let hdr = IvfFrameHeader {
+                        timestamp: coded.metadata.timestamp,
+                        frame_size: coded.bitstream.len() as u32,
+                    };
+
+                    hdr.writo_into(output).unwrap();
+                }
+
                 output.write_all(&coded.bitstream).unwrap();
             }
         }
@@ -211,6 +307,15 @@ fn main() {
     encoder.drain().unwrap();
     while let Some(coded) = encoder.poll().unwrap() {
         if let Some(ref mut output) = output {
+            if codec == Codec::VP9 {
+                let hdr = IvfFrameHeader {
+                    timestamp: coded.metadata.timestamp,
+                    frame_size: coded.bitstream.len() as u32,
+                };
+
+                hdr.writo_into(output).unwrap();
+            }
+
             output.write_all(&coded.bitstream).unwrap();
         }
     }
