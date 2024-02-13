@@ -89,13 +89,13 @@ pub enum MmcoError {
 impl<T: Clone> Dpb<T> {
     /// Returns an iterator over the underlying H264 pictures stored in the
     /// DPB.
-    pub fn pictures(&self) -> impl Iterator<Item = Ref<'_, PictureData>> {
+    fn pictures(&self) -> impl Iterator<Item = Ref<'_, PictureData>> {
         self.entries.iter().map(|h| h.pic.borrow())
     }
 
     /// Returns a mutable iterator over the underlying H264 pictures stored in
     /// the DPB.
-    pub fn pictures_mut(&mut self) -> impl Iterator<Item = RefMut<'_, PictureData>> {
+    fn pictures_mut(&mut self) -> impl Iterator<Item = RefMut<'_, PictureData>> {
         self.entries.iter().map(|h| h.pic.borrow_mut())
     }
 
