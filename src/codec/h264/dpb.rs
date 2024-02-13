@@ -603,13 +603,14 @@ impl<T: Clone> Dpb<T> {
             if long_already_assigned {
                 let is_frame = matches!(picture.field, Field::Frame);
 
-                let is_complementary_field_pair = picture.other_field().is_some()
-                    && matches!(
-                        picture.other_field().unwrap().borrow().reference(),
-                        Reference::LongTerm
-                    )
-                    && picture.other_field().unwrap().borrow().long_term_frame_idx
-                        == long_term_frame_idx;
+                let is_complementary_field_pair = picture
+                    .other_field()
+                    .map(|f| {
+                        let pic = f.borrow();
+                        matches!(pic.reference(), Reference::LongTerm)
+                            && pic.long_term_frame_idx == long_term_frame_idx
+                    })
+                    .unwrap_or(false);
 
                 // When LongTermFrameIdx equal to
                 // long_term_frame_idx is already assigned to a
@@ -756,13 +757,14 @@ impl<T: Clone> Dpb<T> {
             {
                 let is_frame = matches!(dpb_pic.field, Field::Frame);
 
-                let is_complementary_ref_field_pair = dpb_pic.other_field().is_some()
-                    && matches!(
-                        dpb_pic.other_field().unwrap().borrow().reference(),
-                        Reference::LongTerm
-                    )
-                    && dpb_pic.other_field().unwrap().borrow().long_term_frame_idx
-                        == long_term_frame_idx;
+                let is_complementary_ref_field_pair = dpb_pic
+                    .other_field()
+                    .map(|f| {
+                        let pic = f.borrow();
+                        matches!(pic.reference(), Reference::LongTerm)
+                            && pic.long_term_frame_idx == long_term_frame_idx
+                    })
+                    .unwrap_or(false);
 
                 dpb_pic.set_reference(Reference::None, is_frame || is_complementary_ref_field_pair);
 

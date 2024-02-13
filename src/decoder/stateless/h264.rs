@@ -984,8 +984,10 @@ where
                 }
                 Some(last_field)
                     if pic.is_second_field()
-                        && pic.other_field().is_some()
-                        && Rc::ptr_eq(&pic.other_field().unwrap(), &last_field.0) =>
+                        && pic
+                            .other_field()
+                            .map(|f| Rc::ptr_eq(&f, &last_field.0))
+                            .unwrap_or(false) =>
                 {
                     if let Some((field_pic, field_handle)) = self.codec.last_field.take() {
                         field_pic.borrow_mut().set_second_field_to(&pic_rc);
