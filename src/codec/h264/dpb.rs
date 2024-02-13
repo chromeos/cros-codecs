@@ -357,9 +357,7 @@ impl<T: Clone> Dpb<T> {
             return true;
         }
 
-        let is_ref = !matches!(to_insert.reference(), Reference::None);
-        let non_idr_ref = is_ref && matches!(to_insert.is_idr, IsIdr::No);
-
+        let non_idr_ref = to_insert.is_ref() && matches!(to_insert.is_idr, IsIdr::No);
         if non_idr_ref {
             return true;
         }
@@ -384,10 +382,14 @@ impl<T: Clone> Dpb<T> {
                     return false;
                 }
 
-                let skip = !matches!(pic.field, Field::Frame)
-                    && (pic.other_field().is_none() || pic.is_second_field());
-
-                !skip
+                match pic.field {
+                    // Progressive frames in the DPB are fully decoded.
+                    Field::Frame => true,
+                    // Only return the first field of fully decoded interlaced frames.
+                    Field::Top | Field::Bottom => {
+                        !pic.is_second_field() && pic.other_field().is_some()
+                    }
+                }
             })
             .min_by_key(|handle| handle.pic.borrow().pic_order_cnt)
     }
