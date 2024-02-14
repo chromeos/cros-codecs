@@ -1274,10 +1274,10 @@ where
     // picture as required by the specification.
     fn check_first_mb_in_slice(
         &mut self,
-        cur_pic: &mut CurrentPicState<B::Picture>,
+        current_macroblock: &mut CurrentMacroblockTracking,
         slice: &Slice,
     ) {
-        match &mut cur_pic.current_macroblock {
+        match current_macroblock {
             CurrentMacroblockTracking::SeparateColorPlane(current_macroblock) => {
                 match current_macroblock.entry(slice.header.colour_plane_id) {
                     Entry::Vacant(current_macroblock) => {
@@ -1309,7 +1309,7 @@ where
         cur_pic: &mut CurrentPicState<B::Picture>,
         slice: &Slice,
     ) -> anyhow::Result<()> {
-        self.check_first_mb_in_slice(cur_pic, slice);
+        self.check_first_mb_in_slice(&mut cur_pic.current_macroblock, slice);
 
         // A slice can technically refer to another PPS.
         let pps = self
