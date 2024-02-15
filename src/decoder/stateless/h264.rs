@@ -552,7 +552,7 @@ where
     #[allow(clippy::type_complexity)]
     fn find_first_field(
         &self,
-        slice: &Slice,
+        hdr: &SliceHeader,
     ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, H)>> {
         let mut prev_field = None;
 
@@ -572,7 +572,7 @@ where
             }
         }
 
-        if !slice.header.field_pic_flag {
+        if !hdr.field_pic_flag {
             if let Some(prev_field) = prev_field {
                 let field = prev_field.0.borrow().field;
                 return Err(anyhow!(
@@ -588,14 +588,14 @@ where
             Some(prev_field) => {
                 let prev_field_pic = prev_field.0.borrow();
 
-                if prev_field_pic.frame_num != i32::from(slice.header.frame_num) {
+                if prev_field_pic.frame_num != i32::from(hdr.frame_num) {
                     return Err(anyhow!(
                 "The previous field differs in frame_num value wrt. the current field. {:?} vs {:?}",
                 prev_field_pic.frame_num,
-                slice.header.frame_num
+                hdr.frame_num
             ));
                 } else {
-                    let cur_field = if slice.header.bottom_field_flag {
+                    let cur_field = if hdr.bottom_field_flag {
                         Field::Bottom
                     } else {
                         Field::Top
@@ -1236,7 +1236,7 @@ where
             self.handle_frame_num_gap(&pps, frame_num, timestamp)?;
         }
 
-        let first_field = self.codec.find_first_field(slice)?;
+        let first_field = self.codec.find_first_field(&slice.header)?;
 
         let pic = self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
         let ref_pic_lists = self.codec.dpb.build_ref_pic_lists(&pic);
