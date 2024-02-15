@@ -502,7 +502,6 @@ where
     fn drain(&mut self) -> impl Iterator<Item = H> {
         let pics = self.dpb.drain();
 
-        self.dpb.clear();
         self.last_field = None;
 
         pics.into_iter().flatten()
@@ -951,8 +950,6 @@ where
 
         self.codec.prev_pic_info.fill(&pic);
 
-        self.codec.dpb.remove_unused();
-
         if pic.has_mmco_5 {
             // C.4.5.3 "Bumping process"
             // The bumping process is invoked in the following cases:
@@ -1044,7 +1041,6 @@ where
 
             self.codec.dpb.sliding_window_marking(&mut pic, sps)?;
 
-            self.codec.dpb.remove_unused();
             self.ready_queue.extend(self.codec.bump_as_needed(&pic));
 
             if self.codec.dpb.interlaced() {
