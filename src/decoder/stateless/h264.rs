@@ -491,47 +491,6 @@ where
         Ok(())
     }
 
-    fn sliding_window_marking(&self, pic: &mut PictureData, pps: &Pps) -> anyhow::Result<()> {
-        // If the current picture is a coded field that is the second field in
-        // decoding order of a complementary reference field pair, and the first
-        // field has been marked as "used for short-term reference", the current
-        // picture and the complementary reference field pair are also marked as
-        // "used for short-term reference".
-        if pic.is_second_field()
-            && matches!(
-                pic.other_field().unwrap().borrow().reference(),
-                Reference::ShortTerm
-            )
-        {
-            pic.set_reference(Reference::ShortTerm, false);
-            return Ok(());
-        }
-
-        let mut num_ref_pics = self.dpb.num_ref_frames();
-        let max_num_ref_frames =
-            usize::try_from(std::cmp::max(1, pps.sps.max_num_ref_frames)).unwrap();
-
-        if num_ref_pics < max_num_ref_frames {
-            return Ok(());
-        }
-
-        /* 8.2.5.3 */
-        while num_ref_pics >= max_num_ref_frames {
-            let to_unmark = self
-                .dpb
-                .find_short_term_lowest_frame_num_wrap()
-                .context("Could not find a ShortTerm picture to unmark in the DPB")?;
-
-            to_unmark
-                .pic
-                .borrow_mut()
-                .set_reference(Reference::None, true);
-            num_ref_pics -= 1;
-        }
-
-        Ok(())
-    }
-
     /// Returns an iterator of the handles of the frames that need to be bumped into the ready
     /// queue.
     fn bump_as_needed(&mut self, current_pic: &PictureData) -> impl Iterator<Item = H> {
@@ -876,7 +835,7 @@ where
         Ok(())
     }
 
-    fn reference_pic_marking(&mut self, pic: &mut PictureData, pps: &Pps) -> anyhow::Result<()> {
+    fn reference_pic_marking(&mut self, pic: &mut PictureData, sps: &Sps) -> anyhow::Result<()> {
         /* 8.2.5.1 */
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             self.dpb.mark_all_as_unused_for_ref();
@@ -896,7 +855,7 @@ where
         if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag {
             self.handle_memory_management_ops(pic)?;
         } else {
-            self.sliding_window_marking(pic, pps)?;
+            self.dpb.sliding_window_marking(pic, sps)?;
         }
 
         Ok(())
@@ -1008,7 +967,7 @@ where
         let mut pic = pic.pic;
 
         if matches!(pic.reference(), Reference::ShortTerm | Reference::LongTerm) {
-            self.codec.reference_pic_marking(&mut pic, &pps)?;
+            self.codec.reference_pic_marking(&mut pic, &pps.sps)?;
             self.codec.prev_ref_pic_info.fill(&pic);
         }
 
@@ -1079,7 +1038,7 @@ where
 
     fn handle_frame_num_gap(
         &mut self,
-        pps: &Pps,
+        sps: &Sps,
         frame_num: i32,
         timestamp: u64,
     ) -> anyhow::Result<()> {
@@ -1089,7 +1048,7 @@ where
 
         debug!("frame_num gap detected.");
 
-        if !pps.sps.gaps_in_frame_num_value_allowed_flag {
+        if !sps.gaps_in_frame_num_value_allowed_flag {
             return Err(anyhow!(
                 "Invalid frame_num: {}. Assuming unintentional loss of pictures",
                 frame_num
@@ -1097,18 +1056,18 @@ where
         }
 
         let mut unused_short_term_frame_num =
-            (self.codec.prev_ref_pic_info.frame_num + 1) % pps.sps.max_frame_num() as i32;
+            (self.codec.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32;
         while unused_short_term_frame_num != frame_num {
-            let max_frame_num = pps.sps.max_frame_num() as i32;
+            let max_frame_num = sps.max_frame_num() as i32;
 
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
-            self.codec.compute_pic_order_count(&mut pic, &pps.sps)?;
+            self.codec.compute_pic_order_count(&mut pic, sps)?;
 
             self.codec
                 .dpb
                 .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
-            self.codec.sliding_window_marking(&mut pic, pps)?;
+            self.codec.dpb.sliding_window_marking(&mut pic, sps)?;
 
             self.codec.dpb.remove_unused();
             self.ready_queue.extend(self.codec.bump_as_needed(&pic));
@@ -1233,7 +1192,7 @@ where
             && frame_num
                 != (self.codec.prev_ref_pic_info.frame_num + 1) % pps.sps.max_frame_num() as i32
         {
-            self.handle_frame_num_gap(&pps, frame_num, timestamp)?;
+            self.handle_frame_num_gap(&pps.sps, frame_num, timestamp)?;
         }
 
         let first_field = self.codec.find_first_field(&slice.header)?;

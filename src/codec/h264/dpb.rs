@@ -7,10 +7,12 @@ use std::cell::RefCell;
 use std::cell::RefMut;
 use std::rc::Rc;
 
+use anyhow::Context;
 use log::debug;
 use thiserror::Error;
 
 use crate::codec::h264::parser::RefPicMarkingInner;
+use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
@@ -521,6 +523,45 @@ impl<T: Clone> Dpb<T> {
         }
 
         pics
+    }
+
+    // 8.2.5.3
+    pub fn sliding_window_marking(&self, pic: &mut PictureData, sps: &Sps) -> anyhow::Result<()> {
+        // If the current picture is a coded field that is the second field in
+        // decoding order of a complementary reference field pair, and the first
+        // field has been marked as "used for short-term reference", the current
+        // picture and the complementary reference field pair are also marked as
+        // "used for short-term reference".
+        if pic.is_second_field()
+            && matches!(
+                pic.other_field().unwrap().borrow().reference(),
+                Reference::ShortTerm
+            )
+        {
+            pic.set_reference(Reference::ShortTerm, false);
+            return Ok(());
+        }
+
+        let mut num_ref_pics = self.num_ref_frames();
+        let max_num_ref_frames = usize::try_from(std::cmp::max(1, sps.max_num_ref_frames)).unwrap();
+
+        if num_ref_pics < max_num_ref_frames {
+            return Ok(());
+        }
+
+        while num_ref_pics >= max_num_ref_frames {
+            let to_unmark = self
+                .find_short_term_lowest_frame_num_wrap()
+                .context("Could not find a ShortTerm picture to unmark in the DPB")?;
+
+            to_unmark
+                .pic
+                .borrow_mut()
+                .set_reference(Reference::None, true);
+            num_ref_pics -= 1;
+        }
+
+        Ok(())
     }
 
     pub fn mmco_op_1(
