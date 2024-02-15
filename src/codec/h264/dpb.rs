@@ -10,6 +10,7 @@ use std::rc::Rc;
 use log::debug;
 use thiserror::Error;
 
+use crate::codec::h264::parser::RefPicMarkingInner;
 use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
@@ -522,8 +523,11 @@ impl<T: Clone> Dpb<T> {
         pics
     }
 
-    pub fn mmco_op_1(&mut self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
-        let marking = &pic.ref_pic_marking.inner[marking];
+    pub fn mmco_op_1(
+        &mut self,
+        pic: &PictureData,
+        marking: &RefPicMarkingInner,
+    ) -> Result<(), MmcoError> {
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1).unwrap() + 1);
 
@@ -542,9 +546,11 @@ impl<T: Clone> Dpb<T> {
         Ok(())
     }
 
-    pub fn mmco_op_2(&mut self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
-        let marking = &pic.ref_pic_marking.inner[marking];
-
+    pub fn mmco_op_2(
+        &mut self,
+        pic: &PictureData,
+        marking: &RefPicMarkingInner,
+    ) -> Result<(), MmcoError> {
         log::debug!(
             "MMCO op 2 for long_term_pic_num {}",
             marking.long_term_pic_num
@@ -566,8 +572,11 @@ impl<T: Clone> Dpb<T> {
         Ok(())
     }
 
-    pub fn mmco_op_3(&mut self, pic: &PictureData, marking: usize) -> Result<(), MmcoError> {
-        let marking = &pic.ref_pic_marking.inner[marking];
+    pub fn mmco_op_3(
+        &mut self,
+        pic: &PictureData,
+        marking: &RefPicMarkingInner,
+    ) -> Result<(), MmcoError> {
         let pic_num_x =
             pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1).unwrap() + 1);
 
@@ -672,8 +681,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Returns the new `max_long_term_frame_idx`.
-    pub fn mmco_op_4(&mut self, pic: &PictureData, marking: usize) -> i32 {
-        let marking = &pic.ref_pic_marking.inner[marking];
+    pub fn mmco_op_4(&mut self, marking: &RefPicMarkingInner) -> i32 {
         let max_long_term_frame_idx = marking.max_long_term_frame_idx_plus1 - 1;
 
         log::debug!(
@@ -738,8 +746,7 @@ impl<T: Clone> Dpb<T> {
         -1
     }
 
-    pub fn mmco_op_6(&mut self, pic: &mut PictureData, marking: usize) {
-        let marking = &pic.ref_pic_marking.inner[marking];
+    pub fn mmco_op_6(&mut self, pic: &mut PictureData, marking: &RefPicMarkingInner) {
         let long_term_frame_idx = i32::try_from(marking.long_term_frame_idx).unwrap();
 
         log::debug!("MMCO op 6, long_term_frame_idx: {}", long_term_frame_idx);

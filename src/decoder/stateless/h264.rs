@@ -860,15 +860,15 @@ where
     fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
         let markings = pic.ref_pic_marking.clone();
 
-        for (i, marking) in markings.inner.iter().enumerate() {
+        for marking in &markings.inner {
             match marking.memory_management_control_operation {
                 0 => break,
-                1 => self.dpb.mmco_op_1(pic, i)?,
-                2 => self.dpb.mmco_op_2(pic, i)?,
-                3 => self.dpb.mmco_op_3(pic, i)?,
-                4 => self.max_long_term_frame_idx = self.dpb.mmco_op_4(pic, i),
+                1 => self.dpb.mmco_op_1(pic, marking)?,
+                2 => self.dpb.mmco_op_2(pic, marking)?,
+                3 => self.dpb.mmco_op_3(pic, marking)?,
+                4 => self.max_long_term_frame_idx = self.dpb.mmco_op_4(marking),
                 5 => self.max_long_term_frame_idx = self.dpb.mmco_op_5(pic),
-                6 => self.dpb.mmco_op_6(pic, i),
+                6 => self.dpb.mmco_op_6(pic, marking),
                 other => anyhow::bail!("unknown MMCO={}", other),
             }
         }
