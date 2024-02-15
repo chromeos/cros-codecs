@@ -11,6 +11,7 @@ use anyhow::Context;
 use log::debug;
 use thiserror::Error;
 
+use crate::codec::h264::parser::MaxLongTermFrameIdx;
 use crate::codec::h264::parser::RefPicMarkingInner;
 use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
@@ -722,29 +723,28 @@ impl<T: Clone> Dpb<T> {
     }
 
     /// Returns the new `max_long_term_frame_idx`.
-    pub fn mmco_op_4(&mut self, marking: &RefPicMarkingInner) -> i32 {
-        let max_long_term_frame_idx = marking.max_long_term_frame_idx_plus1 - 1;
-
+    pub fn mmco_op_4(&mut self, marking: &RefPicMarkingInner) -> MaxLongTermFrameIdx {
         log::debug!(
-            "MMCO op 4, max_long_term_frame_idx: {}",
-            max_long_term_frame_idx
+            "MMCO op 4, max_long_term_frame_idx: {:?}",
+            marking.max_long_term_frame_idx
         );
 
         log::trace!("Dpb state before MMCO=4: {:#?}", self);
 
         for mut dpb_pic in self.pictures_mut() {
             if matches!(dpb_pic.reference(), Reference::LongTerm)
-                && dpb_pic.long_term_frame_idx > max_long_term_frame_idx
+                && dpb_pic.long_term_frame_idx
+                    > marking.max_long_term_frame_idx.to_value_plus1() as i32 - 1
             {
                 dpb_pic.set_reference(Reference::None, false);
             }
         }
 
-        max_long_term_frame_idx
+        marking.max_long_term_frame_idx
     }
 
     /// Returns the new `max_long_term_frame_idx`.
-    pub fn mmco_op_5(&mut self, pic: &mut PictureData) -> i32 {
+    pub fn mmco_op_5(&mut self, pic: &mut PictureData) -> MaxLongTermFrameIdx {
         log::debug!("MMCO op 5, marking all pictures in the DPB as unused for reference");
         log::trace!("Dpb state before MMCO=5: {:#?}", self);
 
@@ -784,7 +784,7 @@ impl<T: Clone> Dpb<T> {
             }
         }
 
-        -1
+        MaxLongTermFrameIdx::NoLongTermFrameIndices
     }
 
     pub fn mmco_op_6(&mut self, pic: &mut PictureData, marking: &RefPicMarkingInner) {

@@ -115,6 +115,55 @@ pub struct PredWeightTable {
     pub chroma_offset_l1: [[i8; 2]; 32],
 }
 
+/// Representation of `MaxLongTermFrameIdx`.
+///
+/// `MaxLongTermFrameIdx` is derived from `max_long_term_frame_idx_plus1`, an unsigned integer with
+/// a special value indicating "no long-term frame indices". This type allows easy conversion
+/// between the actual and "plus1" representation, while ensuring that the special value is always
+/// handled by the code.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaxLongTermFrameIdx {
+    #[default]
+    NoLongTermFrameIndices,
+    Idx(u32),
+}
+
+impl MaxLongTermFrameIdx {
+    /// Create a value from `max_long_term_frame_idx_plus1`.
+    pub fn from_value_plus1(max_long_term_frame_idx_plus1: u32) -> Self {
+        match max_long_term_frame_idx_plus1 {
+            0 => Self::NoLongTermFrameIndices,
+            i @ 1.. => Self::Idx(i - 1),
+        }
+    }
+
+    /// Convert this value to the representation used by `max_long_term_frame_idx_plus1`.
+    pub fn to_value_plus1(self) -> u32 {
+        match self {
+            Self::NoLongTermFrameIndices => 0,
+            Self::Idx(i) => i + 1,
+        }
+    }
+}
+
+impl PartialEq<u32> for MaxLongTermFrameIdx {
+    fn eq(&self, other: &u32) -> bool {
+        match self {
+            MaxLongTermFrameIdx::NoLongTermFrameIndices => false,
+            MaxLongTermFrameIdx::Idx(idx) => idx.eq(other),
+        }
+    }
+}
+
+impl PartialOrd<u32> for MaxLongTermFrameIdx {
+    fn partial_cmp(&self, other: &u32) -> Option<std::cmp::Ordering> {
+        match self {
+            MaxLongTermFrameIdx::NoLongTermFrameIndices => Some(std::cmp::Ordering::Less),
+            MaxLongTermFrameIdx::Idx(idx) => idx.partial_cmp(other),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RefPicMarkingInner {
     /// Specifies a control operation to be applied to affect the reference
@@ -138,10 +187,10 @@ pub struct RefPicMarkingInner {
     /// assign a long-term frame index to a picture.
     pub long_term_frame_idx: u32,
 
-    /// Minus 1 specifies the maximum value of long-term frame index allowed for
+    /// Specifies the maximum value of long-term frame index allowed for
     /// long-term reference pictures (until receipt of another value of
     /// `max_long_term_frame_idx_plus1`).
-    pub max_long_term_frame_idx_plus1: i32,
+    pub max_long_term_frame_idx: MaxLongTermFrameIdx,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2313,7 +2362,8 @@ impl Parser {
                     }
 
                     if mem_mgmt_ctrl_op == 4 {
-                        marking.max_long_term_frame_idx_plus1 = r.read_ue()?;
+                        marking.max_long_term_frame_idx =
+                            MaxLongTermFrameIdx::from_value_plus1(r.read_ue()?);
                     }
 
                     rpm.inner.push(marking);
@@ -2539,6 +2589,7 @@ mod tests {
     use std::io::Cursor;
 
     use crate::codec::h264::parser::Level;
+    use crate::codec::h264::parser::MaxLongTermFrameIdx;
     use crate::codec::h264::parser::Nalu;
     use crate::codec::h264::parser::NaluType;
     use crate::codec::h264::parser::Parser;
@@ -2889,5 +2940,37 @@ mod tests {
             assert_eq!(nalu.header.type_, NaluType::Sps);
             parser.parse_sps(&nalu).unwrap_err();
         }
+    }
+
+    #[test]
+    fn max_long_term_frame_idx() {
+        assert_eq!(
+            MaxLongTermFrameIdx::from_value_plus1(0),
+            MaxLongTermFrameIdx::NoLongTermFrameIndices
+        );
+        assert_eq!(
+            MaxLongTermFrameIdx::NoLongTermFrameIndices.to_value_plus1(),
+            0
+        );
+
+        assert_eq!(
+            MaxLongTermFrameIdx::from_value_plus1(1),
+            MaxLongTermFrameIdx::Idx(0)
+        );
+        assert_eq!(MaxLongTermFrameIdx::Idx(0).to_value_plus1(), 1);
+
+        assert_eq!(
+            MaxLongTermFrameIdx::from_value_plus1(25),
+            MaxLongTermFrameIdx::Idx(24)
+        );
+        assert_eq!(MaxLongTermFrameIdx::Idx(24).to_value_plus1(), 25);
+
+        // Check PartialOrd<u32> implementation.
+        assert!(MaxLongTermFrameIdx::NoLongTermFrameIndices < 0);
+        assert_ne!(MaxLongTermFrameIdx::NoLongTermFrameIndices, 0);
+        assert_eq!(MaxLongTermFrameIdx::Idx(0), 0);
+        assert!(MaxLongTermFrameIdx::Idx(0) < 1);
+        assert_eq!(MaxLongTermFrameIdx::Idx(24), 24);
+        assert!(MaxLongTermFrameIdx::Idx(24) < 25);
     }
 }

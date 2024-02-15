@@ -20,6 +20,7 @@ use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::dpb::DpbPicRefList;
 use crate::codec::h264::dpb::ReferencePicLists;
+use crate::codec::h264::parser::MaxLongTermFrameIdx;
 use crate::codec::h264::parser::Nalu;
 use crate::codec::h264::parser::NaluType;
 use crate::codec::h264::parser::Parser;
@@ -266,7 +267,7 @@ pub struct H264DecoderState<H: DecodedHandle, P> {
     /// Cached variables from the previous picture.
     prev_pic_info: PrevPicInfo,
     /// Maximum index of the long-term frame.
-    max_long_term_frame_idx: i32,
+    max_long_term_frame_idx: MaxLongTermFrameIdx,
 
     /// A cached, non-reference first field that did not make it into the DPB
     /// because it was full even after bumping the smaller POC. This field will
@@ -584,11 +585,11 @@ where
         }
     }
 
-    fn long_term_pic_num_f(pic: &PictureData, max_long_term_frame_idx: i32) -> i32 {
+    fn long_term_pic_num_f(pic: &PictureData, max_long_term_frame_idx: MaxLongTermFrameIdx) -> u32 {
         if matches!(pic.reference(), Reference::LongTerm) {
-            pic.long_term_pic_num
+            pic.long_term_pic_num as u32
         } else {
-            2 * (max_long_term_frame_idx + 1)
+            2 * max_long_term_frame_idx.to_value_plus1()
         }
     }
 
@@ -669,7 +670,7 @@ where
         dpb: &'a Dpb<H>,
         ref_pic_list_x: &mut DpbPicRefList<'a, H>,
         num_ref_idx_lx_active_minus1: u8,
-        max_long_term_frame_idx: i32,
+        max_long_term_frame_idx: MaxLongTermFrameIdx,
         rplm: &RefPicListModification,
         ref_idx_lx: &mut usize,
     ) -> anyhow::Result<()> {
@@ -696,7 +697,7 @@ where
 
             let target = &ref_pic_list_x[cidx].pic;
             if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
-                != long_term_pic_num as i32
+                != long_term_pic_num
             {
                 ref_pic_list_x[nidx] = ref_pic_list_x[cidx];
                 nidx += 1;
@@ -843,10 +844,10 @@ where
             if pic.ref_pic_marking.long_term_reference_flag {
                 pic.set_reference(Reference::LongTerm, false);
                 pic.long_term_frame_idx = 0;
-                self.max_long_term_frame_idx = 0;
+                self.max_long_term_frame_idx = MaxLongTermFrameIdx::Idx(0);
             } else {
                 pic.set_reference(Reference::ShortTerm, false);
-                self.max_long_term_frame_idx = -1;
+                self.max_long_term_frame_idx = MaxLongTermFrameIdx::NoLongTermFrameIndices;
             }
 
             return Ok(());
