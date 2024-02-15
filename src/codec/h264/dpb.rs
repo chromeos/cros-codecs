@@ -173,7 +173,7 @@ impl<T: Clone> Dpb<T> {
 
     /// Remove unused pictures from the DPB. A picture is not going to be used
     /// anymore if it's a) not a reference and b) not needed for output
-    pub fn remove_unused(&mut self) {
+    fn remove_unused(&mut self) {
         self.entries.retain(|handle| {
             let pic = handle.pic.borrow();
             let discard = !pic.is_ref() && !pic.needed_for_output;
@@ -398,38 +398,17 @@ impl<T: Clone> Dpb<T> {
             .min_by_key(|handle| handle.pic.borrow().pic_order_cnt)
     }
 
-    /// Gets the position of `needle` in the DPB, if any.
-    fn get_position(&self, needle: &Rc<RefCell<PictureData>>) -> Option<usize> {
-        self.entries
-            .iter()
-            .position(|handle| Rc::ptr_eq(&handle.pic, needle))
-    }
-
     /// Bump the dpb, returning a picture as per the bumping process described in C.4.5.3.
     /// Note that this picture will still be referenced by its pair, if any.
-    fn bump(&mut self, flush: bool) -> Option<Option<T>> {
+    fn bump(&mut self) -> Option<Option<T>> {
         let dpb_entry = self.find_lowest_poc_for_bumping()?.clone();
         let mut pic = dpb_entry.pic.borrow_mut();
 
         debug!("Bumping picture {:#?} from the dpb", pic);
 
         pic.needed_for_output = false;
-
-        if !pic.is_ref() || flush {
-            let index = self.get_position(&dpb_entry.pic).unwrap();
-            log::debug!("removed picture {:#?} from dpb", pic);
-            self.entries.remove(index);
-        }
-
         if let Some(other_field_rc) = pic.other_field() {
-            let mut other_field = other_field_rc.borrow_mut();
-            other_field.needed_for_output = false;
-
-            if !other_field.is_ref() {
-                log::debug!("other_field: removed picture {:#?} from dpb", other_field);
-                let index = self.get_position(&other_field_rc).unwrap();
-                self.entries.remove(index);
-            }
+            other_field_rc.borrow_mut().needed_for_output = false;
         }
 
         drop(pic);
@@ -442,9 +421,11 @@ impl<T: Clone> Dpb<T> {
 
         let mut pics = vec![];
 
-        while let Some(pic) = self.bump(true) {
+        while let Some(pic) = self.bump() {
             pics.push(pic);
         }
+
+        self.clear();
 
         pics
     }
@@ -517,10 +498,11 @@ impl<T: Clone> Dpb<T> {
     pub fn bump_as_needed(&mut self, current_pic: &PictureData) -> Vec<Option<T>> {
         let mut pics = vec![];
         while self.needs_bumping(current_pic) && self.len() >= self.max_num_reorder_frames {
-            match self.bump(false) {
+            match self.bump() {
                 Some(pic) => pics.push(pic),
                 None => return pics,
             }
+            self.remove_unused();
         }
 
         pics
@@ -565,6 +547,8 @@ impl<T: Clone> Dpb<T> {
                 .set_reference(Reference::None, true);
             num_ref_pics -= 1;
         }
+
+        self.remove_unused();
 
         Ok(())
     }
