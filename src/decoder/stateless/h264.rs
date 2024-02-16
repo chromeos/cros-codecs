@@ -928,31 +928,27 @@ where
 
             self.ready_queue.push(handle);
         } else {
-            match &self.codec.last_field {
+            match self.codec.last_field.take() {
                 None => {
                     assert!(!pic.is_second_field());
 
                     // Cache the field, wait for its pair.
                     self.codec.last_field = Some((Rc::new(RefCell::new(pic)), handle));
                 }
-                Some(last_field)
+                Some((field_pic, field_handle))
                     if pic.is_second_field()
                         && pic
                             .other_field()
-                            .map(|f| Rc::ptr_eq(&f, &last_field.0))
+                            .map(|f| Rc::ptr_eq(&f, &field_pic))
                             .unwrap_or(false) =>
                 {
-                    if let Some((field_pic, field_handle)) = self.codec.last_field.take() {
-                        field_pic
-                            .borrow_mut()
-                            .set_second_field_to(&Rc::new(RefCell::new(pic)));
-                        self.ready_queue.push(field_handle);
-                    }
+                    field_pic
+                        .borrow_mut()
+                        .set_second_field_to(&Rc::new(RefCell::new(pic)));
+                    self.ready_queue.push(field_handle);
                 }
-                _ => {
-                    // Somehow, the last field is not paired with the current field.
-                    self.codec.last_field = None;
-                }
+                // Somehow, the last field is not paired with the current field.
+                _ => log::warn!("unmatched field dropped"),
             }
         }
     }
