@@ -159,7 +159,7 @@ impl PartialOrd<u32> for MaxLongTermFrameIdx {
     fn partial_cmp(&self, other: &u32) -> Option<std::cmp::Ordering> {
         match self {
             MaxLongTermFrameIdx::NoLongTermFrameIndices => Some(std::cmp::Ordering::Less),
-            MaxLongTermFrameIdx::Idx(idx) => idx.partial_cmp(other),
+            MaxLongTermFrameIdx::Idx(idx) => Some(idx.cmp(other)),
         }
     }
 }

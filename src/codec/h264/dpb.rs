@@ -209,7 +209,7 @@ impl<T: Clone> Dpb<T> {
 
     /// Find a long term reference picture with the given `long_term_pic_num`
     /// value.
-    fn find_long_term_with_long_term_pic_num_pos(&self, long_term_pic_num: i32) -> Option<usize> {
+    fn find_long_term_with_long_term_pic_num_pos(&self, long_term_pic_num: u32) -> Option<usize> {
         let position = self.pictures().position(|p| {
             matches!(p.reference(), Reference::LongTerm) && p.long_term_pic_num == long_term_pic_num
         });
@@ -227,7 +227,7 @@ impl<T: Clone> Dpb<T> {
     /// value.
     pub fn find_long_term_with_long_term_pic_num(
         &self,
-        long_term_pic_num: i32,
+        long_term_pic_num: u32,
     ) -> Option<&DpbEntry<T>> {
         let position = self.find_long_term_with_long_term_pic_num_pos(long_term_pic_num)?;
         Some(&self.entries[position])
@@ -478,8 +478,8 @@ impl<T: Clone> Dpb<T> {
 
     pub fn update_pic_nums(
         &mut self,
-        frame_num: i32,
-        max_frame_num: i32,
+        frame_num: u32,
+        max_frame_num: u32,
         current_pic: &PictureData,
     ) {
         for mut pic in self.pictures_mut() {
@@ -497,9 +497,9 @@ impl<T: Clone> Dpb<T> {
                 };
             } else {
                 pic.frame_num_wrap = if pic.frame_num > frame_num {
-                    pic.frame_num - max_frame_num
+                    pic.frame_num as i32 - max_frame_num as i32
                 } else {
-                    pic.frame_num
+                    pic.frame_num as i32
                 };
 
                 pic.pic_num = if current_pic.field == Field::Frame {
@@ -601,9 +601,7 @@ impl<T: Clone> Dpb<T> {
         log::trace!("Dpb state before MMCO=2: {:#?}", self);
 
         let to_mark = self
-            .find_long_term_with_long_term_pic_num(
-                i32::try_from(marking.long_term_pic_num).unwrap(),
-            )
+            .find_long_term_with_long_term_pic_num(marking.long_term_pic_num)
             .ok_or(MmcoError::NoShortTermPic)?;
 
         to_mark
@@ -647,7 +645,7 @@ impl<T: Clone> Dpb<T> {
             return Err(MmcoError::ExpectedExisting);
         }
 
-        let long_term_frame_idx = i32::try_from(marking.long_term_frame_idx).unwrap();
+        let long_term_frame_idx = marking.long_term_frame_idx;
 
         for mut picture in self.pictures_mut() {
             let long_already_assigned = matches!(picture.reference(), Reference::LongTerm)
@@ -731,13 +729,12 @@ impl<T: Clone> Dpb<T> {
 
         log::trace!("Dpb state before MMCO=4: {:#?}", self);
 
-        for mut dpb_pic in self.pictures_mut() {
-            if matches!(dpb_pic.reference(), Reference::LongTerm)
-                && dpb_pic.long_term_frame_idx
-                    > marking.max_long_term_frame_idx.to_value_plus1() as i32 - 1
-            {
-                dpb_pic.set_reference(Reference::None, false);
-            }
+        for mut dpb_pic in self
+            .pictures_mut()
+            .filter(|pic| matches!(pic.reference(), Reference::LongTerm))
+            .filter(|pic| marking.max_long_term_frame_idx < pic.long_term_frame_idx)
+        {
+            dpb_pic.set_reference(Reference::None, false);
         }
 
         marking.max_long_term_frame_idx
@@ -788,7 +785,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     pub fn mmco_op_6(&mut self, pic: &mut PictureData, marking: &RefPicMarkingInner) {
-        let long_term_frame_idx = i32::try_from(marking.long_term_frame_idx).unwrap();
+        let long_term_frame_idx = marking.long_term_frame_idx;
 
         log::debug!("MMCO op 6, long_term_frame_idx: {}", long_term_frame_idx);
         log::trace!("Dpb state before MMCO=6: {:#?}", self);
@@ -864,7 +861,7 @@ impl<T: Clone> Dpb<T> {
                         (false, _) => ("pic_num", p.pic_num, field),
                         (true, Reference::ShortTerm) => ("frame_num_wrap", p.frame_num_wrap, field),
                         (true, Reference::LongTerm) => {
-                            ("long_term_frame_idx", p.long_term_frame_idx, field)
+                            ("long_term_frame_idx", p.long_term_frame_idx as i32, field)
                         }
 
                         _ => panic!("Not a reference."),
@@ -900,7 +897,9 @@ impl<T: Clone> Dpb<T> {
 
                     let inner = match p.reference() {
                         Reference::ShortTerm => ("POC", p.pic_order_cnt, field),
-                        Reference::LongTerm => ("LongTermPicNum", p.long_term_pic_num, field),
+                        Reference::LongTerm => {
+                            ("LongTermPicNum", p.long_term_pic_num as i32, field)
+                        }
                         _ => panic!("Not a reference!"),
                     };
                     (reference, inner)

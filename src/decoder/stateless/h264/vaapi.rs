@@ -166,7 +166,7 @@ fn fill_va_h264_pic(
 
     libva::PictureH264::new(
         surface_id,
-        frame_idx as u32,
+        frame_idx,
         flags,
         top_field_order_cnt,
         bottom_field_order_cnt,

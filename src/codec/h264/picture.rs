@@ -63,11 +63,11 @@ pub struct PictureData {
     pub delta_pic_order_cnt1: i32,
 
     pub pic_num: i32,
-    pub long_term_pic_num: i32,
-    pub frame_num: i32,
-    pub frame_num_offset: i32,
+    pub long_term_pic_num: u32,
+    pub frame_num: u32,
+    pub frame_num_offset: u32,
     pub frame_num_wrap: i32,
-    pub long_term_frame_idx: i32,
+    pub long_term_frame_idx: u32,
 
     pub coded_resolution: Resolution,
     pub display_resolution: Resolution,
@@ -101,13 +101,13 @@ pub struct PictureData {
 }
 
 impl PictureData {
-    pub fn new_non_existing(frame_num: i32, timestamp: u64) -> Self {
+    pub fn new_non_existing(frame_num: u32, timestamp: u64) -> Self {
         PictureData {
             frame_num,
             nonexisting: true,
             nal_ref_idc: 1,
             field: Field::Frame,
-            pic_num: frame_num,
+            pic_num: frame_num as i32,
             reference: Reference::ShortTerm,
             timestamp,
             ..Default::default()
@@ -192,7 +192,7 @@ impl PictureData {
             delta_pic_order_cnt0,
             delta_pic_order_cnt1,
             pic_num: i32::from(pic_num),
-            frame_num: i32::from(hdr.frame_num),
+            frame_num: u32::from(hdr.frame_num),
             nal_ref_idc: nalu_hdr.ref_idc,
             is_idr,
             reference,

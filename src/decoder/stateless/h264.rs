@@ -170,7 +170,7 @@ enum RefPicList {
 }
 
 pub struct PrevReferencePicInfo {
-    frame_num: i32,
+    frame_num: u32,
     has_mmco_5: bool,
     top_field_order_cnt: i32,
     pic_order_cnt_msb: i32,
@@ -206,8 +206,8 @@ impl PrevReferencePicInfo {
 
 #[derive(Default)]
 pub struct PrevPicInfo {
-    frame_num: i32,
-    frame_num_offset: i32,
+    frame_num: u32,
+    frame_num_offset: u32,
     has_mmco_5: bool,
 }
 
@@ -382,7 +382,7 @@ where
                     pic.frame_num_offset = 0;
                 } else if self.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
+                        self.prev_pic_info.frame_num_offset + sps.max_frame_num();
                 } else {
                     pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
@@ -405,11 +405,11 @@ where
                     }
 
                     let pic_order_cnt_cycle_cnt =
-                        (abs_frame_num - 1) / sps.num_ref_frames_in_pic_order_cnt_cycle as i32;
+                        (abs_frame_num - 1) / sps.num_ref_frames_in_pic_order_cnt_cycle as u32;
                     let frame_num_in_pic_order_cnt_cycle =
-                        (abs_frame_num - 1) % sps.num_ref_frames_in_pic_order_cnt_cycle as i32;
+                        (abs_frame_num - 1) % sps.num_ref_frames_in_pic_order_cnt_cycle as u32;
                     expected_pic_order_cnt =
-                        pic_order_cnt_cycle_cnt * sps.expected_delta_per_pic_order_cnt_cycle;
+                        pic_order_cnt_cycle_cnt as i32 * sps.expected_delta_per_pic_order_cnt_cycle;
 
                     assert!(frame_num_in_pic_order_cnt_cycle < 255);
 
@@ -447,7 +447,7 @@ where
                     pic.frame_num_offset = 0;
                 } else if self.prev_pic_info.frame_num > pic.frame_num {
                     pic.frame_num_offset =
-                        self.prev_pic_info.frame_num_offset + sps.max_frame_num() as i32;
+                        self.prev_pic_info.frame_num_offset + sps.max_frame_num();
                 } else {
                     pic.frame_num_offset = self.prev_pic_info.frame_num_offset;
                 }
@@ -455,9 +455,9 @@ where
                 let pic_order_cnt = if matches!(pic.is_idr, IsIdr::Yes { .. }) {
                     0
                 } else if pic.nal_ref_idc == 0 {
-                    2 * (pic.frame_num_offset + pic.frame_num) - 1
+                    2 * (pic.frame_num_offset + pic.frame_num) as i32 - 1
                 } else {
-                    2 * (pic.frame_num_offset + pic.frame_num)
+                    2 * (pic.frame_num_offset + pic.frame_num) as i32
                 };
 
                 if matches!(pic.field, Field::Frame | Field::Top) {
@@ -548,7 +548,7 @@ where
             Some(prev_field) => {
                 let prev_field_pic = prev_field.0.borrow();
 
-                if prev_field_pic.frame_num != i32::from(hdr.frame_num) {
+                if prev_field_pic.frame_num != u32::from(hdr.frame_num) {
                     return Err(anyhow!(
                 "The previous field differs in frame_num value wrt. the current field. {:?} vs {:?}",
                 prev_field_pic.frame_num,
@@ -587,7 +587,7 @@ where
 
     fn long_term_pic_num_f(pic: &PictureData, max_long_term_frame_idx: MaxLongTermFrameIdx) -> u32 {
         if matches!(pic.reference(), Reference::LongTerm) {
-            pic.long_term_pic_num as u32
+            pic.long_term_pic_num
         } else {
             2 * max_long_term_frame_idx.to_value_plus1()
         }
@@ -677,7 +677,7 @@ where
         let long_term_pic_num = rplm.long_term_pic_num;
 
         let handle = dpb
-            .find_long_term_with_long_term_pic_num(long_term_pic_num as i32)
+            .find_long_term_with_long_term_pic_num(long_term_pic_num)
             .with_context(|| {
                 format!(
                     "No LongTerm reference found with long_term_pic_num {}",
@@ -1032,7 +1032,7 @@ where
     fn handle_frame_num_gap(
         &mut self,
         sps: &Sps,
-        frame_num: i32,
+        frame_num: u32,
         timestamp: u64,
     ) -> anyhow::Result<()> {
         if self.codec.dpb.is_empty() {
@@ -1049,9 +1049,9 @@ where
         }
 
         let mut unused_short_term_frame_num =
-            (self.codec.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num() as i32;
+            (self.codec.prev_ref_pic_info.frame_num + 1) % sps.max_frame_num();
         while unused_short_term_frame_num != frame_num {
-            let max_frame_num = sps.max_frame_num() as i32;
+            let max_frame_num = sps.max_frame_num();
 
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
             self.codec.compute_pic_order_count(&mut pic, sps)?;
@@ -1103,7 +1103,7 @@ where
             .context("Invalid SPS in init_current_pic")?;
 
         let sps = Rc::clone(&pps.sps);
-        let max_frame_num = sps.max_frame_num() as i32;
+        let max_frame_num = sps.max_frame_num();
 
         let mut pic = PictureData::new_from_slice(slice, &sps, timestamp);
         self.codec.compute_pic_order_count(&mut pic, &sps)?;
@@ -1132,7 +1132,7 @@ where
 
         self.codec
             .dpb
-            .update_pic_nums(i32::from(slice.header.frame_num), max_frame_num, &pic);
+            .update_pic_nums(u32::from(slice.header.frame_num), max_frame_num, &pic);
 
         Ok(pic)
     }
@@ -1150,7 +1150,7 @@ where
         }
 
         let hdr = &slice.header;
-        let frame_num = i32::from(hdr.frame_num);
+        let frame_num = u32::from(hdr.frame_num);
 
         let pps = Rc::clone(
             self.codec
@@ -1182,8 +1182,7 @@ where
         };
 
         if frame_num != self.codec.prev_ref_pic_info.frame_num
-            && frame_num
-                != (self.codec.prev_ref_pic_info.frame_num + 1) % pps.sps.max_frame_num() as i32
+            && frame_num != (self.codec.prev_ref_pic_info.frame_num + 1) % pps.sps.max_frame_num()
         {
             self.handle_frame_num_gap(&pps.sps, frame_num, timestamp)?;
         }
