@@ -987,9 +987,6 @@ where
         // Bump the DPB as per C.4.5.3 to cover clauses 1, 4, 5 and 6.
         self.ready_queue.extend(self.codec.bump_as_needed(&pic));
 
-        let pic_rc = Rc::new(RefCell::new(pic));
-        let pic = pic_rc.borrow();
-
         // C.4.5.1, C.4.5.2
         // If the current decoded picture is the second field of a complementary
         // reference field pair, add to DPB.
@@ -1007,30 +1004,30 @@ where
             || self.codec.dpb.has_empty_frame_buffer()
         {
             if self.codec.dpb.interlaced() && matches!(pic.field, Field::Frame) {
-                drop(pic);
-
                 // Split the Frame into two complementary fields so reference
                 // marking is easier. This is inspired by the GStreamer implementation.
-                let other_field = PictureData::split_frame(&pic_rc);
-                let other_field_handle = handle.clone();
+                let (first_field, second_field) = PictureData::split_frame(pic);
+                let second_field_handle = handle.clone();
 
-                self.codec
-                    .dpb
-                    .add_picture(pic_rc, Some(handle), &mut self.codec.last_field)?;
                 self.codec.dpb.add_picture(
-                    other_field,
-                    Some(other_field_handle),
+                    first_field,
+                    Some(handle),
+                    &mut self.codec.last_field,
+                )?;
+                self.codec.dpb.add_picture(
+                    second_field,
+                    Some(second_field_handle),
                     &mut self.codec.last_field,
                 )?;
             } else {
-                drop(pic);
-                self.codec
-                    .dpb
-                    .add_picture(pic_rc, Some(handle), &mut self.codec.last_field)?;
+                self.codec.dpb.add_picture(
+                    Rc::new(RefCell::new(pic)),
+                    Some(handle),
+                    &mut self.codec.last_field,
+                )?;
             }
         } else {
-            drop(pic);
-            self.add_to_ready_queue(pic_rc, handle);
+            self.add_to_ready_queue(Rc::new(RefCell::new(pic)), handle);
         }
 
         Ok(())
@@ -1072,21 +1069,21 @@ where
             self.codec.dpb.remove_unused();
             self.ready_queue.extend(self.codec.bump_as_needed(&pic));
 
-            let pic_rc = Rc::new(RefCell::new(pic));
-
             if self.codec.dpb.interlaced() {
-                let other_field = PictureData::split_frame(&pic_rc);
+                let (first_field, second_field) = PictureData::split_frame(pic);
 
                 self.codec
                     .dpb
-                    .add_picture(pic_rc, None, &mut self.codec.last_field)?;
+                    .add_picture(first_field, None, &mut self.codec.last_field)?;
                 self.codec
                     .dpb
-                    .add_picture(other_field, None, &mut self.codec.last_field)?;
+                    .add_picture(second_field, None, &mut self.codec.last_field)?;
             } else {
-                self.codec
-                    .dpb
-                    .add_picture(pic_rc, None, &mut self.codec.last_field)?;
+                self.codec.dpb.add_picture(
+                    Rc::new(RefCell::new(pic)),
+                    None,
+                    &mut self.codec.last_field,
+                )?;
             }
 
             unused_short_term_frame_num += 1;

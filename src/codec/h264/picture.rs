@@ -265,56 +265,54 @@ impl PictureData {
         self.is_second_field = true;
     }
 
-    /// Split a frame into two complementary fields.
-    pub fn split_frame(pic_rc: &Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
-        assert!(matches!(pic_rc.borrow().field, Field::Frame));
-        assert!(pic_rc.borrow().other_field.is_none());
-
-        let pic_order_cnt;
-        let mut pic = pic_rc.borrow_mut();
+    /// Split a frame into two complementary fields that reference one another.
+    pub fn split_frame(mut self) -> (Rc<RefCell<Self>>, Rc<RefCell<Self>>) {
+        assert!(matches!(self.field, Field::Frame));
+        assert!(self.other_field.is_none());
 
         debug!(
             "Splitting picture (frame_num, POC) ({:?}, {:?})",
-            pic.frame_num, pic.pic_order_cnt
+            self.frame_num, self.pic_order_cnt
         );
 
-        if pic.top_field_order_cnt < pic.bottom_field_order_cnt {
-            pic.field = Field::Top;
-            pic.pic_order_cnt = pic.top_field_order_cnt;
-            pic_order_cnt = pic.bottom_field_order_cnt;
+        let pic_order_cnt;
+        if self.top_field_order_cnt < self.bottom_field_order_cnt {
+            self.field = Field::Top;
+            self.pic_order_cnt = self.top_field_order_cnt;
+            pic_order_cnt = self.bottom_field_order_cnt;
         } else {
-            pic.field = Field::Bottom;
-            pic.pic_order_cnt = pic.bottom_field_order_cnt;
-            pic_order_cnt = pic.top_field_order_cnt;
+            self.field = Field::Bottom;
+            self.pic_order_cnt = self.bottom_field_order_cnt;
+            pic_order_cnt = self.top_field_order_cnt;
         }
 
-        let other_field = PictureData {
-            top_field_order_cnt: pic.top_field_order_cnt,
-            bottom_field_order_cnt: pic.bottom_field_order_cnt,
-            frame_num: pic.frame_num,
-            reference: pic.reference,
-            nonexisting: pic.nonexisting,
+        let second_field = PictureData {
+            top_field_order_cnt: self.top_field_order_cnt,
+            bottom_field_order_cnt: self.bottom_field_order_cnt,
+            frame_num: self.frame_num,
+            reference: self.reference,
+            nonexisting: self.nonexisting,
             pic_order_cnt,
-            field: pic.field.opposite(),
-            is_second_field: true,
-            other_field: Some(Rc::downgrade(pic_rc)),
+            field: self.field.opposite(),
             ..Default::default()
         };
 
         debug!(
             "Split into picture (frame_num, POC) ({:?}, {:?}), field: {:?}",
-            pic.frame_num, pic.pic_order_cnt, pic.field
+            self.frame_num, self.pic_order_cnt, self.field
         );
         debug!(
             "Split into picture (frame_num, POC) ({:?}, {:?}), field {:?}",
-            other_field.frame_num, other_field.pic_order_cnt, other_field.field
+            second_field.frame_num, second_field.pic_order_cnt, second_field.field
         );
 
-        let other_field = Rc::new(RefCell::new(other_field));
+        let first_field = Rc::new(RefCell::new(self));
+        let second_field = Rc::new(RefCell::new(second_field));
 
-        pic.other_field = Some(Rc::downgrade(&other_field));
+        first_field.borrow_mut().set_second_field_to(&second_field);
+        second_field.borrow_mut().set_first_field_to(&first_field);
 
-        other_field
+        (first_field, second_field)
     }
 }
 
