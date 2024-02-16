@@ -922,9 +922,7 @@ where
     }
 
     /// Adds picture to the ready queue if it could not be added to the DPB.
-    fn add_to_ready_queue(&mut self, pic_rc: Rc<RefCell<PictureData>>, handle: B::Handle) {
-        let pic = pic_rc.borrow();
-
+    fn add_to_ready_queue(&mut self, pic: PictureData, handle: B::Handle) {
         if matches!(pic.field, Field::Frame) {
             assert!(self.codec.last_field.is_none());
 
@@ -933,10 +931,9 @@ where
             match &self.codec.last_field {
                 None => {
                     assert!(!pic.is_second_field());
-                    drop(pic);
 
                     // Cache the field, wait for its pair.
-                    self.codec.last_field = Some((pic_rc, handle));
+                    self.codec.last_field = Some((Rc::new(RefCell::new(pic)), handle));
                 }
                 Some(last_field)
                     if pic.is_second_field()
@@ -946,7 +943,9 @@ where
                             .unwrap_or(false) =>
                 {
                     if let Some((field_pic, field_handle)) = self.codec.last_field.take() {
-                        field_pic.borrow_mut().set_second_field_to(&pic_rc);
+                        field_pic
+                            .borrow_mut()
+                            .set_second_field_to(&Rc::new(RefCell::new(pic)));
                         self.ready_queue.push(field_handle);
                     }
                 }
@@ -1027,7 +1026,7 @@ where
                 )?;
             }
         } else {
-            self.add_to_ready_queue(Rc::new(RefCell::new(pic)), handle);
+            self.add_to_ready_queue(pic, handle);
         }
 
         Ok(())
