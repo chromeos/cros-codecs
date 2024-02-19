@@ -921,6 +921,7 @@ where
     }
 
     /// Called once per picture to start it.
+    #[allow(clippy::type_complexity)]
     fn begin_picture(
         &mut self,
         timestamp: u64,
