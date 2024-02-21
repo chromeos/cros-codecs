@@ -14,7 +14,8 @@ use cros_codecs::backend::vaapi::surface_pool::VaSurfacePool;
 use cros_codecs::codec::h264::parser::Profile;
 use cros_codecs::decoder::FramePool;
 use cros_codecs::encoder::stateless::h264::EncoderConfig;
-use cros_codecs::encoder::stateless::h264::StatelessEncoder;
+use cros_codecs::encoder::stateless::h264::H264;
+use cros_codecs::encoder::stateless::StatelessEncoder;
 use cros_codecs::encoder::stateless::StatelessVideoEncoder;
 use cros_codecs::encoder::Bitrate;
 use cros_codecs::encoder::FrameMetadata;
@@ -157,7 +158,7 @@ fn main() {
 
     let display = libva::Display::open().unwrap();
     let fourcc = b"NV12".into();
-    let mut encoder = StatelessEncoder::new_vaapi(
+    let mut encoder = StatelessEncoder::<H264, _, _>::new_vaapi(
         Rc::clone(&display),
         config,
         fourcc,

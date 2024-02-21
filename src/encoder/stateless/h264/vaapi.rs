@@ -37,7 +37,6 @@ use crate::codec::h264::parser::Profile;
 use crate::codec::h264::parser::SliceHeader;
 use crate::codec::h264::parser::Sps;
 use crate::encoder::stateless::h264::BackendRequest;
-use crate::encoder::stateless::h264::Bitrate;
 use crate::encoder::stateless::h264::DpbEntry;
 use crate::encoder::stateless::h264::DpbEntryMeta;
 use crate::encoder::stateless::h264::EncoderConfig;
@@ -50,6 +49,7 @@ use crate::encoder::stateless::ReadyPromise;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
+use crate::encoder::Bitrate;
 use crate::BlockingMode;
 use crate::Fourcc;
 use crate::Resolution;
@@ -59,7 +59,7 @@ type Request<'l, H> = BackendRequest<H, Reconstructed>;
 impl<M, H> StatelessVideoEncoderBackend<H264> for VaapiBackend<M, H>
 where
     M: SurfaceMemoryDescriptor,
-    H: std::borrow::Borrow<Surface<M>>,
+    H: std::borrow::Borrow<Surface<M>> + 'static,
 {
     type Picture = H;
     type Reconstructed = Reconstructed;
@@ -70,7 +70,7 @@ where
 impl<M, H> VaapiBackend<M, H>
 where
     M: SurfaceMemoryDescriptor,
-    H: std::borrow::Borrow<Surface<M>>,
+    H: std::borrow::Borrow<Surface<M>> + 'static,
 {
     /// Builds an invalid [`libva::PictureH264`]. This is usually a place
     /// holder to fill staticly sized array.
@@ -360,7 +360,7 @@ where
 impl<M, H> StatelessH264EncoderBackend for VaapiBackend<M, H>
 where
     M: SurfaceMemoryDescriptor,
-    H: Borrow<Surface<M>>,
+    H: Borrow<Surface<M>> + 'static,
 {
     fn encode_slice(
         &mut self,
@@ -423,10 +423,10 @@ where
     }
 }
 
-impl<M, H> StatelessEncoder<H, VaapiBackend<M, H>>
+impl<M, H> StatelessEncoder<H264, H, VaapiBackend<M, H>>
 where
     M: SurfaceMemoryDescriptor,
-    H: Borrow<libva::Surface<M>>,
+    H: Borrow<libva::Surface<M>> + 'static,
 {
     pub fn new_vaapi(
         display: Rc<Display>,
@@ -455,7 +455,8 @@ where
             bitrate_control,
             low_power,
         )?;
-        Self::new(backend, config, blocking_mode)
+
+        Self::new_h264(backend, config, blocking_mode)
     }
 }
 
@@ -637,7 +638,7 @@ pub(super) mod tests {
     #[ignore]
     fn test_vaapi_encoder() {
         type VaapiH264Encoder<'l> =
-            StatelessEncoder<PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
+            StatelessEncoder<H264, PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
 
         const WIDTH: usize = 512;
         const HEIGHT: usize = 512;

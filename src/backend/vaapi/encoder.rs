@@ -61,7 +61,7 @@ impl Reconstructed {
 pub struct VaapiBackend<M, H>
 where
     M: SurfaceMemoryDescriptor,
-    H: std::borrow::Borrow<Surface<M>>,
+    H: std::borrow::Borrow<Surface<M>> + 'static,
 {
     /// VA config.
     #[allow(dead_code)]
