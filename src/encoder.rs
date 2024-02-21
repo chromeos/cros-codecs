@@ -7,6 +7,19 @@ pub mod stateless;
 use crate::FrameLayout;
 use crate::Resolution;
 
+#[derive(Clone)]
+pub enum Bitrate {
+    Constant(u64),
+}
+
+impl Bitrate {
+    pub(crate) fn target(&self) -> u64 {
+        match self {
+            Bitrate::Constant(target) => *target,
+        }
+    }
+}
+
 /// Encoder's input metadata
 #[derive(Clone)]
 pub struct FrameMetadata {

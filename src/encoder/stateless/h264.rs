@@ -21,6 +21,7 @@ use crate::encoder::stateless::OutputQueue;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessVideoEncoder;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
+use crate::encoder::Bitrate;
 use crate::encoder::CodedBitstreamBuffer;
 use crate::BlockingMode;
 use crate::Resolution;
@@ -29,19 +30,6 @@ mod predictor;
 
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
-
-#[derive(Clone)]
-pub enum Bitrate {
-    Constant(u64),
-}
-
-impl Bitrate {
-    fn target(&self) -> u64 {
-        match self {
-            Bitrate::Constant(target) => *target,
-        }
-    }
-}
 
 #[derive(Clone)]
 pub struct EncoderConfig {
