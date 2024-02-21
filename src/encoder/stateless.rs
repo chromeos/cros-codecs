@@ -12,6 +12,7 @@ use crate::encoder::FrameMetadata;
 use crate::BlockingMode;
 
 pub mod h264;
+pub mod vp9;
 
 #[derive(Error, Debug)]
 pub enum StatelessBackendError {
