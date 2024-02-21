@@ -13,7 +13,6 @@ use crate::codec::h264::parser::Sps;
 use crate::encoder::stateless::h264::predictor::LowDelay;
 use crate::encoder::stateless::h264::predictor::PredictionStructure;
 use crate::encoder::stateless::h264::predictor::Predictor;
-use crate::encoder::stateless::h264::predictor::PredictorVerdict;
 use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::FrameMetadata;
@@ -215,7 +214,9 @@ where
     recon_queue: OutputQueue<ReferencePromise<B::ReconPromise>>,
 
     /// [`Predictor`] instance responsible for the encoder decision making
-    predictor: Box<dyn Predictor<B::Picture, B::Reference>>,
+    predictor: Box<
+        dyn Predictor<B::Picture, DpbEntry<B::Reference>, BackendRequest<B::Picture, B::Reference>>,
+    >,
 
     /// Pending [`CodedBitstreamBuffer`]s to be polled by the user
     coded_queue: VecDeque<CodedBitstreamBuffer>,
@@ -234,7 +235,7 @@ where
     B::Reference: 'static,
 {
     fn new(backend: B, config: EncoderConfig, mode: BlockingMode) -> EncodeResult<Self> {
-        let predictor: Box<dyn Predictor<_, _>> = match config.pred_structure {
+        let predictor: Box<dyn Predictor<_, _, _>> = match config.pred_structure {
             PredictionStructure::LowDelay { .. } => Box::new(LowDelay::new(config)),
         };
 
@@ -248,9 +249,12 @@ where
         })
     }
 
-    fn request(&mut self, request: BackendRequest<B::Picture, B::Reference>) -> EncodeResult<()> {
+    fn execute(&mut self, request: BackendRequest<B::Picture, B::Reference>) -> EncodeResult<()> {
         let meta = request.input_meta.clone();
         let dpb_meta = request.dpb_meta.clone();
+
+        // The [`BackendRequest`] has a frame from predictor. Decreasing internal counter.
+        self.predictor_frame_count -= 1;
 
         log::trace!("submitting new request");
         let (recon, bitstream) = self.backend.encode_slice(request)?;
@@ -267,22 +271,6 @@ where
         Ok(())
     }
 
-    fn execute(
-        &mut self,
-        verdict: PredictorVerdict<B::Picture, B::Reference>,
-    ) -> EncodeResult<bool> {
-        let requests = match verdict {
-            PredictorVerdict::NoOperation => return Ok(false),
-            PredictorVerdict::Request { requests } => requests,
-        };
-
-        for request in requests {
-            self.request(request)?;
-            self.predictor_frame_count -= 1;
-        }
-        Ok(true)
-    }
-
     fn poll_pending(&mut self, mode: BlockingMode) -> EncodeResult<()> {
         // Poll the output queue once and then continue polling while new promise is submitted
         while let Some(coded) = self.output_queue.poll(mode)? {
@@ -290,10 +278,14 @@ where
         }
 
         while let Some(recon) = self.recon_queue.poll(mode)? {
-            let verdict = self.predictor.reconstructed(recon)?;
-            if !self.execute(verdict)? {
+            let requests = self.predictor.reconstructed(recon)?;
+            if requests.is_empty() {
                 // No promise was submitted, therefore break
                 break;
+            }
+
+            for request in requests {
+                self.execute(request)?;
             }
         }
 
@@ -319,8 +311,10 @@ where
         self.predictor_frame_count += 1;
 
         // Ask predictor to decide on the next move and execute it
-        let verdict = self.predictor.new_frame(backend_pic, metadata)?;
-        self.execute(verdict)?;
+        let requests = self.predictor.new_frame(backend_pic, metadata)?;
+        for request in requests {
+            self.execute(request)?;
+        }
 
         Ok(())
     }
@@ -337,7 +331,7 @@ where
                 self.predictor_frame_count -= requests.len();
 
                 for request in requests {
-                    self.request(request)?;
+                    self.execute(request)?;
                 }
             }
 

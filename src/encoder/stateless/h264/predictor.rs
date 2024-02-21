@@ -35,42 +35,28 @@ pub enum PredictionStructure {
     LowDelay { tail: u16, limit: u16 },
 }
 
-/// The result of the predictor operations.
-#[allow(clippy::large_enum_variant)]
-pub(super) enum PredictorVerdict<P, R> {
-    /// The backend/encoder shall do nothing.
-    NoOperation,
-    /// The [`BackendRequest`] shall be submitted to the backend
-    Request { requests: Vec<BackendRequest<P, R>> },
-}
-
 /// Predictor is responsible for yielding stream parameter sets and creating requests to backend.
-/// It accepts the frames and reconstructed frames and returns [`PredictorVerdict`] what operation
-/// encoder shall perfom. For example [`Predictor`] may hold frames from processing until enough
-/// is supplied to create a specific prediction structure. [`Predictor::drain`] may be called to
-/// force predictor to yield requests.
-pub(super) trait Predictor<P, R> {
-    /// Called by encoder when there is new frame to encode. The predictor may return [`NoOperation`]
-    /// to postpone processing or [`Request`] to process a frame (it does not have to be a frame
+/// It accepts the frames and reconstructed frames and returns [`Request`]s for execution. For
+/// example [`Predictor`] may hold frames from processing until enough is supplied to create a
+/// specific prediction structure. [`Predictor::drain`] may be called to force predictor to
+/// yield requests.
+pub(super) trait Predictor<Picture, Reference, Request> {
+    /// Called by encoder when there is new frame to encode. The predictor may return empty vector
+    /// to postpone processing or a set of requests to process frames (it does not have to be a frame
     /// specified in parameters)
-    ///
-    /// [`NoOperation`]: PredictorVerdict::NoOperation
-    /// [`Request`]: PredictorVerdict::Request
     fn new_frame(
         &mut self,
-        backend_pic: P,
+        backend_pic: Picture,
         meta: FrameMetadata,
-    ) -> EncodeResult<PredictorVerdict<P, R>>;
+    ) -> EncodeResult<Vec<Request>>;
 
     /// This function is called by the encoder, with reconstructed frame when backend finished
-    /// processing the frame. the [`Predictor`] may choose to return a [`Request`] to submit new
-    /// request to backend, if reconstructed was required for creating that request.
-    ///
-    /// [`Request`]: PredictorVerdict::Request
-    fn reconstructed(&mut self, recon: DpbEntry<R>) -> EncodeResult<PredictorVerdict<P, R>>;
+    /// processing the frame. the [`Predictor`] may choose to return [`Request`]s to submit to
+    /// backend, if reconstructed was required for creating that request.
+    fn reconstructed(&mut self, recon: Reference) -> EncodeResult<Vec<Request>>;
 
-    /// Force [`Predictor`] to pop frame from internal queue and return a [`BackendRequest`]
-    fn drain(&mut self) -> EncodeResult<Vec<BackendRequest<P, R>>>;
+    /// Force [`Predictor`] to pop at least one frame from internal queue and return a [`Request`]s
+    fn drain(&mut self) -> EncodeResult<Vec<Request>>;
 }
 
 /// Implementation of [`LowDelay`] prediction structure. See [`LowDelay`] for details.
@@ -119,7 +105,7 @@ impl<P, R> LowDelay<P, R> {
     }
 }
 
-impl<P, R> LowDelay<P, R> {
+impl<Picture, Reference> LowDelay<Picture, Reference> {
     fn new_sequence(&mut self) {
         trace!("beginning new sequence");
         let mut sps = SpsBuilder::new()
@@ -166,9 +152,9 @@ impl<P, R> LowDelay<P, R> {
 
     fn request_idr(
         &mut self,
-        input: P,
+        input: Picture,
         input_meta: FrameMetadata,
-    ) -> EncodeResult<PredictorVerdict<P, R>> {
+    ) -> EncodeResult<Vec<BackendRequest<Picture, Reference>>> {
         // Begin new sequence and start with I frame and no references.
         self.counter = 0;
         self.new_sequence();
@@ -198,33 +184,33 @@ impl<P, R> LowDelay<P, R> {
         let num_macroblocks =
             ((sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1)) as usize;
 
-        Ok(PredictorVerdict::Request {
-            requests: vec![BackendRequest {
-                sps,
-                pps,
-                header,
-                input,
-                input_meta,
-                dpb_meta,
-                // This frame is IDR, therefore it has no references
-                ref_list_0: vec![],
-                ref_list_1: vec![],
+        let request = BackendRequest {
+            sps,
+            pps,
+            header,
+            input,
+            input_meta,
+            dpb_meta,
+            // This frame is IDR, therefore it has no references
+            ref_list_0: vec![],
+            ref_list_1: vec![],
 
-                num_macroblocks,
+            num_macroblocks,
 
-                is_idr: true,
-                config: Rc::clone(&self.config),
+            is_idr: true,
+            config: Rc::clone(&self.config),
 
-                coded_output: headers,
-            }],
-        })
+            coded_output: headers,
+        };
+
+        Ok(vec![request])
     }
 
     fn request_interframe(
         &mut self,
-        input: P,
+        input: Picture,
         input_meta: FrameMetadata,
-    ) -> PredictorVerdict<P, R> {
+    ) -> Vec<BackendRequest<Picture, Reference>> {
         let mut ref_list_0 = vec![];
 
         // Use all avaiable reference frames in DPB. Their number is limited by the parameter
@@ -276,17 +262,15 @@ impl<P, R> LowDelay<P, R> {
             self.dpb.pop_front();
         }
 
-        PredictorVerdict::Request {
-            requests: vec![request],
-        }
+        vec![request]
     }
 
-    fn next_request(&mut self) -> EncodeResult<PredictorVerdict<P, R>> {
+    fn next_request(&mut self) -> EncodeResult<Vec<BackendRequest<Picture, Reference>>> {
         self.counter %= self.limit;
 
         match self.queue.pop_front() {
             // Nothing to do. Quit.
-            None => Ok(PredictorVerdict::NoOperation),
+            None => Ok(Vec::new()),
 
             // If first frame in the sequence or forced IDR then create IDR request.
             Some((input, meta)) if self.counter == 0 || meta.force_keyframe => {
@@ -299,7 +283,7 @@ impl<P, R> LowDelay<P, R> {
                     || self.dpb.len() < (self.counter.min(self.tail) as usize) =>
             {
                 self.queue.push_front((input, meta));
-                Ok(PredictorVerdict::NoOperation)
+                Ok(Vec::new())
             }
 
             Some((input, meta)) => {
@@ -311,24 +295,29 @@ impl<P, R> LowDelay<P, R> {
     }
 }
 
-impl<P, R> Predictor<P, R> for LowDelay<P, R> {
+impl<Picture, Reference> Predictor<Picture, DpbEntry<Reference>, BackendRequest<Picture, Reference>>
+    for LowDelay<Picture, Reference>
+{
     fn new_frame(
         &mut self,
-        input: P,
+        input: Picture,
         frame_metadata: FrameMetadata,
-    ) -> EncodeResult<PredictorVerdict<P, R>> {
+    ) -> EncodeResult<Vec<BackendRequest<Picture, Reference>>> {
         // Add new frame in the request queue and request new encoding if possible
         self.queue.push_back((input, frame_metadata));
         self.next_request()
     }
 
-    fn reconstructed(&mut self, recon: DpbEntry<R>) -> EncodeResult<PredictorVerdict<P, R>> {
+    fn reconstructed(
+        &mut self,
+        recon: DpbEntry<Reference>,
+    ) -> EncodeResult<Vec<BackendRequest<Picture, Reference>>> {
         // Add new reconstructed surface and request next encoding if possible
         self.dpb.push_back(Rc::new(recon));
         self.next_request()
     }
 
-    fn drain(&mut self) -> EncodeResult<Vec<BackendRequest<P, R>>> {
+    fn drain(&mut self) -> EncodeResult<Vec<BackendRequest<Picture, Reference>>> {
         // [`LowDelay`] will not hold any frames, therefore the drain function shall never be called.
         Err(EncodeError::InvalidInternalState)
     }
