@@ -39,9 +39,9 @@ const INITIAL_SCRATCH_POOL_SIZE: usize = 16;
 /// scratch frames.
 const MAX_SCRATCH_POOL_SIZE: usize = INITIAL_SCRATCH_POOL_SIZE * 4;
 
-pub struct Reference(PooledVaSurface<()>);
+pub struct Reconstructed(PooledVaSurface<()>);
 
-impl Reference {
+impl Reconstructed {
     pub(crate) fn surface(&self) -> &Surface<()> {
         use std::borrow::Borrow;
         Borrow::<Surface<()>>::borrow(&self.0)
@@ -141,7 +141,7 @@ where
 
     // Creates an empty surface that will be filled with reconstructed picture during encoding
     // which will be later used as frame reference
-    pub(crate) fn new_scratch_picture(&mut self) -> StatelessBackendResult<Reference> {
+    pub(crate) fn new_scratch_picture(&mut self) -> StatelessBackendResult<Reconstructed> {
         if self.scratch_pool.num_free_frames() == 0 {
             if self.scratch_pool.num_managed_frames() >= MAX_SCRATCH_POOL_SIZE {
                 log::error!("Scratch pool is exhausted and hit the size limit");
@@ -160,7 +160,7 @@ where
             .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
 
-        Ok(Reference(surface))
+        Ok(Reconstructed(surface))
     }
 }
 

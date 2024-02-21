@@ -30,7 +30,7 @@ use libva::SurfaceMemoryDescriptor;
 use libva::VAProfile;
 
 use crate::backend::vaapi::encoder::CodedOutputPromise;
-use crate::backend::vaapi::encoder::Reference;
+use crate::backend::vaapi::encoder::Reconstructed;
 use crate::backend::vaapi::encoder::VaapiBackend;
 use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::Profile;
@@ -52,7 +52,7 @@ use crate::BlockingMode;
 use crate::Fourcc;
 use crate::Resolution;
 
-type Request<'l, H> = BackendRequest<H, Reference>;
+type Request<'l, H> = BackendRequest<H, Reconstructed>;
 
 impl<M, H> VaapiBackend<M, H>
 where
@@ -72,7 +72,7 @@ where
     }
 
     /// Builds [`libva::PictureH264`] from `frame`
-    fn build_h264_pic(surface: &Reference, meta: &DpbEntryMeta) -> PictureH264 {
+    fn build_h264_pic(surface: &Reconstructed, meta: &DpbEntryMeta) -> PictureH264 {
         let flags = match meta.is_reference {
             IsReference::No => 0,
             IsReference::LongTerm => VA_PICTURE_H264_LONG_TERM_REFERENCE,
@@ -170,7 +170,7 @@ where
     fn build_enc_pic_param(
         request: &Request<'_, H>,
         coded_buf: &EncCodedBuffer,
-        recon: &Reference,
+        recon: &Reconstructed,
     ) -> BufferType {
         let pic_fields = H264EncPicFields::new(
             request.is_idr as u32,
@@ -229,8 +229,8 @@ where
     fn build_enc_slice_param(
         pps: &Pps,
         header: &SliceHeader,
-        ref_list_0: &[Rc<DpbEntry<Reference>>],
-        ref_list_1: &[Rc<DpbEntry<Reference>>],
+        ref_list_0: &[Rc<DpbEntry<Reconstructed>>],
+        ref_list_1: &[Rc<DpbEntry<Reconstructed>>],
         num_macroblocks: u32,
     ) -> BufferType {
         let mut ref_pic_list_0: [PictureH264; 32] = (0..32)
@@ -349,7 +349,7 @@ where
     M: SurfaceMemoryDescriptor,
     H: Borrow<Surface<M>>,
 {
-    type Reference = Reference;
+    type Reference = Reconstructed;
     type CodedPromise = CodedOutputPromise<M, H>;
     type ReconPromise = ReadyPromise<Self::Reference>;
 
