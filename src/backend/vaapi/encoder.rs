@@ -39,6 +39,12 @@ const INITIAL_SCRATCH_POOL_SIZE: usize = 16;
 /// scratch frames.
 const MAX_SCRATCH_POOL_SIZE: usize = INITIAL_SCRATCH_POOL_SIZE * 4;
 
+impl From<libva::VaError> for StatelessBackendError {
+    fn from(value: libva::VaError) -> Self {
+        Self::Other(value.into())
+    }
+}
+
 pub struct Reconstructed(PooledVaSurface<()>);
 
 impl Reconstructed {

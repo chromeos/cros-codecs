@@ -415,12 +415,6 @@ where
     }
 }
 
-impl From<libva::VaError> for StatelessBackendError {
-    fn from(value: libva::VaError) -> Self {
-        Self::Other(value.into())
-    }
-}
-
 impl<M, H> StatelessEncoder<H, VaapiBackend<M, H>>
 where
     M: SurfaceMemoryDescriptor,
