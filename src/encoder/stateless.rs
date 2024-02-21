@@ -121,6 +121,30 @@ where
     }
 }
 
+/// Predictor is responsible for yielding stream parameter sets and creating requests to backend.
+/// It accepts the frames and reconstructed frames and returns [`Request`]s for execution. For
+/// example [`Predictor`] may hold frames from processing until enough is supplied to create a
+/// specific prediction structure. [`Predictor::drain`] may be called to force predictor to
+/// yield requests.
+pub(super) trait Predictor<Picture, Reference, Request> {
+    /// Called by encoder when there is new frame to encode. The predictor may return empty vector
+    /// to postpone processing or a set of requests to process frames (it does not have to be a frame
+    /// specified in parameters)
+    fn new_frame(
+        &mut self,
+        backend_pic: Picture,
+        meta: FrameMetadata,
+    ) -> EncodeResult<Vec<Request>>;
+
+    /// This function is called by the encoder, with reconstructed frame when backend finished
+    /// processing the frame. the [`Predictor`] may choose to return [`Request`]s to submit to
+    /// backend, if reconstructed was required for creating that request.
+    fn reconstructed(&mut self, recon: Reference) -> EncodeResult<Vec<Request>>;
+
+    /// Force [`Predictor`] to pop at least one frame from internal queue and return a [`Request`]s
+    fn drain(&mut self) -> EncodeResult<Vec<Request>>;
+}
+
 /// Generic trait for stateless encoder backends
 pub trait StatelessVideoEncoderBackend<H> {
     /// Backend's specific representation of the input frame, transformed with [`import_picture`].
