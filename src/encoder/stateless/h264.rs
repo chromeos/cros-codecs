@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use std::collections::VecDeque;
 use std::rc::Rc;
 
 use crate::codec::h264::parser::Level;
@@ -15,13 +14,13 @@ use crate::encoder::stateless::h264::predictor::PredictionStructure;
 use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::FrameMetadata;
-use crate::encoder::stateless::OutputQueue;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
 use crate::encoder::stateless::StatelessCodecSpecific;
+use crate::encoder::stateless::StatelessEncoder;
 use crate::encoder::stateless::StatelessEncoderBackendImport;
-use crate::encoder::stateless::StatelessVideoEncoder;
+use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::Bitrate;
 use crate::encoder::CodedBitstreamBuffer;
@@ -73,7 +72,7 @@ pub enum IsReference {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DpbEntryMeta {
+pub struct DpbEntryMeta {
     /// Picture order count
     poc: u16,
     frame_num: u32,
@@ -216,64 +215,14 @@ pub trait StatelessH264EncoderBackend: StatelessVideoEncoderBackend<H264> {
     ) -> StatelessBackendResult<(Self::ReconPromise, Self::CodedPromise)>;
 }
 
-pub struct StatelessEncoder<H, B>
+impl<Handle, Backend> StatelessEncoderExecute<H264, Handle, Backend>
+    for StatelessEncoder<H264, Handle, Backend>
 where
-    B: StatelessH264EncoderBackend,
-    B::Picture: 'static,
-    B::Reconstructed: 'static,
+    Backend: StatelessH264EncoderBackend,
 {
-    /// Pending slice output promise queue
-    output_queue: OutputQueue<SlicePromise<B::CodedPromise>>,
-
-    /// Pending reconstructed pictures promise queue
-    recon_queue: OutputQueue<ReferencePromise<B::ReconPromise>>,
-
-    /// [`Predictor`] instance responsible for the encoder decision making
-    predictor: Box<
-        dyn Predictor<
-            B::Picture,
-            DpbEntry<B::Reconstructed>,
-            BackendRequest<B::Picture, B::Reconstructed>,
-        >,
-    >,
-
-    /// Pending [`CodedBitstreamBuffer`]s to be polled by the user
-    coded_queue: VecDeque<CodedBitstreamBuffer>,
-
-    /// Number of the currently held frames by the predictor
-    predictor_frame_count: usize,
-
-    /// [`StatelessH264EncoderBackend`] instance to delegate [`BackendRequest`] to
-    backend: B,
-
-    _phantom: std::marker::PhantomData<H>,
-}
-
-impl<H, B> StatelessEncoder<H, B>
-where
-    B: StatelessH264EncoderBackend,
-    B::Picture: 'static,
-    B::Reconstructed: 'static,
-{
-    fn new(backend: B, config: EncoderConfig, mode: BlockingMode) -> EncodeResult<Self> {
-        let predictor: Box<dyn Predictor<_, _, _>> = match config.pred_structure {
-            PredictionStructure::LowDelay { .. } => Box::new(LowDelay::new(config)),
-        };
-
-        Ok(Self {
-            backend,
-            predictor,
-            predictor_frame_count: 0,
-            coded_queue: Default::default(),
-            output_queue: OutputQueue::new(mode),
-            recon_queue: OutputQueue::new(mode),
-            _phantom: Default::default(),
-        })
-    }
-
     fn execute(
         &mut self,
-        request: BackendRequest<B::Picture, B::Reconstructed>,
+        request: BackendRequest<Backend::Picture, Backend::Reconstructed>,
     ) -> EncodeResult<()> {
         let meta = request.input_meta.clone();
         let dpb_meta = request.dpb_meta.clone();
@@ -295,86 +244,18 @@ where
 
         Ok(())
     }
-
-    fn poll_pending(&mut self, mode: BlockingMode) -> EncodeResult<()> {
-        // Poll the output queue once and then continue polling while new promise is submitted
-        while let Some(coded) = self.output_queue.poll(mode)? {
-            self.coded_queue.push_back(coded);
-        }
-
-        while let Some(recon) = self.recon_queue.poll(mode)? {
-            let requests = self.predictor.reconstructed(recon)?;
-            if requests.is_empty() {
-                // No promise was submitted, therefore break
-                break;
-            }
-
-            for request in requests {
-                self.execute(request)?;
-            }
-        }
-
-        Ok(())
-    }
 }
 
-impl<H, B> StatelessVideoEncoder<H> for StatelessEncoder<H, B>
+impl<Handle, Backend> StatelessEncoder<H264, Handle, Backend>
 where
-    B: StatelessH264EncoderBackend,
-    B: StatelessEncoderBackendImport<H, B::Picture>,
+    Backend: StatelessH264EncoderBackend,
+    Backend: StatelessEncoderBackendImport<Handle, Backend::Picture>,
 {
-    fn encode(&mut self, metadata: FrameMetadata, handle: H) -> EncodeResult<()> {
-        log::trace!(
-            "encode: timestamp={} layout={:?}",
-            metadata.timestamp,
-            metadata.layout
-        );
+    fn new_h264(backend: Backend, config: EncoderConfig, mode: BlockingMode) -> EncodeResult<Self> {
+        let predictor: Box<dyn Predictor<_, _, _>> = match config.pred_structure {
+            PredictionStructure::LowDelay { .. } => Box::new(LowDelay::new(config)),
+        };
 
-        // Import `handle` to backends representation
-        let backend_pic = self.backend.import_picture(&metadata, handle)?;
-
-        // Increase the number of frames that predictor holds, before handing one to it
-        self.predictor_frame_count += 1;
-
-        // Ask predictor to decide on the next move and execute it
-        let requests = self.predictor.new_frame(backend_pic, metadata)?;
-        for request in requests {
-            self.execute(request)?;
-        }
-
-        Ok(())
-    }
-
-    fn drain(&mut self) -> EncodeResult<()> {
-        log::trace!("currently predictor holds {}", self.predictor_frame_count);
-
-        // Drain the predictor
-        while self.predictor_frame_count > 0 || !self.recon_queue.is_empty() {
-            if self.output_queue.is_empty() && self.recon_queue.is_empty() {
-                // The OutputQueue is empty and predictor holds frames, force it to yield a request
-                // to empty it's internal queue.
-                let requests = self.predictor.drain()?;
-                self.predictor_frame_count -= requests.len();
-
-                for request in requests {
-                    self.execute(request)?;
-                }
-            }
-
-            self.poll_pending(BlockingMode::Blocking)?;
-        }
-
-        // There are still some requests being processed. Continue on polling them.
-        while !self.output_queue.is_empty() {
-            self.poll_pending(BlockingMode::Blocking)?;
-        }
-
-        Ok(())
-    }
-
-    fn poll(&mut self) -> EncodeResult<Option<CodedBitstreamBuffer>> {
-        // Poll on output queue without blocking and try to dueue from coded queue
-        self.poll_pending(BlockingMode::NonBlocking)?;
-        Ok(self.coded_queue.pop_front())
+        Self::new(backend, mode, predictor)
     }
 }

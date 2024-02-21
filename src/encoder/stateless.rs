@@ -155,7 +155,7 @@ where
     /// an input frame in internal backend's representation.
     ///
     /// [`import_picture`]: StatelessEncoderBackendImport::import_picture
-    type Picture;
+    type Picture: 'static;
 
     /// Backend's reconstructed frame handle.
     type Reconstructed: 'static;
@@ -170,8 +170,6 @@ where
 
 pub trait StatelessEncoderBackendImport<Handle, Picture> {
     /// Imports the input [`Handle`] from client and transforms into [`Picture`]
-    ///
-    /// [`Picture`]: StatelessVideoEncoderBackend::Picture
     fn import_picture(
         &mut self,
         metadata: &FrameMetadata,
@@ -203,13 +201,13 @@ where
 pub trait StatelessCodec: Sized {}
 
 /// Stateless video encoder interface.
-pub trait StatelessVideoEncoder<H> {
+pub trait StatelessVideoEncoder<Handle> {
     /// Enqueues the frame for encoding. The implementation will drop the handle after it is no
     /// longer be needed. The encoder is not required to immediately start processing the frame
     /// and yield output bitstream. It is allowed to hold frames until certain conditions are met
     /// eg. for specified prediction structures or referencing in order to further optimize
     /// the compression rate of the bitstream.
-    fn encode(&mut self, meta: FrameMetadata, handle: H) -> Result<(), EncodeError>;
+    fn encode(&mut self, meta: FrameMetadata, handle: Handle) -> Result<(), EncodeError>;
 
     /// Drains the encoder. This means that encoder is required to finish processing of all the
     /// frames in the internal queue and yield output bitstream by the end of the call. The output
@@ -254,4 +252,168 @@ where
     }
 
     Ok(())
+}
+
+/// Helper aliases for codec and backend specific types
+type Picture<C, B> = <B as StatelessVideoEncoderBackend<C>>::Picture;
+
+type Reference<C, B> = <C as StatelessCodecSpecific<B>>::Reference;
+
+type Request<C, B> = <C as StatelessCodecSpecific<B>>::Request;
+
+type CodedPromise<C, B> = <C as StatelessCodecSpecific<B>>::CodedPromise;
+
+type ReferencePromise<C, B> =
+    <C as StatelessCodecSpecific<B>>::ReferencePromise;
+
+type BoxPredictor<C, B> = Box<dyn Predictor<Picture<C, B>, Reference<C, B>, Request<C, B>>>;
+
+pub struct StatelessEncoder<Codec, Handle, Backend>
+where
+    Backend: StatelessVideoEncoderBackend<Codec>,
+    Codec: StatelessCodec + StatelessCodecSpecific<Backend>,
+{
+    /// Pending frame output promise queue
+    output_queue: OutputQueue<CodedPromise<Codec, Backend>>,
+
+    /// Pending reconstructed pictures promise queue
+    recon_queue: OutputQueue<ReferencePromise<Codec, Backend>>,
+
+    /// [`Predictor`] instance responsible for the encoder decision making
+    predictor: BoxPredictor<Codec, Backend>,
+
+    // predictor: Box<dyn Predictor<B::Picture, B::Reference>>,
+    coded_queue: VecDeque<CodedBitstreamBuffer>,
+
+    /// Number of the currently held frames by the predictor
+    predictor_frame_count: usize,
+
+    /// [`StatelessVP9EncoderBackend`] instance to delegate [`BackendRequest`] to
+    backend: Backend,
+
+    _phantom: std::marker::PhantomData<Handle>,
+}
+
+/// A bridge trait between [`StatelessEncoder`] and codec specific backend trait (eg.
+/// [`h264::StatelessH264EncoderBackend`] or [`vp9::StatelessVP9EncoderBackend`]).
+/// Accepts [`Request`] and is responsible for adding resutling [`BackendPromise`] to
+/// [`StatelessEncoder`] internal queues and  decrementing the internal predictor frame counter if
+/// the backend moved the frame outside predictor ownership.
+pub trait StatelessEncoderExecute<Codec, Handle, Backend>
+where
+    Backend: StatelessVideoEncoderBackend<Codec>,
+    Codec: StatelessCodec + StatelessCodecSpecific<Backend>,
+{
+    fn execute(&mut self, request: Request<Codec, Backend>) -> EncodeResult<()>;
+}
+
+impl<Codec, Handle, Backend> StatelessEncoder<Codec, Handle, Backend>
+where
+    Codec: StatelessCodec + StatelessCodecSpecific<Backend>,
+    Backend: StatelessVideoEncoderBackend<Codec>,
+    Self: StatelessEncoderExecute<Codec, Handle, Backend>,
+{
+    fn new(
+        backend: Backend,
+        mode: BlockingMode,
+        predictor: BoxPredictor<Codec, Backend>,
+    ) -> EncodeResult<Self> {
+        Ok(Self {
+            backend,
+            predictor,
+            predictor_frame_count: 0,
+            coded_queue: Default::default(),
+            output_queue: OutputQueue::new(mode),
+            recon_queue: OutputQueue::new(mode),
+            _phantom: Default::default(),
+        })
+    }
+
+    fn poll_pending(&mut self, mode: BlockingMode) -> EncodeResult<()> {
+        // Poll the output queue once and then continue polling while new promise is submitted
+        while let Some(coded) = self.output_queue.poll(mode)? {
+            self.coded_queue.push_back(coded);
+        }
+
+        while let Some(recon) = self.recon_queue.poll(mode)? {
+            let requests = self.predictor.reconstructed(recon)?;
+            if requests.is_empty() {
+                // No promise was submitted, therefore break
+                break;
+            }
+
+            for request in requests {
+                self.execute(request)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl<Codec, Handle, Backend> StatelessVideoEncoder<Handle>
+    for StatelessEncoder<Codec, Handle, Backend>
+where
+    Codec: StatelessCodec + StatelessCodecSpecific<Backend>,
+    Backend: StatelessVideoEncoderBackend<Codec>,
+    Backend: StatelessEncoderBackendImport<Handle, Backend::Picture>,
+    Self: StatelessEncoderExecute<Codec, Handle, Backend>,
+{
+    fn encode(&mut self, metadata: FrameMetadata, handle: Handle) -> EncodeResult<()> {
+        log::trace!(
+            "encode: timestamp={} layout={:?}",
+            metadata.timestamp,
+            metadata.layout
+        );
+
+        // Import `handle` to backends representation
+        let backend_pic = self.backend.import_picture(&metadata, handle)?;
+
+        // Increase the number of frames that predictor holds, before handing one to it
+        self.predictor_frame_count += 1;
+
+        // Ask predictor to decide on the next move and execute it
+        let requests = self.predictor.new_frame(backend_pic, metadata)?;
+        for request in requests {
+            self.execute(request)?;
+        }
+
+        Ok(())
+    }
+
+    fn drain(&mut self) -> EncodeResult<()> {
+        log::trace!("currently predictor holds {}", self.predictor_frame_count);
+
+        // Drain the predictor
+        while self.predictor_frame_count > 0 || !self.recon_queue.is_empty() {
+            if self.output_queue.is_empty() && self.recon_queue.is_empty() {
+                // The OutputQueue is empty and predictor holds frames, force it to yield a request
+                // to empty it's internal queue.
+                let requests = self.predictor.drain()?;
+                if requests.is_empty() {
+                    log::error!("failed to drain predictor, no request was returned");
+                    return Err(EncodeError::InvalidInternalState);
+                }
+
+                for request in requests {
+                    self.execute(request)?;
+                }
+            }
+
+            self.poll_pending(BlockingMode::Blocking)?;
+        }
+
+        // There are still some requests being processed. Continue on polling them.
+        while !self.output_queue.is_empty() {
+            self.poll_pending(BlockingMode::Blocking)?;
+        }
+
+        Ok(())
+    }
+
+    fn poll(&mut self) -> EncodeResult<Option<CodedBitstreamBuffer>> {
+        // Poll on output queue without blocking and try to dueue from coded queue
+        self.poll_pending(BlockingMode::NonBlocking)?;
+        Ok(self.coded_queue.pop_front())
+    }
 }
