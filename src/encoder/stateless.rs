@@ -70,6 +70,38 @@ impl<T> BackendPromise for ReadyPromise<T> {
     }
 }
 
+/// Wrapper type for [`BackendPromise<Output = Vec<u8>>`], with additional
+/// metadata.
+pub struct BitstreamPromise<P>
+where
+    P: BackendPromise<Output = Vec<u8>>,
+{
+    /// Slice data and reconstructed surface promise
+    bitstream: P,
+
+    /// Input frame metadata, for [`CodedBitstreamBuffer`]
+    meta: FrameMetadata,
+}
+
+impl<P> BackendPromise for BitstreamPromise<P>
+where
+    P: BackendPromise<Output = Vec<u8>>,
+{
+    type Output = CodedBitstreamBuffer;
+
+    fn is_ready(&self) -> bool {
+        self.bitstream.is_ready()
+    }
+
+    fn sync(self) -> StatelessBackendResult<Self::Output> {
+        let coded_data = self.bitstream.sync()?;
+
+        log::trace!("synced bitstream size={}", coded_data.len());
+
+        Ok(CodedBitstreamBuffer::new(self.meta, coded_data))
+    }
+}
+
 /// Internal structure representing all current processing represented using promises and allowing
 /// polling for finished promises.
 pub(crate) struct OutputQueue<O>
