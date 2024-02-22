@@ -59,12 +59,11 @@ pub(super) struct LowDelay<P, R> {
     pps: Option<Rc<Pps>>,
 
     /// Encoder config
-    config: Rc<EncoderConfig>,
+    config: EncoderConfig,
 }
 
 impl<P, R> LowDelay<P, R> {
     pub(super) fn new(config: EncoderConfig) -> Self {
-        let config = Rc::new(config);
         let (tail, limit) = match config.pred_structure {
             PredictionStructure::LowDelay { tail, limit } => (tail, limit),
         };
@@ -175,7 +174,7 @@ impl<Picture, Reference> LowDelay<Picture, Reference> {
             num_macroblocks,
 
             is_idr: true,
-            config: Rc::clone(&self.config),
+            bitrate: self.config.bitrate.clone(),
 
             coded_output: headers,
         };
@@ -227,7 +226,7 @@ impl<Picture, Reference> LowDelay<Picture, Reference> {
             num_macroblocks,
 
             is_idr: false,
-            config: Rc::clone(&self.config),
+            bitrate: self.config.bitrate.clone(),
 
             coded_output: vec![],
         };

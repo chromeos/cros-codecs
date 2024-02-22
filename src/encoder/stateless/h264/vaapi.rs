@@ -371,12 +371,11 @@ where
 
         let coded_buf = self
             .context()
-            .create_enc_coded(CODED_SIZE_MUL * request.config.bitrate.target() as usize)?;
+            .create_enc_coded(CODED_SIZE_MUL * request.bitrate.target() as usize)?;
 
         let recon = self.new_scratch_picture()?;
 
-        let seq_param =
-            Self::build_enc_seq_param(&request.sps, request.config.bitrate.target() as u32);
+        let seq_param = Self::build_enc_seq_param(&request.sps, request.bitrate.target() as u32);
         let pic_param = Self::build_enc_pic_param(&request, &coded_buf, &recon);
         let slice_param = Self::build_enc_slice_param(
             &request.pps,
@@ -612,7 +611,7 @@ pub(super) mod tests {
             ref_list_1: vec![],
             num_macroblocks: (WIDTH * HEIGHT) as usize / (16 * 16),
             is_idr: true,
-            config: Rc::new(EncoderConfig::default()),
+            bitrate: Bitrate::Constant(30_000),
             coded_output: vec![],
         };
 

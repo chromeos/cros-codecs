@@ -113,9 +113,8 @@ pub struct BackendRequest<P, R> {
     /// True whenever the result is IDR
     is_idr: bool,
 
-    /// Current encoder config. The backend may peek into config to find bitrate and framerate
-    /// settings.
-    config: Rc<EncoderConfig>,
+    /// Current expected bitrate
+    bitrate: Bitrate,
 
     /// Container for the request output. [`StatelessH264EncoderBackend`] impl shall move it and
     /// append the slice data to it. This prevents unnecessary copying of bitstream around.
