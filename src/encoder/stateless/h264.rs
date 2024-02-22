@@ -12,6 +12,7 @@ use crate::codec::h264::parser::Sps;
 use crate::encoder::stateless::h264::predictor::LowDelay;
 use crate::encoder::stateless::h264::predictor::PredictionStructure;
 use crate::encoder::stateless::BackendPromise;
+use crate::encoder::stateless::BitstreamPromise;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::FrameMetadata;
 use crate::encoder::stateless::Predictor;
@@ -23,7 +24,6 @@ use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::Bitrate;
-use crate::encoder::CodedBitstreamBuffer;
 use crate::BlockingMode;
 use crate::Resolution;
 
@@ -121,38 +121,6 @@ pub struct BackendRequest<P, R> {
     coded_output: Vec<u8>,
 }
 
-/// Wrapper type for [`BackendPromise<Output = Vec<u8>>`], with additional
-/// metadata.
-pub struct SlicePromise<P>
-where
-    P: BackendPromise<Output = Vec<u8>>,
-{
-    /// Slice data and reconstructed surface promise
-    bitstream: P,
-
-    /// Input frame metadata, for [`CodedBitstreamBuffer`]
-    meta: FrameMetadata,
-}
-
-impl<P> BackendPromise for SlicePromise<P>
-where
-    P: BackendPromise<Output = Vec<u8>>,
-{
-    type Output = CodedBitstreamBuffer;
-
-    fn is_ready(&self) -> bool {
-        self.bitstream.is_ready()
-    }
-
-    fn sync(self) -> StatelessBackendResult<Self::Output> {
-        let coded_data = self.bitstream.sync()?;
-
-        log::trace!("synced bitstream size={}", coded_data.len());
-
-        Ok(CodedBitstreamBuffer::new(self.meta, coded_data))
-    }
-}
-
 /// Wrapper type for [`BackendPromise<Output = R>`], with additional
 /// metadata.
 pub struct ReferencePromise<P>
@@ -198,7 +166,7 @@ where
 
     type Request = BackendRequest<Backend::Picture, Backend::Reconstructed>;
 
-    type CodedPromise = SlicePromise<Backend::CodedPromise>;
+    type CodedPromise = BitstreamPromise<Backend::CodedPromise>;
 
     type ReferencePromise = ReferencePromise<Backend::ReconPromise>;
 }
@@ -234,7 +202,7 @@ where
         let (recon, bitstream) = self.backend.encode_slice(request)?;
 
         // Wrap promise from backend with headers and metadata
-        let slice_promise = SlicePromise { bitstream, meta };
+        let slice_promise = BitstreamPromise { bitstream, meta };
 
         self.output_queue.add_promise(slice_promise);
 
