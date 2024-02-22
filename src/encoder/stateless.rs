@@ -179,7 +179,28 @@ pub trait StatelessEncoderBackendImport<Handle, Picture> {
     ) -> StatelessBackendResult<Picture>;
 }
 
-pub trait StatelessCodec {}
+/// Trait helping contain all codec specific and backend specific types
+pub trait StatelessCodecSpecific<Backend>: StatelessCodec
+where
+    Backend: StatelessVideoEncoderBackend<Self>,
+{
+    /// Codec specific representation of frame reference wrapping a backend reference type
+    /// containing a codec specific frame metadata
+    type Reference;
+
+    /// A request type that will be delivered to codec specific stateless encoder backend
+    type Request;
+
+    /// Codec specific [`BackendPromise`] for [`CodedBitstreamBuffer`] wrapping a backend specific
+    /// [`StatelessVideoEncoderBackend::CodedPromise`]
+    type CodedPromise: BackendPromise<Output = CodedBitstreamBuffer>;
+
+    /// Codec specific [`BackendPromise`] for [`StatelessCodecSpecific::Reference`] wrapping a
+    /// backend speficic [`StatelessVideoEncoderBackend::ReconPromise`]
+    type ReferencePromise: BackendPromise<Output = Self::Reference>;
+}
+
+pub trait StatelessCodec: Sized {}
 
 /// Stateless video encoder interface.
 pub trait StatelessVideoEncoder<H> {

@@ -19,6 +19,7 @@ use crate::encoder::stateless::OutputQueue;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
+use crate::encoder::stateless::StatelessCodecSpecific;
 use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::stateless::StatelessVideoEncoder;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
@@ -81,7 +82,7 @@ pub(crate) struct DpbEntryMeta {
 
 /// Frame structure used in the backend representing currently encoded frame or references used
 /// for its encoding.
-pub(crate) struct DpbEntry<R> {
+pub struct DpbEntry<R> {
     /// Reconstructed picture
     recon_pic: R,
     /// Decoded picture buffer entry metadata
@@ -123,7 +124,7 @@ pub struct BackendRequest<P, R> {
 
 /// Wrapper type for [`BackendPromise<Output = Vec<u8>>`], with additional
 /// metadata.
-struct SlicePromise<P>
+pub struct SlicePromise<P>
 where
     P: BackendPromise<Output = Vec<u8>>,
 {
@@ -155,7 +156,7 @@ where
 
 /// Wrapper type for [`BackendPromise<Output = R>`], with additional
 /// metadata.
-struct ReferencePromise<P>
+pub struct ReferencePromise<P>
 where
     P: BackendPromise,
 {
@@ -189,6 +190,19 @@ where
 }
 
 pub struct H264;
+
+impl<Backend> StatelessCodecSpecific<Backend> for H264
+where
+    Backend: StatelessVideoEncoderBackend<H264>,
+{
+    type Reference = DpbEntry<Backend::Reconstructed>;
+
+    type Request = BackendRequest<Backend::Picture, Backend::Reconstructed>;
+
+    type CodedPromise = SlicePromise<Backend::CodedPromise>;
+
+    type ReferencePromise = ReferencePromise<Backend::ReconPromise>;
+}
 
 impl StatelessCodec for H264 {}
 
