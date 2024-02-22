@@ -367,3 +367,80 @@ impl Drop for UserPtrFrame {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ivf_file_header() {
+        let mut hdr = IvfFileHeader {
+            version: 0,
+            codec: IvfFileHeader::CODEC_VP9,
+            width: 256,
+            height: 256,
+            framerate: 30_000,
+            timescale: 1_000,
+            frame_count: 1,
+
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        hdr.writo_into(&mut buf).unwrap();
+
+        const EXPECTED: [u8; 32] = [
+            0x44, 0x4b, 0x49, 0x46, 0x00, 0x00, 0x20, 0x00, 0x56, 0x50, 0x39, 0x30, 0x00, 0x01,
+            0x00, 0x01, 0x30, 0x75, 0x00, 0x00, 0xe8, 0x03, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ];
+
+        assert_eq!(&buf, &EXPECTED);
+
+        hdr.width = 1920;
+        hdr.height = 800;
+        hdr.framerate = 24;
+        hdr.timescale = 1;
+        hdr.frame_count = 100;
+
+        buf.clear();
+        hdr.writo_into(&mut buf).unwrap();
+
+        const EXPECTED2: [u8; 32] = [
+            0x44, 0x4b, 0x49, 0x46, 0x00, 0x00, 0x20, 0x00, 0x56, 0x50, 0x39, 0x30, 0x80, 0x07,
+            0x20, 0x03, 0x18, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ];
+
+        assert_eq!(&buf, &EXPECTED2);
+    }
+
+    #[test]
+    fn test_ivf_frame_header() {
+        let mut hdr = IvfFrameHeader {
+            frame_size: 199249,
+            timestamp: 0,
+        };
+
+        let mut buf = Vec::new();
+        hdr.writo_into(&mut buf).unwrap();
+
+        const EXPECTED: [u8; 12] = [
+            0x51, 0x0a, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        assert_eq!(&buf, &EXPECTED);
+
+        hdr.timestamp = 1;
+        hdr.frame_size = 52;
+
+        buf.clear();
+        hdr.writo_into(&mut buf).unwrap();
+
+        const EXPECTED2: [u8; 12] = [
+            0x34, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        assert_eq!(&buf, &EXPECTED2);
+    }
+}
