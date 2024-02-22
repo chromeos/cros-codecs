@@ -29,7 +29,6 @@ use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessEncoderBackendImport;
-use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::FrameMetadata;
 use crate::Fourcc;
 use crate::Resolution;
@@ -169,14 +168,6 @@ where
 
         Ok(Reconstructed(surface))
     }
-}
-
-impl<M, H> StatelessVideoEncoderBackend for VaapiBackend<M, H>
-where
-    M: SurfaceMemoryDescriptor,
-    H: std::borrow::Borrow<Surface<M>>,
-{
-    type Picture = H;
 }
 
 impl<M, Handle> StatelessEncoderBackendImport<Handle, Handle> for VaapiBackend<M, Handle>

@@ -18,6 +18,7 @@ use crate::encoder::stateless::FrameMetadata;
 use crate::encoder::stateless::OutputQueue;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
+use crate::encoder::stateless::StatelessCodec;
 use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::stateless::StatelessVideoEncoder;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
@@ -188,8 +189,12 @@ where
     }
 }
 
+pub struct H264;
+
+impl StatelessCodec for H264 {}
+
 /// Trait for stateless encoder backend for H.264
-pub trait StatelessH264EncoderBackend: StatelessVideoEncoderBackend {
+pub trait StatelessH264EncoderBackend: StatelessVideoEncoderBackend<H264> {
     type Reference;
     type CodedPromise: BackendPromise<Output = Vec<u8>>;
     type ReconPromise: BackendPromise<Output = Self::Reference>;

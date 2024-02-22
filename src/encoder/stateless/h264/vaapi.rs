@@ -44,15 +44,25 @@ use crate::encoder::stateless::h264::EncoderConfig;
 use crate::encoder::stateless::h264::IsReference;
 use crate::encoder::stateless::h264::StatelessEncoder;
 use crate::encoder::stateless::h264::StatelessH264EncoderBackend;
+use crate::encoder::stateless::h264::H264;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::ReadyPromise;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::encoder::stateless::StatelessBackendResult;
+use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::BlockingMode;
 use crate::Fourcc;
 use crate::Resolution;
 
 type Request<'l, H> = BackendRequest<H, Reconstructed>;
+
+impl<M, H> StatelessVideoEncoderBackend<H264> for VaapiBackend<M, H>
+where
+    M: SurfaceMemoryDescriptor,
+    H: std::borrow::Borrow<Surface<M>>,
+{
+    type Picture = H;
+}
 
 impl<M, H> VaapiBackend<M, H>
 where
