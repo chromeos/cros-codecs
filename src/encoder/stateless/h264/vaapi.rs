@@ -62,6 +62,9 @@ where
     H: std::borrow::Borrow<Surface<M>>,
 {
     type Picture = H;
+    type Reconstructed = Reconstructed;
+    type CodedPromise = CodedOutputPromise<M, H>;
+    type ReconPromise = ReadyPromise<Self::Reconstructed>;
 }
 
 impl<M, H> VaapiBackend<M, H>
@@ -359,10 +362,6 @@ where
     M: SurfaceMemoryDescriptor,
     H: Borrow<Surface<M>>,
 {
-    type Reference = Reconstructed;
-    type CodedPromise = CodedOutputPromise<M, H>;
-    type ReconPromise = ReadyPromise<Self::Reference>;
-
     fn encode_slice(
         &mut self,
         request: Request<'_, H>,

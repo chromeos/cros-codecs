@@ -156,6 +156,16 @@ where
     ///
     /// [`import_picture`]: StatelessEncoderBackendImport::import_picture
     type Picture;
+
+    /// Backend's reconstructed frame handle.
+    type Reconstructed: 'static;
+
+    /// Backend's specific [`BackendPromise`] for bitstream, a result of [`Request`] submission.
+    type CodedPromise: BackendPromise<Output = Vec<u8>>;
+
+    /// Backend's specific [`BackendPromise`] for [`StatelessVideoEncoderBackend::Reconstructed`],
+    /// a result of [`Request`] submission.
+    type ReconPromise: BackendPromise<Output = Self::Reconstructed>;
 }
 
 pub trait StatelessEncoderBackendImport<Handle, Picture> {

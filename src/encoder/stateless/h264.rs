@@ -195,15 +195,11 @@ impl StatelessCodec for H264 {}
 
 /// Trait for stateless encoder backend for H.264
 pub trait StatelessH264EncoderBackend: StatelessVideoEncoderBackend<H264> {
-    type Reference;
-    type CodedPromise: BackendPromise<Output = Vec<u8>>;
-    type ReconPromise: BackendPromise<Output = Self::Reference>;
-
     /// Submit a [`BackendRequest`] to the backend. This operation returns both a
     /// [`Self::CodedPromise`] and a [`Self::ReconPromise`] with resulting slice data.
     fn encode_slice(
         &mut self,
-        request: BackendRequest<Self::Picture, Self::Reference>,
+        request: BackendRequest<Self::Picture, Self::Reconstructed>,
     ) -> StatelessBackendResult<(Self::ReconPromise, Self::CodedPromise)>;
 }
 
@@ -211,7 +207,7 @@ pub struct StatelessEncoder<H, B>
 where
     B: StatelessH264EncoderBackend,
     B::Picture: 'static,
-    B::Reference: 'static,
+    B::Reconstructed: 'static,
 {
     /// Pending slice output promise queue
     output_queue: OutputQueue<SlicePromise<B::CodedPromise>>,
@@ -221,7 +217,11 @@ where
 
     /// [`Predictor`] instance responsible for the encoder decision making
     predictor: Box<
-        dyn Predictor<B::Picture, DpbEntry<B::Reference>, BackendRequest<B::Picture, B::Reference>>,
+        dyn Predictor<
+            B::Picture,
+            DpbEntry<B::Reconstructed>,
+            BackendRequest<B::Picture, B::Reconstructed>,
+        >,
     >,
 
     /// Pending [`CodedBitstreamBuffer`]s to be polled by the user
@@ -240,7 +240,7 @@ impl<H, B> StatelessEncoder<H, B>
 where
     B: StatelessH264EncoderBackend,
     B::Picture: 'static,
-    B::Reference: 'static,
+    B::Reconstructed: 'static,
 {
     fn new(backend: B, config: EncoderConfig, mode: BlockingMode) -> EncodeResult<Self> {
         let predictor: Box<dyn Predictor<_, _, _>> = match config.pred_structure {
@@ -258,7 +258,10 @@ where
         })
     }
 
-    fn execute(&mut self, request: BackendRequest<B::Picture, B::Reference>) -> EncodeResult<()> {
+    fn execute(
+        &mut self,
+        request: BackendRequest<B::Picture, B::Reconstructed>,
+    ) -> EncodeResult<()> {
         let meta = request.input_meta.clone();
         let dpb_meta = request.dpb_meta.clone();
 
