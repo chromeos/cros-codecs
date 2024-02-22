@@ -18,6 +18,7 @@ use crate::encoder::stateless::FrameMetadata;
 use crate::encoder::stateless::OutputQueue;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
+use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::stateless::StatelessVideoEncoder;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::Bitrate;
@@ -188,7 +189,7 @@ where
 }
 
 /// Trait for stateless encoder backend for H.264
-pub trait StatelessH264EncoderBackend<H>: StatelessVideoEncoderBackend<H> {
+pub trait StatelessH264EncoderBackend: StatelessVideoEncoderBackend {
     type Reference;
     type CodedPromise: BackendPromise<Output = Vec<u8>>;
     type ReconPromise: BackendPromise<Output = Self::Reference>;
@@ -203,7 +204,7 @@ pub trait StatelessH264EncoderBackend<H>: StatelessVideoEncoderBackend<H> {
 
 pub struct StatelessEncoder<H, B>
 where
-    B: StatelessH264EncoderBackend<H>,
+    B: StatelessH264EncoderBackend,
     B::Picture: 'static,
     B::Reference: 'static,
 {
@@ -226,11 +227,13 @@ where
 
     /// [`StatelessH264EncoderBackend`] instance to delegate [`BackendRequest`] to
     backend: B,
+
+    _phantom: std::marker::PhantomData<H>,
 }
 
 impl<H, B> StatelessEncoder<H, B>
 where
-    B: StatelessH264EncoderBackend<H>,
+    B: StatelessH264EncoderBackend,
     B::Picture: 'static,
     B::Reference: 'static,
 {
@@ -246,6 +249,7 @@ where
             coded_queue: Default::default(),
             output_queue: OutputQueue::new(mode),
             recon_queue: OutputQueue::new(mode),
+            _phantom: Default::default(),
         })
     }
 
@@ -295,7 +299,8 @@ where
 
 impl<H, B> StatelessVideoEncoder<H> for StatelessEncoder<H, B>
 where
-    B: StatelessH264EncoderBackend<H>,
+    B: StatelessH264EncoderBackend,
+    B: StatelessEncoderBackendImport<H, B::Picture>,
 {
     fn encode(&mut self, metadata: FrameMetadata, handle: H) -> EncodeResult<()> {
         log::trace!(

@@ -146,22 +146,24 @@ pub(super) trait Predictor<Picture, Reference, Request> {
 }
 
 /// Generic trait for stateless encoder backends
-pub trait StatelessVideoEncoderBackend<H> {
+pub trait StatelessVideoEncoderBackend {
     /// Backend's specific representation of the input frame, transformed with [`import_picture`].
     /// Might be a wrapper of the input handle with additional backend specific data or a copy of
     /// an input frame in internal backend's representation.
     ///
-    /// [`import_picture`]: StatelessVideoEncoderBackend::import_picture
+    /// [`import_picture`]: StatelessEncoderBackendImport::import_picture
     type Picture;
+}
 
-    /// Imports the input handle from client and transforms into [`Picture`]
+pub trait StatelessEncoderBackendImport<Handle, Picture> {
+    /// Imports the input [`Handle`] from client and transforms into [`Picture`]
     ///
     /// [`Picture`]: StatelessVideoEncoderBackend::Picture
     fn import_picture(
         &mut self,
         metadata: &FrameMetadata,
-        handle: H,
-    ) -> StatelessBackendResult<Self::Picture>;
+        handle: Handle,
+    ) -> StatelessBackendResult<Picture>;
 }
 
 /// Stateless video encoder interface.

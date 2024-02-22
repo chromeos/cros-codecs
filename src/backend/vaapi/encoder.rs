@@ -28,6 +28,7 @@ use crate::decoder::FramePool;
 use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::encoder::stateless::StatelessBackendResult;
+use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::FrameMetadata;
 use crate::Fourcc;
@@ -170,18 +171,24 @@ where
     }
 }
 
-impl<M, H> StatelessVideoEncoderBackend<H> for VaapiBackend<M, H>
+impl<M, H> StatelessVideoEncoderBackend for VaapiBackend<M, H>
 where
     M: SurfaceMemoryDescriptor,
     H: std::borrow::Borrow<Surface<M>>,
 {
     type Picture = H;
+}
 
+impl<M, Handle> StatelessEncoderBackendImport<Handle, Handle> for VaapiBackend<M, Handle>
+where
+    M: SurfaceMemoryDescriptor,
+    Handle: std::borrow::Borrow<Surface<M>>,
+{
     fn import_picture(
         &mut self,
         _metadata: &FrameMetadata,
-        handle: H,
-    ) -> StatelessBackendResult<Self::Picture> {
+        handle: Handle,
+    ) -> StatelessBackendResult<Handle> {
         Ok(handle)
     }
 }

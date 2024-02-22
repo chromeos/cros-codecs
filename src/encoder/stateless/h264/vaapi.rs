@@ -344,7 +344,7 @@ where
     }
 }
 
-impl<M, H> StatelessH264EncoderBackend<H> for VaapiBackend<M, H>
+impl<M, H> StatelessH264EncoderBackend for VaapiBackend<M, H>
 where
     M: SurfaceMemoryDescriptor,
     H: Borrow<Surface<M>>,
@@ -476,7 +476,7 @@ pub(super) mod tests {
     use crate::encoder::stateless::h264::StatelessEncoder;
     use crate::encoder::stateless::simple_encode_loop;
     use crate::encoder::stateless::BackendPromise;
-    use crate::encoder::stateless::StatelessVideoEncoderBackend;
+    use crate::encoder::stateless::StatelessEncoderBackendImport;
     use crate::encoder::FrameMetadata;
     use crate::FrameLayout;
     use crate::PlaneLayout;
