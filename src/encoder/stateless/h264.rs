@@ -18,7 +18,6 @@ use crate::encoder::stateless::FrameMetadata;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
-use crate::encoder::stateless::StatelessCodecSpecific;
 use crate::encoder::stateless::StatelessEncoder;
 use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::stateless::StatelessEncoderExecute;
@@ -158,7 +157,7 @@ where
 
 pub struct H264;
 
-impl<Backend> StatelessCodecSpecific<Backend> for H264
+impl<Backend> StatelessCodec<Backend> for H264
 where
     Backend: StatelessVideoEncoderBackend<H264>,
 {
@@ -170,8 +169,6 @@ where
 
     type ReferencePromise = ReferencePromise<Backend::ReconPromise>;
 }
-
-impl StatelessCodec for H264 {}
 
 /// Trait for stateless encoder backend for H.264
 pub trait StatelessH264EncoderBackend: StatelessVideoEncoderBackend<H264> {

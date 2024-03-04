@@ -179,9 +179,9 @@ pub(super) trait Predictor<Picture, Reference, Request> {
 }
 
 /// Generic trait for stateless encoder backends
-pub trait StatelessVideoEncoderBackend<Codec>
+pub trait StatelessVideoEncoderBackend<Codec>: Sized
 where
-    Codec: StatelessCodec,
+    Codec: StatelessCodec<Self>,
 {
     /// Backend's specific representation of the input frame, transformed with [`import_picture`].
     /// Might be a wrapper of the input handle with additional backend specific data or a copy of
@@ -211,7 +211,7 @@ pub trait StatelessEncoderBackendImport<Handle, Picture> {
 }
 
 /// Trait helping contain all codec specific and backend specific types
-pub trait StatelessCodecSpecific<Backend>: StatelessCodec
+pub trait StatelessCodec<Backend>: Sized
 where
     Backend: StatelessVideoEncoderBackend<Self>,
 {
@@ -230,8 +230,6 @@ where
     /// backend speficic [`StatelessVideoEncoderBackend::ReconPromise`]
     type ReferencePromise: BackendPromise<Output = Self::Reference>;
 }
-
-pub trait StatelessCodec: Sized {}
 
 /// Stateless video encoder interface.
 pub trait StatelessVideoEncoder<Handle> {
@@ -290,20 +288,20 @@ where
 /// Helper aliases for codec and backend specific types
 type Picture<C, B> = <B as StatelessVideoEncoderBackend<C>>::Picture;
 
-type Reference<C, B> = <C as StatelessCodecSpecific<B>>::Reference;
+type Reference<C, B> = <C as StatelessCodec<B>>::Reference;
 
-type Request<C, B> = <C as StatelessCodecSpecific<B>>::Request;
+type Request<C, B> = <C as StatelessCodec<B>>::Request;
 
-type CodedPromise<C, B> = <C as StatelessCodecSpecific<B>>::CodedPromise;
+type CodedPromise<C, B> = <C as StatelessCodec<B>>::CodedPromise;
 
-type ReferencePromise<C, B> = <C as StatelessCodecSpecific<B>>::ReferencePromise;
+type ReferencePromise<C, B> = <C as StatelessCodec<B>>::ReferencePromise;
 
 type BoxPredictor<C, B> = Box<dyn Predictor<Picture<C, B>, Reference<C, B>, Request<C, B>>>;
 
 pub struct StatelessEncoder<Codec, Handle, Backend>
 where
     Backend: StatelessVideoEncoderBackend<Codec>,
-    Codec: StatelessCodec + StatelessCodecSpecific<Backend>,
+    Codec: StatelessCodec<Backend>,
 {
     /// Pending frame output promise queue
     output_queue: OutputQueue<CodedPromise<Codec, Backend>>,
@@ -334,14 +332,14 @@ where
 pub trait StatelessEncoderExecute<Codec, Handle, Backend>
 where
     Backend: StatelessVideoEncoderBackend<Codec>,
-    Codec: StatelessCodec + StatelessCodecSpecific<Backend>,
+    Codec: StatelessCodec<Backend>,
 {
     fn execute(&mut self, request: Request<Codec, Backend>) -> EncodeResult<()>;
 }
 
 impl<Codec, Handle, Backend> StatelessEncoder<Codec, Handle, Backend>
 where
-    Codec: StatelessCodec + StatelessCodecSpecific<Backend>,
+    Codec: StatelessCodec<Backend>,
     Backend: StatelessVideoEncoderBackend<Codec>,
     Self: StatelessEncoderExecute<Codec, Handle, Backend>,
 {
@@ -386,7 +384,7 @@ where
 impl<Codec, Handle, Backend> StatelessVideoEncoder<Handle>
     for StatelessEncoder<Codec, Handle, Backend>
 where
-    Codec: StatelessCodec + StatelessCodecSpecific<Backend>,
+    Codec: StatelessCodec<Backend>,
     Backend: StatelessVideoEncoderBackend<Codec>,
     Backend: StatelessEncoderBackendImport<Handle, Backend::Picture>,
     Self: StatelessEncoderExecute<Codec, Handle, Backend>,

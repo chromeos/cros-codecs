@@ -12,7 +12,6 @@ use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
-use crate::encoder::stateless::StatelessCodecSpecific;
 use crate::encoder::stateless::StatelessEncoder;
 use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
@@ -83,7 +82,7 @@ pub struct BackendRequest<P, R> {
 
 pub struct VP9;
 
-impl<Backend> StatelessCodecSpecific<Backend> for VP9
+impl<Backend> StatelessCodec<Backend> for VP9
 where
     Backend: StatelessVideoEncoderBackend<VP9>,
 {
@@ -95,8 +94,6 @@ where
 
     type ReferencePromise = Backend::ReconPromise;
 }
-
-impl StatelessCodec for VP9 {}
 
 pub trait StatelessVP9EncoderBackend: StatelessVideoEncoderBackend<VP9> {
     fn encode_frame(
