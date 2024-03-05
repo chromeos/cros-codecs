@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use anyhow::anyhow;
-use bytes::Buf;
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::io::Cursor;
+
+use anyhow::anyhow;
+use bytes::Buf;
 
 #[allow(clippy::len_without_is_empty)]
 pub trait Header: Sized {
@@ -96,6 +97,15 @@ where
         data.get_ref()[offset..]
             .windows(3)
             .position(|window| window == [0x00, 0x00, 0x01])
+    }
+
+    pub fn into_owned(self) -> Nalu<'static, U> {
+        Nalu {
+            header: self.header,
+            size: self.size,
+            offset: self.offset,
+            data: Cow::Owned(self.data.into_owned()),
+        }
     }
 }
 

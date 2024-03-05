@@ -315,7 +315,7 @@ pub struct H265DecoderState<H: DecodedHandle, P> {
     /// calls to `decode`.
     current_pic: Option<CurrentPicState<H, P>>,
 
-    pending_pps: Vec<Vec<u8>>,
+    pending_pps: Vec<Nalu<'static>>,
 }
 
 impl<H, P> Default for H265DecoderState<H, P>
@@ -1159,19 +1159,20 @@ where
                 let sps = self.codec.parser.parse_sps(&nalu)?;
                 self.codec.max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
 
+                let pending_pps = std::mem::take(&mut self.codec.pending_pps);
+
                 // Try parsing the PPS again.
-                for pending_pps in self.codec.pending_pps.clone().iter().enumerate() {
-                    let mut cursor: Cursor<&[u8]> = Cursor::new(pending_pps.1.as_ref());
-                    let nalu = crate::codec::h265::parser::Nalu::next(&mut cursor)?;
-                    if self.codec.parser.parse_pps(&nalu).is_ok() {
-                        self.codec.pending_pps.remove(pending_pps.0);
+                for pps in pending_pps.into_iter() {
+                    if self.codec.parser.parse_pps(&pps).is_err() {
+                        // Failed to parse PPS add it again to pending
+                        self.codec.pending_pps.push(pps);
                     }
                 }
             }
 
             NaluType::PpsNut => {
                 if self.codec.parser.parse_pps(&nalu).is_err() {
-                    self.codec.pending_pps.push(Vec::from(&nalu.data[..]))
+                    self.codec.pending_pps.push(nalu.into_owned())
                 }
             }
 
