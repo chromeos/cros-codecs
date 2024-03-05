@@ -460,10 +460,14 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
     )))
 }
 
+pub struct VaapiH264Picture<Picture> {
+    picture: Picture,
+}
+
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H264>
     for VaapiBackend<M>
 {
-    type Picture = VaapiPicture<M>;
+    type Picture = VaapiH264Picture<VaapiPicture<M>>;
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<M> {
@@ -482,6 +486,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     ) -> StatelessBackendResult<()> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
+        let picture = &mut picture.picture;
 
         let surface_id = picture.surface().id();
 
@@ -512,6 +517,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     ) -> StatelessBackendResult<()> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
+        let picture = &mut picture.picture;
 
         let slice_param = context
             .create_buffer(build_slice_param(
@@ -536,7 +542,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     }
 
     fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle> {
-        self.process_picture::<H264>(picture)
+        self.process_picture::<H264>(picture.picture)
     }
 
     fn new_picture(
@@ -551,11 +557,9 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
 
         let metadata = self.metadata_state.get_parsed()?;
 
-        Ok(VaPicture::new(
-            timestamp,
-            Rc::clone(&metadata.context),
-            surface,
-        ))
+        Ok(VaapiH264Picture {
+            picture: VaPicture::new(timestamp, Rc::clone(&metadata.context), surface),
+        })
     }
 
     fn new_field_picture(
@@ -565,9 +569,11 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         first_field: &Self::Handle,
     ) -> StatelessBackendResult<Self::Picture> {
         // Decode to the same surface as the first field picture.
-        Ok(first_field
-            .borrow()
-            .new_picture_from_same_surface(timestamp))
+        Ok(VaapiH264Picture {
+            picture: first_field
+                .borrow()
+                .new_picture_from_same_surface(timestamp),
+        })
     }
 }
 
