@@ -38,16 +38,16 @@ pub struct ReferencePicLists {
     pub ref_pic_list_b1: Vec<usize>,
 }
 
-// Shortcut to refer to a DPB entry.
-//
-// The first member of the tuple is the `PictureData` for the frame.
-//
-// The second member is the backend handle of the frame. It can be `None` if the inserted picture
-// is non-existing (i.e. `nonexisting` is true on the `PictureData`).
+/// A single entry in the DPB.
 #[derive(Clone)]
 pub struct DpbEntry<T> {
+    /// `PictureData` of the frame in this entry.
     pub pic: RcPictureData,
-    pub handle: Option<T>,
+    /// Reference to the decoded frame, ensuring that it doesn't get reused while in the DPB.
+    pub reference: Option<T>,
+    /// Decoded frame promise. It will be set when the frame enters the DPB, and taken during the
+    /// bump process.
+    pub decoded_frame: Option<T>,
     /// Whether the picture is still waiting to be bumped and displayed.
     needed_for_output: bool,
 }
@@ -287,7 +287,8 @@ impl<T: Clone> Dpb<T> {
 
         self.entries.push(DpbEntry {
             pic: picture,
-            handle,
+            reference: handle.clone(),
+            decoded_frame: handle,
             needed_for_output,
         });
 
@@ -406,7 +407,7 @@ impl<T: Clone> Dpb<T> {
     /// Note that this picture will still be referenced by its pair, if any.
     fn bump(&mut self) -> Option<Option<T>> {
         let dpb_entry = self.find_lowest_poc_for_bumping_mut()?;
-        let handle = dpb_entry.handle.clone();
+        let handle = dpb_entry.decoded_frame.take();
         let pic = dpb_entry.pic.borrow();
 
         debug!("Bumping picture {:#?} from the dpb", pic);

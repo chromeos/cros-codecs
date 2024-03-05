@@ -517,7 +517,7 @@ where
                 let last_pic = last_dpb_entry.pic.borrow();
 
                 if !matches!(last_pic.field, Field::Frame) && last_pic.other_field().is_none() {
-                    if let Some(handle) = &last_dpb_entry.handle {
+                    if let Some(handle) = &last_dpb_entry.reference {
                         // Still waiting for the second field
                         prev_field = Some((&last_dpb_entry.pic, handle));
                     }

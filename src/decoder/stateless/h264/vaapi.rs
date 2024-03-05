@@ -227,7 +227,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     let mut va_refs = vec![];
 
     for handle in &refs {
-        let surface_id = va_surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.reference);
         let ref_pic = handle.pic.borrow();
         let pic = fill_va_h264_pic(&ref_pic, surface_id, true);
         va_refs.push(pic);
@@ -245,7 +245,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         .collect();
 
     for handle in &refs {
-        let surface_id = va_surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.reference);
         let ref_pic = handle.pic.borrow();
         let pic = fill_va_h264_pic(&ref_pic, surface_id, true);
         va_refs.push(pic);
@@ -325,7 +325,7 @@ fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
     let mut va_pics = vec![];
 
     for handle in ref_list_x {
-        let surface_id = va_surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.reference);
         let ref_pic = handle.pic.borrow();
         let merge = matches!(ref_pic.field, Field::Frame);
         let va_pic = fill_va_h264_pic(&ref_pic, surface_id, merge);
