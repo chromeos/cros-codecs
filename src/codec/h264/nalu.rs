@@ -4,6 +4,7 @@
 
 use anyhow::anyhow;
 use bytes::Buf;
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::io::Cursor;
 
@@ -22,7 +23,7 @@ pub struct Nalu<'a, U> {
     pub header: U,
     /// The mapping that backs this NALU. Possibly shared with the other NALUs
     /// in the Access Unit.
-    pub data: &'a [u8],
+    pub data: Cow<'a, [u8]>,
 
     pub size: usize,
     pub offset: usize,
@@ -80,7 +81,7 @@ where
 
         Ok(Nalu {
             header: hdr,
-            data: bitstream,
+            data: Cow::from(bitstream),
             size: nal_size,
             offset: nalu_offset,
             sc_offset: start_code_offset,

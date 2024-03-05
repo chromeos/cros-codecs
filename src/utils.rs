@@ -7,6 +7,7 @@
 //! This module is for anything that doesn't fit into the other top-level modules. Try not to add
 //! new code here unless it really doesn't belong anywhere else.
 
+use std::borrow::Cow;
 use std::io::Cursor;
 use std::io::Seek;
 use std::marker::PhantomData;
@@ -164,28 +165,40 @@ impl<'a, Nalu> NalIterator<'a, Nalu> {
 }
 
 impl<'a> Iterator for NalIterator<'a, H264Nalu<'a>> {
-    type Item = &'a [u8];
+    type Item = Cow<'a, [u8]>;
 
     fn next(&mut self) -> Option<Self::Item> {
         H264Nalu::next(&mut self.0)
             .map(|n| {
                 let start = n.sc_offset;
                 let end = n.offset + n.size;
-                &n.data[start..end]
+                match n.data {
+                    Cow::Borrowed(data) => Cow::Borrowed(&data[start..end]),
+                    Cow::Owned(mut data) => {
+                        data.truncate(end);
+                        Cow::Owned(data.split_off(start))
+                    }
+                }
             })
             .ok()
     }
 }
 
 impl<'a> Iterator for NalIterator<'a, H265Nalu<'a>> {
-    type Item = &'a [u8];
+    type Item = Cow<'a, [u8]>;
 
     fn next(&mut self) -> Option<Self::Item> {
         H265Nalu::next(&mut self.0)
             .map(|n| {
                 let start = n.sc_offset;
                 let end = n.offset + n.size;
-                &n.data[start..end]
+                match n.data {
+                    Cow::Borrowed(data) => Cow::Borrowed(&data[start..end]),
+                    Cow::Owned(mut data) => {
+                        data.truncate(end);
+                        Cow::Owned(data.split_off(start))
+                    }
+                }
             })
             .ok()
     }
