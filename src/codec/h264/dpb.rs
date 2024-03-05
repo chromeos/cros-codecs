@@ -48,6 +48,28 @@ pub struct ReferencePicLists {
 pub struct DpbEntry<T> {
     pub pic: Rc<RefCell<PictureData>>,
     pub handle: Option<T>,
+    /// Whether the picture is still waiting to be bumped and displayed.
+    needed_for_output: bool,
+}
+
+impl<T> DpbEntry<T> {
+    /// Returns `true` is the entry is eligible to be bumped.
+    ///
+    /// An entry can be bumped if its `needed_for_output` flag is true and it is the first field of
+    /// a frame which fields are all decoded.
+    fn is_bumpable(&self) -> bool {
+        if !self.needed_for_output {
+            return false;
+        }
+
+        let pic = self.pic.borrow();
+        match pic.field {
+            // Progressive frames in the DPB are fully decoded.
+            Field::Frame => true,
+            // Only return the first field of fully decoded interlaced frames.
+            Field::Top | Field::Bottom => !pic.is_second_field() && pic.other_field().is_some(),
+        }
+    }
 }
 
 pub struct Dpb<T> {
@@ -174,9 +196,9 @@ impl<T: Clone> Dpb<T> {
     /// Remove unused pictures from the DPB. A picture is not going to be used
     /// anymore if it's a) not a reference and b) not needed for output
     fn remove_unused(&mut self) {
-        self.entries.retain(|handle| {
-            let pic = handle.pic.borrow();
-            let discard = !pic.is_ref() && !pic.needed_for_output;
+        self.entries.retain(|entry| {
+            let pic = entry.pic.borrow();
+            let discard = !pic.is_ref() && !entry.needed_for_output;
 
             if discard {
                 log::debug!("Removing unused picture {:#?}", pic);
@@ -249,21 +271,19 @@ impl<T: Clone> Dpb<T> {
             return Err(StorePictureError::DpbIsFull);
         }
 
-        let mut pic_mut = picture.borrow_mut();
+        let pic = picture.borrow();
 
         // C.4.2. Decoding of gaps in frame_num and storage of "non-existing"
         // pictures
-        pic_mut.needed_for_output = !pic_mut.nonexisting;
+        let needed_for_output = !pic.nonexisting;
 
-        if pic_mut.is_second_field() {
-            let first_field_rc = pic_mut
-                .other_field()
-                .ok_or(StorePictureError::NoFirstField)?;
-            drop(pic_mut);
+        if pic.is_second_field() {
+            let first_field_rc = pic.other_field().ok_or(StorePictureError::NoFirstField)?;
+            drop(pic);
             let mut first_field = first_field_rc.borrow_mut();
             first_field.set_second_field_to(&picture);
         } else {
-            drop(pic_mut);
+            drop(pic);
         }
 
         let pic = picture.borrow();
@@ -278,6 +298,7 @@ impl<T: Clone> Dpb<T> {
         self.entries.push(DpbEntry {
             pic: picture,
             handle,
+            needed_for_output,
         });
 
         Ok(())
@@ -379,37 +400,38 @@ impl<T: Clone> Dpb<T> {
     fn find_lowest_poc_for_bumping(&self) -> Option<&DpbEntry<T>> {
         self.entries
             .iter()
-            .filter(|handle| {
-                let pic = handle.pic.borrow();
+            .filter(|entry| entry.is_bumpable())
+            .min_by_key(|handle| handle.pic.borrow().pic_order_cnt)
+    }
 
-                if !pic.needed_for_output {
-                    return false;
-                }
-
-                match pic.field {
-                    // Progressive frames in the DPB are fully decoded.
-                    Field::Frame => true,
-                    // Only return the first field of fully decoded interlaced frames.
-                    Field::Top | Field::Bottom => {
-                        !pic.is_second_field() && pic.other_field().is_some()
-                    }
-                }
-            })
+    /// Find the lowest POC in the DPB that can be bumped and return a mutable reference.
+    fn find_lowest_poc_for_bumping_mut(&mut self) -> Option<&mut DpbEntry<T>> {
+        self.entries
+            .iter_mut()
+            .filter(|entry| entry.is_bumpable())
             .min_by_key(|handle| handle.pic.borrow().pic_order_cnt)
     }
 
     /// Bump the dpb, returning a picture as per the bumping process described in C.4.5.3.
     /// Note that this picture will still be referenced by its pair, if any.
     fn bump(&mut self) -> Option<Option<T>> {
-        let dpb_entry = self.find_lowest_poc_for_bumping()?;
+        let dpb_entry = self.find_lowest_poc_for_bumping_mut()?;
         let handle = dpb_entry.handle.clone();
-        let mut pic = dpb_entry.pic.borrow_mut();
+        let pic = dpb_entry.pic.borrow();
 
         debug!("Bumping picture {:#?} from the dpb", pic);
 
-        pic.needed_for_output = false;
-        if let Some(other_field_rc) = pic.other_field() {
-            other_field_rc.borrow_mut().needed_for_output = false;
+        dpb_entry.needed_for_output = false;
+        // Lookup the second field entry and flip as well.
+        if let Some(other_pic) = pic.other_field() {
+            drop(pic);
+            if let Some(other_entry) = self
+                .entries
+                .iter_mut()
+                .find(|e| Rc::ptr_eq(&other_pic, &e.pic))
+            {
+                other_entry.needed_for_output = false;
+            }
         }
 
         Some(handle)

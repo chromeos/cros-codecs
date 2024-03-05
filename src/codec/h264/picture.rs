@@ -79,7 +79,6 @@ pub struct PictureData {
     reference: Reference,
     pub ref_pic_list_modification_flag_l0: i32,
     pub abs_diff_pic_num_minus1: i32,
-    pub needed_for_output: bool,
 
     // Does memory management op 5 needs to be executed after this
     // picture has finished decoding?
@@ -365,7 +364,6 @@ impl std::fmt::Debug for PictureData {
                 &self.ref_pic_list_modification_flag_l0,
             )
             .field("abs_diff_pic_num_minus1", &self.abs_diff_pic_num_minus1)
-            .field("needed_for_output", &self.needed_for_output)
             .field("has_mmco_5", &self.has_mmco_5)
             .field("nonexisting", &self.nonexisting)
             .field("field", &self.field)
