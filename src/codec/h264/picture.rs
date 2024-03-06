@@ -306,11 +306,7 @@ impl PictureData {
     /// Whether the current picture is the second field of a complementary ref pair.
     pub fn is_second_field_of_complementary_ref_pair(&self) -> bool {
         self.is_ref()
-            && self.is_second_field()
-            && self
-                .other_field()
-                .map(|f| f.borrow().is_ref())
-                .unwrap_or(false)
+            && matches!(self.field_rank(), FieldRank::Second(first_field) if first_field.borrow().is_ref())
     }
 
     /// Set this picture's first field.
