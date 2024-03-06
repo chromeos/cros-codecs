@@ -14,6 +14,7 @@ use crate::codec::h264::parser::MaxLongTermFrameIdx;
 use crate::codec::h264::parser::RefPicMarkingInner;
 use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
+use crate::codec::h264::picture::FieldRank;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::RcPictureData;
@@ -529,14 +530,14 @@ impl<T: Clone> Dpb<T> {
         // field has been marked as "used for short-term reference", the current
         // picture and the complementary reference field pair are also marked as
         // "used for short-term reference".
-        if pic.is_second_field()
-            && matches!(
-                pic.other_field().unwrap().borrow().reference(),
-                Reference::ShortTerm
-            )
-        {
-            pic.set_reference(Reference::ShortTerm, false);
-            return Ok(());
+        if let FieldRank::Second(other_field) = pic.field_rank() {
+            if matches!(
+                other_field.upgrade().map(|f| *f.borrow().reference()),
+                Some(Reference::ShortTerm)
+            ) {
+                pic.set_reference(Reference::ShortTerm, false);
+                return Ok(());
+            }
         }
 
         let mut num_ref_pics = self.num_ref_frames();
