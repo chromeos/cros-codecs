@@ -51,6 +51,19 @@ pub enum IsIdr {
     },
 }
 
+/// The rank of a field, i.e. whether it is the first or second one to be parsed from the stream.
+/// This is unrelated to the `Field` type, as the first field can be either `Top` or `Bottom`.
+#[derive(Default, Debug)]
+pub enum FieldRank {
+    /// Frame has a single field.
+    #[default]
+    Single,
+    /// Frame is interlaced, and this is the first field (with a reference to the second one).
+    First(Weak<RefCell<PictureData>>),
+    /// Frame is interlaced, and this is the second field (with a reference to the first one).
+    Second(Weak<RefCell<PictureData>>),
+}
+
 #[derive(Default)]
 pub struct PictureData {
     pub pic_order_cnt_type: u8,
@@ -94,8 +107,7 @@ pub struct PictureData {
     // memory management after finishing this picture.
     pub ref_pic_marking: RefPicMarking,
 
-    is_second_field: bool,
-    other_field: Option<Weak<RefCell<Self>>>,
+    field_rank: FieldRank,
 
     pub timestamp: u64,
 }
@@ -212,7 +224,12 @@ impl PictureData {
 
     /// Whether this picture is a second field.
     pub fn is_second_field(&self) -> bool {
-        self.is_second_field
+        matches!(self.field_rank, FieldRank::Second(..))
+    }
+
+    /// Returns the field rank of this picture, including a reference to its other field.
+    pub fn field_rank(&self) -> &FieldRank {
+        &self.field_rank
     }
 
     /// Returns a reference to the picture's Reference
@@ -240,19 +257,22 @@ impl PictureData {
     /// Get a reference to the picture's other field, if there is any
     /// and its reference is still valid.
     pub fn other_field(&self) -> Option<Rc<RefCell<PictureData>>> {
-        self.other_field.as_ref().and_then(Weak::upgrade)
+        match &self.field_rank {
+            FieldRank::Single => None,
+            FieldRank::First(other_field) => other_field.upgrade(),
+            FieldRank::Second(other_field) => other_field.upgrade(),
+        }
     }
 
     /// Set this picture's second field.
     pub fn set_second_field_to(&mut self, other_field: &Rc<RefCell<Self>>) {
-        self.other_field = Some(Rc::downgrade(other_field));
-        other_field.borrow_mut().is_second_field = true;
+        self.field_rank = FieldRank::First(Rc::downgrade(other_field));
     }
 
     /// Whether the current picture is the second field of a complementary ref pair.
     pub fn is_second_field_of_complementary_ref_pair(&self) -> bool {
         self.is_ref()
-            && self.is_second_field
+            && self.is_second_field()
             && self
                 .other_field()
                 .map(|f| f.borrow().is_ref())
@@ -261,8 +281,7 @@ impl PictureData {
 
     /// Set this picture's first field.
     pub fn set_first_field_to(&mut self, other_field: &Rc<RefCell<Self>>) {
-        self.other_field = Some(Rc::downgrade(other_field));
-        self.is_second_field = true;
+        self.field_rank = FieldRank::Second(Rc::downgrade(other_field));
     }
 
     pub fn pic_num_f(&self, max_pic_num: i32) -> i32 {
@@ -284,7 +303,7 @@ impl PictureData {
     /// Split a frame into two complementary fields that reference one another.
     pub fn split_frame(mut self) -> (Rc<RefCell<Self>>, Rc<RefCell<Self>>) {
         assert!(matches!(self.field, Field::Frame));
-        assert!(self.other_field.is_none());
+        assert!(matches!(self.field_rank, FieldRank::Single));
 
         debug!(
             "Splitting picture (frame_num, POC) ({:?}, {:?})",
@@ -368,8 +387,7 @@ impl std::fmt::Debug for PictureData {
             .field("nonexisting", &self.nonexisting)
             .field("field", &self.field)
             .field("ref_pic_marking", &self.ref_pic_marking)
-            .field("is_second_field", &self.is_second_field)
-            .field("other_field", &self.other_field)
+            .field("field_rank", &self.field_rank)
             .finish()
     }
 }
