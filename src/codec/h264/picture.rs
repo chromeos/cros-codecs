@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::rc::Weak;
 
@@ -112,6 +113,25 @@ pub struct PictureData {
     pub timestamp: u64,
 }
 
+/// A `PictureData` within a `Rc<RefCell>` which field rank is guaranteed to be correct.
+///
+/// The field rank of `PictureData` is only final after both fields have been constructed - namely,
+/// the first field can only point to the second one after the latter is available as a Rc. Methods
+/// [`PictureData::into_rc`] and [`PictureData::split_frame`] take care of this, and is this only
+/// producer of this type, ensuring all instances are correct.
+#[derive(Default, Debug, Clone)]
+pub struct RcPictureData {
+    pic: Rc<RefCell<PictureData>>,
+}
+
+impl Deref for RcPictureData {
+    type Target = Rc<RefCell<PictureData>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.pic
+    }
+}
+
 impl PictureData {
     pub fn new_non_existing(frame_num: u32, timestamp: u64) -> Self {
         PictureData {
@@ -133,7 +153,7 @@ impl PictureData {
         slice: &Slice,
         sps: &Sps,
         timestamp: u64,
-        first_field: Option<&Rc<RefCell<PictureData>>>,
+        first_field: Option<&RcPictureData>,
     ) -> Self {
         let hdr = &slice.header;
         let nalu_hdr = &slice.nalu.header;
@@ -279,7 +299,7 @@ impl PictureData {
     }
 
     /// Set this picture's second field.
-    pub fn set_second_field_to(&mut self, other_field: &Rc<RefCell<Self>>) {
+    fn set_second_field_to(&mut self, other_field: &Rc<RefCell<Self>>) {
         self.field_rank = FieldRank::First(Rc::downgrade(other_field));
     }
 
@@ -314,8 +334,26 @@ impl PictureData {
         }
     }
 
+    /// Consume this picture and return a Rc'd version.
+    ///
+    /// If the picture was a second field, adjust the field of the first field to point to this
+    /// one.
+    pub fn into_rc(self) -> RcPictureData {
+        let self_rc = Rc::new(RefCell::new(self));
+        let pic = self_rc.borrow();
+
+        if let FieldRank::Second(first_field) = &pic.field_rank {
+            let first_field = first_field.upgrade().unwrap();
+            first_field.borrow_mut().set_second_field_to(&self_rc);
+        }
+
+        drop(pic);
+
+        RcPictureData { pic: self_rc }
+    }
+
     /// Split a frame into two complementary fields that reference one another.
-    pub fn split_frame(mut self) -> (Rc<RefCell<Self>>, Rc<RefCell<Self>>) {
+    pub fn split_frame(mut self) -> (RcPictureData, RcPictureData) {
         assert!(matches!(self.field, Field::Frame));
         assert!(matches!(self.field_rank, FieldRank::Single));
 
@@ -361,7 +399,10 @@ impl PictureData {
         first_field.borrow_mut().set_second_field_to(&second_field);
         second_field.borrow_mut().set_first_field_to(&first_field);
 
-        (first_field, second_field)
+        (
+            RcPictureData { pic: first_field },
+            RcPictureData { pic: second_field },
+        )
     }
 }
 
