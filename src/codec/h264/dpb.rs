@@ -527,7 +527,11 @@ impl<T: Clone> Dpb<T> {
     }
 
     // 8.2.5.3
-    pub fn sliding_window_marking(&self, pic: &mut PictureData, sps: &Sps) -> anyhow::Result<()> {
+    pub fn sliding_window_marking(
+        &mut self,
+        pic: &mut PictureData,
+        sps: &Sps,
+    ) -> anyhow::Result<()> {
         // If the current picture is a coded field that is the second field in
         // decoding order of a complementary reference field pair, and the first
         // field has been marked as "used for short-term reference", the current
