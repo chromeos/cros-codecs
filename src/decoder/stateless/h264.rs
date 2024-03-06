@@ -1082,11 +1082,8 @@ where
         let sps = Rc::clone(&pps.sps);
         let max_frame_num = sps.max_frame_num();
 
-        let mut pic = PictureData::new_from_slice(slice, &sps, timestamp);
+        let mut pic = PictureData::new_from_slice(slice, &sps, timestamp, first_field);
         self.codec.compute_pic_order_count(&mut pic, &sps)?;
-        if let Some(first_field) = first_field {
-            pic.set_first_field_to(first_field);
-        }
 
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             // C.4.5.3 "Bumping process"
@@ -1165,7 +1162,6 @@ where
         }
 
         let first_field = self.codec.find_first_field(&slice.header)?;
-
         let pic = self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
         let ref_pic_lists = self.codec.dpb.build_ref_pic_lists(&pic);
 

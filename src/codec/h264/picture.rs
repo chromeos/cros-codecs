@@ -126,7 +126,15 @@ impl PictureData {
         }
     }
 
-    pub fn new_from_slice(slice: &Slice, sps: &Sps, timestamp: u64) -> Self {
+    /// Create a new picture from a `slice`, `sps`, and `timestamp`.
+    ///
+    /// `first_field` is set if this picture is the second field of a frame.
+    pub fn new_from_slice(
+        slice: &Slice,
+        sps: &Sps,
+        timestamp: u64,
+        first_field: Option<&Rc<RefCell<PictureData>>>,
+    ) -> Self {
         let hdr = &slice.header;
         let nalu_hdr = &slice.nalu.header;
 
@@ -197,7 +205,7 @@ impl PictureData {
             height: visible_rect.max.y - visible_rect.min.y,
         };
 
-        PictureData {
+        let mut pic = PictureData {
             pic_order_cnt_type: sps.pic_order_cnt_type,
             pic_order_cnt_lsb: i32::from(pic_order_cnt_lsb),
             delta_pic_order_cnt_bottom,
@@ -214,7 +222,13 @@ impl PictureData {
             display_resolution,
             timestamp,
             ..Default::default()
+        };
+
+        if let Some(first_field) = first_field {
+            pic.set_first_field_to(first_field);
         }
+
+        pic
     }
 
     /// Whether the current picture is a reference, either ShortTerm or LongTerm.
@@ -280,7 +294,7 @@ impl PictureData {
     }
 
     /// Set this picture's first field.
-    pub fn set_first_field_to(&mut self, other_field: &Rc<RefCell<Self>>) {
+    fn set_first_field_to(&mut self, other_field: &Rc<RefCell<Self>>) {
         self.field_rank = FieldRank::Second(Rc::downgrade(other_field));
     }
 
