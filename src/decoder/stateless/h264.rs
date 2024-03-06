@@ -7,7 +7,6 @@ mod dummy;
 #[cfg(feature = "vaapi")]
 mod vaapi;
 
-use std::cell::RefCell;
 use std::collections::btree_map::Entry;
 use std::io::Cursor;
 use std::rc::Rc;
@@ -33,6 +32,7 @@ use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
+use crate::codec::h264::picture::RcPictureData;
 use crate::codec::h264::picture::Reference;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
@@ -276,7 +276,7 @@ pub struct H264DecoderState<H: DecodedHandle, P> {
     ///
     /// We are not using `DbpEntry<T>` as the type because contrary to a DPB entry,
     /// the handle of this member is always valid.
-    last_field: Option<(Rc<RefCell<PictureData>>, H)>,
+    last_field: Option<(RcPictureData, H)>,
 
     /// The picture currently being decoded. We need to preserve it between calls to `decode`
     /// because multiple slices will be processed in different calls to `decode`.
@@ -509,10 +509,7 @@ where
 
     /// Find the first field for the picture started by `slice`, if any.
     #[allow(clippy::type_complexity)]
-    fn find_first_field(
-        &self,
-        hdr: &SliceHeader,
-    ) -> anyhow::Result<Option<(Rc<RefCell<PictureData>>, H)>> {
+    fn find_first_field(&self, hdr: &SliceHeader) -> anyhow::Result<Option<(RcPictureData, H)>> {
         let mut prev_field = None;
 
         if self.dpb.interlaced() {
@@ -915,7 +912,7 @@ where
                     assert!(!pic.is_second_field());
 
                     // Cache the field, wait for its pair.
-                    self.codec.last_field = Some((Rc::new(RefCell::new(pic)), handle));
+                    self.codec.last_field = Some((pic.into_rc(), handle));
                 }
                 Some((field_pic, field_handle))
                     if pic.is_second_field()
@@ -924,9 +921,6 @@ where
                             .map(|f| Rc::ptr_eq(&f, &field_pic))
                             .unwrap_or(false) =>
                 {
-                    field_pic
-                        .borrow_mut()
-                        .set_second_field_to(&Rc::new(RefCell::new(pic)));
                     self.ready_queue.push(field_handle);
                 }
                 // Somehow, the last field is not paired with the current field.
@@ -995,7 +989,7 @@ where
                 )?;
             } else {
                 self.codec.dpb.add_picture(
-                    Rc::new(RefCell::new(pic)),
+                    pic.into_rc(),
                     Some(handle),
                     &mut self.codec.last_field,
                 )?;
@@ -1052,11 +1046,9 @@ where
                     .dpb
                     .add_picture(second_field, None, &mut self.codec.last_field)?;
             } else {
-                self.codec.dpb.add_picture(
-                    Rc::new(RefCell::new(pic)),
-                    None,
-                    &mut self.codec.last_field,
-                )?;
+                self.codec
+                    .dpb
+                    .add_picture(pic.into_rc(), None, &mut self.codec.last_field)?;
             }
 
             unused_short_term_frame_num += 1;
@@ -1070,7 +1062,7 @@ where
     fn init_current_pic(
         &mut self,
         slice: &Slice,
-        first_field: Option<&Rc<RefCell<PictureData>>>,
+        first_field: Option<&RcPictureData>,
         timestamp: u64,
     ) -> anyhow::Result<PictureData> {
         let pps = self

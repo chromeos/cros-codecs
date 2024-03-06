@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use std::cell::Ref;
-use std::cell::RefCell;
 use std::cell::RefMut;
 use std::rc::Rc;
 
@@ -17,6 +16,7 @@ use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
+use crate::codec::h264::picture::RcPictureData;
 use crate::codec::h264::picture::Reference;
 
 pub type DpbPicRefList<'a, H> = Vec<&'a DpbEntry<H>>;
@@ -46,7 +46,7 @@ pub struct ReferencePicLists {
 // is non-existing (i.e. `nonexisting` is true on the `PictureData`).
 #[derive(Clone)]
 pub struct DpbEntry<T> {
-    pub pic: Rc<RefCell<PictureData>>,
+    pub pic: RcPictureData,
     pub handle: Option<T>,
     /// Whether the picture is still waiting to be bumped and displayed.
     needed_for_output: bool,
@@ -98,8 +98,6 @@ pub struct Dpb<T> {
 pub enum StorePictureError {
     #[error("DPB is full")]
     DpbIsFull,
-    #[error("picture is second field but first field doesn't exist")]
-    NoFirstField,
 }
 
 #[derive(Debug, Error)]
@@ -258,7 +256,7 @@ impl<T: Clone> Dpb<T> {
     /// Store a picture and its backend handle in the DPB.
     fn store_picture(
         &mut self,
-        picture: Rc<RefCell<PictureData>>,
+        picture: RcPictureData,
         handle: Option<T>,
     ) -> Result<(), StorePictureError> {
         let max_pics = if self.interlaced {
@@ -277,16 +275,6 @@ impl<T: Clone> Dpb<T> {
         // pictures
         let needed_for_output = !pic.nonexisting;
 
-        if pic.is_second_field() {
-            let first_field_rc = pic.other_field().ok_or(StorePictureError::NoFirstField)?;
-            drop(pic);
-            let mut first_field = first_field_rc.borrow_mut();
-            first_field.set_second_field_to(&picture);
-        } else {
-            drop(pic);
-        }
-
-        let pic = picture.borrow();
         debug!(
             "Stored picture POC {:?}, field {:?}, the DPB length is {:?}",
             pic.pic_order_cnt,
@@ -307,9 +295,9 @@ impl<T: Clone> Dpb<T> {
     /// Add `pic` and its associated `handle` to the DPB.
     pub fn add_picture(
         &mut self,
-        pic: Rc<RefCell<PictureData>>,
+        pic: RcPictureData,
         handle: Option<T>,
-        last_field: &mut Option<(Rc<RefCell<PictureData>>, T)>,
+        last_field: &mut Option<(RcPictureData, T)>,
     ) -> anyhow::Result<()> {
         if !self.interlaced() {
             assert!(last_field.is_none());
