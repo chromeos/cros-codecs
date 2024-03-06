@@ -30,6 +30,7 @@ use crate::codec::h264::parser::SliceHeader;
 use crate::codec::h264::parser::SliceType;
 use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::Field;
+use crate::codec::h264::picture::FieldRank;
 use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::RcPictureData;
@@ -914,12 +915,7 @@ where
                     // Cache the field, wait for its pair.
                     self.codec.last_field = Some((pic.into_rc(), handle));
                 }
-                Some((field_pic, field_handle))
-                    if pic.is_second_field()
-                        && pic
-                            .other_field()
-                            .map(|f| Rc::ptr_eq(&f, &field_pic))
-                            .unwrap_or(false) =>
+                Some((field_pic, field_handle)) if matches!(pic.field_rank(), FieldRank::Second(first_field) if Rc::ptr_eq(first_field, &field_pic)) =>
                 {
                     self.ready_queue.push(field_handle);
                 }
