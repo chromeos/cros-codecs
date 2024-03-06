@@ -577,22 +577,6 @@ where
         }
     }
 
-    fn pic_num_f(pic: &PictureData, max_pic_num: i32) -> i32 {
-        if !matches!(pic.reference(), Reference::LongTerm) {
-            pic.pic_num
-        } else {
-            max_pic_num
-        }
-    }
-
-    fn long_term_pic_num_f(pic: &PictureData, max_long_term_frame_idx: MaxLongTermFrameIdx) -> u32 {
-        if matches!(pic.reference(), Reference::LongTerm) {
-            pic.long_term_pic_num
-        } else {
-            2 * max_long_term_frame_idx.to_value_plus1()
-        }
-    }
-
     // 8.2.4.3.1 Modification process of reference picture lists for short-term
     // reference pictures
     #[allow(clippy::too_many_arguments)]
@@ -653,7 +637,7 @@ where
 
             let target = &ref_pic_list_x[cidx].pic;
 
-            if Self::pic_num_f(&target.borrow(), max_pic_num) != pic_num_lx {
+            if target.borrow().pic_num_f(max_pic_num) != pic_num_lx {
                 ref_pic_list_x[nidx] = ref_pic_list_x[cidx];
                 nidx += 1;
             }
@@ -696,9 +680,7 @@ where
             }
 
             let target = &ref_pic_list_x[cidx].pic;
-            if Self::long_term_pic_num_f(&target.borrow(), max_long_term_frame_idx)
-                != long_term_pic_num
-            {
+            if target.borrow().long_term_pic_num_f(max_long_term_frame_idx) != long_term_pic_num {
                 ref_pic_list_x[nidx] = ref_pic_list_x[cidx];
                 nidx += 1;
             }

@@ -8,6 +8,7 @@ use std::rc::Weak;
 
 use log::debug;
 
+use crate::codec::h264::parser::MaxLongTermFrameIdx;
 use crate::codec::h264::parser::RefPicMarking;
 use crate::codec::h264::parser::Slice;
 use crate::codec::h264::parser::SliceType;
@@ -263,6 +264,22 @@ impl PictureData {
     pub fn set_first_field_to(&mut self, other_field: &Rc<RefCell<Self>>) {
         self.other_field = Some(Rc::downgrade(other_field));
         self.is_second_field = true;
+    }
+
+    pub fn pic_num_f(&self, max_pic_num: i32) -> i32 {
+        if !matches!(self.reference(), Reference::LongTerm) {
+            self.pic_num
+        } else {
+            max_pic_num
+        }
+    }
+
+    pub fn long_term_pic_num_f(&self, max_long_term_frame_idx: MaxLongTermFrameIdx) -> u32 {
+        if matches!(self.reference(), Reference::LongTerm) {
+            self.long_term_pic_num
+        } else {
+            2 * max_long_term_frame_idx.to_value_plus1()
+        }
     }
 
     /// Split a frame into two complementary fields that reference one another.
