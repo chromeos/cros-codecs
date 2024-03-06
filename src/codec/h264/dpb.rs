@@ -670,14 +670,15 @@ impl<T: Clone> Dpb<T> {
                 // part of a complementary field pair that includes
                 // the picture specified by picNumX, that field is
                 // marked as "unused for reference".
-                let reference_field_is_not_part_of_pic_x = if picture.other_field().is_none() {
-                    true
-                } else {
-                    // Check that the fields do not reference one another.
-                    !std::ptr::eq(picture.other_field().unwrap().as_ptr(), to_mark_as_long_ptr)
-                        && to_mark_as_long_other_field_ptr
-                            .map(|p| !std::ptr::eq(p, &(*picture)))
-                            .unwrap_or(true)
+                let reference_field_is_not_part_of_pic_x = match picture.other_field() {
+                    None => true,
+                    Some(other_field) => {
+                        // Check that the fields do not reference one another.
+                        !std::ptr::eq(other_field.as_ptr(), to_mark_as_long_ptr)
+                            && to_mark_as_long_other_field_ptr
+                                .map(|p| !std::ptr::eq(p, &(*picture)))
+                                .unwrap_or(true)
+                    }
                 };
 
                 if reference_field_is_not_part_of_pic_x {
