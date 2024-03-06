@@ -531,10 +531,7 @@ impl<T: Clone> Dpb<T> {
         // picture and the complementary reference field pair are also marked as
         // "used for short-term reference".
         if let FieldRank::Second(other_field) = pic.field_rank() {
-            if matches!(
-                other_field.upgrade().map(|f| *f.borrow().reference()),
-                Some(Reference::ShortTerm)
-            ) {
+            if matches!(other_field.borrow().reference(), Reference::ShortTerm) {
                 pic.set_reference(Reference::ShortTerm, false);
                 return Ok(());
             }

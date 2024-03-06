@@ -62,7 +62,7 @@ pub enum FieldRank {
     /// Frame is interlaced, and this is the first field (with a reference to the second one).
     First(Weak<RefCell<PictureData>>),
     /// Frame is interlaced, and this is the second field (with a reference to the first one).
-    Second(Weak<RefCell<PictureData>>),
+    Second(Rc<RefCell<PictureData>>),
 }
 
 #[derive(Default)]
@@ -294,7 +294,7 @@ impl PictureData {
         match &self.field_rank {
             FieldRank::Single => None,
             FieldRank::First(other_field) => other_field.upgrade(),
-            FieldRank::Second(other_field) => other_field.upgrade(),
+            FieldRank::Second(other_field) => Some(other_field.clone()),
         }
     }
 
@@ -315,7 +315,7 @@ impl PictureData {
 
     /// Set this picture's first field.
     fn set_first_field_to(&mut self, other_field: &Rc<RefCell<Self>>) {
-        self.field_rank = FieldRank::Second(Rc::downgrade(other_field));
+        self.field_rank = FieldRank::Second(other_field.clone());
     }
 
     pub fn pic_num_f(&self, max_pic_num: i32) -> i32 {
@@ -340,14 +340,10 @@ impl PictureData {
     /// one.
     pub fn into_rc(self) -> RcPictureData {
         let self_rc = Rc::new(RefCell::new(self));
-        let pic = self_rc.borrow();
 
-        if let FieldRank::Second(first_field) = &pic.field_rank {
-            let first_field = first_field.upgrade().unwrap();
+        if let FieldRank::Second(first_field) = self_rc.borrow().field_rank() {
             first_field.borrow_mut().set_second_field_to(&self_rc);
         }
-
-        drop(pic);
 
         RcPictureData { pic: self_rc }
     }
