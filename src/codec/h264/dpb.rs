@@ -622,24 +622,19 @@ impl<T: Clone> Dpb<T> {
         let to_mark_as_long_pos = self
             .find_short_term_with_pic_num_pos(pic_num_x)
             .ok_or(MmcoError::NoShortTermPic)?;
-        let to_mark_as_long = &self.entries[to_mark_as_long_pos];
-        let to_mark_as_long_ptr = to_mark_as_long.pic.as_ptr();
-        let to_mark_as_long_other_field_ptr = to_mark_as_long
-            .pic
-            .borrow()
-            .other_field()
-            .map(|f| f.as_ptr());
+        let to_mark_as_long = &self.entries[to_mark_as_long_pos].pic;
 
-        if !matches!(
-            to_mark_as_long.pic.borrow().reference(),
-            Reference::ShortTerm
-        ) {
+        if !matches!(to_mark_as_long.borrow().reference(), Reference::ShortTerm) {
             return Err(MmcoError::ExpectedMarked);
         }
 
-        if to_mark_as_long.pic.borrow().nonexisting {
+        if to_mark_as_long.borrow().nonexisting {
             return Err(MmcoError::ExpectedExisting);
         }
+
+        let to_mark_as_long_ptr = to_mark_as_long.as_ptr();
+        let to_mark_as_long_other_field_ptr =
+            to_mark_as_long.borrow().other_field().map(|f| f.as_ptr());
 
         let long_term_frame_idx = marking.long_term_frame_idx;
 
@@ -693,14 +688,13 @@ impl<T: Clone> Dpb<T> {
         }
 
         let is_frame = matches!(pic.field, Field::Frame);
-        let to_mark_as_long = &self.entries[to_mark_as_long_pos];
+        let to_mark_as_long = &self.entries[to_mark_as_long_pos].pic;
         to_mark_as_long
-            .pic
             .borrow_mut()
             .set_reference(Reference::LongTerm, is_frame);
-        to_mark_as_long.pic.borrow_mut().long_term_frame_idx = long_term_frame_idx;
+        to_mark_as_long.borrow_mut().long_term_frame_idx = long_term_frame_idx;
 
-        if let Some(other_field) = to_mark_as_long.pic.borrow().other_field() {
+        if let Some(other_field) = to_mark_as_long.borrow().other_field() {
             let mut other_field = other_field.borrow_mut();
             if matches!(other_field.reference(), Reference::LongTerm) {
                 other_field.long_term_frame_idx = long_term_frame_idx;
