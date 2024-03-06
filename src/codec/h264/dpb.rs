@@ -817,18 +817,18 @@ impl<T: Clone> Dpb<T> {
 
         let is_frame = matches!(pic.field, Field::Frame);
 
-        let is_second_ref_field = pic.is_second_field()
-            && matches!(
-                pic.other_field().unwrap().borrow().reference(),
-                Reference::LongTerm
-            );
+        let is_second_ref_field = match pic.field_rank() {
+            FieldRank::Second(first_field)
+                if *first_field.borrow().reference() == Reference::LongTerm =>
+            {
+                first_field.borrow_mut().long_term_frame_idx = long_term_frame_idx;
+                true
+            }
+            _ => false,
+        };
 
         pic.set_reference(Reference::LongTerm, is_frame || is_second_ref_field);
         pic.long_term_frame_idx = long_term_frame_idx;
-
-        if is_second_ref_field {
-            pic.other_field().unwrap().borrow_mut().long_term_frame_idx = long_term_frame_idx;
-        }
     }
 
     #[cfg(debug_assertions)]
