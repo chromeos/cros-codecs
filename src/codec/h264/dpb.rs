@@ -329,19 +329,18 @@ impl<T: Clone> Dpb<T> {
 
     /// Whether the DPB has an empty slot for a new picture.
     pub fn has_empty_frame_buffer(&self) -> bool {
-        if !self.interlaced {
-            self.entries.len() < self.max_num_pics
+        let count = if !self.interlaced {
+            self.entries.len()
         } else {
-            let count = self
-                .pictures()
+            self.pictures()
                 .filter(|pic| {
                     !pic.is_second_field()
                         && (matches!(pic.field, Field::Frame) || pic.other_field().is_some())
                 })
-                .count();
+                .count()
+        };
 
-            count < self.max_num_pics
-        }
+        count < self.max_num_pics
     }
 
     /// Whether the DPB needs bumping, as described by clauses 1, 4, 5, 6 of
