@@ -412,14 +412,14 @@ impl<T: Clone> Dpb<T> {
 
         dpb_entry.needed_for_output = false;
         // Lookup the second field entry and flip as well.
-        if let Some(other_pic) = pic.other_field() {
+        // `find_lowest_poc_for_bumping_mut` always returns the first field, never the second.
+        if let FieldRank::First(second_field) = pic.field_rank() {
+            let second_field = second_field.upgrade();
             drop(pic);
-            if let Some(other_entry) = self
-                .entries
-                .iter_mut()
-                .find(|e| Rc::ptr_eq(&other_pic, &e.pic))
+            if let Some(second_field) =
+                second_field.and_then(|f| self.entries.iter_mut().find(|e| Rc::ptr_eq(&f, &e.pic)))
             {
-                other_entry.needed_for_output = false;
+                second_field.needed_for_output = false;
             }
         }
 
