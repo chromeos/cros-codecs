@@ -68,7 +68,7 @@ impl<T> DpbEntry<T> {
             // Progressive frames in the DPB are fully decoded.
             Field::Frame => true,
             // Only return the first field of fully decoded interlaced frames.
-            Field::Top | Field::Bottom => !pic.is_second_field() && pic.other_field().is_some(),
+            Field::Top | Field::Bottom => matches!(pic.field_rank(), FieldRank::First(..)),
         }
     }
 }
