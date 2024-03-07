@@ -255,8 +255,8 @@ impl<T: Clone> Dpb<T> {
         Some(&self.entries[position])
     }
 
-    /// Store a picture and its backend handle in the DPB.
-    fn store_picture(
+    /// Store `picture` and its backend handle in the DPB.
+    pub fn store_picture(
         &mut self,
         picture: RcPictureData,
         handle: Option<T>,
@@ -291,40 +291,6 @@ impl<T: Clone> Dpb<T> {
             decoded_frame: handle,
             needed_for_output,
         });
-
-        Ok(())
-    }
-
-    /// Add `pic` and its associated `handle` to the DPB.
-    pub fn add_picture(
-        &mut self,
-        pic: RcPictureData,
-        handle: Option<T>,
-        last_field: &mut Option<(RcPictureData, T)>,
-    ) -> Result<(), StorePictureError> {
-        if !self.interlaced() {
-            assert!(last_field.is_none());
-
-            self.store_picture(pic, handle)?;
-        } else {
-            // If we have a cached field for this picture, we must combine
-            // them before insertion.
-            if pic
-                .borrow()
-                .other_field()
-                .zip(last_field.as_ref().map(|f| &f.0))
-                .map_or_else(
-                    || false,
-                    |(other_field, last_field)| Rc::ptr_eq(&other_field, last_field),
-                )
-            {
-                if let Some((last_field, last_field_handle)) = last_field.take() {
-                    self.store_picture(last_field, Some(last_field_handle))?;
-                }
-            }
-
-            self.store_picture(pic, handle)?;
-        }
 
         Ok(())
     }

@@ -267,15 +267,6 @@ pub struct H264DecoderState<H: DecodedHandle, P> {
     /// Maximum index of the long-term frame.
     max_long_term_frame_idx: MaxLongTermFrameIdx,
 
-    /// A cached, non-reference first field that did not make it into the DPB
-    /// because it was full even after bumping the smaller POC. This field will
-    /// be cached until the second field is processed so they can be output
-    /// together.
-    ///
-    /// We are not using `DbpEntry<T>` as the type because contrary to a DPB entry,
-    /// the handle of this member is always valid.
-    last_field: Option<(RcPictureData, H)>,
-
     /// The picture currently being decoded. We need to preserve it between calls to `decode`
     /// because multiple slices will be processed in different calls to `decode`.
     current_pic: Option<CurrentPicState<P>>,
@@ -293,7 +284,6 @@ where
             prev_ref_pic_info: Default::default(),
             prev_pic_info: Default::default(),
             max_long_term_frame_idx: Default::default(),
-            last_field: Default::default(),
             current_pic: None,
         }
     }
@@ -508,8 +498,6 @@ where
     fn drain(&mut self) -> impl Iterator<Item = H> {
         let pics = self.dpb.drain();
 
-        self.last_field = None;
-
         pics.into_iter().flatten()
     }
 
@@ -521,17 +509,18 @@ where
         let mut prev_field = None;
 
         if self.dpb.interlaced() {
-            if let Some(last_field) = &self.last_field {
-                prev_field = Some((&last_field.0, &last_field.1));
-            } else if let Some(last_dpb_entry) = self.dpb.entries().last() {
+            if let Some(last_dpb_entry) = self.dpb.entries().last() {
                 // Use the last entry in the DPB
                 let last_pic = last_dpb_entry.pic.borrow();
 
                 // If the picture is interlaced but doesn't have its other field set yet, then it must
                 // be the first field.
-                if !matches!(last_pic.field, Field::Frame) && last_pic.other_field().is_none() {
+                if !matches!(last_pic.field, Field::Frame)
+                    && matches!(last_pic.field_rank(), FieldRank::Single)
+                {
                     if let Some(handle) = &last_dpb_entry.reference {
-                        prev_field = Some((&last_dpb_entry.pic, handle));
+                        // Still waiting for the second field
+                        prev_field = Some((last_dpb_entry.pic.clone(), handle.clone()));
                     }
                 }
             }
@@ -567,7 +556,7 @@ where
         }
 
         drop(prev_field_pic);
-        Ok(Some((prev_field.0.clone(), prev_field.1.clone())))
+        Ok(Some(prev_field))
     }
 
     // 8.2.4.3.1 Modification process of reference picture lists for short-term
@@ -897,24 +886,9 @@ where
     /// Adds picture to the ready queue if it could not be added to the DPB.
     fn add_to_ready_queue(&mut self, pic: PictureData, handle: B::Handle) {
         if matches!(pic.field, Field::Frame) {
-            assert!(self.codec.last_field.is_none());
-
             self.ready_queue.push(handle);
-        } else {
-            match self.codec.last_field.take() {
-                None => {
-                    assert!(!pic.is_second_field());
-
-                    // Cache the field, wait for its pair.
-                    self.codec.last_field = Some((pic.into_rc(), handle));
-                }
-                Some((field_pic, field_handle)) if matches!(pic.field_rank(), FieldRank::Second(first_field) if Rc::ptr_eq(first_field, &field_pic)) =>
-                {
-                    self.ready_queue.push(field_handle);
-                }
-                // Somehow, the last field is not paired with the current field.
-                _ => log::warn!("unmatched field dropped"),
-            }
+        } else if let FieldRank::Second(..) = pic.field_rank() {
+            self.ready_queue.push(handle)
         }
     }
 
@@ -966,22 +940,12 @@ where
                 // marking is easier. This is inspired by the GStreamer implementation.
                 let (first_field, second_field) = PictureData::split_frame(pic);
 
-                self.codec.dpb.add_picture(
-                    first_field,
-                    Some(handle.clone()),
-                    &mut self.codec.last_field,
-                )?;
-                self.codec.dpb.add_picture(
-                    second_field,
-                    Some(handle),
-                    &mut self.codec.last_field,
-                )?;
+                self.codec
+                    .dpb
+                    .store_picture(first_field, Some(handle.clone()))?;
+                self.codec.dpb.store_picture(second_field, Some(handle))?;
             } else {
-                self.codec.dpb.add_picture(
-                    pic.into_rc(),
-                    Some(handle),
-                    &mut self.codec.last_field,
-                )?;
+                self.codec.dpb.store_picture(pic.into_rc(), Some(handle))?;
             }
         } else {
             self.add_to_ready_queue(pic, handle);
@@ -1028,16 +992,10 @@ where
             if self.codec.dpb.interlaced() {
                 let (first_field, second_field) = PictureData::split_frame(pic);
 
-                self.codec
-                    .dpb
-                    .add_picture(first_field, None, &mut self.codec.last_field)?;
-                self.codec
-                    .dpb
-                    .add_picture(second_field, None, &mut self.codec.last_field)?;
+                self.codec.dpb.store_picture(first_field, None)?;
+                self.codec.dpb.store_picture(second_field, None)?;
             } else {
-                self.codec
-                    .dpb
-                    .add_picture(pic.into_rc(), None, &mut self.codec.last_field)?;
+                self.codec.dpb.store_picture(pic.into_rc(), None)?;
             }
 
             unused_short_term_frame_num += 1;
@@ -1073,7 +1031,6 @@ where
                 // emptied without output of the pictures they contain, and DPB
                 // fullness is set to 0.
                 self.codec.dpb.clear();
-                self.codec.last_field = None;
             }
         }
 
