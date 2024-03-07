@@ -999,9 +999,10 @@ impl<T: Clone> Dpb<T> {
 
         let num_short_term_refs = ref_pic_list_p0.len();
 
-        ref_pic_list_p0.extend(self.long_term_refs_iter());
-        // BUG what if we remove stuff here, aren't we going to invalidate `num_short_term_refs`?
-        ref_pic_list_p0.retain(|h| !h.pic.borrow().is_second_field());
+        ref_pic_list_p0.extend(
+            self.long_term_refs_iter()
+                .filter(|h| !h.pic.borrow().is_second_field()),
+        );
         Self::sort_long_term_pic_num_ascending(&mut ref_pic_list_p0[num_short_term_refs..]);
 
         #[cfg(debug_assertions)]
