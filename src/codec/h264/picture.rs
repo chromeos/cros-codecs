@@ -354,16 +354,17 @@ impl PictureData {
             self.frame_num, self.pic_order_cnt
         );
 
-        let pic_order_cnt;
-        if self.top_field_order_cnt < self.bottom_field_order_cnt {
+        let second_pic_order_cnt = if self.top_field_order_cnt < self.bottom_field_order_cnt {
             self.field = Field::Top;
             self.pic_order_cnt = self.top_field_order_cnt;
-            pic_order_cnt = self.bottom_field_order_cnt;
+
+            self.bottom_field_order_cnt
         } else {
             self.field = Field::Bottom;
             self.pic_order_cnt = self.bottom_field_order_cnt;
-            pic_order_cnt = self.top_field_order_cnt;
-        }
+
+            self.top_field_order_cnt
+        };
 
         let second_field = PictureData {
             top_field_order_cnt: self.top_field_order_cnt,
@@ -371,7 +372,7 @@ impl PictureData {
             frame_num: self.frame_num,
             reference: self.reference,
             nonexisting: self.nonexisting,
-            pic_order_cnt,
+            pic_order_cnt: second_pic_order_cnt,
             field: self.field.opposite(),
             ..Default::default()
         };
