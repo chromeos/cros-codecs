@@ -334,8 +334,9 @@ impl<T: Clone> Dpb<T> {
         } else {
             self.pictures()
                 .filter(|pic| {
-                    !pic.is_second_field()
-                        && (matches!(pic.field, Field::Frame) || pic.other_field().is_some())
+                    matches!(pic.field_rank(), FieldRank::First(..))
+                        || (matches!(pic.field_rank(), FieldRank::Single)
+                            && pic.field == Field::Frame)
                 })
                 .count()
         };
