@@ -9,6 +9,7 @@
 //!
 //! At the moment, only a [stateless] decoder interface is provided.
 
+pub mod stateful;
 pub mod stateless;
 
 use std::collections::VecDeque;
