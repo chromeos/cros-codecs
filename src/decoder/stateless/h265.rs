@@ -1171,8 +1171,7 @@ where
 
             NaluType::PpsNut => {
                 if self.codec.parser.parse_pps(&nalu).is_err() {
-                    let data = &nalu.data[nalu.sc_offset..nalu.offset + nalu.size];
-                    self.codec.pending_pps.push(Vec::from(data))
+                    self.codec.pending_pps.push(Vec::from(&nalu.data[..]))
                 }
             }
 

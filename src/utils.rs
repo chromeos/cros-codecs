@@ -168,19 +168,7 @@ impl<'a> Iterator for NalIterator<'a, H264Nalu<'a>> {
     type Item = Cow<'a, [u8]>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        H264Nalu::next(&mut self.0)
-            .map(|n| {
-                let start = n.sc_offset;
-                let end = n.offset + n.size;
-                match n.data {
-                    Cow::Borrowed(data) => Cow::Borrowed(&data[start..end]),
-                    Cow::Owned(mut data) => {
-                        data.truncate(end);
-                        Cow::Owned(data.split_off(start))
-                    }
-                }
-            })
-            .ok()
+        H264Nalu::next(&mut self.0).map(|n| n.data).ok()
     }
 }
 
@@ -188,19 +176,7 @@ impl<'a> Iterator for NalIterator<'a, H265Nalu<'a>> {
     type Item = Cow<'a, [u8]>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        H265Nalu::next(&mut self.0)
-            .map(|n| {
-                let start = n.sc_offset;
-                let end = n.offset + n.size;
-                match n.data {
-                    Cow::Borrowed(data) => Cow::Borrowed(&data[start..end]),
-                    Cow::Owned(mut data) => {
-                        data.truncate(end);
-                        Cow::Owned(data.split_off(start))
-                    }
-                }
-            })
-            .ok()
+        H265Nalu::next(&mut self.0).map(|n| n.data).ok()
     }
 }
 

@@ -27,7 +27,6 @@ pub struct Nalu<'a, U> {
 
     pub size: usize,
     pub offset: usize,
-    pub sc_offset: usize,
 }
 
 impl<'a, U> Nalu<'a, U>
@@ -81,10 +80,9 @@ where
 
         Ok(Nalu {
             header: hdr,
-            data: Cow::from(bitstream),
+            data: Cow::from(&bitstream[start_code_offset..nalu_offset + nal_size]),
             size: nal_size,
-            offset: nalu_offset,
-            sc_offset: start_code_offset,
+            offset: nalu_offset - start_code_offset,
         })
     }
 }
