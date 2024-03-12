@@ -6,6 +6,94 @@ use std::io::Write;
 use log::error;
 use thiserror::Error;
 
+/// Internal wrapper over [`std::io::Write`] for possible emulation prevention
+struct EmulationPrevention<W: Write> {
+    out: W,
+    prev_bytes: [Option<u8>; 2],
+
+    /// Emulation prevention enabled.
+    ep_enabled: bool,
+}
+
+impl<W: Write> EmulationPrevention<W> {
+    fn new(writer: W, ep_enabled: bool) -> Self {
+        Self {
+            out: writer,
+            prev_bytes: [None; 2],
+            ep_enabled,
+        }
+    }
+
+    fn write_byte(&mut self, curr_byte: u8) -> std::io::Result<()> {
+        if self.prev_bytes[1] == Some(0x00) && self.prev_bytes[0] == Some(0x00) && curr_byte <= 0x03
+        {
+            self.out.write_all(&[0x00, 0x00, 0x03, curr_byte])?;
+            self.prev_bytes = [None; 2];
+        } else {
+            if let Some(byte) = self.prev_bytes[1] {
+                self.out.write_all(&[byte])?;
+            }
+
+            self.prev_bytes[1] = self.prev_bytes[0];
+            self.prev_bytes[0] = Some(curr_byte);
+        }
+
+        Ok(())
+    }
+
+    /// Writes a H.264 NALU header.
+    fn write_header(&mut self, idc: u8, type_: u8) -> NaluWriterResult<()> {
+        self.out.write_all(&[
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            (idc & 0b11) << 5 | (type_ & 0b11111),
+        ])?;
+
+        Ok(())
+    }
+
+    fn has_data_pending(&self) -> bool {
+        self.prev_bytes[0].is_some() || self.prev_bytes[1].is_some()
+    }
+}
+
+impl<W: Write> Write for EmulationPrevention<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if !self.ep_enabled {
+            self.out.write_all(buf)?;
+            return Ok(buf.len());
+        }
+
+        for byte in buf {
+            self.write_byte(*byte)?;
+        }
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        if let Some(byte) = self.prev_bytes[1].take() {
+            self.out.write_all(&[byte])?;
+        }
+
+        if let Some(byte) = self.prev_bytes[0].take() {
+            self.out.write_all(&[byte])?;
+        }
+
+        self.out.flush()
+    }
+}
+
+impl<W: Write> Drop for EmulationPrevention<W> {
+    fn drop(&mut self) {
+        if let Err(e) = self.flush() {
+            log::error!("Unable to flush pending bytes {e:?}");
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum NaluWriterError {
     #[error("value increment caused value overflow")]
@@ -21,24 +109,18 @@ pub type NaluWriterResult<T> = std::result::Result<T, NaluWriterError>;
 /// A writer for H.264 bitstream. It is capable of outputing bitstream with
 /// emulation-prevention.
 pub struct NaluWriter<W: Write> {
-    out: W,
+    out: EmulationPrevention<W>,
 
     nth_bit: usize,
     curr_byte: u8,
-    prev_bytes: [Option<u8>; 2],
-
-    /// Emulation prevention enabled.
-    ep_enabled: bool,
 }
 
 impl<W: Write> NaluWriter<W> {
     pub fn new(writer: W, ep_enabled: bool) -> Self {
         Self {
-            out: writer,
+            out: EmulationPrevention::new(writer, ep_enabled),
             curr_byte: 0,
-            prev_bytes: [None; 2],
             nth_bit: 0,
-            ep_enabled,
         }
     }
 
@@ -102,7 +184,7 @@ impl<W: Write> NaluWriter<W> {
 
     /// Returns `true` if ['Self`] hold data that wasn't written to [`std::io::Write`]
     pub fn has_data_pending(&self) -> bool {
-        self.nth_bit != 0 || self.prev_bytes[0].is_some() || self.prev_bytes[1].is_some()
+        self.nth_bit != 0 || self.out.has_data_pending()
     }
 
     /// Takes a single bit that will be outputed to [`std::io::Write`]
@@ -122,46 +204,18 @@ impl<W: Write> NaluWriter<W> {
     fn output_byte(&mut self) -> NaluWriterResult<()> {
         if self.nth_bit == 0 {
             return Ok(());
-        } else if !self.ep_enabled {
-            self.out.write_all(&[self.curr_byte])?;
-            self.nth_bit = 0;
-            self.curr_byte = 0;
-            return Ok(());
         }
 
-        if self.prev_bytes[1] == Some(0x00)
-            && self.prev_bytes[0] == Some(0x00)
-            && self.curr_byte <= 0x03
-        {
-            self.out.write_all(&[0x00, 0x00, 0x03, self.curr_byte])?;
-            self.prev_bytes = [None; 2];
-        } else {
-            if let Some(byte) = self.prev_bytes[1] {
-                self.out.write_all(&[byte])?;
-            }
-
-            self.prev_bytes[1] = self.prev_bytes[0];
-            self.prev_bytes[0] = Some(self.curr_byte);
-        }
-
+        self.out.write_all(&[self.curr_byte])?;
         self.nth_bit = 0;
         self.curr_byte = 0;
-
         Ok(())
     }
 
     /// Writes a H.264 NALU header.
     pub fn write_header(&mut self, idc: u8, _type: u8) -> NaluWriterResult<()> {
         self.flush()?;
-
-        self.out.write_all(&[
-            0x00,
-            0x00,
-            0x00,
-            0x01,
-            (idc & 0b11) << 5 | (_type & 0b11111),
-        ])?;
-
+        self.out.write_header(idc, _type)?;
         Ok(())
     }
 
@@ -172,14 +226,6 @@ impl<W: Write> NaluWriter<W> {
 
     /// Immediately outputs any cached bits to [`std::io::Write`]
     fn flush(&mut self) -> NaluWriterResult<()> {
-        if let Some(byte) = self.prev_bytes[1] {
-            self.out.write_all(&[byte])?;
-        }
-        if let Some(byte) = self.prev_bytes[0] {
-            self.out.write_all(&[byte])?;
-        }
-
-        self.prev_bytes = [None; 2];
         if self.nth_bit != 0 {
             self.out.write_all(&[self.curr_byte])?;
             self.nth_bit = 0;
