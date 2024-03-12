@@ -36,7 +36,7 @@ pub type SynthesizerResult<T> = Result<T, SynthesizerError>;
 
 /// A helper to output typed NALUs to [`std::io::Write`] using [`NaluWriter`].
 pub struct Synthesizer<'n, N: private::NaluStruct, W: Write> {
-    writer: NaluWriter<'n, W>,
+    writer: NaluWriter<W>,
     nalu: &'n N,
 }
 
@@ -135,11 +135,11 @@ impl<'n, W: Write> Synthesizer<'n, Sps, W> {
     pub fn synthesize(
         ref_idc: u8,
         sps: &'n Sps,
-        writer: &'n mut W,
+        writer: W,
         ep_enabled: bool,
     ) -> SynthesizerResult<()> {
         let mut s = Self {
-            writer: NaluWriter::<'n, W>::new(writer, ep_enabled),
+            writer: NaluWriter::<W>::new(writer, ep_enabled),
             nalu: sps,
         };
 
@@ -358,11 +358,11 @@ impl<'n, W: Write> Synthesizer<'n, Pps, W> {
     pub fn synthesize(
         ref_idc: u8,
         pps: &'n Pps,
-        writer: &'n mut W,
+        writer: W,
         ep_enabled: bool,
     ) -> SynthesizerResult<()> {
         let mut s = Self {
-            writer: NaluWriter::<'n, W>::new(writer, ep_enabled),
+            writer: NaluWriter::<W>::new(writer, ep_enabled),
             nalu: pps,
         };
 

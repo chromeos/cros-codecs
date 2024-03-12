@@ -154,8 +154,8 @@ impl<Picture, Reference> LowDelay<Picture, Reference> {
         self.counter += 1;
 
         let mut headers = vec![];
-        Synthesizer::<Sps, Vec<u8>>::synthesize(3, &sps, &mut headers, true)?;
-        Synthesizer::<Pps, Vec<u8>>::synthesize(3, &pps, &mut headers, true)?;
+        Synthesizer::<Sps, &mut Vec<u8>>::synthesize(3, &sps, &mut headers, true)?;
+        Synthesizer::<Pps, &mut Vec<u8>>::synthesize(3, &pps, &mut headers, true)?;
 
         let num_macroblocks =
             ((sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1)) as usize;

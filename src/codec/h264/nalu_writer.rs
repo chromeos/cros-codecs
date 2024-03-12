@@ -20,8 +20,8 @@ pub type NaluWriterResult<T> = std::result::Result<T, NaluWriterError>;
 
 /// A writer for H.264 bitstream. It is capable of outputing bitstream with
 /// emulation-prevention.
-pub struct NaluWriter<'w, W: Write> {
-    out: &'w mut W,
+pub struct NaluWriter<W: Write> {
+    out: W,
 
     nth_bit: usize,
     curr_byte: u8,
@@ -31,8 +31,8 @@ pub struct NaluWriter<'w, W: Write> {
     ep_enabled: bool,
 }
 
-impl<'w, W: Write> NaluWriter<'w, W> {
-    pub fn new(writer: &'w mut W, ep_enabled: bool) -> Self {
+impl<W: Write> NaluWriter<W> {
+    pub fn new(writer: W, ep_enabled: bool) -> Self {
         Self {
             out: writer,
             curr_byte: 0,
@@ -190,7 +190,7 @@ impl<'w, W: Write> NaluWriter<'w, W> {
     }
 }
 
-impl<W: Write> Drop for NaluWriter<'_, W> {
+impl<W: Write> Drop for NaluWriter<W> {
     fn drop(&mut self) {
         if let Err(e) = self.flush() {
             error!("Unable to flush bits {e:?}");
