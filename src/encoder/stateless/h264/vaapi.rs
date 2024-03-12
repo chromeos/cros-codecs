@@ -626,8 +626,10 @@ pub(super) mod tests {
             use crate::codec::h264::synthesizer::Synthesizer;
             let mut out = std::fs::File::create("test_simple_encode_slice.h264").unwrap();
 
-            Synthesizer::<'_, Sps, std::fs::File>::synthesize(3, &sps, &mut out, true).unwrap();
-            Synthesizer::<'_, Pps, std::fs::File>::synthesize(3, &pps, &mut out, true).unwrap();
+            Synthesizer::<'_, Sps, &mut std::fs::File>::synthesize(3, &sps, &mut out, true)
+                .unwrap();
+            Synthesizer::<'_, Pps, &mut std::fs::File>::synthesize(3, &pps, &mut out, true)
+                .unwrap();
             out.write_all(&output).unwrap();
             out.flush().unwrap();
         }
