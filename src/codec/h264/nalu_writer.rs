@@ -6,6 +6,9 @@ use std::io::Write;
 use log::error;
 use thiserror::Error;
 
+use crate::utils::BitWriter;
+use crate::utils::BitWriterError;
+
 /// Internal wrapper over [`std::io::Write`] for possible emulation prevention
 struct EmulationPrevention<W: Write> {
     out: W,
@@ -98,50 +101,29 @@ impl<W: Write> Drop for EmulationPrevention<W> {
 pub enum NaluWriterError {
     #[error("value increment caused value overflow")]
     Overflow,
-    #[error("invalid bit count")]
-    InvalidBitCount,
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    BitWriterError(#[from] BitWriterError),
 }
 
 pub type NaluWriterResult<T> = std::result::Result<T, NaluWriterError>;
 
 /// A writer for H.264 bitstream. It is capable of outputing bitstream with
 /// emulation-prevention.
-pub struct NaluWriter<W: Write> {
-    out: EmulationPrevention<W>,
-
-    nth_bit: usize,
-    curr_byte: u8,
-}
+pub struct NaluWriter<W: Write>(BitWriter<EmulationPrevention<W>>);
 
 impl<W: Write> NaluWriter<W> {
     pub fn new(writer: W, ep_enabled: bool) -> Self {
-        Self {
-            out: EmulationPrevention::new(writer, ep_enabled),
-            curr_byte: 0,
-            nth_bit: 0,
-        }
+        Self(BitWriter::new(EmulationPrevention::new(writer, ep_enabled)))
     }
 
     /// Writes fixed bit size integer (up to 32 bit) output with emulation
     /// prevention if enabled. Corresponds to `f(n)` in H.264 spec.
     pub fn write_f<T: Into<u32>>(&mut self, bits: usize, value: T) -> NaluWriterResult<usize> {
-        let value = value.into();
-
-        if bits > 32 {
-            return Err(NaluWriterError::InvalidBitCount);
-        }
-
-        let mut written = 0;
-        for bit in (0..bits).rev() {
-            let bit = (1 << bit) as u32;
-
-            self.write_bit((value & bit) == bit)?;
-            written += 1;
-        }
-
-        Ok(written)
+        self.0
+            .write_f(bits, value)
+            .map_err(NaluWriterError::BitWriterError)
     }
 
     /// An alias to [`Self::write_f`] Corresponds to `n(n)` in H.264 spec.
@@ -184,63 +166,19 @@ impl<W: Write> NaluWriter<W> {
 
     /// Returns `true` if ['Self`] hold data that wasn't written to [`std::io::Write`]
     pub fn has_data_pending(&self) -> bool {
-        self.nth_bit != 0 || self.out.has_data_pending()
-    }
-
-    /// Takes a single bit that will be outputed to [`std::io::Write`]
-    fn write_bit(&mut self, bit: bool) -> NaluWriterResult<()> {
-        self.curr_byte |= (bit as u8) << (7u8 - self.nth_bit as u8);
-        self.nth_bit += 1;
-
-        if self.nth_bit == 8 {
-            self.output_byte()?
-        }
-
-        Ok(())
-    }
-
-    /// Outputs a currently cached bits value and writes to [`std::io::Write`]
-    /// with emulation-prevention if enabled.
-    fn output_byte(&mut self) -> NaluWriterResult<()> {
-        if self.nth_bit == 0 {
-            return Ok(());
-        }
-
-        self.out.write_all(&[self.curr_byte])?;
-        self.nth_bit = 0;
-        self.curr_byte = 0;
-        Ok(())
+        self.0.has_data_pending() || self.0.inner().has_data_pending()
     }
 
     /// Writes a H.264 NALU header.
     pub fn write_header(&mut self, idc: u8, _type: u8) -> NaluWriterResult<()> {
-        self.flush()?;
-        self.out.write_header(idc, _type)?;
+        self.0.flush()?;
+        self.0.inner_mut().write_header(idc, _type)?;
         Ok(())
     }
 
     /// Returns `true` if next bits will be aligned to 8
     pub fn aligned(&self) -> bool {
-        self.nth_bit == 0
-    }
-
-    /// Immediately outputs any cached bits to [`std::io::Write`]
-    fn flush(&mut self) -> NaluWriterResult<()> {
-        if self.nth_bit != 0 {
-            self.out.write_all(&[self.curr_byte])?;
-            self.nth_bit = 0;
-        }
-
-        self.out.flush()?;
-        Ok(())
-    }
-}
-
-impl<W: Write> Drop for NaluWriter<W> {
-    fn drop(&mut self) {
-        if let Err(e) = self.flush() {
-            error!("Unable to flush bits {e:?}");
-        }
+        !self.0.has_data_pending()
     }
 }
 

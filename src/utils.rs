@@ -10,10 +10,12 @@
 use std::borrow::Cow;
 use std::io::Cursor;
 use std::io::Seek;
+use std::io::Write;
 use std::marker::PhantomData;
 use std::os::fd::OwnedFd;
 
 use bytes::Buf;
+use thiserror::Error;
 
 use crate::codec::h264::parser::Nalu as H264Nalu;
 use crate::codec::h265::parser::Nalu as H265Nalu;
@@ -177,6 +179,98 @@ impl<'a> Iterator for NalIterator<'a, H265Nalu<'a>> {
 
     fn next(&mut self) -> Option<Self::Item> {
         H265Nalu::next(&mut self.0).map(|n| n.data).ok()
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum BitWriterError {
+    #[error("invalid bit count")]
+    InvalidBitCount,
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+
+pub type BitWriterResult<T> = std::result::Result<T, BitWriterError>;
+
+pub struct BitWriter<W: Write> {
+    out: W,
+    nth_bit: u8,
+    curr_byte: u8,
+}
+
+impl<W: Write> BitWriter<W> {
+    pub fn new(writer: W) -> Self {
+        Self {
+            out: writer,
+            curr_byte: 0,
+            nth_bit: 0,
+        }
+    }
+
+    /// Writes fixed bit size integer (up to 32 bit)
+    pub fn write_f<T: Into<u32>>(&mut self, bits: usize, value: T) -> BitWriterResult<usize> {
+        let value = value.into();
+
+        if bits > 32 {
+            return Err(BitWriterError::InvalidBitCount);
+        }
+
+        let mut written = 0;
+        for bit in (0..bits).rev() {
+            let bit = (1 << bit) as u32;
+
+            self.write_bit((value & bit) == bit)?;
+            written += 1;
+        }
+
+        Ok(written)
+    }
+
+    /// Takes a single bit that will be outputed to [`std::io::Write`]
+    pub fn write_bit(&mut self, bit: bool) -> BitWriterResult<()> {
+        self.curr_byte |= (bit as u8) << (7u8 - self.nth_bit);
+        self.nth_bit += 1;
+
+        if self.nth_bit == 8 {
+            self.out.write_all(&[self.curr_byte])?;
+            self.nth_bit = 0;
+            self.curr_byte = 0;
+        }
+
+        Ok(())
+    }
+
+    /// Immediately outputs any cached bits to [`std::io::Write`]
+    pub fn flush(&mut self) -> BitWriterResult<()> {
+        if self.nth_bit != 0 {
+            self.out.write_all(&[self.curr_byte])?;
+            self.nth_bit = 0;
+            self.curr_byte = 0;
+        }
+
+        self.out.flush()?;
+        Ok(())
+    }
+
+    /// Returns `true` if ['Self`] hold data that wasn't written to [`std::io::Write`]
+    pub fn has_data_pending(&self) -> bool {
+        self.nth_bit != 0
+    }
+
+    pub(crate) fn inner(&self) -> &W {
+        &self.out
+    }
+
+    pub(crate) fn inner_mut(&mut self) -> &mut W {
+        &mut self.out
+    }
+}
+
+impl<W: Write> Drop for BitWriter<W> {
+    fn drop(&mut self) {
+        if let Err(e) = self.flush() {
+            log::error!("Unable to flush bits {e:?}");
+        }
     }
 }
 
@@ -431,5 +525,45 @@ mod tests {
         ];
 
         assert_eq!(&buf, &EXPECTED2);
+    }
+
+    #[test]
+    fn test_bitwriter_f1() {
+        let mut buf = Vec::<u8>::new();
+        {
+            let mut writer = BitWriter::new(&mut buf);
+            writer.write_f(1, true).unwrap();
+            writer.write_f(1, false).unwrap();
+            writer.write_f(1, false).unwrap();
+            writer.write_f(1, false).unwrap();
+            writer.write_f(1, true).unwrap();
+            writer.write_f(1, true).unwrap();
+            writer.write_f(1, true).unwrap();
+            writer.write_f(1, true).unwrap();
+        }
+        assert_eq!(buf, vec![0b10001111u8]);
+    }
+
+    #[test]
+    fn test_bitwriter_f3() {
+        let mut buf = Vec::<u8>::new();
+        {
+            let mut writer = BitWriter::new(&mut buf);
+            writer.write_f(3, 0b100u8).unwrap();
+            writer.write_f(3, 0b101u8).unwrap();
+            writer.write_f(3, 0b011u8).unwrap();
+        }
+        assert_eq!(buf, vec![0b10010101u8, 0b10000000u8]);
+    }
+
+    #[test]
+    fn test_bitwriter_f4() {
+        let mut buf = Vec::<u8>::new();
+        {
+            let mut writer = BitWriter::new(&mut buf);
+            writer.write_f(4, 0b1000u8).unwrap();
+            writer.write_f(4, 0b1011u8).unwrap();
+        }
+        assert_eq!(buf, vec![0b10001011u8]);
     }
 }
