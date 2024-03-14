@@ -1703,7 +1703,7 @@ impl Parser {
         ti.time_scale = r.read_bits(32)?;
         ti.equal_picture_interval = r.read_bit()?;
         if ti.equal_picture_interval {
-            ti.num_ticks_per_picture_minus_1 = r.read_ulvc()?;
+            ti.num_ticks_per_picture_minus_1 = r.read_uvlc()?;
         }
         Ok(())
     }

@@ -30,7 +30,7 @@ impl<'a> Reader<'a> {
 
     /// Implements uvlc(): Variable length unsigned n-bit number appearing
     /// directly in the bitstream. See 4.10.3
-    pub fn read_ulvc(&mut self) -> anyhow::Result<u32> {
+    pub fn read_uvlc(&mut self) -> anyhow::Result<u32> {
         let mut leading_zeroes = 0;
         loop {
             let done = self.read_bit()?;
