@@ -84,7 +84,7 @@ impl<'a> Reader<'a> {
         }
 
         assert!(leb128bytes < 8);
-        assert!(value < u32::MAX.into());
+        assert!(value <= u32::MAX.into());
         Ok(value as u32)
     }
 
