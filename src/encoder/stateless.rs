@@ -6,11 +6,13 @@ use std::collections::VecDeque;
 
 use thiserror::Error;
 
-use crate::codec::h264::synthesizer::SynthesizerError;
+use crate::codec::av1::synthesizer::SynthesizerError as AV1SynthesizerError;
+use crate::codec::h264::synthesizer::SynthesizerError as H264SynthesizerError;
 use crate::encoder::CodedBitstreamBuffer;
 use crate::encoder::FrameMetadata;
 use crate::BlockingMode;
 
+pub mod av1;
 pub mod h264;
 pub mod vp9;
 
@@ -30,12 +32,16 @@ pub type StatelessBackendResult<T> = Result<T, StatelessBackendError>;
 
 #[derive(Error, Debug)]
 pub enum EncodeError {
+    #[error("unsupported")]
+    Unsupported,
     #[error("invalid internal state. This is likely a bug.")]
     InvalidInternalState,
     #[error(transparent)]
     BackendError(#[from] StatelessBackendError),
     #[error(transparent)]
-    H264SynthesizerError(#[from] SynthesizerError),
+    H264SynthesizerError(#[from] H264SynthesizerError),
+    #[error(transparent)]
+    AV1SynthesizerError(#[from] AV1SynthesizerError),
 }
 
 pub type EncodeResult<T> = Result<T, EncodeError>;
