@@ -109,6 +109,7 @@ impl Default for IvfFileHeader {
 impl IvfFileHeader {
     pub const MAGIC: [u8; 4] = *b"DKIF";
     pub const CODEC_VP9: [u8; 4] = *b"VP90";
+    pub const CODEC_AV1: [u8; 4] = *b"AV01";
 
     pub fn new(codec: [u8; 4], width: u16, height: u16, framerate: u32, frame_count: u32) -> Self {
         let default = Self::default();
