@@ -52,6 +52,13 @@ pub const GM_TRANS_ONLY_PREC_BITS: u32 = 3;
 pub const GM_ABS_TRANS_BITS: u32 = 12;
 pub const GM_TRANS_PREC_BITS: u32 = 6;
 
+// Same as Segmentation_Feature_Bits in the specification. See 5.9.14
+pub const FEATURE_BITS: [u8; SEG_LVL_MAX] = [8, 6, 6, 6, 6, 3, 0, 0];
+// Same as Segmentation_Feature_Signed in the specification. See 5.9.14
+pub const FEATURE_SIGNED: [bool; SEG_LVL_MAX] = [true, true, true, true, true, false, false, false];
+// Same as Segmentation_Feature_Max in the specification. See 5.9.14
+pub const FEATURE_MAX: [i32; SEG_LVL_MAX] = [255, 63, 63, 63, 63, 7, 0, 0];
+
 pub enum ParsedObu<'a> {
     /// We should process the OBU normally.
     Process(Obu<'a>),
@@ -2241,11 +2248,6 @@ impl Parser {
         r: &mut Reader,
         fh: &mut FrameHeaderObu,
     ) -> anyhow::Result<()> {
-        const FEATURE_BITS: [u8; SEG_LVL_MAX] = [8, 6, 6, 6, 6, 3, 0, 0];
-        const FEATURE_SIGNED: [bool; SEG_LVL_MAX] =
-            [true, true, true, true, true, false, false, false];
-        const FEATURE_MAX: [i32; SEG_LVL_MAX] = [255, 63, 63, 63, 63, 7, 0, 0];
-
         let s = &mut fh.segmentation_params;
         s.segmentation_enabled = r.read_bit()?;
         if s.segmentation_enabled {
