@@ -114,10 +114,10 @@ impl<P, R> LowDelay<P, R> {
                 ops
             },
 
-            bit_depth: BitDepth::Depth8,
+            bit_depth: config.bit_depth,
             color_config: ColorConfig {
-                // YUV 4:2:0 8-bit
-                high_bitdepth: false,
+                // YUV 4:2:0 8-bit or 10-bit
+                high_bitdepth: config.bit_depth == BitDepth::Depth10,
                 mono_chrome: false,
                 subsampling_x: true,
                 subsampling_y: true,

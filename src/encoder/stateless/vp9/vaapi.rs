@@ -292,7 +292,7 @@ pub(super) mod tests {
     use libva::VAProfile::VAProfileVP9Profile0;
 
     use super::*;
-    use crate::backend::vaapi::encoder::tests::upload_test_frame;
+    use crate::backend::vaapi::encoder::tests::upload_test_frame_nv12;
     use crate::backend::vaapi::encoder::tests::TestFrameGenerator;
     use crate::backend::vaapi::encoder::VaapiBackend;
     use crate::backend::vaapi::surface_pool::PooledVaSurface;
@@ -374,7 +374,7 @@ pub(super) mod tests {
 
         let surface = surfaces.pop().unwrap();
 
-        upload_test_frame(&display, &surface, 0.0);
+        upload_test_frame_nv12(&display, &surface, 0.0);
 
         let input_meta = FrameMetadata {
             display_resolution: Resolution {

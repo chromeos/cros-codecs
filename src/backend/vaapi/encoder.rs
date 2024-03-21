@@ -278,22 +278,35 @@ pub(crate) mod tests {
     use std::borrow::Borrow;
 
     use libva::constants::VA_FOURCC_NV12;
+    use libva::constants::VA_FOURCC_P010;
 
     use super::*;
     use crate::encoder::FrameMetadata;
     use crate::FrameLayout;
 
+    fn map_surface<'a, M: SurfaceMemoryDescriptor>(
+        display: &Rc<Display>,
+        surface: &'a Surface<M>,
+        fourcc: u32,
+    ) -> libva::Image<'a> {
+        let image_fmts = display.query_image_formats().unwrap();
+        let image_fmt = image_fmts.into_iter().find(|f| f.fourcc == fourcc).unwrap();
+
+        libva::Image::create_from(surface, image_fmt, surface.size(), surface.size()).unwrap()
+    }
+
     fn map_surface_nv12<'a, M: SurfaceMemoryDescriptor>(
         display: &Rc<Display>,
         surface: &'a Surface<M>,
     ) -> libva::Image<'a> {
-        let image_fmts = display.query_image_formats().unwrap();
-        let image_fmt = image_fmts
-            .into_iter()
-            .find(|f| f.fourcc == VA_FOURCC_NV12)
-            .unwrap();
+        map_surface(display, surface, VA_FOURCC_NV12)
+    }
 
-        libva::Image::create_from(surface, image_fmt, surface.size(), surface.size()).unwrap()
+    fn map_surface_p010<'a, M: SurfaceMemoryDescriptor>(
+        display: &Rc<Display>,
+        surface: &'a Surface<M>,
+    ) -> libva::Image<'a> {
+        map_surface(display, surface, VA_FOURCC_P010)
     }
 
     /// Uploads raw NV12 to Surface
@@ -505,7 +518,74 @@ pub(crate) mod tests {
         }
     }
 
-    pub fn upload_test_frame<M: SurfaceMemoryDescriptor>(
+    pub fn fill_test_frame_p010(
+        width: usize,
+        height: usize,
+        pitches: [u32; 3],
+        offsets: [u32; 3],
+        t: f32,
+        raw: &mut [u8],
+    ) {
+        let (sin, cos) = f32::sin_cos(t);
+        let (sin2, cos2) = (sin.powi(2), cos.powi(2));
+
+        // Pick the dot position
+        let dot_col = height as f32 * (1.1 + 2.0 * sin * cos) / 2.2;
+        let dot_row = width as f32 * (1.1 + sin) / 2.2;
+        let dot_size2 = (width.min(height) as f32 * 0.05).powi(2);
+
+        let mut dst = &mut raw[offsets[0] as usize..];
+
+        // Luma
+        for row in 0..height {
+            #[allow(clippy::needless_range_loop)]
+            for col in 0..width {
+                let dist = (dot_col - col as f32).powi(2) + (dot_row - row as f32).powi(2);
+
+                let y = if dist < dot_size2 {
+                    0
+                } else {
+                    0x3ff * (row + col) / (width + height)
+                };
+
+                dst[2 * col + 0] = ((y << 6) & 0xa0) as u8;
+                dst[2 * col + 1] = (y >> 2) as u8;
+            }
+
+            dst = &mut dst[pitches[0] as usize..];
+        }
+
+        // Advance to the offset of the chroma plane
+        let mut dst = &mut raw[offsets[1] as usize..];
+
+        // Chroma
+        for row in 0..height / 2 {
+            let row = row * 2;
+
+            for col in 0..width / 2 {
+                let col = col * 2;
+                let dist = (dot_col - col as f32).powi(2) + (dot_row - row as f32).powi(2);
+
+                let c = if dist < dot_size2 {
+                    (512, 512)
+                } else {
+                    (
+                        (((row * 0x3ff) / width) as f32 * sin2) as u32,
+                        (((col * 0x3ff) / height) as f32 * cos2) as u32,
+                    )
+                };
+
+                dst[2 * col + 0] = ((c.0 << 6) & 0xa0) as u8;
+                dst[2 * col + 1] = (c.0 >> 2) as u8;
+                dst[2 * col + 2] = ((c.1 << 6) & 0xa0) as u8;
+                dst[2 * col + 3] = (c.1 >> 2) as u8;
+            }
+
+            dst = &mut dst[pitches[1] as usize..];
+        }
+    }
+
+    pub fn upload_test_frame_nv12<M: SurfaceMemoryDescriptor>(
         display: &Rc<Display>,
         surface: &Surface<M>,
         t: f32,
@@ -530,12 +610,38 @@ pub(crate) mod tests {
         surface.sync().unwrap();
     }
 
+    pub fn upload_test_frame_p010<M: SurfaceMemoryDescriptor>(
+        display: &Rc<Display>,
+        surface: &Surface<M>,
+        t: f32,
+    ) {
+        let mut image = map_surface_p010(display, surface);
+
+        let (width, height) = image.display_resolution();
+
+        let offsets = image.image().offsets;
+        let pitches = image.image().pitches;
+
+        fill_test_frame_p010(
+            width as usize,
+            height as usize,
+            pitches,
+            offsets,
+            t,
+            image.as_mut(),
+        );
+
+        drop(image);
+        surface.sync().unwrap();
+    }
+
     /// Helper struct. Procedurally generate NV12 frames for test purposes.
     pub struct TestFrameGenerator {
         counter: u64,
         max_count: u64,
         pool_iter: PooledFrameIterator,
         display: Rc<Display>,
+        fourcc: Fourcc,
     }
 
     impl TestFrameGenerator {
@@ -549,6 +655,7 @@ pub(crate) mod tests {
             Self {
                 counter: 0,
                 max_count,
+                fourcc: frame_layout.format.0,
                 pool_iter: PooledFrameIterator::new(
                     display.clone(),
                     pool,
@@ -575,7 +682,11 @@ pub(crate) mod tests {
             let surface: &Surface<()> = handle.borrow();
 
             let t = 2.0 * std::f32::consts::PI * (meta.timestamp as f32) / (self.max_count as f32);
-            upload_test_frame(&self.display, surface, t);
+            match self.fourcc.0 {
+                VA_FOURCC_NV12 => upload_test_frame_nv12(&self.display, surface, t),
+                VA_FOURCC_P010 => upload_test_frame_p010(&self.display, surface, t),
+                _ => unreachable!(),
+            }
 
             Some((meta, handle))
         }
@@ -601,6 +712,32 @@ pub(crate) mod tests {
             let t = 2.0 * std::f32::consts::PI * (i as f32) / (COUNT as f32);
 
             fill_test_frame(WIDTH, HEIGHT, pitches, offsets, t, &mut raw[..]);
+
+            out.write_all(&raw).unwrap();
+            out.flush().unwrap();
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn dump_generator_golden_frames_p010() {
+        use std::io::Write;
+
+        const WIDTH: usize = 512;
+        const HEIGHT: usize = 512;
+        const COUNT: usize = 100;
+
+        let mut raw = vec![0u8; 2 * (WIDTH * HEIGHT + WIDTH * HEIGHT / 2)];
+
+        let pitches = [2 * WIDTH as u32, 2 * WIDTH as u32, 0];
+        let offsets = [0, 2 * WIDTH as u32 * HEIGHT as u32, 0];
+
+        let mut out = std::fs::File::create("dump_generator_golden_frames.p010").unwrap();
+
+        for i in 0..=COUNT {
+            let t = 2.0 * std::f32::consts::PI * (i as f32) / (COUNT as f32);
+
+            fill_test_frame_p010(WIDTH, HEIGHT, pitches, offsets, t, &mut raw[..]);
 
             out.write_all(&raw).unwrap();
             out.flush().unwrap();
