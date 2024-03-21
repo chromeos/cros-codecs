@@ -102,11 +102,13 @@ where
     }
 
     /// Builds [`BufferType::EncSequenceParameter`] from `sps`
-    fn build_enc_seq_param(sps: &Sps, bits_per_second: u32) -> BufferType {
-        // TODO(bgrzesik): move the constants
-        const INTRA_PERIOD: u32 = 8;
-        const INTRA_IDR_PERIOD: u32 = 8;
-        const IP_PERIOD: u32 = 8;
+    fn build_enc_seq_param(
+        sps: &Sps,
+        bits_per_second: u32,
+        intra_period: u32,
+        ip_period: u32,
+    ) -> BufferType {
+        let intra_idr_period = intra_period;
 
         let seq_fields = H264EncSeqFields::new(
             sps.chroma_format_idc as u32,
@@ -153,9 +155,9 @@ where
             EncSequenceParameterBufferH264::new(
                 sps.seq_parameter_set_id,
                 sps.level_idc as u8,
-                INTRA_PERIOD,
-                INTRA_IDR_PERIOD,
-                IP_PERIOD,
+                intra_period,
+                intra_idr_period,
+                ip_period,
                 bits_per_second,
                 sps.max_num_ref_frames,
                 (sps.pic_width_in_mbs_minus1 + 1) as u16,
@@ -375,7 +377,12 @@ where
 
         let recon = self.new_scratch_picture()?;
 
-        let seq_param = Self::build_enc_seq_param(&request.sps, request.bitrate.target() as u32);
+        let seq_param = Self::build_enc_seq_param(
+            &request.sps,
+            request.bitrate.target() as u32,
+            request.intra_period,
+            request.ip_period,
+        );
         let pic_param = Self::build_enc_pic_param(&request, &coded_buf, &recon);
         let slice_param = Self::build_enc_slice_param(
             &request.pps,
@@ -610,6 +617,8 @@ pub(super) mod tests {
             input_meta,
             ref_list_0: vec![],
             ref_list_1: vec![],
+            intra_period: 1,
+            ip_period: 0,
             num_macroblocks: (WIDTH * HEIGHT) as usize / (16 * 16),
             is_idr: true,
             bitrate: Bitrate::Constant(30_000),

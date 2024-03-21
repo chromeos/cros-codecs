@@ -171,6 +171,11 @@ impl<Picture, Reference> LowDelay<Picture, Reference> {
             ref_list_0: vec![],
             ref_list_1: vec![],
 
+            // I frame is every `self.limit` is requested
+            intra_period: self.limit as u32,
+            // There is no B frames between I and P frames
+            ip_period: 0,
+
             num_macroblocks,
 
             is_idr: true,
@@ -222,6 +227,11 @@ impl<Picture, Reference> LowDelay<Picture, Reference> {
             dpb_meta,
             ref_list_0,
             ref_list_1: vec![], // No future references
+
+            // I frame is every `self.limit` is requested
+            intra_period: self.limit as u32,
+            // There is no B frames between I and P frames
+            ip_period: 0,
 
             num_macroblocks,
 
