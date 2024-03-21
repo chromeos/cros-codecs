@@ -15,6 +15,7 @@ use cros_codecs::backend::vaapi::encoder::VaapiBackend;
 use cros_codecs::backend::vaapi::surface_pool::PooledVaSurface;
 use cros_codecs::backend::vaapi::surface_pool::VaSurfacePool;
 use cros_codecs::decoder::FramePool;
+use cros_codecs::encoder::stateless::av1;
 use cros_codecs::encoder::stateless::h264;
 use cros_codecs::encoder::stateless::h264::H264;
 use cros_codecs::encoder::stateless::vp9;
@@ -35,6 +36,7 @@ enum Codec {
     #[default]
     H264,
     VP9,
+    AV1,
 }
 
 impl FromStr for Codec {
@@ -44,7 +46,8 @@ impl FromStr for Codec {
         match s {
             "h264" | "H264" => Ok(Self::H264),
             "vp9" | "VP9" => Ok(Self::VP9),
-            _ => Err("unrecognized codec. Valid values: h264, vp9"),
+            "av1" | "AV1" => Ok(Self::AV1),
+            _ => Err("unrecognized codec. Valid values: h264, vp9, av1"),
         }
     }
 }
@@ -226,6 +229,38 @@ fn new_vp9_vaapi_encoder(
     Box::new(encoder)
 }
 
+fn new_av1_vaapi_encoder(
+    args: &Args,
+    display: &Rc<libva::Display>,
+) -> Box<dyn StatelessVideoEncoder<PooledVaSurface<()>>> {
+    let resolution = Resolution {
+        width: args.width,
+        height: args.height,
+    };
+
+    let mut config = av1::EncoderConfig {
+        resolution,
+        ..Default::default()
+    };
+
+    if let Some(framerate) = args.framerate {
+        config.framerate = framerate;
+    }
+
+    let fourcc = b"NV12".into();
+    let encoder = av1::StatelessEncoder::new_vaapi(
+        Rc::clone(display),
+        config,
+        fourcc,
+        resolution,
+        args.low_power,
+        BlockingMode::Blocking,
+    )
+    .expect("Unable to crate encoder");
+
+    Box::new(encoder)
+}
+
 fn main() {
     env_logger::init();
 
@@ -240,6 +275,7 @@ fn main() {
     let mut encoder = match codec {
         Codec::H264 => new_h264_vaapi_encoder(&args, &display),
         Codec::VP9 => new_vp9_vaapi_encoder(&args, &display),
+        Codec::AV1 => new_av1_vaapi_encoder(&args, &display),
     };
 
     let mut pool = VaSurfacePool::new(
