@@ -495,6 +495,7 @@ where
         &mut self,
         request: BackendRequest<Self::Picture, Self::Reconstructed>,
     ) -> StatelessBackendResult<(Self::ReconPromise, Self::CodedPromise)> {
+        // TODO(bgrzesik): Replace with [`Self::new_coded_buffer`] and [`RateControl::ConstantQuality`]
         const CODED_SIZE: usize = 1_200_000;
         // Coded buffer size multiplier. It's inteded to give head room for the encoder.
         const CODED_SIZE_MUL: usize = 2;

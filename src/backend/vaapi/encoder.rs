@@ -30,6 +30,7 @@ use crate::encoder::stateless::StatelessBackendError;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::FrameMetadata;
+use crate::encoder::RateControl;
 use crate::Fourcc;
 use crate::Resolution;
 
@@ -143,6 +144,24 @@ where
 
     pub(crate) fn context(&self) -> &Rc<Context> {
         &self.context
+    }
+
+    pub(crate) fn new_coded_buffer(
+        &self,
+        rate_control: &RateControl,
+    ) -> StatelessBackendResult<EncCodedBuffer> {
+        // Coded buffer size multiplier. It's inteded to give head room for the encoder.
+        const CODED_SIZE_MUL: usize = 2;
+
+        // Default coded buffer size if bitrate control is not used.
+        const DEFAULT_CODED_SIZE: usize = 1_500_000;
+
+        let coded_size = rate_control
+            .bitrate_target()
+            .map(|e| e as usize * CODED_SIZE_MUL)
+            .unwrap_or(DEFAULT_CODED_SIZE);
+
+        Ok(self.context().create_enc_coded(coded_size)?)
     }
 
     // Creates an empty surface that will be filled with reconstructed picture during encoding
