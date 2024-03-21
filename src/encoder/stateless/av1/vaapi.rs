@@ -588,16 +588,18 @@ where
 #[cfg(test)]
 mod tests {
     use libva::constants::VA_RT_FORMAT_YUV420;
+    use libva::constants::VA_RT_FORMAT_YUV420_10;
     use libva::Display;
     use libva::UsageHint;
     use libva::VAEntrypoint::VAEntrypointEncSliceLP;
     use libva::VAProfile::VAProfileAV1Profile0;
 
     use super::*;
-    use crate::backend::vaapi::encoder::tests::upload_test_frame;
+    use crate::backend::vaapi::encoder::tests::upload_test_frame_nv12;
     use crate::backend::vaapi::encoder::tests::TestFrameGenerator;
     use crate::backend::vaapi::surface_pool::PooledVaSurface;
     use crate::backend::vaapi::surface_pool::VaSurfacePool;
+    use crate::codec::av1::parser::BitDepth;
     use crate::codec::av1::parser::CdefParams;
     use crate::codec::av1::parser::ColorConfig;
     use crate::codec::av1::parser::FrameHeaderObu;
@@ -690,7 +692,7 @@ mod tests {
 
         let surface = surfaces.pop().unwrap();
 
-        upload_test_frame(&display, &surface, 0.0);
+        upload_test_frame_nv12(&display, &surface, 0.0);
 
         let input_meta = FrameMetadata {
             display_resolution: Resolution {
@@ -969,6 +971,121 @@ mod tests {
         if write_to_file {
             use std::io::Write;
             let mut out = std::fs::File::create("test_vaapi_encoder.av1.ivf").unwrap();
+            out.write_all(&bitstream).unwrap();
+            out.flush().unwrap();
+        }
+    }
+
+    #[ignore]
+    // Ignore this test by default as it requires libva-compatible hardware.
+    #[test]
+    fn test_vaapi_encoder_p010() {
+        type VaapiAv1Encoder<'l> =
+            StatelessEncoder<AV1, PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
+
+        const WIDTH: usize = 512;
+        const HEIGHT: usize = 512;
+        const FRAME_COUNT: u64 = 100;
+
+        let _ = env_logger::try_init();
+
+        let display = libva::Display::open().unwrap();
+        let entrypoints = display
+            .query_config_entrypoints(VAProfileAV1Profile0)
+            .unwrap();
+        let low_power = entrypoints.contains(&VAEntrypointEncSliceLP);
+
+        let config = EncoderConfig {
+            profile: Profile::Profile0,
+            framerate: 30,
+            resolution: Resolution {
+                width: WIDTH as u32,
+                height: HEIGHT as u32,
+            },
+            bit_depth: BitDepth::Depth10,
+            ..Default::default()
+        };
+
+        let frame_layout = FrameLayout {
+            format: (b"P010".into(), 0),
+            size: Resolution {
+                width: WIDTH as u32,
+                height: HEIGHT as u32,
+            },
+            planes: vec![
+                PlaneLayout {
+                    buffer_index: 0,
+                    offset: 0,
+                    stride: WIDTH,
+                },
+                PlaneLayout {
+                    buffer_index: 0,
+                    offset: WIDTH * HEIGHT,
+                    stride: WIDTH,
+                },
+            ],
+        };
+
+        let mut encoder = VaapiAv1Encoder::new_vaapi(
+            Rc::clone(&display),
+            config,
+            frame_layout.format.0,
+            frame_layout.size,
+            low_power,
+            BlockingMode::Blocking,
+        )
+        .unwrap();
+
+        let mut pool = VaSurfacePool::new(
+            Rc::clone(&display),
+            VA_RT_FORMAT_YUV420_10,
+            Some(UsageHint::USAGE_HINT_ENCODER),
+            Resolution {
+                width: WIDTH as u32,
+                height: HEIGHT as u32,
+            },
+        );
+
+        pool.add_frames(vec![(); 16]).unwrap();
+
+        let mut frame_producer = TestFrameGenerator::new(
+            FRAME_COUNT,
+            display,
+            pool,
+            Resolution {
+                width: WIDTH as u32,
+                height: HEIGHT as u32,
+            },
+            frame_layout,
+        );
+
+        let mut bitstream = Vec::new();
+
+        let file_header = IvfFileHeader::new(
+            IvfFileHeader::CODEC_AV1,
+            WIDTH as u16,
+            HEIGHT as u16,
+            30,
+            FRAME_COUNT as u32,
+        );
+
+        file_header.writo_into(&mut bitstream).unwrap();
+
+        simple_encode_loop(&mut encoder, &mut frame_producer, |coded| {
+            let header = IvfFrameHeader {
+                timestamp: coded.metadata.timestamp,
+                frame_size: coded.bitstream.len() as u32,
+            };
+
+            header.writo_into(&mut bitstream).unwrap();
+            bitstream.extend(coded.bitstream);
+        })
+        .unwrap();
+
+        let write_to_file = std::option_env!("CROS_CODECS_TEST_WRITE_TO_FILE") == Some("true");
+        if write_to_file {
+            use std::io::Write;
+            let mut out = std::fs::File::create("test_vaapi_encoder_p010.av1.ivf").unwrap();
             out.write_all(&bitstream).unwrap();
             out.flush().unwrap();
         }

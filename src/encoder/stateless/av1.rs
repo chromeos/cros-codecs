@@ -4,6 +4,7 @@
 
 use std::rc::Rc;
 
+use crate::codec::av1::parser::BitDepth;
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::Profile;
 use crate::codec::av1::parser::ReferenceFrameType;
@@ -30,6 +31,7 @@ pub mod vaapi;
 #[derive(Clone)]
 pub struct EncoderConfig {
     pub profile: Profile,
+    pub bit_depth: BitDepth,
     pub framerate: u32,
     pub resolution: Resolution,
     pub pred_structure: PredictionStructure,
@@ -41,6 +43,7 @@ impl Default for EncoderConfig {
         // Artificially encoder configuration with intent to be widely supported.
         Self {
             profile: Profile::Profile0,
+            bit_depth: BitDepth::Depth8,
             framerate: 30,
             resolution: Resolution {
                 width: 320,
