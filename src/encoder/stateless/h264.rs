@@ -106,6 +106,12 @@ pub struct BackendRequest<P, R> {
     ref_list_0: Vec<Rc<DpbEntry<R>>>,
     ref_list_1: Vec<Rc<DpbEntry<R>>>,
 
+    /// Period between intra frames
+    intra_period: u32,
+
+    /// Period between intra frame and P frame
+    ip_period: u32,
+
     /// Number of macroblock to be encoded in slice
     num_macroblocks: usize,
 
