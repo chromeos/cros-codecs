@@ -87,7 +87,7 @@ impl<P, R> LowDelay<P, R> {
             last_frame_ref: None,
             golden_frame_ref: None,
             altref_frame_ref: None,
-            bitrate: self.config.bitrate.clone(),
+            rate_control: self.config.rate_control.clone(),
             coded_output: Vec::new(),
         };
 
@@ -112,7 +112,7 @@ impl<P, R> LowDelay<P, R> {
             last_frame_ref: Some((ref_frame, ReferenceUse::Single)),
             golden_frame_ref: None,
             altref_frame_ref: None,
-            bitrate: self.config.bitrate.clone(),
+            rate_control: self.config.rate_control.clone(),
             coded_output: Vec::new(),
         };
 
