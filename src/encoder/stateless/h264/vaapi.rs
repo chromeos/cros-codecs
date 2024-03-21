@@ -49,7 +49,7 @@ use crate::encoder::stateless::ReadyPromise;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
-use crate::encoder::Bitrate;
+use crate::encoder::RateControl;
 use crate::BlockingMode;
 use crate::Fourcc;
 use crate::Resolution;
@@ -368,21 +368,18 @@ where
         &mut self,
         request: Request<'_, H>,
     ) -> StatelessBackendResult<(Self::ReconPromise, Self::CodedPromise)> {
-        // Coded buffer size multiplier. It's inteded to give head room for the encoder.
-        const CODED_SIZE_MUL: usize = 2;
-
-        let coded_buf = self
-            .context()
-            .create_enc_coded(CODED_SIZE_MUL * request.bitrate.target() as usize)?;
-
+        let coded_buf = self.new_coded_buffer(&request.rate_control)?;
         let recon = self.new_scratch_picture()?;
 
+        // Use bitrate from RateControl or ask driver to ignore
+        let bits_per_second = request.rate_control.bitrate_target().unwrap_or(0) as u32;
         let seq_param = Self::build_enc_seq_param(
             &request.sps,
-            request.bitrate.target() as u32,
+            bits_per_second,
             request.intra_period,
             request.ip_period,
         );
+
         let pic_param = Self::build_enc_pic_param(&request, &coded_buf, &recon);
         let slice_param = Self::build_enc_slice_param(
             &request.pps,
@@ -450,8 +447,8 @@ where
             _ => return Err(StatelessBackendError::UnsupportedProfile.into()),
         };
 
-        let bitrate_control = match config.bitrate {
-            Bitrate::Constant(_) => libva::constants::VA_RC_CBR,
+        let bitrate_control = match config.rate_control {
+            RateControl::ConstantBitrate(_) => libva::constants::VA_RC_CBR,
         };
 
         let backend = VaapiBackend::new(
@@ -621,7 +618,7 @@ pub(super) mod tests {
             ip_period: 0,
             num_macroblocks: (WIDTH * HEIGHT) as usize / (16 * 16),
             is_idr: true,
-            bitrate: Bitrate::Constant(30_000),
+            rate_control: RateControl::ConstantBitrate(30_000),
             coded_output: vec![],
         };
 
@@ -661,7 +658,7 @@ pub(super) mod tests {
         let low_power = entrypoints.contains(&VAEntrypointEncSliceLP);
 
         let config = EncoderConfig {
-            bitrate: Bitrate::Constant(1_200_000),
+            rate_control: RateControl::ConstantBitrate(1_200_000),
             profile: Profile::Main,
             framerate: 30,
             resolution: Resolution {

@@ -179,7 +179,7 @@ impl<Picture, Reference> LowDelay<Picture, Reference> {
             num_macroblocks,
 
             is_idr: true,
-            bitrate: self.config.bitrate.clone(),
+            rate_control: self.config.rate_control.clone(),
 
             coded_output: headers,
         };
@@ -236,7 +236,7 @@ impl<Picture, Reference> LowDelay<Picture, Reference> {
             num_macroblocks,
 
             is_idr: false,
-            bitrate: self.config.bitrate.clone(),
+            rate_control: self.config.rate_control.clone(),
 
             coded_output: vec![],
         };

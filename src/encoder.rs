@@ -7,15 +7,17 @@ pub mod stateless;
 use crate::FrameLayout;
 use crate::Resolution;
 
+/// Specifies the encoder operation
 #[derive(Clone)]
-pub enum Bitrate {
-    Constant(u64),
+pub enum RateControl {
+    /// The encoder shall maintain the constant bitrate
+    ConstantBitrate(u64),
 }
 
-impl Bitrate {
-    pub(crate) fn target(&self) -> u64 {
+impl RateControl {
+    pub(crate) fn bitrate_target(&self) -> Option<u64> {
         match self {
-            Bitrate::Constant(target) => *target,
+            RateControl::ConstantBitrate(target) => Some(*target),
         }
     }
 }
