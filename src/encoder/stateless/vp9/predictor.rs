@@ -7,8 +7,10 @@ use std::rc::Rc;
 
 use super::BackendRequest;
 use super::EncoderConfig;
+use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::FrameType;
 use crate::codec::vp9::parser::Header;
+use crate::codec::vp9::parser::Profile;
 use crate::encoder::stateless::vp9::ReferenceUse;
 use crate::encoder::stateless::EncodeError;
 use crate::encoder::stateless::EncodeResult;
@@ -45,6 +47,33 @@ impl<P, R> LowDelay<P, R> {
         }
     }
 
+    fn create_frame_header(&mut self, frame_type: FrameType) -> Header {
+        let width = self.config.resolution.width;
+        let height = self.config.resolution.height;
+
+
+        let profile = match self.config.bit_depth {
+            BitDepth::Depth8 => Profile::Profile0,
+            BitDepth::Depth10 | BitDepth::Depth12 => Profile::Profile2,
+        };
+
+        Header {
+            profile,
+            bit_depth: BitDepth::Depth10,
+            frame_type,
+            show_frame: true,
+            error_resilient_mode: true,
+            width,
+            height,
+            render_and_frame_size_different: false,
+            intra_only: matches!(frame_type, FrameType::KeyFrame),
+            refresh_frame_flags: 0x01,
+            ref_frame_idx: [0, 0, 0],
+
+            ..Default::default()
+        }
+    }
+
     fn request_keyframe(
         &mut self,
         input: P,
@@ -52,24 +81,8 @@ impl<P, R> LowDelay<P, R> {
     ) -> EncodeResult<Vec<BackendRequest<P, R>>> {
         log::trace!("Requested keyframe timestamp={}", input_meta.timestamp);
 
-        let header = Header {
-            frame_type: FrameType::KeyFrame,
-            show_frame: true,
-            error_resilient_mode: true,
-            width: self.config.resolution.width,
-            height: self.config.resolution.height,
-            render_and_frame_size_different: false,
-            render_width: self.config.resolution.width,
-            render_height: self.config.resolution.height,
-            intra_only: true,
-            refresh_frame_flags: 0x01,
-            ref_frame_idx: [0, 0, 0],
-
-            ..Default::default()
-        };
-
         let request = BackendRequest {
-            header,
+            header: self.create_frame_header(FrameType::KeyFrame),
             input,
             input_meta,
             last_frame_ref: None,
@@ -91,26 +104,10 @@ impl<P, R> LowDelay<P, R> {
     ) -> EncodeResult<Vec<BackendRequest<P, R>>> {
         log::trace!("Requested interframe timestamp={}", input_meta.timestamp);
 
-        let header = Header {
-            frame_type: FrameType::InterFrame,
-            show_frame: true,
-            error_resilient_mode: true,
-            width: self.config.resolution.width,
-            height: self.config.resolution.height,
-            render_and_frame_size_different: false,
-            render_width: self.config.resolution.width,
-            render_height: self.config.resolution.height,
-            intra_only: false,
-            refresh_frame_flags: 0x01,
-            ref_frame_idx: [0; 3],
-
-            ..Default::default()
-        };
-
         let ref_frame = self.references.pop_front().unwrap();
 
         let request = BackendRequest {
-            header,
+            header: self.create_frame_header(FrameType::InterFrame),
             input,
             input_meta,
             last_frame_ref: Some((ref_frame, ReferenceUse::Single)),
