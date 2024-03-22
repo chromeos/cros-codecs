@@ -4,6 +4,7 @@
 
 use std::rc::Rc;
 
+use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::Header;
 use crate::encoder::stateless::vp9::predictor::LowDelay;
 pub use crate::encoder::stateless::vp9::predictor::PredictionStructure;
@@ -28,6 +29,7 @@ pub mod vaapi;
 #[derive(Clone)]
 pub struct EncoderConfig {
     pub bitrate: Bitrate,
+    pub bit_depth: BitDepth,
     pub framerate: u32,
     pub resolution: Resolution,
     pub pred_structure: PredictionStructure,
@@ -38,6 +40,7 @@ impl Default for EncoderConfig {
         // Artificially encoder configuration with intent to be widely supported.
         Self {
             bitrate: Bitrate::Constant(30_000_000),
+            bit_depth: BitDepth::Depth8,
             framerate: 30,
             resolution: Resolution {
                 width: 320,
