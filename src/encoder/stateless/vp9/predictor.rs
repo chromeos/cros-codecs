@@ -51,7 +51,6 @@ impl<P, R> LowDelay<P, R> {
         let width = self.config.resolution.width;
         let height = self.config.resolution.height;
 
-
         let profile = match self.config.bit_depth {
             BitDepth::Depth8 => Profile::Profile0,
             BitDepth::Depth10 | BitDepth::Depth12 => Profile::Profile2,

@@ -254,7 +254,7 @@ where
     }
 }
 
-impl<M, Handle> StatelessEncoder<VP9, Handle, VaapiBackend<M, Handle>>
+impl<M, Handle> StatelessEncoder<Handle, VaapiBackend<M, Handle>>
 where
     M: SurfaceMemoryDescriptor,
     Handle: Borrow<Surface<M>>,
@@ -452,7 +452,7 @@ pub(super) mod tests {
     #[ignore]
     fn test_vaapi_encoder() {
         type VaapiVp9Encoder<'l> =
-            StatelessEncoder<VP9, PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
+            StatelessEncoder<PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
 
         const WIDTH: usize = 512;
         const HEIGHT: usize = 512;
@@ -566,7 +566,7 @@ pub(super) mod tests {
     #[ignore]
     fn test_vaapi_encoder_p010() {
         type VaapiVp9Encoder<'l> =
-            StatelessEncoder<VP9, PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
+            StatelessEncoder<PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
 
         const WIDTH: usize = 512;
         const HEIGHT: usize = 512;

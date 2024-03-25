@@ -430,7 +430,7 @@ where
     }
 }
 
-impl<M, H> StatelessEncoder<H264, H, VaapiBackend<M, H>>
+impl<M, H> StatelessEncoder<H, VaapiBackend<M, H>>
 where
     M: SurfaceMemoryDescriptor,
     H: Borrow<libva::Surface<M>> + 'static,
@@ -649,7 +649,7 @@ pub(super) mod tests {
     #[ignore]
     fn test_vaapi_encoder() {
         type VaapiH264Encoder<'l> =
-            StatelessEncoder<H264, PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
+            StatelessEncoder<PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
 
         const WIDTH: usize = 512;
         const HEIGHT: usize = 512;

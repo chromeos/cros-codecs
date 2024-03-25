@@ -13,7 +13,6 @@ use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
-use crate::encoder::stateless::StatelessEncoder;
 use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::Bitrate;
@@ -105,8 +104,11 @@ pub trait StatelessVP9EncoderBackend: StatelessVideoEncoderBackend<VP9> {
     ) -> StatelessBackendResult<(Self::ReconPromise, Self::CodedPromise)>;
 }
 
+pub type StatelessEncoder<Handle, Backend> =
+    crate::encoder::stateless::StatelessEncoder<VP9, Handle, Backend>;
+
 impl<Handle, Backend> StatelessEncoderExecute<VP9, Handle, Backend>
-    for StatelessEncoder<VP9, Handle, Backend>
+    for StatelessEncoder<Handle, Backend>
 where
     Backend: StatelessVP9EncoderBackend,
 {
@@ -133,7 +135,7 @@ where
     }
 }
 
-impl<Handle, Backend> StatelessEncoder<VP9, Handle, Backend>
+impl<Handle, Backend> StatelessEncoder<Handle, Backend>
 where
     Backend: StatelessVP9EncoderBackend,
 {
