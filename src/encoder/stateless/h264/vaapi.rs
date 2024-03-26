@@ -449,6 +449,7 @@ where
 
         let bitrate_control = match config.rate_control {
             RateControl::ConstantBitrate(_) => libva::constants::VA_RC_CBR,
+            RateControl::ConstantQuality(_) => libva::constants::VA_RC_CQP,
         };
 
         let backend = VaapiBackend::new(

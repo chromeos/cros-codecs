@@ -38,7 +38,6 @@ pub struct EncoderConfig {
     pub profile: Profile,
     pub level: Level,
     pub pred_structure: PredictionStructure,
-    pub default_qp: u8,
 }
 
 impl Default for EncoderConfig {
@@ -57,7 +56,6 @@ impl Default for EncoderConfig {
                 tail: 1,
                 limit: 2048,
             },
-            default_qp: 26,
         }
     }
 }
