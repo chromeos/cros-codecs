@@ -10,14 +10,19 @@ use crate::Resolution;
 /// Specifies the encoder operation
 #[derive(Clone)]
 pub enum RateControl {
-    /// The encoder shall maintain the constnat bitrate
+    /// The encoder shall maintain the constant bitrate
     ConstantBitrate(u64),
+
+    /// The encoder shall maintain codec specific quality parameter constant (eg. QP for H.264)
+    /// disregarding bitrate.
+    ConstantQuality(u32),
 }
 
 impl RateControl {
     pub(crate) fn bitrate_target(&self) -> Option<u64> {
         match self {
             RateControl::ConstantBitrate(target) => Some(*target),
+            RateControl::ConstantQuality(_) => None,
         }
     }
 }
