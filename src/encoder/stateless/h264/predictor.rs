@@ -25,6 +25,7 @@ use crate::encoder::stateless::EncodeError;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::FrameMetadata;
 use crate::encoder::stateless::Predictor;
+use crate::encoder::RateControl;
 
 /// Available predictors and initialization parameters
 #[derive(Clone)]
@@ -112,9 +113,20 @@ impl<Picture, Reference> LowDelay<Picture, Reference> {
             .timing_info(1, self.config.framerate * 2, false)
             .build();
 
+        const MIN_QP: u8 = 1;
+        const MAX_QP: u8 = 51;
+
+        let init_qp = if let RateControl::ConstantQuality(init_qp) = self.config.rate_control {
+            // Limit QP to valid values
+            init_qp.clamp(MIN_QP as u32, MAX_QP as u32) as u8
+        } else {
+            // Pick middle QP for default qp
+            (MIN_QP + MAX_QP) / 2
+        };
+
         let pps = PpsBuilder::new(Rc::clone(&sps))
             .pic_parameter_set_id(0)
-            .pic_init_qp(self.config.default_qp)
+            .pic_init_qp(init_qp)
             .deblocking_filter_control_present_flag(true)
             .num_ref_idx_l0_default_active(self.tail as u8)
             // Unused, P frame relies only on list0
