@@ -11,11 +11,13 @@ use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::FrameType;
 use crate::codec::vp9::parser::Header;
 use crate::codec::vp9::parser::Profile;
+use crate::codec::vp9::parser::QuantizationParams;
 use crate::encoder::stateless::vp9::ReferenceUse;
 use crate::encoder::stateless::EncodeError;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::FrameMetadata;
+use crate::encoder::RateControl;
 
 #[derive(Clone)]
 pub enum PredictionStructure {
@@ -56,6 +58,18 @@ impl<P, R> LowDelay<P, R> {
             BitDepth::Depth10 | BitDepth::Depth12 => Profile::Profile2,
         };
 
+        const MIN_Q_IDX: u8 = 0;
+        const MAX_Q_IDX: u8 = 255;
+
+        let base_q_idx = if let RateControl::ConstantQuality(base_q_idx) = self.config.rate_control
+        {
+            // Limit Q index to valid values
+            base_q_idx.clamp(MIN_Q_IDX as u32, MAX_Q_IDX as u32) as u8
+        } else {
+            // Pick middle Q index
+            (MAX_Q_IDX + MIN_Q_IDX) / 2
+        };
+
         Header {
             profile,
             bit_depth: BitDepth::Depth10,
@@ -68,6 +82,10 @@ impl<P, R> LowDelay<P, R> {
             intra_only: matches!(frame_type, FrameType::KeyFrame),
             refresh_frame_flags: 0x01,
             ref_frame_idx: [0, 0, 0],
+            quant: QuantizationParams {
+                base_q_idx,
+                ..Default::default()
+            },
 
             ..Default::default()
         }
