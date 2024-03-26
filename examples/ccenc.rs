@@ -11,16 +11,12 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use argh::FromArgs;
-use cros_codecs::backend::vaapi::encoder::VaapiBackend;
 use cros_codecs::backend::vaapi::surface_pool::PooledVaSurface;
 use cros_codecs::backend::vaapi::surface_pool::VaSurfacePool;
 use cros_codecs::decoder::FramePool;
 use cros_codecs::encoder::stateless::av1;
 use cros_codecs::encoder::stateless::h264;
-use cros_codecs::encoder::stateless::h264::H264;
 use cros_codecs::encoder::stateless::vp9;
-use cros_codecs::encoder::stateless::vp9::VP9;
-use cros_codecs::encoder::stateless::StatelessEncoder;
 use cros_codecs::encoder::stateless::StatelessVideoEncoder;
 use cros_codecs::encoder::FrameMetadata;
 use cros_codecs::utils::IvfFileHeader;
@@ -158,9 +154,6 @@ fn upload_img<M: libva::SurfaceMemoryDescriptor>(
     }
 }
 
-type VaapiEncoder<Codec> =
-    StatelessEncoder<Codec, PooledVaSurface<()>, VaapiBackend<(), PooledVaSurface<()>>>;
-
 fn new_h264_vaapi_encoder(
     args: &Args,
     display: &Rc<libva::Display>,
@@ -184,7 +177,7 @@ fn new_h264_vaapi_encoder(
     }
 
     let fourcc = b"NV12".into();
-    let encoder = VaapiEncoder::<H264>::new_vaapi(
+    let encoder = h264::StatelessEncoder::new_vaapi(
         Rc::clone(display),
         config,
         fourcc,
@@ -216,7 +209,7 @@ fn new_vp9_vaapi_encoder(
     }
 
     let fourcc = b"NV12".into();
-    let encoder = VaapiEncoder::<VP9>::new_vaapi(
+    let encoder = vp9::StatelessEncoder::new_vaapi(
         Rc::clone(display),
         config,
         fourcc,
