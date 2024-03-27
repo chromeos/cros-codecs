@@ -11,6 +11,7 @@ use crate::codec::h264::synthesizer::SynthesizerError as H264SynthesizerError;
 pub use crate::encoder::stateless::predictor::PredictionStructure;
 use crate::encoder::CodedBitstreamBuffer;
 use crate::encoder::FrameMetadata;
+use crate::encoder::Tunings;
 use crate::BlockingMode;
 
 pub mod av1;
@@ -182,6 +183,12 @@ pub(super) trait Predictor<Picture, Reference, Request> {
     /// backend, if reconstructed was required for creating that request.
     fn reconstructed(&mut self, recon: Reference) -> EncodeResult<Vec<Request>>;
 
+    /// Requests the change of dynamic parameters (aka [`Tunings`]) for the stream. The predictor
+    /// may choose to delay the change until entire or some part of the structure had been encoded.
+    /// However in such case the predictor is responsible for ensuring the change will be
+    /// successful.
+    fn tune(&mut self, tunings: Tunings) -> EncodeResult<()>;
+
     /// Force [`Predictor`] to pop at least one frame from internal queue and return a [`Request`]s
     fn drain(&mut self) -> EncodeResult<Vec<Request>>;
 }
@@ -241,6 +248,13 @@ where
 
 /// Stateless video encoder interface.
 pub trait StatelessVideoEncoder<Handle> {
+    /// Changes dynamic parameters (aka [`Tunings`]) of the encoded stream. The change may not
+    /// be effective right away. Depending on the used prediction structure, the [`Predictor`] may
+    /// choose to delay the change until entire or a some part of the structure had been encoded.
+    ///
+    /// Note: Currently changing the variant of [`RateControl`] is not supported.
+    fn tune(&mut self, tunings: Tunings) -> EncodeResult<()>;
+
     /// Enqueues the frame for encoding. The implementation will drop the handle after it is no
     /// longer be needed. The encoder is not required to immediately start processing the frame
     /// and yield output bitstream. It is allowed to hold frames until certain conditions are met
@@ -397,6 +411,10 @@ where
     Backend: StatelessEncoderBackendImport<Handle, Backend::Picture>,
     Self: StatelessEncoderExecute<Codec, Handle, Backend>,
 {
+    fn tune(&mut self, tunings: Tunings) -> EncodeResult<()> {
+        self.predictor.tune(tunings)
+    }
+
     fn encode(&mut self, metadata: FrameMetadata, handle: Handle) -> EncodeResult<()> {
         log::trace!(
             "encode: timestamp={} layout={:?}",
