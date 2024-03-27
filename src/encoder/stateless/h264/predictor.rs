@@ -56,6 +56,9 @@ impl<Picture, Reference> LowDelayH264<Picture, Reference> {
                 sps: None,
                 pps: None,
             },
+            // TODO: Extract from config
+            tunings: Default::default(),
+            tunings_queue: Default::default(),
             _phantom: Default::default(),
         }
     }

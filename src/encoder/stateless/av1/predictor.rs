@@ -54,6 +54,9 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
                 sequence: Self::create_sequence_header(&config),
                 config,
             },
+            // TODO: Extract from config
+            tunings: Default::default(),
+            tunings_queue: Default::default(),
             _phantom: Default::default(),
         }
     }

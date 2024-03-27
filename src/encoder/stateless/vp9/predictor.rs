@@ -31,6 +31,9 @@ impl<Picture, Reference> LowDelayVP9<Picture, Reference> {
             counter: 0,
             limit,
             delegate: LowDelayVP9Delegate { config },
+            // TODO: Extract from config
+            tunings: Default::default(),
+            tunings_queue: Default::default(),
             _phantom: Default::default(),
         }
     }
