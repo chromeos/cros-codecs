@@ -6,17 +6,17 @@ use std::rc::Rc;
 
 use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::Header;
-use crate::encoder::stateless::vp9::predictor::LowDelay;
-pub use crate::encoder::stateless::vp9::predictor::PredictionStructure;
+use crate::encoder::stateless::vp9::predictor::LowDelayVP9;
 use crate::encoder::stateless::BitstreamPromise;
 use crate::encoder::stateless::EncodeResult;
+use crate::encoder::stateless::PredictionStructure;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
 use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
-use crate::encoder::Bitrate;
 use crate::encoder::FrameMetadata;
+use crate::encoder::RateControl;
 use crate::BlockingMode;
 use crate::Resolution;
 
@@ -27,7 +27,7 @@ pub mod vaapi;
 
 #[derive(Clone)]
 pub struct EncoderConfig {
-    pub bitrate: Bitrate,
+    pub rate_control: RateControl,
     pub bit_depth: BitDepth,
     pub framerate: u32,
     pub resolution: Resolution,
@@ -38,7 +38,7 @@ impl Default for EncoderConfig {
     fn default() -> Self {
         // Artificially encoder configuration with intent to be widely supported.
         Self {
-            bitrate: Bitrate::Constant(30_000_000),
+            rate_control: RateControl::ConstantBitrate(30_000_000),
             bit_depth: BitDepth::Depth8,
             framerate: 30,
             resolution: Resolution {
@@ -75,7 +75,7 @@ pub struct BackendRequest<P, R> {
     altref_frame_ref: Option<(Rc<R>, ReferenceUse)>,
 
     /// Current expected bitrate
-    bitrate: Bitrate,
+    rate_control: RateControl,
 
     /// Container for the request output. [`StatelessVP9EncoderBackend`] impl shall move it and
     /// append the slice data to it. This prevents unnecessary copying of bitstream around.
@@ -141,7 +141,7 @@ where
 {
     fn new_vp9(backend: Backend, config: EncoderConfig, mode: BlockingMode) -> EncodeResult<Self> {
         let predictor: Box<dyn Predictor<_, _, _>> = match config.pred_structure {
-            PredictionStructure::LowDelay { .. } => Box::new(LowDelay::new(config)),
+            PredictionStructure::LowDelay { limit } => Box::new(LowDelayVP9::new(config, limit)),
         };
 
         Self::new(backend, mode, predictor)

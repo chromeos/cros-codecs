@@ -8,12 +8,14 @@ use thiserror::Error;
 
 use crate::codec::av1::synthesizer::SynthesizerError as AV1SynthesizerError;
 use crate::codec::h264::synthesizer::SynthesizerError as H264SynthesizerError;
+pub use crate::encoder::stateless::predictor::PredictionStructure;
 use crate::encoder::CodedBitstreamBuffer;
 use crate::encoder::FrameMetadata;
 use crate::BlockingMode;
 
 pub mod av1;
 pub mod h264;
+pub(crate) mod predictor;
 pub mod vp9;
 
 #[derive(Error, Debug)]

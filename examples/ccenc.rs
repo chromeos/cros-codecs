@@ -71,10 +71,6 @@ struct Args {
     #[argh(option)]
     codec: Option<Codec>,
 
-    /// default quantization parameter
-    #[argh(option)]
-    default_qp: Option<u8>,
-
     /// framerate
     #[argh(option)]
     framerate: Option<u32>,
@@ -167,10 +163,6 @@ fn new_h264_vaapi_encoder(
         resolution,
         ..Default::default()
     };
-
-    if let Some(default_qp) = args.default_qp {
-        config.default_qp = default_qp;
-    }
 
     if let Some(framerate) = args.framerate {
         config.framerate = framerate;
