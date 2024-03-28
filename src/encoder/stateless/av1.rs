@@ -10,10 +10,10 @@ use crate::codec::av1::parser::Profile;
 use crate::codec::av1::parser::ReferenceFrameType;
 use crate::codec::av1::parser::SequenceHeaderObu;
 use crate::codec::av1::parser::REFS_PER_FRAME;
-use crate::encoder::stateless::av1::predictor::LowDelay;
-pub use crate::encoder::stateless::av1::predictor::PredictionStructure;
+use crate::encoder::stateless::av1::predictor::LowDelayAV1;
 use crate::encoder::stateless::BitstreamPromise;
 use crate::encoder::stateless::EncodeResult;
+use crate::encoder::stateless::PredictionStructure;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
@@ -150,7 +150,7 @@ where
 {
     fn new_av1(backend: Backend, config: EncoderConfig, mode: BlockingMode) -> EncodeResult<Self> {
         let predictor: Box<dyn Predictor<_, _, _>> = match config.pred_structure {
-            PredictionStructure::LowDelay { limit } => Box::new(LowDelay::new(config, limit)),
+            PredictionStructure::LowDelay { limit } => Box::new(LowDelayAV1::new(config, limit)),
         };
 
         Self::new(backend, mode, predictor)
