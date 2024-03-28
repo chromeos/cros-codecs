@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use std::collections::VecDeque;
-use std::rc::Rc;
-
 use crate::codec::av1::parser::BitDepth;
 use crate::codec::av1::parser::CdefParams;
 use crate::codec::av1::parser::ColorConfig;
@@ -30,48 +27,34 @@ use crate::codec::av1::parser::SUPERRES_NUM;
 use crate::codec::av1::synthesizer::Synthesizer;
 use crate::encoder::stateless::av1::BackendRequest;
 use crate::encoder::stateless::av1::EncoderConfig;
-use crate::encoder::stateless::EncodeError;
+use crate::encoder::stateless::predictor::LowDelay;
+use crate::encoder::stateless::predictor::LowDelayDelegate;
 use crate::encoder::stateless::EncodeResult;
-use crate::encoder::stateless::Predictor;
 use crate::encoder::FrameMetadata;
 
-#[derive(Clone)]
-pub enum PredictionStructure {
-    /// Simplest prediction structure, suitable eg. for RTC. Interframe is produced at the start of
-    /// the stream and every time when [`limit`] frames are reached. Following interframe frames
-    /// are frames relying solely on the last frame.
-    LowDelay { limit: u16 },
-}
-
-pub(super) struct LowDelay<Picture, Reference> {
-    /// Pending frames for encoding
-    queue: VecDeque<(Picture, FrameMetadata)>,
-
-    /// Availabe frames for references
-    references: VecDeque<Rc<Reference>>,
-
+pub(crate) struct LowDelayAV1Delegate {
     /// Current sequence header obu
     sequence: SequenceHeaderObu,
-
-    /// Current frame counter
-    counter: usize,
-
-    /// The number of frames between intra frames
-    limit: u16,
 
     /// Encoder config
     config: EncoderConfig,
 }
 
-impl<P, R> LowDelay<P, R> {
-    pub(super) fn new(config: EncoderConfig, limit: u16) -> Self {
+pub(crate) type LowDelayAV1<Picture, Reference> =
+    LowDelay<Picture, Reference, LowDelayAV1Delegate, BackendRequest<Picture, Reference>>;
+
+impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
+    pub fn new(config: EncoderConfig, limit: u16) -> Self {
         Self {
             queue: Default::default(),
             references: Default::default(),
-            sequence: Self::create_sequence_header(&config),
             counter: 0,
             limit,
-            config,
+            delegate: LowDelayAV1Delegate {
+                sequence: Self::create_sequence_header(&config),
+                config,
+            },
+            _phantom: Default::default(),
         }
     }
 
@@ -141,18 +124,18 @@ impl<P, R> LowDelay<P, R> {
     }
 
     fn create_frame_header(&self, frame_type: FrameType) -> FrameHeaderObu {
-        let width = self.config.resolution.width;
-        let height = self.config.resolution.height;
+        let width = self.delegate.config.resolution.width;
+        let height = self.delegate.config.resolution.height;
 
         // Superblock size
-        let sb_size = if self.sequence.use_128x128_superblock {
+        let sb_size = if self.delegate.sequence.use_128x128_superblock {
             128
         } else {
             64
         };
 
         // Use frame counter for order hinting
-        let order_hint_mask = (1 << self.sequence.order_hint_bits) - 1;
+        let order_hint_mask = (1 << self.delegate.sequence.order_hint_bits) - 1;
         let order_hint = (self.counter & order_hint_mask) as u32;
 
         // Set the frame size in superblocks for the only tile
@@ -193,7 +176,7 @@ impl<P, R> LowDelay<P, R> {
 
             // Provide the Q index from config
             quantization_params: QuantizationParams {
-                base_q_idx: self.config.base_qindex as u32,
+                base_q_idx: self.delegate.config.base_qindex as u32,
                 ..Default::default()
             },
 
@@ -226,16 +209,21 @@ impl<P, R> LowDelay<P, R> {
             ..Default::default()
         }
     }
+}
 
+impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Picture, Reference>>
+    for LowDelayAV1<Picture, Reference>
+{
     fn request_keyframe(
         &mut self,
-        input: P,
+        input: Picture,
         input_meta: FrameMetadata,
-    ) -> EncodeResult<Vec<BackendRequest<P, R>>> {
+        idr: bool,
+    ) -> EncodeResult<BackendRequest<Picture, Reference>> {
         log::trace!("Requested keyframe timestamp={}", input_meta.timestamp);
 
         let temporal_delim = Self::create_temporal_delimiter();
-        let sequence = self.sequence.clone();
+        let sequence = self.delegate.sequence.clone();
         let frame = self.create_frame_header(FrameType::KeyFrame);
 
         // This is intra frame, so there is no references
@@ -247,7 +235,9 @@ impl<P, R> LowDelay<P, R> {
 
         // Output Temporal Delimiter, Sequence Header and Frame Header OBUs to bitstream
         Synthesizer::<'_, TemporalDelimiterObu, _>::synthesize(&temporal_delim, &mut coded_output)?;
-        Synthesizer::<'_, SequenceHeaderObu, _>::synthesize(&sequence, &mut coded_output)?;
+        if idr {
+            Synthesizer::<'_, SequenceHeaderObu, _>::synthesize(&sequence, &mut coded_output)?;
+        }
         Synthesizer::<'_, FrameHeaderObu, _>::synthesize(&frame, &sequence, &mut coded_output)?;
 
         let request = BackendRequest {
@@ -263,20 +253,18 @@ impl<P, R> LowDelay<P, R> {
             coded_output,
         };
 
-        self.counter += 1;
-
-        Ok(vec![request])
+        Ok(request)
     }
 
     fn request_interframe(
         &mut self,
-        input: P,
+        input: Picture,
         input_meta: FrameMetadata,
-    ) -> EncodeResult<Vec<BackendRequest<P, R>>> {
+    ) -> EncodeResult<BackendRequest<Picture, Reference>> {
         log::trace!("Requested interframe timestamp={}", input_meta.timestamp);
 
         let temporal_delim = Self::create_temporal_delimiter();
-        let sequence = self.sequence.clone();
+        let sequence = self.delegate.sequence.clone();
         let mut frame = self.create_frame_header(FrameType::InterFrame);
 
         // Use previous frame as last frame reference
@@ -290,7 +278,7 @@ impl<P, R> LowDelay<P, R> {
             None,
         ];
 
-        let order_hint_mask = (1 << self.sequence.order_hint_bits) - 1;
+        let order_hint_mask = (1 << self.delegate.sequence.order_hint_bits) - 1;
         let mut ref_frame_ctrl_l0 = [ReferenceFrameType::Intra; REFS_PER_FRAME];
         let ref_frame_ctrl_l1 = [ReferenceFrameType::Intra; REFS_PER_FRAME];
 
@@ -319,50 +307,8 @@ impl<P, R> LowDelay<P, R> {
             coded_output,
         };
 
-        self.counter = self.counter.wrapping_add(1) % (self.limit as usize);
         self.references.clear();
 
-        Ok(vec![request])
-    }
-
-    fn next_request(&mut self) -> EncodeResult<Vec<BackendRequest<P, R>>> {
-        match self.queue.pop_front() {
-            // Nothing to do. Quit.
-            None => Ok(Vec::new()),
-            // If first frame in the sequence or forced IDR then create IDR request.
-            Some((input, meta)) if self.counter == 0 || meta.force_keyframe => {
-                self.request_keyframe(input, meta)
-            }
-            // There is no enough frames reconstructed
-            Some((input, meta)) if self.references.is_empty() => {
-                self.queue.push_front((input, meta));
-                Ok(Vec::new())
-            }
-
-            Some((input, meta)) => self.request_interframe(input, meta),
-        }
-    }
-}
-
-impl<P, R> Predictor<P, R, BackendRequest<P, R>> for LowDelay<P, R> {
-    fn new_frame(
-        &mut self,
-        input: P,
-        frame_metadata: FrameMetadata,
-    ) -> EncodeResult<Vec<BackendRequest<P, R>>> {
-        // Add new frame in the request queue and request new encoding if possible
-        self.queue.push_back((input, frame_metadata));
-        self.next_request()
-    }
-
-    fn reconstructed(&mut self, recon: R) -> EncodeResult<Vec<BackendRequest<P, R>>> {
-        // Add new reconstructed surface and request next encoding if possible
-        self.references.push_back(Rc::new(recon));
-        self.next_request()
-    }
-
-    fn drain(&mut self) -> EncodeResult<Vec<BackendRequest<P, R>>> {
-        // [`LowDelay`] will not hold any frames, therefore the drain function shall never be called.
-        Err(EncodeError::InvalidInternalState)
+        Ok(request)
     }
 }
