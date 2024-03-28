@@ -6,10 +6,10 @@ use std::rc::Rc;
 
 use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::Header;
-use crate::encoder::stateless::vp9::predictor::LowDelay;
-pub use crate::encoder::stateless::vp9::predictor::PredictionStructure;
+use crate::encoder::stateless::vp9::predictor::LowDelayVP9;
 use crate::encoder::stateless::BitstreamPromise;
 use crate::encoder::stateless::EncodeResult;
+use crate::encoder::stateless::PredictionStructure;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
@@ -141,7 +141,7 @@ where
 {
     fn new_vp9(backend: Backend, config: EncoderConfig, mode: BlockingMode) -> EncodeResult<Self> {
         let predictor: Box<dyn Predictor<_, _, _>> = match config.pred_structure {
-            PredictionStructure::LowDelay { .. } => Box::new(LowDelay::new(config)),
+            PredictionStructure::LowDelay { limit } => Box::new(LowDelayVP9::new(config, limit)),
         };
 
         Self::new(backend, mode, predictor)
