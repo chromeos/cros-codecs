@@ -87,6 +87,7 @@ impl<Picture, Reference> LowDelayH264<Picture, Reference> {
         };
 
         let sps = sps
+            .level_idc(config.level)
             .max_frame_num(self.limit as u32)
             .pic_order_cnt_type(0)
             .max_pic_order_cnt_lsb(self.limit as u32 * 2)
