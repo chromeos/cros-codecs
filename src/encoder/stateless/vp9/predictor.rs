@@ -17,6 +17,9 @@ use crate::encoder::FrameMetadata;
 use crate::encoder::RateControl;
 use crate::encoder::Tunings;
 
+pub(crate) const MIN_Q_IDX: u8 = 0;
+pub(crate) const MAX_Q_IDX: u8 = 255;
+
 pub(crate) struct LowDelayVP9Delegate {
     config: EncoderConfig,
 }
@@ -46,9 +49,6 @@ impl<Picture, Reference> LowDelayVP9<Picture, Reference> {
             BitDepth::Depth8 => Profile::Profile0,
             BitDepth::Depth10 | BitDepth::Depth12 => Profile::Profile2,
         };
-
-        const MIN_Q_IDX: u8 = 0;
-        const MAX_Q_IDX: u8 = 255;
 
         let base_q_idx = if let RateControl::ConstantQuality(base_q_idx) = self.tunings.rate_control
         {
@@ -99,7 +99,7 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
             last_frame_ref: None,
             golden_frame_ref: None,
             altref_frame_ref: None,
-            rate_control: self.tunings.rate_control.clone(),
+            tunings: self.tunings.clone(),
             coded_output: Vec::new(),
         };
 
@@ -122,7 +122,7 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
             last_frame_ref: Some((ref_frame, ReferenceUse::Single)),
             golden_frame_ref: None,
             altref_frame_ref: None,
-            rate_control: self.tunings.rate_control.clone(),
+            tunings: self.tunings.clone(),
             coded_output: Vec::new(),
         };
 

@@ -67,11 +67,11 @@ where
         &mut self,
         request: BackendRequest<Self::Picture, Self::Reconstructed>,
     ) -> StatelessBackendResult<(Self::ReconPromise, Self::CodedPromise)> {
-        let coded_buf = self.new_coded_buffer(&request.rate_control)?;
+        let coded_buf = self.new_coded_buffer(&request.tunings.rate_control)?;
         let recon = self.new_scratch_picture()?;
 
         // Use bitrate from RateControl or ask driver to ignore
-        let bits_per_second = request.rate_control.bitrate_target().unwrap_or(0) as u32;
+        let bits_per_second = request.tunings.rate_control.bitrate_target().unwrap_or(0) as u32;
 
         let seq_param = BufferType::EncSequenceParameter(EncSequenceParameter::VP9(
             EncSequenceParameterBufferVP9::new(
@@ -417,7 +417,10 @@ pub(super) mod tests {
             last_frame_ref: None,
             golden_frame_ref: None,
             altref_frame_ref: None,
-            rate_control: RateControl::ConstantBitrate(30_000),
+            tunings: Tunings {
+                rate_control: RateControl::ConstantBitrate(30_000),
+                ..Default::default()
+            },
             coded_output: Vec::new(),
         };
 
