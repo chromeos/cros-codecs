@@ -26,12 +26,16 @@ use crate::encoder::stateless::EncodeError;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::FrameMetadata;
 use crate::encoder::RateControl;
+use crate::encoder::Tunings;
 
 pub(crate) struct LowDelayH264Delegate {
     /// Current sequence SPS
     sps: Option<Rc<Sps>>,
     /// Current sequence PPS
     pps: Option<Rc<Pps>>,
+
+    // True if SPS or PPS changed and should reappear in the bitstream
+    update_params_sets: bool,
 
     /// Encoder config
     config: EncoderConfig,
@@ -51,13 +55,13 @@ impl<Picture, Reference> LowDelayH264<Picture, Reference> {
             references: Default::default(),
             counter: 0,
             limit,
+            tunings: config.initial_tunings.clone(),
             delegate: LowDelayH264Delegate {
                 config,
+                update_params_sets: false,
                 sps: None,
                 pps: None,
             },
-            // TODO: Extract from config
-            tunings: Default::default(),
             tunings_queue: Default::default(),
             _phantom: Default::default(),
         }
@@ -91,13 +95,13 @@ impl<Picture, Reference> LowDelayH264<Picture, Reference> {
             .bit_depth_luma(8)
             .bit_depth_chroma(8)
             .aspect_ratio(1, 1)
-            .timing_info(1, config.framerate * 2, false)
+            .timing_info(1, self.tunings.framerate * 2, false)
             .build();
 
         const MIN_QP: u8 = 1;
         const MAX_QP: u8 = 51;
 
-        let init_qp = if let RateControl::ConstantQuality(init_qp) = config.rate_control {
+        let init_qp = if let RateControl::ConstantQuality(init_qp) = self.tunings.rate_control {
             // Limit QP to valid values
             init_qp.clamp(MIN_QP as u32, MAX_QP as u32) as u8
         } else {
@@ -116,6 +120,7 @@ impl<Picture, Reference> LowDelayH264<Picture, Reference> {
 
         self.delegate.sps = Some(sps);
         self.delegate.pps = Some(pps);
+        self.delegate.update_params_sets = true;
     }
 }
 
@@ -158,9 +163,10 @@ impl<Picture, Reference>
             .build();
 
         let mut headers = vec![];
-        if idr {
+        if idr || self.delegate.update_params_sets {
             Synthesizer::<Sps, &mut Vec<u8>>::synthesize(3, &sps, &mut headers, true)?;
             Synthesizer::<Pps, &mut Vec<u8>>::synthesize(3, &pps, &mut headers, true)?;
+            self.delegate.update_params_sets = false;
         }
 
         let num_macroblocks =
@@ -185,7 +191,7 @@ impl<Picture, Reference>
             num_macroblocks,
 
             is_idr: idr,
-            rate_control: self.delegate.config.rate_control.clone(),
+            rate_control: self.tunings.rate_control.clone(),
 
             coded_output: headers,
         };
@@ -228,6 +234,13 @@ impl<Picture, Reference>
             .pic_order_cnt_lsb(dpb_meta.poc)
             .build();
 
+        let mut headers = Vec::new();
+        if self.delegate.update_params_sets {
+            Synthesizer::<Sps, &mut Vec<u8>>::synthesize(3, &sps, &mut headers, true)?;
+            Synthesizer::<Pps, &mut Vec<u8>>::synthesize(3, &pps, &mut headers, true)?;
+            self.delegate.update_params_sets = false;
+        }
+
         let num_macroblocks =
             ((sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1)) as usize;
 
@@ -249,13 +262,22 @@ impl<Picture, Reference>
             num_macroblocks,
 
             is_idr: false,
-            rate_control: self.delegate.config.rate_control.clone(),
+            rate_control: self.tunings.rate_control.clone(),
 
-            coded_output: vec![],
+            coded_output: headers,
         };
 
         self.references.clear();
 
         Ok(request)
+    }
+
+    fn try_tunings(&self, _tunings: &Tunings) -> EncodeResult<()> {
+        Ok(())
+    }
+
+    fn apply_tunings(&mut self, _tunings: &Tunings) -> EncodeResult<()> {
+        self.new_sequence();
+        Ok(())
     }
 }
