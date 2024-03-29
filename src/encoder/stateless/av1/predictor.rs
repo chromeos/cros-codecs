@@ -29,8 +29,11 @@ use crate::encoder::stateless::av1::BackendRequest;
 use crate::encoder::stateless::av1::EncoderConfig;
 use crate::encoder::stateless::predictor::LowDelay;
 use crate::encoder::stateless::predictor::LowDelayDelegate;
+use crate::encoder::stateless::EncodeError;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::FrameMetadata;
+use crate::encoder::RateControl;
+use crate::encoder::Tunings;
 
 pub(crate) struct LowDelayAV1Delegate {
     /// Current sequence header obu
@@ -50,12 +53,11 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
             references: Default::default(),
             counter: 0,
             limit,
+            tunings: config.initial_tunings.clone(),
             delegate: LowDelayAV1Delegate {
                 sequence: Self::create_sequence_header(&config),
                 config,
             },
-            // TODO: Extract from config
-            tunings: Default::default(),
             tunings_queue: Default::default(),
             _phantom: Default::default(),
         }
@@ -126,7 +128,7 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
         }
     }
 
-    fn create_frame_header(&self, frame_type: FrameType) -> FrameHeaderObu {
+    fn create_frame_header(&self, frame_type: FrameType) -> EncodeResult<FrameHeaderObu> {
         let width = self.delegate.config.resolution.width;
         let height = self.delegate.config.resolution.height;
 
@@ -141,6 +143,15 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
         let order_hint_mask = (1 << self.delegate.sequence.order_hint_bits) - 1;
         let order_hint = (self.counter & order_hint_mask) as u32;
 
+        let RateControl::ConstantQuality(base_q_idx) = self.tunings.rate_control else {
+            return Err(EncodeError::Unsupported);
+        };
+        // AV1 Spec. Dc_Qlookup max indices
+        const MIN_BASE_QINDEX: u32 = 0;
+        const MAX_BASE_QINDEX: u32 = 255;
+        // Clamp Q index
+        let base_q_idx = base_q_idx.clamp(MIN_BASE_QINDEX, MAX_BASE_QINDEX);
+
         // Set the frame size in superblocks for the only tile
         let mut width_in_sbs_minus_1 = [0u32; MAX_TILE_COLS];
         width_in_sbs_minus_1[0] = ((width + sb_size - 1) / sb_size) - 1;
@@ -148,7 +159,7 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
         let mut height_in_sbs_minus_1 = [0u32; MAX_TILE_ROWS];
         height_in_sbs_minus_1[0] = ((height + sb_size - 1) / sb_size) - 1;
 
-        FrameHeaderObu {
+        Ok(FrameHeaderObu {
             obu_header: ObuHeader {
                 obu_type: ObuType::FrameHeader,
                 extension_flag: false,
@@ -179,7 +190,7 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
 
             // Provide the Q index from config
             quantization_params: QuantizationParams {
-                base_q_idx: self.delegate.config.base_qindex as u32,
+                base_q_idx,
                 ..Default::default()
             },
 
@@ -210,7 +221,7 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
             render_height: height,
 
             ..Default::default()
-        }
+        })
     }
 }
 
@@ -227,7 +238,7 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
 
         let temporal_delim = Self::create_temporal_delimiter();
         let sequence = self.delegate.sequence.clone();
-        let frame = self.create_frame_header(FrameType::KeyFrame);
+        let frame = self.create_frame_header(FrameType::KeyFrame)?;
 
         // This is intra frame, so there is no references
         let references = [None, None, None, None, None, None, None];
@@ -268,7 +279,7 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
 
         let temporal_delim = Self::create_temporal_delimiter();
         let sequence = self.delegate.sequence.clone();
-        let mut frame = self.create_frame_header(FrameType::InterFrame);
+        let mut frame = self.create_frame_header(FrameType::InterFrame)?;
 
         // Use previous frame as last frame reference
         let references = [
@@ -313,5 +324,13 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
         self.references.clear();
 
         Ok(request)
+    }
+
+    fn try_tunings(&self, _tunings: &Tunings) -> EncodeResult<()> {
+        Ok(())
+    }
+
+    fn apply_tunings(&mut self, _tunings: &Tunings) -> EncodeResult<()> {
+        Ok(())
     }
 }
