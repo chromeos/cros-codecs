@@ -42,12 +42,14 @@ use crate::encoder::stateless::av1::BackendRequest;
 use crate::encoder::stateless::av1::EncoderConfig;
 use crate::encoder::stateless::av1::StatelessAV1EncoderBackend;
 use crate::encoder::stateless::av1::AV1;
+use crate::encoder::stateless::EncodeError;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::ReadyPromise;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessEncoder;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
+use crate::encoder::RateControl;
 use crate::BlockingMode;
 use crate::Fourcc;
 use crate::Resolution;
@@ -573,6 +575,13 @@ where
             _ => return Err(StatelessBackendError::UnsupportedProfile.into()),
         };
 
+        if !matches!(
+            config.initial_tunings.rate_control,
+            RateControl::ConstantQuality(_)
+        ) {
+            return Err(EncodeError::Unsupported);
+        }
+
         let backend = VaapiBackend::new(
             display,
             va_profile,
@@ -623,6 +632,8 @@ mod tests {
     use crate::encoder::stateless::BackendPromise;
     use crate::encoder::stateless::StatelessEncoderBackendImport;
     use crate::encoder::FrameMetadata;
+    use crate::encoder::RateControl;
+    use crate::encoder::Tunings;
     use crate::utils::IvfFileHeader;
     use crate::utils::IvfFrameHeader;
     use crate::FrameLayout;
@@ -884,10 +895,14 @@ mod tests {
 
         let config = EncoderConfig {
             profile: Profile::Profile0,
-            framerate: 30,
             resolution: Resolution {
                 width: WIDTH as u32,
                 height: HEIGHT as u32,
+            },
+            initial_tunings: Tunings {
+                rate_control: RateControl::ConstantQuality(128),
+                framerate: 30,
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -998,12 +1013,16 @@ mod tests {
 
         let config = EncoderConfig {
             profile: Profile::Profile0,
-            framerate: 30,
             resolution: Resolution {
                 width: WIDTH as u32,
                 height: HEIGHT as u32,
             },
             bit_depth: BitDepth::Depth10,
+            initial_tunings: Tunings {
+                rate_control: RateControl::ConstantQuality(128),
+                framerate: 30,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
