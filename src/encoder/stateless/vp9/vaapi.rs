@@ -22,6 +22,7 @@ use libva::VAProfile::VAProfileVP9Profile2;
 use libva::VP9EncPicFlags;
 use libva::VP9EncRefFlags;
 
+use crate::backend::vaapi::encoder::tunings_to_libva_rc;
 use crate::backend::vaapi::encoder::CodedOutputPromise;
 use crate::backend::vaapi::encoder::Reconstructed;
 use crate::backend::vaapi::encoder::VaapiBackend;
@@ -32,6 +33,8 @@ use crate::codec::vp9::parser::ALTREF_FRAME;
 use crate::codec::vp9::parser::GOLDEN_FRAME;
 use crate::codec::vp9::parser::LAST_FRAME;
 use crate::codec::vp9::parser::NUM_REF_FRAMES;
+use crate::encoder::stateless::vp9::predictor::MAX_Q_IDX;
+use crate::encoder::stateless::vp9::predictor::MIN_Q_IDX;
 use crate::encoder::stateless::vp9::BackendRequest;
 use crate::encoder::stateless::vp9::EncoderConfig;
 use crate::encoder::stateless::vp9::ReferenceUse;
@@ -226,6 +229,11 @@ where
             ),
         ));
 
+        let rc_param =
+            tunings_to_libva_rc::<{ MIN_Q_IDX as u32 }, { MAX_Q_IDX as u32 }>(&request.tunings)?;
+        let rc_param =
+            libva::BufferType::EncMiscParameter(libva::EncMiscParameter::RateControl(rc_param));
+
         let mut picture = Picture::new(
             request.input_meta.timestamp,
             Rc::clone(self.context()),
@@ -234,6 +242,7 @@ where
 
         picture.add_buffer(self.context().create_buffer(seq_param)?);
         picture.add_buffer(self.context().create_buffer(pic_param)?);
+        picture.add_buffer(self.context().create_buffer(rc_param)?);
 
         // Start processing the picture encoding
         let picture = picture.begin().context("picture begin")?;
