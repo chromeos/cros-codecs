@@ -28,6 +28,9 @@ use crate::encoder::stateless::FrameMetadata;
 use crate::encoder::RateControl;
 use crate::encoder::Tunings;
 
+pub(crate) const MIN_QP: u8 = 1;
+pub(crate) const MAX_QP: u8 = 51;
+
 pub(crate) struct LowDelayH264Delegate {
     /// Current sequence SPS
     sps: Option<Rc<Sps>>,
@@ -98,15 +101,15 @@ impl<Picture, Reference> LowDelayH264<Picture, Reference> {
             .timing_info(1, self.tunings.framerate * 2, false)
             .build();
 
-        const MIN_QP: u8 = 1;
-        const MAX_QP: u8 = 51;
+        let min_qp = self.tunings.min_quality.max(MIN_QP as u32);
+        let max_qp = self.tunings.max_quality.min(MAX_QP as u32);
 
         let init_qp = if let RateControl::ConstantQuality(init_qp) = self.tunings.rate_control {
             // Limit QP to valid values
-            init_qp.clamp(MIN_QP as u32, MAX_QP as u32) as u8
+            init_qp.clamp(min_qp, max_qp) as u8
         } else {
             // Pick middle QP for default qp
-            (MIN_QP + MAX_QP) / 2
+            ((min_qp + max_qp) / 2) as u8
         };
 
         let pps = PpsBuilder::new(Rc::clone(&sps))
