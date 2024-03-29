@@ -191,7 +191,7 @@ impl<Picture, Reference>
             num_macroblocks,
 
             is_idr: idr,
-            rate_control: self.tunings.rate_control.clone(),
+            tunings: self.tunings.clone(),
 
             coded_output: headers,
         };
@@ -262,7 +262,7 @@ impl<Picture, Reference>
             num_macroblocks,
 
             is_idr: false,
-            rate_control: self.tunings.rate_control.clone(),
+            tunings: self.tunings.clone(),
 
             coded_output: headers,
         };
