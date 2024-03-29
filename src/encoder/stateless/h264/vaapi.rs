@@ -29,6 +29,7 @@ use libva::Surface;
 use libva::SurfaceMemoryDescriptor;
 use libva::VAProfile;
 
+use crate::backend::vaapi::encoder::tunings_to_libva_rc;
 use crate::backend::vaapi::encoder::CodedOutputPromise;
 use crate::backend::vaapi::encoder::Reconstructed;
 use crate::backend::vaapi::encoder::VaapiBackend;
@@ -36,6 +37,8 @@ use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::Profile;
 use crate::codec::h264::parser::SliceHeader;
 use crate::codec::h264::parser::Sps;
+use crate::encoder::stateless::h264::predictor::MAX_QP;
+use crate::encoder::stateless::h264::predictor::MIN_QP;
 use crate::encoder::stateless::h264::BackendRequest;
 use crate::encoder::stateless::h264::DpbEntry;
 use crate::encoder::stateless::h264::DpbEntryMeta;
@@ -407,9 +410,14 @@ where
             request.input,
         );
 
+        let rc_param =
+            tunings_to_libva_rc::<{ MIN_QP as u32 }, { MAX_QP as u32 }>(&request.tunings)?;
+        let rc_param = BufferType::EncMiscParameter(libva::EncMiscParameter::RateControl(rc_param));
+
         picture.add_buffer(self.context().create_buffer(seq_param)?);
         picture.add_buffer(self.context().create_buffer(pic_param)?);
         picture.add_buffer(self.context().create_buffer(slice_param)?);
+        picture.add_buffer(self.context().create_buffer(rc_param)?);
 
         // Start processing the picture encoding
         let picture = picture.begin().context("picture begin")?;
