@@ -31,6 +31,7 @@ use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::FrameMetadata;
 use crate::encoder::RateControl;
+use crate::encoder::Tunings;
 use crate::Fourcc;
 use crate::Resolution;
 
@@ -44,6 +45,93 @@ impl From<libva::VaError> for StatelessBackendError {
     fn from(value: libva::VaError) -> Self {
         Self::Other(value.into())
     }
+}
+
+pub(crate) fn tunings_to_libva_rc<const CLAMP_MIN_QP: u32, const CLAMP_MAX_QP: u32>(
+    tunings: &Tunings,
+) -> StatelessBackendResult<libva::EncMiscParameterRateControl> {
+    let bits_per_second = tunings.rate_control.bitrate_target().unwrap_or(0);
+    let bits_per_second = u32::try_from(bits_per_second).map_err(|e| anyhow::anyhow!(e))?;
+
+    // At the moment we don't support variable bitrate therefore target 100%
+    const TARGET_PERCENTAGE: u32 = 100;
+
+    // Window size in ms that the RC should apply to
+    const WINDOW_SIZE: u32 = 1_500;
+
+    // Clamp minium QP
+    let min_qp = tunings.min_quality.clamp(CLAMP_MIN_QP, CLAMP_MAX_QP);
+
+    let basic_unit_size = 0;
+
+    // Don't reset the rate controller
+    const RESET: u32 = 0;
+
+    // Don't skip frames
+    const DISABLE_FRAME_SKIP: u32 = 1;
+
+    // Allow bit stuffing
+    const DISABLE_BIT_STUFFING: u32 = 0;
+
+    // Use default
+    const MB_RATE_CONTROL: u32 = 0;
+
+    // SVC encoding is not supported for now
+    const TEMPORAL_ID: u32 = 0;
+
+    // Don't ensure intraframe size
+    const CFS_I_FRAMES: u32 = 0;
+
+    // We don't use hierarchical B frames currently
+    const ENABLE_PARALLEL_BRC: u32 = 0;
+
+    // Disable dynamic scaling
+    const ENABLE_DYNAMIC_SCALING: u32 = 0;
+
+    // Use default tolerance mode
+    const FRAME_TOLERANCE_MODE: u32 = 0;
+
+    // ICQ mode is not used
+    const ICQ_QUALITY_FACTOR: u32 = 0;
+
+    // Clamp maximum QP
+    let max_qp = tunings.max_quality.clamp(CLAMP_MIN_QP, CLAMP_MAX_QP);
+
+    // Unsed
+    const QUALITY_FACTOR: u32 = 0;
+
+    // No limits
+    const TARGET_FRAME_SIZE: u32 = 0;
+
+    // If ConstantQuality is used then set to it's value, otherwise use middle
+    let initial_qp = match tunings.rate_control {
+        RateControl::ConstantQuality(qp) => qp.clamp(min_qp, max_qp),
+        _ => (min_qp + max_qp) / 2,
+    };
+
+    Ok(libva::EncMiscParameterRateControl::new(
+        bits_per_second,
+        TARGET_PERCENTAGE,
+        WINDOW_SIZE,
+        initial_qp,
+        min_qp,
+        basic_unit_size,
+        libva::RcFlags::new(
+            RESET,
+            DISABLE_FRAME_SKIP,
+            DISABLE_BIT_STUFFING,
+            MB_RATE_CONTROL,
+            TEMPORAL_ID,
+            CFS_I_FRAMES,
+            ENABLE_PARALLEL_BRC,
+            ENABLE_DYNAMIC_SCALING,
+            FRAME_TOLERANCE_MODE,
+        ),
+        ICQ_QUALITY_FACTOR,
+        max_qp,
+        QUALITY_FACTOR,
+        TARGET_FRAME_SIZE,
+    ))
 }
 
 pub struct Reconstructed(PooledVaSurface<()>);
