@@ -324,4 +324,51 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn test_keyframes() {
+        const FRAME_COUNT: u32 = 1028;
+        const IDR_PERIOD: u16 = 37;
+        const KEYFRAME_REQUEST_PERIOD: u32 = 31;
+
+        let _ = env_logger::try_init();
+
+        let tunings = Tunings::default();
+        let mut predictor: LowDelay<u32, u32, MockDelegate, MockRequest> = LowDelay {
+            queue: Default::default(),
+            references: Default::default(),
+            counter: 0,
+            limit: IDR_PERIOD,
+            delegate: MockDelegate,
+            tunings: tunings.clone(),
+            tunings_queue: Default::default(),
+            _phantom: Default::default(),
+        };
+
+        let mut requests = Vec::new();
+
+        for i in 0..FRAME_COUNT {
+            let keyframe = i % KEYFRAME_REQUEST_PERIOD == 0;
+            requests.extend(
+                predictor
+                    .new_frame(i, dummy_frame_meta(i as u64, keyframe))
+                    .unwrap(),
+            );
+        }
+
+        for i in 0..FRAME_COUNT {
+            requests.extend(predictor.reconstructed(i).unwrap());
+        }
+
+        let mut expected = Vec::new();
+        for i in 0..FRAME_COUNT {
+            if (i % IDR_PERIOD as u32 == 0) || (i % KEYFRAME_REQUEST_PERIOD) == 0 {
+                expected.push(MockRequest::KeyFrameRequest(i, tunings.clone()));
+            } else {
+                expected.push(MockRequest::InterframerRequest(i, tunings.clone()));
+            }
+        }
+
+        assert_eq!(requests, expected);
+    }
 }
