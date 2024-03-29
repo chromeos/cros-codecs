@@ -9,12 +9,12 @@ use crate::codec::h264::parser::Pps;
 use crate::codec::h264::parser::Profile;
 use crate::codec::h264::parser::SliceHeader;
 use crate::codec::h264::parser::Sps;
-use crate::encoder::stateless::h264::predictor::LowDelay;
-use crate::encoder::stateless::h264::predictor::PredictionStructure;
+use crate::encoder::stateless::h264::predictor::LowDelayH264;
 use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::BitstreamPromise;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::FrameMetadata;
+use crate::encoder::stateless::PredictionStructure;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
@@ -52,10 +52,7 @@ impl Default for EncoderConfig {
             },
             profile: Profile::Baseline,
             level: Level::L4,
-            pred_structure: PredictionStructure::LowDelay {
-                tail: 1,
-                limit: 2048,
-            },
+            pred_structure: PredictionStructure::LowDelay { limit: 2048 },
         }
     }
 }
@@ -224,7 +221,7 @@ where
 {
     fn new_h264(backend: Backend, config: EncoderConfig, mode: BlockingMode) -> EncodeResult<Self> {
         let predictor: Box<dyn Predictor<_, _, _>> = match config.pred_structure {
-            PredictionStructure::LowDelay { .. } => Box::new(LowDelay::new(config)),
+            PredictionStructure::LowDelay { limit } => Box::new(LowDelayH264::new(config, limit)),
         };
 
         Self::new(backend, mode, predictor)
