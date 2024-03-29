@@ -15,6 +15,7 @@ use crate::encoder::stateless::vp9::ReferenceUse;
 use crate::encoder::stateless::EncodeResult;
 use crate::encoder::FrameMetadata;
 use crate::encoder::RateControl;
+use crate::encoder::Tunings;
 
 pub(crate) struct LowDelayVP9Delegate {
     config: EncoderConfig,
@@ -30,9 +31,8 @@ impl<Picture, Reference> LowDelayVP9<Picture, Reference> {
             references: Default::default(),
             counter: 0,
             limit,
+            tunings: config.initial_tunings.clone(),
             delegate: LowDelayVP9Delegate { config },
-            // TODO: Extract from config
-            tunings: Default::default(),
             tunings_queue: Default::default(),
             _phantom: Default::default(),
         }
@@ -50,14 +50,14 @@ impl<Picture, Reference> LowDelayVP9<Picture, Reference> {
         const MIN_Q_IDX: u8 = 0;
         const MAX_Q_IDX: u8 = 255;
 
-        let base_q_idx =
-            if let RateControl::ConstantQuality(base_q_idx) = self.delegate.config.rate_control {
-                // Limit Q index to valid values
-                base_q_idx.clamp(MIN_Q_IDX as u32, MAX_Q_IDX as u32) as u8
-            } else {
-                // Pick middle Q index
-                (MAX_Q_IDX + MIN_Q_IDX) / 2
-            };
+        let base_q_idx = if let RateControl::ConstantQuality(base_q_idx) = self.tunings.rate_control
+        {
+            // Limit Q index to valid values
+            base_q_idx.clamp(MIN_Q_IDX as u32, MAX_Q_IDX as u32) as u8
+        } else {
+            // Pick middle Q index
+            (MAX_Q_IDX + MIN_Q_IDX) / 2
+        };
 
         Header {
             profile,
@@ -99,7 +99,7 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
             last_frame_ref: None,
             golden_frame_ref: None,
             altref_frame_ref: None,
-            rate_control: self.delegate.config.rate_control.clone(),
+            rate_control: self.tunings.rate_control.clone(),
             coded_output: Vec::new(),
         };
 
@@ -122,12 +122,20 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
             last_frame_ref: Some((ref_frame, ReferenceUse::Single)),
             golden_frame_ref: None,
             altref_frame_ref: None,
-            rate_control: self.delegate.config.rate_control.clone(),
+            rate_control: self.tunings.rate_control.clone(),
             coded_output: Vec::new(),
         };
 
         self.references.clear();
 
         Ok(request)
+    }
+
+    fn try_tunings(&self, _tunings: &Tunings) -> EncodeResult<()> {
+        Ok(())
+    }
+
+    fn apply_tunings(&mut self, _tunings: &Tunings) -> EncodeResult<()> {
+        Ok(())
     }
 }

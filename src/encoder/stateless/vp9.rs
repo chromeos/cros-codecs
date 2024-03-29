@@ -17,6 +17,7 @@ use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::FrameMetadata;
 use crate::encoder::RateControl;
+use crate::encoder::Tunings;
 use crate::BlockingMode;
 use crate::Resolution;
 
@@ -27,25 +28,24 @@ pub mod vaapi;
 
 #[derive(Clone)]
 pub struct EncoderConfig {
-    pub rate_control: RateControl,
     pub bit_depth: BitDepth,
-    pub framerate: u32,
     pub resolution: Resolution,
     pub pred_structure: PredictionStructure,
+    /// Initial tunings values
+    pub initial_tunings: Tunings,
 }
 
 impl Default for EncoderConfig {
     fn default() -> Self {
         // Artificially encoder configuration with intent to be widely supported.
         Self {
-            rate_control: RateControl::ConstantBitrate(30_000_000),
             bit_depth: BitDepth::Depth8,
-            framerate: 30,
             resolution: Resolution {
                 width: 320,
                 height: 240,
             },
             pred_structure: PredictionStructure::LowDelay { limit: 2048 },
+            initial_tunings: Default::default(),
         }
     }
 }
