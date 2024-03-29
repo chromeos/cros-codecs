@@ -35,6 +35,10 @@ use crate::encoder::FrameMetadata;
 use crate::encoder::RateControl;
 use crate::encoder::Tunings;
 
+// AV1 Spec. Dc_Qlookup max indices
+pub(crate) const MIN_BASE_QINDEX: u32 = 0;
+pub(crate) const MAX_BASE_QINDEX: u32 = 255;
+
 pub(crate) struct LowDelayAV1Delegate {
     /// Current sequence header obu
     sequence: SequenceHeaderObu,
@@ -146,11 +150,13 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
         let RateControl::ConstantQuality(base_q_idx) = self.tunings.rate_control else {
             return Err(EncodeError::Unsupported);
         };
-        // AV1 Spec. Dc_Qlookup max indices
-        const MIN_BASE_QINDEX: u32 = 0;
-        const MAX_BASE_QINDEX: u32 = 255;
+
+        // Clamp tunings's quaility range to correct range
+        let min_q_idx = self.tunings.min_quality.max(MIN_BASE_QINDEX);
+        let max_q_idx = self.tunings.max_quality.min(MAX_BASE_QINDEX);
+
         // Clamp Q index
-        let base_q_idx = base_q_idx.clamp(MIN_BASE_QINDEX, MAX_BASE_QINDEX);
+        let base_q_idx = base_q_idx.clamp(min_q_idx, max_q_idx);
 
         // Set the frame size in superblocks for the only tile
         let mut width_in_sbs_minus_1 = [0u32; MAX_TILE_COLS];
@@ -264,6 +270,7 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
             ref_frame_ctrl_l1,
             intra_period: self.limit as u32,
             ip_period: 1,
+            tunings: self.tunings.clone(),
             coded_output,
         };
 
@@ -318,6 +325,7 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
             ref_frame_ctrl_l1,
             intra_period: self.limit as u32,
             ip_period: 1,
+            tunings: self.tunings.clone(),
             coded_output,
         };
 
