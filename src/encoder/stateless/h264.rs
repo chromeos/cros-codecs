@@ -21,7 +21,6 @@ use crate::encoder::stateless::StatelessCodec;
 use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
-use crate::encoder::RateControl;
 use crate::encoder::Tunings;
 use crate::BlockingMode;
 use crate::Resolution;
@@ -112,8 +111,8 @@ pub struct BackendRequest<P, R> {
     /// True whenever the result is IDR
     is_idr: bool,
 
-    /// Current expected bitrate
-    rate_control: RateControl,
+    /// [`Tunings`] for the frame
+    tunings: Tunings,
 
     /// Container for the request output. [`StatelessH264EncoderBackend`] impl shall move it and
     /// append the slice data to it. This prevents unnecessary copying of bitstream around.

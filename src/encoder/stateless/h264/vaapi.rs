@@ -368,11 +368,11 @@ where
         &mut self,
         request: Request<'_, H>,
     ) -> StatelessBackendResult<(Self::ReconPromise, Self::CodedPromise)> {
-        let coded_buf = self.new_coded_buffer(&request.rate_control)?;
+        let coded_buf = self.new_coded_buffer(&request.tunings.rate_control)?;
         let recon = self.new_scratch_picture()?;
 
         // Use bitrate from RateControl or ask driver to ignore
-        let bits_per_second = request.rate_control.bitrate_target().unwrap_or(0) as u32;
+        let bits_per_second = request.tunings.rate_control.bitrate_target().unwrap_or(0) as u32;
         let seq_param = Self::build_enc_seq_param(
             &request.sps,
             bits_per_second,
@@ -620,7 +620,10 @@ pub(super) mod tests {
             ip_period: 0,
             num_macroblocks: (WIDTH * HEIGHT) as usize / (16 * 16),
             is_idr: true,
-            rate_control: RateControl::ConstantBitrate(30_000),
+            tunings: Tunings {
+                rate_control: RateControl::ConstantBitrate(30_000),
+                ..Default::default()
+            },
             coded_output: vec![],
         };
 
