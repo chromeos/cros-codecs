@@ -16,7 +16,6 @@ use crate::encoder::stateless::StatelessCodec;
 use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::FrameMetadata;
-use crate::encoder::RateControl;
 use crate::encoder::Tunings;
 use crate::BlockingMode;
 use crate::Resolution;
@@ -74,8 +73,8 @@ pub struct BackendRequest<P, R> {
     golden_frame_ref: Option<(Rc<R>, ReferenceUse)>,
     altref_frame_ref: Option<(Rc<R>, ReferenceUse)>,
 
-    /// Current expected bitrate
-    rate_control: RateControl,
+    /// [`Tunings`] for the frame
+    tunings: Tunings,
 
     /// Container for the request output. [`StatelessVP9EncoderBackend`] impl shall move it and
     /// append the slice data to it. This prevents unnecessary copying of bitstream around.
