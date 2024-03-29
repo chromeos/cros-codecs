@@ -264,7 +264,7 @@ where
         low_power: bool,
         blocking_mode: BlockingMode,
     ) -> EncodeResult<Self> {
-        let bitrate_control = match config.rate_control {
+        let bitrate_control = match config.initial_tunings.rate_control {
             RateControl::ConstantBitrate(_) => libva::constants::VA_RC_CBR,
             RateControl::ConstantQuality(_) => libva::constants::VA_RC_CQP,
         };
@@ -311,6 +311,7 @@ pub(super) mod tests {
     use crate::encoder::stateless::BackendPromise;
     use crate::encoder::stateless::StatelessEncoderBackendImport;
     use crate::encoder::FrameMetadata;
+    use crate::encoder::Tunings;
     use crate::utils::IvfFileHeader;
     use crate::utils::IvfFrameHeader;
     use crate::FrameLayout;
@@ -465,11 +466,14 @@ pub(super) mod tests {
         let low_power = entrypoints.contains(&VAEntrypointEncSliceLP);
 
         let config = EncoderConfig {
-            rate_control: RateControl::ConstantBitrate(200_000),
-            framerate: 30,
             resolution: Resolution {
                 width: WIDTH as u32,
                 height: HEIGHT as u32,
+            },
+            initial_tunings: Tunings {
+                rate_control: RateControl::ConstantBitrate(200_000),
+                framerate: 30,
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -579,12 +583,15 @@ pub(super) mod tests {
         let low_power = entrypoints.contains(&VAEntrypointEncSliceLP);
 
         let config = EncoderConfig {
-            rate_control: RateControl::ConstantBitrate(200_000),
             bit_depth: BitDepth::Depth10,
-            framerate: 30,
             resolution: Resolution {
                 width: WIDTH as u32,
                 height: HEIGHT as u32,
+            },
+            initial_tunings: Tunings {
+                rate_control: RateControl::ConstantBitrate(200_000),
+                framerate: 30,
+                ..Default::default()
             },
             ..Default::default()
         };
