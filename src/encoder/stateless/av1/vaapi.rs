@@ -38,6 +38,8 @@ use crate::codec::av1::parser::MAX_TILE_COLS;
 use crate::codec::av1::parser::MAX_TILE_ROWS;
 use crate::codec::av1::parser::REFS_PER_FRAME;
 use crate::codec::av1::parser::SEG_LVL_MAX;
+use crate::encoder::stateless::av1::predictor::MAX_BASE_QINDEX;
+use crate::encoder::stateless::av1::predictor::MIN_BASE_QINDEX;
 use crate::encoder::stateless::av1::BackendRequest;
 use crate::encoder::stateless::av1::EncoderConfig;
 use crate::encoder::stateless::av1::StatelessAV1EncoderBackend;
@@ -270,9 +272,11 @@ where
         let v_dc_delta_q = i8::try_from(request.frame.quantization_params.delta_q_v_dc)?;
         let v_ac_delta_q = i8::try_from(request.frame.quantization_params.delta_q_v_ac)?;
 
-        // TODO: Export to config
-        const MIN_BASE_QINDEX: u8 = 1;
-        const MAX_BASE_QINDEX: u8 = 255;
+        // Clamp tunings's quaility range to correct range
+        let min_base_qindex = request.tunings.min_quality.max(MIN_BASE_QINDEX);
+        let min_base_qindex = u8::try_from(min_base_qindex)?;
+        let max_base_qindex = request.tunings.max_quality.min(MAX_BASE_QINDEX);
+        let max_base_qindex = u8::try_from(max_base_qindex)?;
 
         let qm_y = u16::try_from(request.frame.quantization_params.qm_y)?;
         let qm_u = u16::try_from(request.frame.quantization_params.qm_u)?;
@@ -419,8 +423,8 @@ where
             u_ac_delta_q,
             v_dc_delta_q,
             v_ac_delta_q,
-            MIN_BASE_QINDEX,
-            MAX_BASE_QINDEX,
+            min_base_qindex,
+            max_base_qindex,
             &AV1EncQMatrixFlags::new(
                 request.frame.quantization_params.using_qmatrix,
                 qm_y,
@@ -497,15 +501,7 @@ where
         &mut self,
         request: BackendRequest<Self::Picture, Self::Reconstructed>,
     ) -> StatelessBackendResult<(Self::ReconPromise, Self::CodedPromise)> {
-        // TODO(bgrzesik): Replace with [`Self::new_coded_buffer`] and [`RateControl::ConstantQuality`]
-        const CODED_SIZE: usize = 1_200_000;
-        // Coded buffer size multiplier. It's inteded to give head room for the encoder.
-        const CODED_SIZE_MUL: usize = 2;
-
-        let coded_buf = self
-            .context()
-            .create_enc_coded(CODED_SIZE_MUL * CODED_SIZE)?;
-
+        let coded_buf = self.new_coded_buffer(&request.tunings.rate_control)?;
         let recon = self.new_scratch_picture()?;
 
         let seq_param = Self::build_seq_param(&request)?;
@@ -820,6 +816,7 @@ mod tests {
             ref_frame_ctrl_l1: [ReferenceFrameType::Intra; REFS_PER_FRAME],
             intra_period: 4,
             ip_period: 1,
+            tunings: Default::default(),
             coded_output: Vec::new(),
         };
 

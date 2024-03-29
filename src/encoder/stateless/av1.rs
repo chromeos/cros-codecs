@@ -83,6 +83,9 @@ pub struct BackendRequest<P, R> {
     /// Period between intra frame and P frame
     ip_period: u32,
 
+    /// [`Tunings`] for the frame
+    tunings: Tunings,
+
     /// Container for the request output. [`StatelessAV1EncoderBackend`] impl shall move it and
     /// append the slice data to it. This prevents unnecessary copying of bitstream around.
     coded_output: Vec<u8>,
