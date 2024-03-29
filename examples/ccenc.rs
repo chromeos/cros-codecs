@@ -165,7 +165,7 @@ fn new_h264_vaapi_encoder(
     };
 
     if let Some(framerate) = args.framerate {
-        config.framerate = framerate;
+        config.initial_tunings.framerate = framerate;
     }
 
     let fourcc = b"NV12".into();
@@ -177,7 +177,7 @@ fn new_h264_vaapi_encoder(
         args.low_power,
         BlockingMode::Blocking,
     )
-    .expect("Unable to crate encoder");
+    .expect("Unable to create encoder");
 
     Box::new(encoder)
 }
