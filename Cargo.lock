@@ -133,6 +133,7 @@ dependencies = [
  "md5",
  "nix",
  "thiserror",
+ "v4l2r",
 ]
 
 [[package]]
@@ -439,6 +440,19 @@ name = "unicode-ident"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "301abaae475aa91687eb82514b328ab47a211a533026cb25fc3e519b86adfc3c"
+
+[[package]]
+name = "v4l2r"
+version = "0.0.2"
+source = "git+https://github.com/Gnurou/v4l2r?rev=1b5db8e#1b5db8e1bb98283d98b1edd2b2ace931b44c825c"
+dependencies = [
+ "anyhow",
+ "bitflags 2.5.0",
+ "enumn",
+ "log",
+ "nix",
+ "thiserror",
+]
 
 [[package]]
 name = "winapi"
