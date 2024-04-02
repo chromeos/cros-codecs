@@ -10,6 +10,7 @@ edition = "2021"
 [features]
 default = ["vaapi"]
 vaapi = ["libva"]
+v4l2 = ["v4l2r"]
 
 [dependencies]
 anyhow = "1"
@@ -18,6 +19,7 @@ byteorder = "1.4.3"
 bytes = "1.1.0"
 enumn = "0.1.4"
 libva = { git = "https://github.com/chromeos/cros-libva", rev = "843cef6", package = "cros-libva", optional = true }
+v4l2r = { git = "https://github.com/Gnurou/v4l2r", rev = "1b5db8e", package = "v4l2r", optional = true }
 log = { version = "0", features = ["release_max_level_debug"] }
 thiserror = "1.0.31"
 crc32fast = "1.3.2"

@@ -32,6 +32,8 @@ use byteorder::ByteOrder;
 use byteorder::LittleEndian;
 #[cfg(feature = "vaapi")]
 pub use libva;
+#[cfg(feature = "v4l2")]
+pub use v4l2r;
 
 /// Rounding modes for `Resolution`
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
