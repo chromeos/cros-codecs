@@ -388,6 +388,8 @@ pub(crate) mod tests {
     use libva::constants::VA_FOURCC_P010;
 
     use super::*;
+    use crate::encoder::tests::fill_test_frame_nv12;
+    use crate::encoder::tests::fill_test_frame_p010;
     use crate::encoder::FrameMetadata;
     use crate::FrameLayout;
 
@@ -561,137 +563,6 @@ pub(crate) mod tests {
         }
     }
 
-    pub fn fill_test_frame(
-        width: usize,
-        height: usize,
-        pitches: [u32; 3],
-        offsets: [u32; 3],
-        t: f32,
-        raw: &mut [u8],
-    ) {
-        let (sin, cos) = f32::sin_cos(t);
-        let (sin2, cos2) = (sin.powi(2), cos.powi(2));
-
-        // Pick the dot position
-        let dot_col = height as f32 * (1.1 + 2.0 * sin * cos) / 2.2;
-        let dot_row = width as f32 * (1.1 + sin) / 2.2;
-        let dot_size2 = (width.min(height) as f32 * 0.05).powi(2);
-
-        let mut dst = &mut raw[offsets[0] as usize..];
-
-        // Luma
-        for row in 0..height {
-            #[allow(clippy::needless_range_loop)]
-            for col in 0..width {
-                let dist = (dot_col - col as f32).powi(2) + (dot_row - row as f32).powi(2);
-
-                let y = if dist < dot_size2 {
-                    0
-                } else {
-                    255 * (row + col) / (width + height)
-                };
-
-                dst[col] = y as u8;
-            }
-
-            dst = &mut dst[pitches[0] as usize..];
-        }
-
-        // Advance to the offset of the chroma plane
-        let mut dst = &mut raw[offsets[1] as usize..];
-
-        // Chroma
-        for row in 0..height / 2 {
-            let row = row * 2;
-
-            for col in 0..width / 2 {
-                let col = col * 2;
-                let dist = (dot_col - col as f32).powi(2) + (dot_row - row as f32).powi(2);
-
-                let c = if dist < dot_size2 {
-                    (128.0, 128.0)
-                } else {
-                    (
-                        ((row * 255) / width) as f32 * sin2,
-                        ((col * 255) / height) as f32 * cos2,
-                    )
-                };
-
-                dst[col] = c.0 as u8;
-                dst[col + 1] = c.1 as u8;
-            }
-
-            dst = &mut dst[pitches[1] as usize..];
-        }
-    }
-
-    pub fn fill_test_frame_p010(
-        width: usize,
-        height: usize,
-        pitches: [u32; 3],
-        offsets: [u32; 3],
-        t: f32,
-        raw: &mut [u8],
-    ) {
-        let (sin, cos) = f32::sin_cos(t);
-        let (sin2, cos2) = (sin.powi(2), cos.powi(2));
-
-        // Pick the dot position
-        let dot_col = height as f32 * (1.1 + 2.0 * sin * cos) / 2.2;
-        let dot_row = width as f32 * (1.1 + sin) / 2.2;
-        let dot_size2 = (width.min(height) as f32 * 0.05).powi(2);
-
-        let mut dst = &mut raw[offsets[0] as usize..];
-
-        // Luma
-        for row in 0..height {
-            #[allow(clippy::needless_range_loop)]
-            for col in 0..width {
-                let dist = (dot_col - col as f32).powi(2) + (dot_row - row as f32).powi(2);
-
-                let y = if dist < dot_size2 {
-                    0
-                } else {
-                    0x3ff * (row + col) / (width + height)
-                };
-
-                dst[2 * col + 0] = ((y << 6) & 0xa0) as u8;
-                dst[2 * col + 1] = (y >> 2) as u8;
-            }
-
-            dst = &mut dst[pitches[0] as usize..];
-        }
-
-        // Advance to the offset of the chroma plane
-        let mut dst = &mut raw[offsets[1] as usize..];
-
-        // Chroma
-        for row in 0..height / 2 {
-            let row = row * 2;
-
-            for col in 0..width / 2 {
-                let col = col * 2;
-                let dist = (dot_col - col as f32).powi(2) + (dot_row - row as f32).powi(2);
-
-                let c = if dist < dot_size2 {
-                    (512, 512)
-                } else {
-                    (
-                        (((row * 0x3ff) / width) as f32 * sin2) as u32,
-                        (((col * 0x3ff) / height) as f32 * cos2) as u32,
-                    )
-                };
-
-                dst[2 * col + 0] = ((c.0 << 6) & 0xa0) as u8;
-                dst[2 * col + 1] = (c.0 >> 2) as u8;
-                dst[2 * col + 2] = ((c.1 << 6) & 0xa0) as u8;
-                dst[2 * col + 3] = (c.1 >> 2) as u8;
-            }
-
-            dst = &mut dst[pitches[1] as usize..];
-        }
-    }
-
     pub fn upload_test_frame_nv12<M: SurfaceMemoryDescriptor>(
         display: &Rc<Display>,
         surface: &Surface<M>,
@@ -704,11 +575,11 @@ pub(crate) mod tests {
         let offsets = image.image().offsets;
         let pitches = image.image().pitches;
 
-        fill_test_frame(
+        fill_test_frame_nv12(
             width as usize,
             height as usize,
-            pitches,
-            offsets,
+            [pitches[0] as usize, pitches[1] as usize],
+            [offsets[0] as usize, offsets[1] as usize],
             t,
             image.as_mut(),
         );
@@ -732,8 +603,8 @@ pub(crate) mod tests {
         fill_test_frame_p010(
             width as usize,
             height as usize,
-            pitches,
-            offsets,
+            [pitches[0] as usize, pitches[1] as usize],
+            [offsets[0] as usize, offsets[1] as usize],
             t,
             image.as_mut(),
         );
@@ -810,15 +681,15 @@ pub(crate) mod tests {
 
         let mut raw = vec![0u8; WIDTH * HEIGHT + WIDTH * HEIGHT / 2];
 
-        let pitches = [WIDTH as u32, WIDTH as u32, 0];
-        let offsets = [0, WIDTH as u32 * HEIGHT as u32, 0];
+        let pitches = [WIDTH, WIDTH];
+        let offsets = [0, WIDTH * HEIGHT];
 
         let mut out = std::fs::File::create("dump_generator_golden_frames.nv12").unwrap();
 
         for i in 0..=COUNT {
             let t = 2.0 * std::f32::consts::PI * (i as f32) / (COUNT as f32);
 
-            fill_test_frame(WIDTH, HEIGHT, pitches, offsets, t, &mut raw[..]);
+            fill_test_frame_nv12(WIDTH, HEIGHT, pitches, offsets, t, &mut raw[..]);
 
             out.write_all(&raw).unwrap();
             out.flush().unwrap();
@@ -836,8 +707,8 @@ pub(crate) mod tests {
 
         let mut raw = vec![0u8; 2 * (WIDTH * HEIGHT + WIDTH * HEIGHT / 2)];
 
-        let pitches = [2 * WIDTH as u32, 2 * WIDTH as u32, 0];
-        let offsets = [0, 2 * WIDTH as u32 * HEIGHT as u32, 0];
+        let pitches = [2 * WIDTH, 2 * WIDTH];
+        let offsets = [0, 2 * WIDTH * HEIGHT];
 
         let mut out = std::fs::File::create("dump_generator_golden_frames.p010").unwrap();
 
