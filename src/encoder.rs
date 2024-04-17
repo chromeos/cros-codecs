@@ -91,6 +91,10 @@ impl From<CodedBitstreamBuffer> for Vec<u8> {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    pub fn get_test_frame_t(ts: u64, max_ts: u64) -> f32 {
+        2.0 * std::f32::consts::PI * (ts as f32) / (max_ts as f32)
+    }
+
     pub fn gen_test_frame<F>(frame_width: usize, frame_height: usize, t: f32, mut set_pix: F)
     where
         F: FnMut(usize, usize, [f32; 3]),
