@@ -22,9 +22,9 @@ use crate::encoder::stateless::h264::EncoderConfig;
 use crate::encoder::stateless::h264::IsReference;
 use crate::encoder::stateless::predictor::LowDelay;
 use crate::encoder::stateless::predictor::LowDelayDelegate;
-use crate::encoder::stateless::EncodeError;
-use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::FrameMetadata;
+use crate::encoder::EncodeError;
+use crate::encoder::EncodeResult;
 use crate::encoder::RateControl;
 use crate::encoder::Tunings;
 
