@@ -27,8 +27,8 @@ argh = "0.1"
 env_logger = "0.10.0"
 matroska-demuxer = "0.5.0"
 md5 = "0.7"
-drm = "0.9.0"
-gbm = { version = "0.12", default-features = false, features = ["drm-support"] }
+drm = "0.11.0"
+gbm = { version = "0.14", default-features = false, features = ["drm-support"] }
 
 [[example]]
 name = "ccdec"
