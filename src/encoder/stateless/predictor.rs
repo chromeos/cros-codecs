@@ -5,9 +5,9 @@
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use crate::encoder::stateless::EncodeError;
-use crate::encoder::stateless::EncodeResult;
 use crate::encoder::stateless::Predictor;
+use crate::encoder::EncodeError;
+use crate::encoder::EncodeResult;
 use crate::encoder::FrameMetadata;
 use crate::encoder::RateControl;
 use crate::encoder::Tunings;

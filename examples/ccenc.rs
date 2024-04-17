@@ -17,8 +17,8 @@ use cros_codecs::decoder::FramePool;
 use cros_codecs::encoder::stateless::av1;
 use cros_codecs::encoder::stateless::h264;
 use cros_codecs::encoder::stateless::vp9;
-use cros_codecs::encoder::stateless::StatelessVideoEncoder;
 use cros_codecs::encoder::FrameMetadata;
+use cros_codecs::encoder::VideoEncoder;
 use cros_codecs::utils::IvfFileHeader;
 use cros_codecs::utils::IvfFrameHeader;
 use cros_codecs::BlockingMode;
@@ -153,7 +153,7 @@ fn upload_img<M: libva::SurfaceMemoryDescriptor>(
 fn new_h264_vaapi_encoder(
     args: &Args,
     display: &Rc<libva::Display>,
-) -> Box<dyn StatelessVideoEncoder<PooledVaSurface<()>>> {
+) -> Box<dyn VideoEncoder<PooledVaSurface<()>>> {
     let resolution = Resolution {
         width: args.width,
         height: args.height,
@@ -185,7 +185,7 @@ fn new_h264_vaapi_encoder(
 fn new_vp9_vaapi_encoder(
     args: &Args,
     display: &Rc<libva::Display>,
-) -> Box<dyn StatelessVideoEncoder<PooledVaSurface<()>>> {
+) -> Box<dyn VideoEncoder<PooledVaSurface<()>>> {
     let resolution = Resolution {
         width: args.width,
         height: args.height,
@@ -217,7 +217,7 @@ fn new_vp9_vaapi_encoder(
 fn new_av1_vaapi_encoder(
     args: &Args,
     display: &Rc<libva::Display>,
-) -> Box<dyn StatelessVideoEncoder<PooledVaSurface<()>>> {
+) -> Box<dyn VideoEncoder<PooledVaSurface<()>>> {
     let resolution = Resolution {
         width: args.width,
         height: args.height,

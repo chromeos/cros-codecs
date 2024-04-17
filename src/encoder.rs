@@ -2,8 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use thiserror::Error;
+
 pub mod stateless;
 
+use crate::codec::av1::synthesizer::SynthesizerError as AV1SynthesizerError;
+use crate::codec::h264::synthesizer::SynthesizerError as H264SynthesizerError;
+use crate::encoder::stateless::StatelessBackendError;
 use crate::FrameLayout;
 use crate::Resolution;
 
@@ -87,6 +92,79 @@ impl From<CodedBitstreamBuffer> for Vec<u8> {
     fn from(value: CodedBitstreamBuffer) -> Self {
         value.bitstream
     }
+}
+
+#[derive(Error, Debug)]
+pub enum EncodeError {
+    #[error("unsupported")]
+    Unsupported,
+    #[error("invalid internal state. This is likely a bug.")]
+    InvalidInternalState,
+    #[error(transparent)]
+    StatelessBackendError(#[from] StatelessBackendError),
+    #[error(transparent)]
+    H264SynthesizerError(#[from] H264SynthesizerError),
+    #[error(transparent)]
+    AV1SynthesizerError(#[from] AV1SynthesizerError),
+}
+
+pub type EncodeResult<T> = Result<T, EncodeError>;
+
+/// Generic video encoder interface.
+pub trait VideoEncoder<Handle> {
+    /// Changes dynamic parameters (aka [`Tunings`]) of the encoded stream. The change may not
+    /// be effective right away. Depending on the used prediction structure, the [`Predictor`] may
+    /// choose to delay the change until entire or a some part of the structure had been encoded.
+    ///
+    /// Note: Currently changing the variant of [`RateControl`] is not supported.
+    fn tune(&mut self, tunings: Tunings) -> EncodeResult<()>;
+
+    /// Enqueues the frame for encoding. The implementation will drop the handle after it is no
+    /// longer be needed. The encoder is not required to immediately start processing the frame
+    /// and yield output bitstream. It is allowed to hold frames until certain conditions are met
+    /// eg. for specified prediction structures or referencing in order to further optimize
+    /// the compression rate of the bitstream.
+    fn encode(&mut self, meta: FrameMetadata, handle: Handle) -> Result<(), EncodeError>;
+
+    /// Drains the encoder. This means that encoder is required to finish processing of all the
+    /// frames in the internal queue and yield output bitstream by the end of the call. The output
+    /// bitstream then can be polled using [`poll`] function.
+    ///
+    /// Drain does not enforce the flush of the internal state, ie. the enqueued frame handles
+    /// do not have to be returned to user (dropped) and key frame is not enforced on the next
+    /// frame.
+    ///
+    /// [`poll`]: StatelessVideoEncoder::poll
+    fn drain(&mut self) -> EncodeResult<()>;
+
+    /// Polls on the encoder for the available output bitstream with compressed frames that where
+    /// submitted with [`encode`].
+    ///
+    /// The call may also trigger a further processing aside of returning output. Therefore it
+    /// *recommended* that this function is called frequently.
+    ///
+    /// [`encode`]: StatelessVideoEncoder::encode
+    fn poll(&mut self) -> EncodeResult<Option<CodedBitstreamBuffer>>;
+}
+
+pub fn simple_encode_loop<H>(
+    encoder: &mut impl VideoEncoder<H>,
+    frame_producer: &mut impl Iterator<Item = (FrameMetadata, H)>,
+    mut coded_consumer: impl FnMut(CodedBitstreamBuffer),
+) -> EncodeResult<()> {
+    for (meta, handle) in frame_producer.by_ref() {
+        encoder.encode(meta, handle)?;
+        while let Some(coded) = encoder.poll()? {
+            coded_consumer(coded);
+        }
+    }
+
+    encoder.drain()?;
+    while let Some(coded) = encoder.poll()? {
+        coded_consumer(coded);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
