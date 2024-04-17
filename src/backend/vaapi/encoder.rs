@@ -390,6 +390,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::encoder::tests::fill_test_frame_nv12;
     use crate::encoder::tests::fill_test_frame_p010;
+    use crate::encoder::tests::get_test_frame_t;
     use crate::encoder::FrameMetadata;
     use crate::FrameLayout;
 
@@ -659,7 +660,7 @@ pub(crate) mod tests {
 
             let surface: &Surface<()> = handle.borrow();
 
-            let t = 2.0 * std::f32::consts::PI * (meta.timestamp as f32) / (self.max_count as f32);
+            let t = get_test_frame_t(meta.timestamp, self.max_count);
             match self.fourcc.0 {
                 VA_FOURCC_NV12 => upload_test_frame_nv12(&self.display, surface, t),
                 VA_FOURCC_P010 => upload_test_frame_p010(&self.display, surface, t),
