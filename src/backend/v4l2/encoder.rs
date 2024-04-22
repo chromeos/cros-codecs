@@ -77,6 +77,9 @@ pub enum UnsupportedError {
 
     #[error("buffer lacking TIMESTAMP_COPY flag")]
     NoTimestampCopyFlag,
+
+    #[error("unsupported profile")]
+    Profile,
 }
 
 #[derive(Debug, Error)]
