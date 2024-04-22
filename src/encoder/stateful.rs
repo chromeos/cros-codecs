@@ -15,6 +15,7 @@ use crate::encoder::Tunings;
 use crate::encoder::VideoEncoder;
 
 pub mod h264;
+pub mod vp9;
 
 #[derive(Debug, Error)]
 pub enum StatefulBackendError {
