@@ -424,12 +424,18 @@ where
         let picture = picture.render().context("picture render")?;
         let picture = picture.end().context("picture end")?;
 
+        // HACK: Make sure that slice nalu start code is at least 4 bytes.
+        // TODO: Use packed headers to supply slice header with nalu start code of size 4 and get
+        // rid of this hack.
+        let mut coded_output = request.coded_output;
+        coded_output.push(0);
+
         // libva will handle the synchronization of reconstructed surface with implicit fences.
         // Therefore return the reconstructed frame immediately.
         let reference_promise = ReadyPromise::from(recon);
 
         let bitstream_promise =
-            CodedOutputPromise::new(picture, references, coded_buf, request.coded_output);
+            CodedOutputPromise::new(picture, references, coded_buf, coded_output);
 
         Ok((reference_promise, bitstream_promise))
     }
