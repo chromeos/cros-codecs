@@ -16,6 +16,7 @@ use crate::encoder::VideoEncoder;
 
 pub mod h264;
 pub mod h265;
+pub mod vp8;
 pub mod vp9;
 
 #[derive(Debug, Error)]

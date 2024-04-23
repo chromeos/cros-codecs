@@ -108,6 +108,7 @@ impl Default for IvfFileHeader {
 
 impl IvfFileHeader {
     pub const MAGIC: [u8; 4] = *b"DKIF";
+    pub const CODEC_VP8: [u8; 4] = *b"VP80";
     pub const CODEC_VP9: [u8; 4] = *b"VP90";
     pub const CODEC_AV1: [u8; 4] = *b"AV01";
 
