@@ -4,12 +4,12 @@
 
 use std::rc::Rc;
 
-use crate::codec::av1::parser::BitDepth;
 use crate::codec::av1::parser::FrameHeaderObu;
-use crate::codec::av1::parser::Profile;
 use crate::codec::av1::parser::ReferenceFrameType;
 use crate::codec::av1::parser::SequenceHeaderObu;
 use crate::codec::av1::parser::REFS_PER_FRAME;
+use crate::encoder::av1::EncoderConfig;
+use crate::encoder::av1::AV1;
 use crate::encoder::stateless::av1::predictor::LowDelayAV1;
 use crate::encoder::stateless::BitstreamPromise;
 use crate::encoder::stateless::PredictionStructure;
@@ -22,38 +22,11 @@ use crate::encoder::EncodeResult;
 use crate::encoder::FrameMetadata;
 use crate::encoder::Tunings;
 use crate::BlockingMode;
-use crate::Resolution;
 
 mod predictor;
 
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
-
-#[derive(Clone)]
-pub struct EncoderConfig {
-    pub profile: Profile,
-    pub bit_depth: BitDepth,
-    pub resolution: Resolution,
-    pub pred_structure: PredictionStructure,
-    /// Initial tunings values
-    pub initial_tunings: Tunings,
-}
-
-impl Default for EncoderConfig {
-    fn default() -> Self {
-        // Artificially encoder configuration with intent to be widely supported.
-        Self {
-            profile: Profile::Profile0,
-            bit_depth: BitDepth::Depth8,
-            resolution: Resolution {
-                width: 320,
-                height: 240,
-            },
-            pred_structure: PredictionStructure::LowDelay { limit: 1024 },
-            initial_tunings: Default::default(),
-        }
-    }
-}
 
 pub struct BackendRequest<P, R> {
     /// Current sequence's header OBU
@@ -90,8 +63,6 @@ pub struct BackendRequest<P, R> {
     /// append the slice data to it. This prevents unnecessary copying of bitstream around.
     coded_output: Vec<u8>,
 }
-
-pub struct AV1;
 
 impl<Backend> StatelessCodec<Backend> for AV1
 where
