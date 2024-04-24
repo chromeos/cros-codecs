@@ -390,9 +390,11 @@ impl libva::ExternalBufferDescriptor for DmabufFrame {
             .iter()
             .map(|fd| libva::VADRMPRIMESurfaceDescriptorObject {
                 fd: fd.as_raw_fd(),
-                // libva seems happy is we leave this to zero, which is fortunate as I cannot find
-                // a way to obtain the size from a GBM buffer object.
-                size: 0,
+                size: nix::sys::stat::fstat(fd.as_raw_fd())
+                    .map(|stat| stat.st_size as u32)
+                    // If we don't have the information about the plane fd size, fallback to 0.
+                    // Libva seems to be *sometimes* "happy" with zero.
+                    .unwrap_or(0),
                 // TODO should the descriptor be moved to individual objects?
                 drm_format_modifier: self.layout.format.1,
             })
