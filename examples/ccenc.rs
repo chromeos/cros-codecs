@@ -14,9 +14,12 @@ use argh::FromArgs;
 use cros_codecs::backend::vaapi::surface_pool::PooledVaSurface;
 use cros_codecs::backend::vaapi::surface_pool::VaSurfacePool;
 use cros_codecs::decoder::FramePool;
+use cros_codecs::encoder::av1::EncoderConfig as AV1EncoderConfig;
+use cros_codecs::encoder::h264::EncoderConfig as H264EncoderConfig;
 use cros_codecs::encoder::stateless::av1;
 use cros_codecs::encoder::stateless::h264;
 use cros_codecs::encoder::stateless::vp9;
+use cros_codecs::encoder::vp9::EncoderConfig as VP9EncoderConfig;
 use cros_codecs::encoder::FrameMetadata;
 use cros_codecs::encoder::VideoEncoder;
 use cros_codecs::utils::IvfFileHeader;
@@ -159,7 +162,7 @@ fn new_h264_vaapi_encoder(
         height: args.height,
     };
 
-    let mut config = h264::EncoderConfig {
+    let mut config = H264EncoderConfig {
         resolution,
         ..Default::default()
     };
@@ -191,7 +194,7 @@ fn new_vp9_vaapi_encoder(
         height: args.height,
     };
 
-    let mut config = vp9::EncoderConfig {
+    let mut config = VP9EncoderConfig {
         resolution,
         ..Default::default()
     };
@@ -223,7 +226,7 @@ fn new_av1_vaapi_encoder(
         height: args.height,
     };
 
-    let mut config = av1::EncoderConfig {
+    let mut config = AV1EncoderConfig {
         resolution,
         ..Default::default()
     };

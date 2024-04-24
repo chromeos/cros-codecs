@@ -4,6 +4,10 @@
 
 use thiserror::Error;
 
+pub mod av1;
+pub mod h264;
+pub mod vp9;
+
 pub mod stateless;
 
 use crate::codec::av1::synthesizer::SynthesizerError as AV1SynthesizerError;

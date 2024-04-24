@@ -4,11 +4,11 @@
 
 use std::rc::Rc;
 
-use crate::codec::h264::parser::Level;
 use crate::codec::h264::parser::Pps;
-use crate::codec::h264::parser::Profile;
 use crate::codec::h264::parser::SliceHeader;
 use crate::codec::h264::parser::Sps;
+use crate::encoder::h264::EncoderConfig;
+use crate::encoder::h264::H264;
 use crate::encoder::stateless::h264::predictor::LowDelayH264;
 use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::BitstreamPromise;
@@ -23,38 +23,11 @@ use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::EncodeResult;
 use crate::encoder::Tunings;
 use crate::BlockingMode;
-use crate::Resolution;
 
 mod predictor;
 
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
-
-#[derive(Clone)]
-pub struct EncoderConfig {
-    pub resolution: Resolution,
-    pub profile: Profile,
-    pub level: Level,
-    pub pred_structure: PredictionStructure,
-    /// Initial tunings values
-    pub initial_tunings: Tunings,
-}
-
-impl Default for EncoderConfig {
-    fn default() -> Self {
-        // Artificially encoder configuration with intent to be widely supported.
-        Self {
-            resolution: Resolution {
-                width: 320,
-                height: 240,
-            },
-            profile: Profile::Baseline,
-            level: Level::L4,
-            pred_structure: PredictionStructure::LowDelay { limit: 2048 },
-            initial_tunings: Default::default(),
-        }
-    }
-}
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum IsReference {
@@ -153,8 +126,6 @@ where
         })
     }
 }
-
-pub struct H264;
 
 impl<Backend> StatelessCodec<Backend> for H264
 where

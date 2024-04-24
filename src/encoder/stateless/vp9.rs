@@ -4,7 +4,6 @@
 
 use std::rc::Rc;
 
-use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::Header;
 use crate::encoder::stateless::vp9::predictor::LowDelayVP9;
 use crate::encoder::stateless::BitstreamPromise;
@@ -14,40 +13,17 @@ use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
 use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
+use crate::encoder::vp9::EncoderConfig;
+use crate::encoder::vp9::VP9;
 use crate::encoder::EncodeResult;
 use crate::encoder::FrameMetadata;
 use crate::encoder::Tunings;
 use crate::BlockingMode;
-use crate::Resolution;
 
 mod predictor;
 
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
-
-#[derive(Clone)]
-pub struct EncoderConfig {
-    pub bit_depth: BitDepth,
-    pub resolution: Resolution,
-    pub pred_structure: PredictionStructure,
-    /// Initial tunings values
-    pub initial_tunings: Tunings,
-}
-
-impl Default for EncoderConfig {
-    fn default() -> Self {
-        // Artificially encoder configuration with intent to be widely supported.
-        Self {
-            bit_depth: BitDepth::Depth8,
-            resolution: Resolution {
-                width: 320,
-                height: 240,
-            },
-            pred_structure: PredictionStructure::LowDelay { limit: 2048 },
-            initial_tunings: Default::default(),
-        }
-    }
-}
 
 /// Determines how reference frame shall be used
 pub enum ReferenceUse {
@@ -80,8 +56,6 @@ pub struct BackendRequest<P, R> {
     /// append the slice data to it. This prevents unnecessary copying of bitstream around.
     coded_output: Vec<u8>,
 }
-
-pub struct VP9;
 
 impl<Backend> StatelessCodec<Backend> for VP9
 where
