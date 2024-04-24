@@ -12,17 +12,9 @@ use crate::encoder::FrameMetadata;
 use crate::encoder::RateControl;
 use crate::encoder::Tunings;
 
-#[derive(Clone)]
-pub enum PredictionStructure {
-    /// Simplest prediction structure, suitable eg. for RTC. Interframe is produced at the start of
-    /// the stream and every time when [`limit`] frames are reached. Following interframe frames
-    /// are frames relying solely on the last frame.
-    LowDelay { limit: u16 },
-}
-
 /// Implementation of [`LowDelay`] prediction structure. See [`LowDelay`] for details.
 ///
-/// [`LowDelay`]: PredictionStructure::LowDelay
+/// [`LowDelay`]: crate::encoder::PredictionStructure::LowDelay
 pub(crate) struct LowDelay<Picture, Reference, Delegate, Request> {
     /// Pending frames for encoding
     pub(super) queue: VecDeque<(Picture, FrameMetadata)>,

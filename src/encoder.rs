@@ -39,6 +39,14 @@ impl RateControl {
     }
 }
 
+#[derive(Clone)]
+pub enum PredictionStructure {
+    /// Simplest prediction structure, suitable eg. for RTC. Interframe is produced at the start of
+    /// the stream and every time when [`limit`] frames are reached. Following interframe frames
+    /// are frames relying solely on the last frame.
+    LowDelay { limit: u16 },
+}
+
 /// Dynamic parameters of the encoded stream that client may choose to change during the encoding
 /// session without recreating the entire encoder instance.
 #[derive(Debug, Clone, PartialEq, Eq)]

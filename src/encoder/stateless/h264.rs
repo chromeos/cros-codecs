@@ -13,7 +13,6 @@ use crate::encoder::stateless::h264::predictor::LowDelayH264;
 use crate::encoder::stateless::BackendPromise;
 use crate::encoder::stateless::BitstreamPromise;
 use crate::encoder::stateless::FrameMetadata;
-use crate::encoder::stateless::PredictionStructure;
 use crate::encoder::stateless::Predictor;
 use crate::encoder::stateless::StatelessBackendResult;
 use crate::encoder::stateless::StatelessCodec;
@@ -21,6 +20,7 @@ use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::stateless::StatelessEncoderExecute;
 use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::EncodeResult;
+use crate::encoder::PredictionStructure;
 use crate::encoder::Tunings;
 use crate::BlockingMode;
 

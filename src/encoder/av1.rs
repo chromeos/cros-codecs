@@ -4,7 +4,7 @@
 
 use crate::codec::av1::parser::BitDepth;
 use crate::codec::av1::parser::Profile;
-use crate::encoder::stateless::PredictionStructure;
+use crate::encoder::PredictionStructure;
 use crate::encoder::Tunings;
 use crate::Resolution;
 

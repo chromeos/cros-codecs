@@ -4,7 +4,7 @@
 
 use crate::codec::h264::parser::Level;
 use crate::codec::h264::parser::Profile;
-use crate::encoder::stateless::PredictionStructure;
+use crate::encoder::PredictionStructure;
 use crate::encoder::Tunings;
 use crate::Resolution;
 
