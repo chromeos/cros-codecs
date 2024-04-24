@@ -6,7 +6,6 @@ use std::collections::VecDeque;
 
 use thiserror::Error;
 
-pub use crate::encoder::stateless::predictor::PredictionStructure;
 use crate::encoder::CodedBitstreamBuffer;
 use crate::encoder::EncodeError;
 use crate::encoder::EncodeResult;

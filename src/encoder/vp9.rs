@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 //
 use crate::codec::vp9::parser::BitDepth;
-use crate::encoder::stateless::PredictionStructure;
+use crate::encoder::PredictionStructure;
 use crate::encoder::Tunings;
 use crate::Resolution;
 
