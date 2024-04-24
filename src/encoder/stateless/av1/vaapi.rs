@@ -703,10 +703,6 @@ mod tests {
         upload_test_frame_nv12(&display, &surface, 0.0);
 
         let input_meta = FrameMetadata {
-            display_resolution: Resolution {
-                width: WIDTH,
-                height: HEIGHT,
-            },
             layout: frame_layout,
             force_keyframe: false,
             timestamp: 0,
@@ -946,16 +942,7 @@ mod tests {
 
         pool.add_frames(vec![(); 16]).unwrap();
 
-        let mut frame_producer = TestFrameGenerator::new(
-            FRAME_COUNT,
-            display,
-            pool,
-            Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
-            frame_layout,
-        );
+        let mut frame_producer = TestFrameGenerator::new(FRAME_COUNT, display, pool, frame_layout);
 
         let mut bitstream = Vec::new();
 
@@ -1065,16 +1052,7 @@ mod tests {
 
         pool.add_frames(vec![(); 16]).unwrap();
 
-        let mut frame_producer = TestFrameGenerator::new(
-            FRAME_COUNT,
-            display,
-            pool,
-            Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
-            frame_layout,
-        );
+        let mut frame_producer = TestFrameGenerator::new(FRAME_COUNT, display, pool, frame_layout);
 
         let mut bitstream = Vec::new();
 

@@ -466,7 +466,6 @@ pub(crate) mod tests {
         counter: u64,
         display: Rc<Display>,
         pool: VaSurfacePool<()>,
-        display_resolution: Resolution,
         frame_layout: FrameLayout,
     }
 
@@ -474,14 +473,12 @@ pub(crate) mod tests {
         pub fn new(
             display: Rc<Display>,
             pool: VaSurfacePool<()>,
-            display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {
             Self {
                 counter: 0,
                 display,
                 pool,
-                display_resolution,
                 frame_layout,
             }
         }
@@ -494,7 +491,6 @@ pub(crate) mod tests {
             let handle = self.pool.get_surface().unwrap();
 
             let meta = FrameMetadata {
-                display_resolution: self.display_resolution,
                 layout: self.frame_layout.clone(),
                 force_keyframe: false,
                 timestamp: self.counter,
@@ -525,17 +521,11 @@ pub(crate) mod tests {
             raw_iterator: I,
             display: Rc<Display>,
             pool: VaSurfacePool<()>,
-            display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {
             Self {
                 raw_iterator,
-                pool_iter: PooledFrameIterator::new(
-                    display,
-                    pool,
-                    display_resolution,
-                    frame_layout,
-                ),
+                pool_iter: PooledFrameIterator::new(display, pool, frame_layout),
             }
         }
     }
@@ -628,19 +618,13 @@ pub(crate) mod tests {
             max_count: u64,
             display: Rc<Display>,
             pool: VaSurfacePool<()>,
-            display_resolution: Resolution,
             frame_layout: FrameLayout,
         ) -> Self {
             Self {
                 counter: 0,
                 max_count,
                 fourcc: frame_layout.format.0,
-                pool_iter: PooledFrameIterator::new(
-                    display.clone(),
-                    pool,
-                    display_resolution,
-                    frame_layout,
-                ),
+                pool_iter: PooledFrameIterator::new(display.clone(), pool, frame_layout),
                 display,
             }
         }
