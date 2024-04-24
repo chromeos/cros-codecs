@@ -8,10 +8,12 @@ pub mod av1;
 pub mod h264;
 pub mod vp9;
 
+pub mod stateful;
 pub mod stateless;
 
 use crate::codec::av1::synthesizer::SynthesizerError as AV1SynthesizerError;
 use crate::codec::h264::synthesizer::SynthesizerError as H264SynthesizerError;
+use crate::encoder::stateful::StatefulBackendError;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::FrameLayout;
 
@@ -113,6 +115,8 @@ pub enum EncodeError {
     #[error(transparent)]
     StatelessBackendError(#[from] StatelessBackendError),
     #[error(transparent)]
+    StatefulBackendError(#[from] StatefulBackendError),
+    #[error(transparent)]
     H264SynthesizerError(#[from] H264SynthesizerError),
     #[error(transparent)]
     AV1SynthesizerError(#[from] AV1SynthesizerError),
@@ -179,6 +183,15 @@ pub fn simple_encode_loop<H>(
 
 #[cfg(test)]
 pub(crate) mod tests {
+    #[cfg(feature = "v4l2")]
+    use crate::encoder::FrameMetadata;
+    #[cfg(feature = "v4l2")]
+    use crate::utils::UserPtrFrame;
+    #[cfg(feature = "v4l2")]
+    use crate::Fourcc;
+    #[cfg(feature = "v4l2")]
+    use crate::FrameLayout;
+
     pub fn get_test_frame_t(ts: u64, max_ts: u64) -> f32 {
         2.0 * std::f32::consts::PI * (ts as f32) / (max_ts as f32)
     }
@@ -223,13 +236,13 @@ pub(crate) mod tests {
         }
     }
 
-    pub fn fill_test_frame_nv12(
+    pub fn fill_test_frame_nm12(
         width: usize,
         height: usize,
         strides: [usize; 2],
-        offsets: [usize; 2],
         t: f32,
-        raw: &mut [u8],
+        y_plane: &mut [u8],
+        uv_plane: &mut [u8],
     ) {
         gen_test_frame(width, height, t, |col, row, yuv| {
             /// Maximum value of color component for NV12
@@ -240,19 +253,33 @@ pub(crate) mod tests {
                 (yuv[1] * MAX_COMP_VAL).clamp(0.0, MAX_COMP_VAL) as u8,
                 (yuv[2] * MAX_COMP_VAL).clamp(0.0, MAX_COMP_VAL) as u8,
             );
-            let y_pos = offsets[0] + row * strides[0] + col;
+            let y_pos = row * strides[0] + col;
 
-            raw[y_pos] = y;
+            y_plane[y_pos] = y;
 
             // Subsample with upper left pixel
             if col % 2 == 0 && row % 2 == 0 {
-                let u_pos = offsets[1] + (row / 2) * strides[1] + col;
+                let u_pos = (row / 2) * strides[1] + col;
                 let v_pos = u_pos + 1;
 
-                raw[u_pos] = u;
-                raw[v_pos] = v;
+                uv_plane[u_pos] = u;
+                uv_plane[v_pos] = v;
             }
         });
+    }
+
+    pub fn fill_test_frame_nv12(
+        width: usize,
+        height: usize,
+        strides: [usize; 2],
+        offsets: [usize; 2],
+        t: f32,
+        raw: &mut [u8],
+    ) {
+        let (y_plane, uv_plane) = raw.split_at_mut(offsets[1]);
+        let y_plane = &mut y_plane[offsets[0]..];
+
+        fill_test_frame_nm12(width, height, strides, t, y_plane, uv_plane)
     }
 
     pub fn fill_test_frame_p010(
@@ -288,5 +315,82 @@ pub(crate) mod tests {
                 raw[v_pos + 1] = (v >> 2) as u8;
             }
         });
+    }
+
+    #[cfg(feature = "v4l2")]
+    pub fn userptr_test_frame_generator(
+        frame_count: u64,
+        layout: FrameLayout,
+        buffer_size: usize,
+    ) -> impl Iterator<Item = (FrameMetadata, UserPtrFrame)> {
+        (0..frame_count).map(move |timestamp| {
+            let frame = UserPtrFrame::alloc(layout.clone(), buffer_size);
+
+            let t = get_test_frame_t(timestamp, frame_count);
+
+            if (frame.layout.format.0 == Fourcc::from(b"NM12")
+                || frame.layout.format.0 == Fourcc::from(b"NV12"))
+                && frame.layout.planes.len() == 2
+                && frame.buffers.len() == 2
+            {
+                // SAFETY: Slice matches the allocation
+                let y_plane = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        frame.buffers[frame.layout.planes[0].buffer_index],
+                        frame.mem_layout.size(),
+                    )
+                };
+                // SAFETY: Slice matches the allocation
+                let uv_plane = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        frame.buffers[frame.layout.planes[1].buffer_index],
+                        frame.mem_layout.size(),
+                    )
+                };
+
+                fill_test_frame_nm12(
+                    frame.layout.size.width as usize,
+                    frame.layout.size.height as usize,
+                    [frame.layout.planes[0].stride, frame.layout.planes[1].stride],
+                    t,
+                    y_plane,
+                    uv_plane,
+                );
+            } else if frame.layout.format.0 == Fourcc::from(b"NV12")
+                && frame.layout.planes.len() == 1
+                && frame.buffers.len() == 1
+            {
+                // SAFETY: Slice matches the allocation
+                let raw = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        frame.buffers[frame.layout.planes[0].buffer_index]
+                            .add(frame.layout.planes[0].offset),
+                        frame.mem_layout.size(),
+                    )
+                };
+
+                let uv_stride = frame.layout.planes[0].stride;
+                let uv_offset = frame.layout.planes[0].stride * (frame.layout.size.height as usize);
+
+                fill_test_frame_nv12(
+                    frame.layout.size.width as usize,
+                    frame.layout.size.height as usize,
+                    [frame.layout.planes[0].stride, uv_stride],
+                    [frame.layout.planes[0].offset, uv_offset],
+                    t,
+                    raw,
+                );
+            } else {
+                panic!("Unrecognized frame layout used during test");
+            }
+
+            let meta = FrameMetadata {
+                timestamp,
+                layout: frame.layout.clone(),
+                force_keyframe: false,
+            };
+
+            (meta, frame)
+        })
     }
 }
