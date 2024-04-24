@@ -458,6 +458,7 @@ impl UserPtrFrame {
     }
 }
 
+#[derive(Debug)]
 pub struct DmabufFrame {
     pub fds: Vec<OwnedFd>,
     pub layout: FrameLayout,
