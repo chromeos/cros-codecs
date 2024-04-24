@@ -409,16 +409,9 @@ impl UserPtrFrame {
         let stride = align!(width, 64);
         let uv_start = height * stride;
         let uv_size = (height / 2) * stride;
-        let buffer_size = align!(uv_start + uv_size, 4096);
 
-        // Safe because the invariants of `Layout` are respected.
-        let layout = unsafe { std::alloc::Layout::from_size_align_unchecked(buffer_size, 4096) };
-        let mem = unsafe { std::alloc::alloc(layout) };
-
-        Self {
-            buffers: vec![mem],
-            mem_layout: layout,
-            layout: FrameLayout {
+        Self::alloc(
+            FrameLayout {
                 format: (Fourcc::from(b"NV12"), 0),
                 size: Resolution::from((width as u32, height as u32)),
                 planes: vec![
@@ -434,6 +427,33 @@ impl UserPtrFrame {
                     },
                 ],
             },
+            uv_start.max(uv_size),
+        )
+    }
+
+    pub fn alloc(layout: FrameLayout, buffer_size: usize) -> Self {
+        let buffer_count = layout
+            .planes
+            .iter()
+            .map(|plane| plane.buffer_index)
+            .collect::<std::collections::HashSet<usize>>()
+            .len();
+
+        // SAFETY: the invariants of `Layout` are respected.
+        let mem_layout =
+            unsafe { std::alloc::Layout::from_size_align_unchecked(buffer_size, 4096) };
+
+        let buffers = (0..buffer_count)
+            .map(|_| {
+                // SAFETY: the invariants of `Layout` are respected.
+                unsafe { std::alloc::alloc(mem_layout) }
+            })
+            .collect();
+
+        Self {
+            buffers,
+            mem_layout,
+            layout,
         }
     }
 }
