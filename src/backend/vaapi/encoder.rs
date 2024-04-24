@@ -291,6 +291,36 @@ where
     }
 }
 
+impl<M> StatelessEncoderBackendImport<M, Surface<M>> for VaapiBackend<M, Surface<M>>
+where
+    M: libva::SurfaceMemoryDescriptor,
+{
+    fn import_picture(
+        &mut self,
+        meta: &FrameMetadata,
+        handle: M,
+    ) -> StatelessBackendResult<Surface<M>> {
+        let fourcc = meta.layout.format.0 .0;
+
+        let format_map = FORMAT_MAP
+            .iter()
+            .find(|&map| map.va_fourcc == fourcc)
+            .ok_or_else(|| StatelessBackendError::UnsupportedFormat)?;
+
+        log::debug!("Creating new surface for meta={meta:#?}");
+        let mut surfaces = self.context.display().create_surfaces(
+            format_map.rt_format,
+            Some(format_map.va_fourcc),
+            meta.layout.size.width,
+            meta.layout.size.height,
+            Some(UsageHint::USAGE_HINT_ENCODER),
+            vec![handle],
+        )?;
+
+        surfaces.pop().ok_or(StatelessBackendError::OutOfResources)
+    }
+}
+
 /// Vaapi's implementation of [`crate::encoder::stateless::BackendPromise`]
 pub struct CodedOutputPromise<M, P>
 where
