@@ -248,10 +248,6 @@ mod tests {
     fn dummy_frame_meta(timestamp: u64, force_keyframe: bool) -> FrameMetadata {
         FrameMetadata {
             timestamp,
-            display_resolution: crate::Resolution {
-                width: 0,
-                height: 0,
-            },
             layout: crate::FrameLayout {
                 format: (Fourcc::from(b"NV12"), 0),
                 size: crate::Resolution {

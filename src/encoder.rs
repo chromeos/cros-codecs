@@ -10,7 +10,6 @@ use crate::codec::av1::synthesizer::SynthesizerError as AV1SynthesizerError;
 use crate::codec::h264::synthesizer::SynthesizerError as H264SynthesizerError;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::FrameLayout;
-use crate::Resolution;
 
 /// Specifies the encoder operation
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,10 +61,9 @@ impl Default for Tunings {
 }
 
 /// Encoder's input metadata
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FrameMetadata {
     pub timestamp: u64,
-    pub display_resolution: Resolution,
     pub layout: FrameLayout,
     pub force_keyframe: bool,
 }

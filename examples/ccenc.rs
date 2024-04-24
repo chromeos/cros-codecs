@@ -299,10 +299,6 @@ fn main() {
         let layout = upload_img(&display, handle.borrow(), args.width, args.height, &buf[..]);
 
         let input_frame = FrameMetadata {
-            display_resolution: Resolution {
-                width: args.width,
-                height: args.height,
-            },
             layout,
             timestamp: i as u64,
             force_keyframe: false,
