@@ -18,7 +18,7 @@ This crate is still under heavy development and is not recommended for use yet.
 - VAAPI decoder support (using
   [cros-libva](https://github.com/chromeos/cros-libva)) for H.264, H.265, VP8,
   VP9 and AV1,
-- VAAPI encoder support for H.264 and VP9.
+- VAAPI encoder support for H.264, VP9 and AV1.
 
 ## Planned features
 
