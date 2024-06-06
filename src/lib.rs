@@ -23,6 +23,7 @@
 pub mod backend;
 pub mod codec;
 pub mod decoder;
+pub mod device;
 pub mod encoder;
 pub mod utils;
 
