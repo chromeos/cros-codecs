@@ -438,12 +438,11 @@ where
             {
                 self.invalid_element_value("BitDepth")?;
             }
-        } else if self.obu.seq_profile <= Profile::Profile2 {
-            if (cc.high_bitdepth && self.obu.bit_depth != BitDepth::Depth10)
-                || (!cc.high_bitdepth && self.obu.bit_depth != BitDepth::Depth8)
-            {
-                self.invalid_element_value("BitDepth")?;
-            }
+        } else if self.obu.seq_profile <= Profile::Profile2
+            && ((cc.high_bitdepth && self.obu.bit_depth != BitDepth::Depth10)
+                || (!cc.high_bitdepth && self.obu.bit_depth != BitDepth::Depth8))
+        {
+            self.invalid_element_value("BitDepth")?;
         }
 
         if matches!(self.obu.seq_profile, Profile::Profile1) {
@@ -812,14 +811,15 @@ where
             self.f(8, self.obu.refresh_frame_flags)?;
         }
 
-        if !self.obu.frame_is_intra || self.obu.refresh_frame_flags != ALL_FRAMES {
-            if self.obu.error_resilient_mode && sequence.enable_order_hint {
-                for i in 0..NUM_REF_FRAMES {
-                    self.f(
-                        sequence.order_hint_bits as usize,
-                        self.obu.ref_order_hint[i],
-                    )?;
-                }
+        if (!self.obu.frame_is_intra || self.obu.refresh_frame_flags != ALL_FRAMES)
+            && self.obu.error_resilient_mode
+            && sequence.enable_order_hint
+        {
+            for i in 0..NUM_REF_FRAMES {
+                self.f(
+                    sequence.order_hint_bits as usize,
+                    self.obu.ref_order_hint[i],
+                )?;
             }
         }
 
@@ -1054,13 +1054,12 @@ where
 
         self.f(6, self.obu.loop_filter_params.loop_filter_level[0])?;
         self.f(6, self.obu.loop_filter_params.loop_filter_level[1])?;
-        if sequence.num_planes > 1 {
-            if self.obu.loop_filter_params.loop_filter_level[0] != 0
-                && self.obu.loop_filter_params.loop_filter_level[1] != 0
-            {
-                self.f(6, self.obu.loop_filter_params.loop_filter_level[2])?;
-                self.f(6, self.obu.loop_filter_params.loop_filter_level[3])?;
-            }
+        if sequence.num_planes > 1
+            && self.obu.loop_filter_params.loop_filter_level[0] != 0
+            && self.obu.loop_filter_params.loop_filter_level[1] != 0
+        {
+            self.f(6, self.obu.loop_filter_params.loop_filter_level[2])?;
+            self.f(6, self.obu.loop_filter_params.loop_filter_level[3])?;
         }
 
         self.f(3, self.obu.loop_filter_params.loop_filter_sharpness)?;
