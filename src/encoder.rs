@@ -311,9 +311,9 @@ pub(crate) mod tests {
                 let u_pos = offsets[1] + (row / 2) * strides[1] + 2 * col;
                 let v_pos = u_pos + 2;
 
-                raw[u_pos + 0] = ((u << 6) & 0xa0) as u8;
+                raw[u_pos] = ((u << 6) & 0xa0) as u8;
                 raw[u_pos + 1] = (u >> 2) as u8;
-                raw[v_pos + 0] = ((v << 6) & 0xa0) as u8;
+                raw[v_pos] = ((v << 6) & 0xa0) as u8;
                 raw[v_pos + 1] = (v >> 2) as u8;
             }
         });
