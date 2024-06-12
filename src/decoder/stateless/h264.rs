@@ -20,6 +20,7 @@ use log::debug;
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::dpb::DpbPicRefList;
+use crate::codec::h264::dpb::MmcoError;
 use crate::codec::h264::dpb::ReferencePicLists;
 use crate::codec::h264::parser::MaxLongTermFrameIdx;
 use crate::codec::h264::parser::Nalu;
@@ -797,7 +798,7 @@ where
         })
     }
 
-    fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> anyhow::Result<()> {
+    fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> Result<(), MmcoError> {
         let markings = pic.ref_pic_marking.clone();
 
         for marking in &markings.inner {
@@ -809,7 +810,7 @@ where
                 4 => self.max_long_term_frame_idx = self.dpb.mmco_op_4(marking),
                 5 => self.max_long_term_frame_idx = self.dpb.mmco_op_5(pic),
                 6 => self.dpb.mmco_op_6(pic, marking),
-                other => anyhow::bail!("unknown MMCO={}", other),
+                other => return Err(MmcoError::UnknownMmco(other)),
             }
         }
 

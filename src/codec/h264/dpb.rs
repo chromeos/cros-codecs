@@ -109,6 +109,8 @@ pub enum MmcoError {
     ExpectedMarked,
     #[error("picture cannot be marked as nonexisting for MMCO=3")]
     ExpectedExisting,
+    #[error("unknown MMCO: {0}")]
+    UnknownMmco(u8),
 }
 
 impl<T: Clone> Dpb<T> {
