@@ -8,7 +8,6 @@ use std::os::fd::AsRawFd;
 use std::sync::Arc;
 
 use nix::sys::stat::fstat;
-use nix::sys::time::TimeVal;
 use thiserror::Error;
 use v4l2r::bindings::v4l2_streamparm;
 use v4l2r::controls::codec::VideoBitrate;
@@ -49,6 +48,8 @@ use v4l2r::memory::MmapHandle;
 use v4l2r::memory::PlaneHandle;
 use v4l2r::memory::PrimitiveBufferHandles;
 use v4l2r::memory::UserPtrHandle;
+use v4l2r::nix::errno::Errno;
+use v4l2r::nix::sys::time::TimeVal;
 use v4l2r::Format;
 use v4l2r::PixelFormat;
 use v4l2r::QueueDirection;
@@ -115,7 +116,7 @@ pub enum InitializationError {
     EncoderStart(#[from] ioctl::EncoderCmdError),
 
     #[error(transparent)]
-    CreatePoller(nix::Error),
+    CreatePoller(v4l2r::nix::Error),
 
     #[error(transparent)]
     SetSelection(ioctl::SSelectionError),
@@ -127,7 +128,7 @@ pub enum InitializationError {
 #[derive(Debug, Error)]
 pub struct ControlError {
     which: &'static str,
-    error: nix::errno::Errno,
+    error: Errno,
 }
 
 impl std::fmt::Display for ControlError {
@@ -406,7 +407,7 @@ where
             Ok(()) => (),
             Err(ioctl::ExtControlError {
                 error_idx: _,
-                error: ioctl::ExtControlErrorType::IoctlError(nix::errno::Errno::EINVAL),
+                error: ioctl::ExtControlErrorType::IoctlError(Errno::EINVAL),
             }) => {
                 log::debug!("Setting/getting {name} control is not supported for this device");
                 return Ok(());
@@ -431,7 +432,7 @@ where
             Ok(()) => (),
             Err(ioctl::ExtControlError {
                 error_idx: _,
-                error: ioctl::ExtControlErrorType::IoctlError(nix::errno::Errno::EINVAL),
+                error: ioctl::ExtControlErrorType::IoctlError(Errno::EINVAL),
             }) => {
                 log::debug!("Setting/getting {name} control is not supported for this device");
                 return Ok(());

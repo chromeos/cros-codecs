@@ -105,6 +105,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "cfg_aliases"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+
+[[package]]
 name = "crc32fast"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -131,7 +137,7 @@ dependencies = [
  "log",
  "matroska-demuxer",
  "md5",
- "nix",
+ "nix 0.29.0",
  "thiserror",
  "v4l2r",
 ]
@@ -319,6 +325,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags 2.5.0",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "pkg-config"
 version = "0.3.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -444,13 +462,13 @@ checksum = "301abaae475aa91687eb82514b328ab47a211a533026cb25fc3e519b86adfc3c"
 [[package]]
 name = "v4l2r"
 version = "0.0.2"
-source = "git+https://github.com/Gnurou/v4l2r?rev=1b5db8e#1b5db8e1bb98283d98b1edd2b2ace931b44c825c"
+source = "git+https://github.com/Gnurou/v4l2r?rev=a8b368b#a8b368b3c7c058523b4bb448064bfee325cbdff3"
 dependencies = [
  "anyhow",
  "bitflags 2.5.0",
  "enumn",
  "log",
- "nix",
+ "nix 0.27.1",
  "thiserror",
 ]
 
