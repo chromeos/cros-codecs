@@ -339,7 +339,7 @@ where
     {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
-        (&mut self.ready_queue)
+        self.ready_queue
             .next()
             .map(DecoderEvent::FrameReady)
             .or_else(|| {

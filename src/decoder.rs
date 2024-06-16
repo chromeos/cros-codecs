@@ -170,7 +170,7 @@ impl<T> Extend<T> for ReadyFramesQueue<T> {
 
 /// Allows us to manipulate the frames list like an iterator without consuming it and resetting its
 /// display order counter.
-impl<'a, T> Iterator for &'a mut ReadyFramesQueue<T> {
+impl<'a, T> Iterator for ReadyFramesQueue<T> {
     type Item = T;
 
     /// Returns the next frame (if any) waiting to be dequeued.
