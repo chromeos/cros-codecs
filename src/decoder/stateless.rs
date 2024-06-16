@@ -17,6 +17,15 @@ pub mod h265;
 pub mod vp8;
 pub mod vp9;
 
+use std::os::fd::AsFd;
+use std::os::fd::BorrowedFd;
+
+use nix::errno::Errno;
+use nix::sys::epoll::Epoll;
+use nix::sys::epoll::EpollCreateFlags;
+use nix::sys::epoll::EpollEvent;
+use nix::sys::epoll::EpollFlags;
+use nix::sys::eventfd::EventFd;
 use thiserror::Error;
 
 use crate::decoder::BlockingMode;
@@ -256,6 +265,10 @@ pub trait StatelessVideoDecoder<B: StatelessDecoderBackend> {
 
     /// Returns the next event, if there is any pending.
     fn next_event(&mut self) -> Option<DecoderEvent<B::Handle, B::FramePool>>;
+
+    /// Returns a file descriptor that signals `POLLIN` whenever an event is pending on this
+    /// decoder.
+    fn poll_fd(&self) -> BorrowedFd;
 }
 
 pub trait StatelessCodec {
@@ -306,6 +319,25 @@ where
 
     /// Codec-specific state.
     codec: C::DecoderState<B::Handle, B::Picture>,
+
+    /// Signaled whenever the decoder is in `AwaitingFormat` state.
+    awaiting_format_event: EventFd,
+
+    /// Union of `awaiting_format_event` and `ready_queue` to signal whenever there is an event
+    /// (frame ready or format change) pending.
+    epoll_fd: Epoll,
+}
+
+#[derive(Debug, Error)]
+pub enum NewStatelessDecoderError {
+    #[error("failed to create EventFd for ready frames queue: {0}")]
+    ReadyFramesQueue(Errno),
+    #[error("failed to create EventFd for awaiting format event: {0}")]
+    AwaitingFormatEventFd(Errno),
+    #[error("failed to create Epoll for decoder: {0}")]
+    Epoll(Errno),
+    #[error("failed to add poll FDs to decoder Epoll: {0}")]
+    EpollAdd(Errno),
 }
 
 impl<C, B> StatelessDecoder<C, B>
@@ -314,15 +346,43 @@ where
     B: StatelessDecoderBackend + StatelessDecoderBackendPicture<C> + TryFormat<C>,
     C::DecoderState<B::Handle, B::Picture>: Default,
 {
-    pub fn new(backend: B, blocking_mode: BlockingMode) -> Self {
-        Self {
+    pub fn new(backend: B, blocking_mode: BlockingMode) -> Result<Self, NewStatelessDecoderError> {
+        let ready_queue =
+            ReadyFramesQueue::new().map_err(NewStatelessDecoderError::ReadyFramesQueue)?;
+        let awaiting_format_event =
+            EventFd::new().map_err(NewStatelessDecoderError::AwaitingFormatEventFd)?;
+        let epoll_fd =
+            Epoll::new(EpollCreateFlags::empty()).map_err(NewStatelessDecoderError::Epoll)?;
+        epoll_fd
+            .add(
+                ready_queue.poll_fd(),
+                EpollEvent::new(EpollFlags::EPOLLIN, 1),
+            )
+            .map_err(NewStatelessDecoderError::EpollAdd)?;
+        epoll_fd
+            .add(
+                awaiting_format_event.as_fd(),
+                EpollEvent::new(EpollFlags::EPOLLIN, 2),
+            )
+            .map_err(NewStatelessDecoderError::EpollAdd)?;
+
+        Ok(Self {
             backend,
             blocking_mode,
             coded_resolution: Default::default(),
             decoding_state: Default::default(),
-            ready_queue: Default::default(),
+            ready_queue,
             codec: Default::default(),
-        }
+            awaiting_format_event,
+            epoll_fd,
+        })
+    }
+
+    /// Switch the decoder into `AwaitingFormat` state, making it refuse any input until the
+    /// `FormatChanged` event is processed.
+    fn await_format_change(&mut self, format_info: C::FormatInfo) {
+        self.decoding_state = DecodingState::AwaitingFormat(format_info);
+        self.awaiting_format_event.write(1).unwrap();
     }
 
     /// Returns the next pending event, if any, using `on_format_changed` as the format change
@@ -351,6 +411,8 @@ where
                             move |decoder, sps| {
                                 on_format_changed(decoder, sps);
                                 decoder.decoding_state = DecodingState::Decoding;
+                                // Stop signaling the format change event.
+                                decoder.awaiting_format_event.read().unwrap();
                             },
                         ),
                     )))

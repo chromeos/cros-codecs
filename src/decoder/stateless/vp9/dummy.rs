@@ -16,6 +16,7 @@ use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::Segmentation;
 use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::vp9::Vp9;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::BlockingMode;
@@ -41,7 +42,7 @@ impl StatelessVp9DecoderBackend for Backend {
 
 impl StatelessDecoder<Vp9, Backend> {
     // Creates a new instance of the decoder using the dummy backend.
-    pub fn new_dummy(blocking_mode: BlockingMode) -> Self {
+    pub fn new_dummy(blocking_mode: BlockingMode) -> Result<Self, NewStatelessDecoderError> {
         Self::new(Backend::new(), blocking_mode)
     }
 }

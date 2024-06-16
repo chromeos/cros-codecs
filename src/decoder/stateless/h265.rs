@@ -9,6 +9,8 @@ mod vaapi;
 
 use std::cell::RefCell;
 use std::io::Cursor;
+use std::os::fd::AsFd;
+use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 
 use anyhow::anyhow;
@@ -359,7 +361,7 @@ impl StatelessCodec for H265 {
 
 impl<B> StatelessDecoder<H265, B>
 where
-    B: StatelessH265DecoderBackend,
+    B: StatelessH265DecoderBackend + TryFormat<H265>,
     B::Handle: Clone,
 {
     /// Whether the stream parameters have changed, indicating that a negotiation window has opened.
@@ -1137,7 +1139,7 @@ where
                 RenegotiationType::NewSps(sps) => sps,
             };
             self.backend.new_sequence(sps)?;
-            self.decoding_state = DecodingState::AwaitingFormat(sps.clone());
+            self.await_format_change(sps.clone());
         }
 
         Ok(())
@@ -1323,6 +1325,10 @@ where
     fn stream_info(&self) -> Option<&StreamInfo> {
         self.backend.stream_info()
     }
+
+    fn poll_fd(&self) -> BorrowedFd {
+        self.epoll_fd.0.as_fd()
+    }
 }
 
 #[cfg(test)]
@@ -1341,7 +1347,7 @@ pub mod tests {
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
-        let decoder = StatelessDecoder::<H265, _>::new_dummy(blocking_mode);
+        let decoder = StatelessDecoder::<H265, _>::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, f| {

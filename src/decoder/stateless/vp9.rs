@@ -7,6 +7,9 @@ mod dummy;
 #[cfg(feature = "vaapi")]
 mod vaapi;
 
+use std::os::fd::AsFd;
+use std::os::fd::BorrowedFd;
+
 use anyhow::anyhow;
 use log::debug;
 
@@ -259,7 +262,7 @@ where
         if let Some(frame) = largest_in_superframe {
             if self.negotiation_possible(&frame.header, &self.codec.negotiation_info) {
                 self.backend.new_sequence(&frame.header)?;
-                self.decoding_state = DecodingState::AwaitingFormat(frame.header.clone());
+                self.await_format_change(frame.header.clone());
             } else if matches!(self.decoding_state, DecodingState::Reset) {
                 // We can resume decoding since the decoding parameters have not changed.
                 self.decoding_state = DecodingState::Decoding;
@@ -300,6 +303,10 @@ where
     fn stream_info(&self) -> Option<&StreamInfo> {
         self.backend.stream_info()
     }
+
+    fn poll_fd(&self) -> BorrowedFd {
+        self.epoll_fd.0.as_fd()
+    }
 }
 
 #[cfg(test)]
@@ -316,7 +323,7 @@ pub mod tests {
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
-        let decoder = StatelessDecoder::<Vp9, _>::new_dummy(blocking_mode);
+        let decoder = StatelessDecoder::<Vp9, _>::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, c| {

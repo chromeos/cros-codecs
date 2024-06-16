@@ -26,6 +26,7 @@ use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::Segmentation;
 use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::vp9::Vp9;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
@@ -292,7 +293,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Vp9, VaapiBackend<M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
+    pub fn new_vaapi<S>(
+        display: Rc<Display>,
+        blocking_mode: BlockingMode,
+    ) -> Result<Self, NewStatelessDecoderError>
     where
         M: From<S>,
         S: From<M>,
@@ -329,7 +333,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = StatelessDecoder::<Vp9, _>::new_vaapi::<()>(display, blocking_mode);
+        let decoder = StatelessDecoder::<Vp9, _>::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, c| {
@@ -427,7 +431,8 @@ mod tests {
     fn test_resolution_change_500frames_block() {
         use crate::decoder::stateless::vp9::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
         let display = Display::open().unwrap();
-        let decoder = StatelessDecoder::<Vp9, _>::new_vaapi::<()>(display, BlockingMode::Blocking);
+        let decoder =
+            StatelessDecoder::<Vp9, _>::new_vaapi::<()>(display, BlockingMode::Blocking).unwrap();
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(
@@ -454,7 +459,8 @@ mod tests {
     fn test_resolution_change_500frames_nonblock() {
         use crate::decoder::stateless::vp9::tests::DECODE_RESOLUTION_CHANGE_500FRAMES;
         let display = Display::open().unwrap();
-        let decoder = StatelessDecoder::<Vp9, _>::new_vaapi::<()>(display, BlockingMode::Blocking);
+        let decoder =
+            StatelessDecoder::<Vp9, _>::new_vaapi::<()>(display, BlockingMode::Blocking).unwrap();
 
         // Skip CRC checking as they have not been generated properly?
         test_decode_stream(

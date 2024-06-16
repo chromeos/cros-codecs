@@ -9,6 +9,8 @@ mod vaapi;
 
 use std::collections::btree_map::Entry;
 use std::io::Cursor;
+use std::os::fd::AsFd;
+use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 
 use anyhow::anyhow;
@@ -860,7 +862,7 @@ where
 
 impl<B> StatelessDecoder<H264, B>
 where
-    B: StatelessH264DecoderBackend,
+    B: StatelessH264DecoderBackend + TryFormat<H264>,
     B::Handle: Clone,
 {
     fn negotiation_possible(sps: &Sps, old_negotiation_info: &NegotiationInfo) -> bool {
@@ -873,7 +875,7 @@ where
             // Make sure all the frames we decoded so far are in the ready queue.
             self.drain()?;
             self.backend.new_sequence(sps)?;
-            self.decoding_state = DecodingState::AwaitingFormat(sps.clone());
+            self.await_format_change(sps.clone());
         }
 
         Ok(())
@@ -1383,6 +1385,10 @@ where
     fn stream_info(&self) -> Option<&StreamInfo> {
         self.backend.stream_info()
     }
+
+    fn poll_fd(&self) -> BorrowedFd {
+        self.epoll_fd.0.as_fd()
+    }
 }
 
 #[cfg(test)]
@@ -1400,7 +1406,7 @@ pub mod tests {
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
-        let decoder = StatelessDecoder::<H264, _>::new_dummy(blocking_mode);
+        let decoder = StatelessDecoder::<H264, _>::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, f| {

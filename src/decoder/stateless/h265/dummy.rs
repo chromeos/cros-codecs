@@ -11,6 +11,7 @@ use std::rc::Rc;
 use crate::backend::dummy::decoder::Backend;
 use crate::backend::dummy::decoder::Handle;
 use crate::decoder::stateless::h265::H265;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::BlockingMode;
 
@@ -68,7 +69,7 @@ impl StatelessH265DecoderBackend for Backend {
 }
 impl StatelessDecoder<H265, Backend> {
     // Creates a new instance of the decoder using the dummy backend.
-    pub fn new_dummy(blocking_mode: BlockingMode) -> Self {
+    pub fn new_dummy(blocking_mode: BlockingMode) -> Result<Self, NewStatelessDecoderError> {
         Self::new(Backend::new(), blocking_mode)
     }
 }

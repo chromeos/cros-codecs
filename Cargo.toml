@@ -23,7 +23,7 @@ v4l2r = { git = "https://github.com/Gnurou/v4l2r", rev = "a8b368b", package = "v
 log = { version = "0", features = ["release_max_level_debug"] }
 thiserror = "1.0.31"
 crc32fast = "1.3.2"
-nix = { version = "0.29", features = ["fs"] }
+nix = { version = "0.29", features = ["fs", "event"] }
 
 [dev-dependencies]
 argh = "0.1"

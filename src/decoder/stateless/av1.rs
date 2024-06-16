@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use std::os::fd::AsFd;
+use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 
 use anyhow::anyhow;
@@ -442,7 +444,7 @@ where
                             self.codec.parser.highest_operating_point();
                         self.backend
                             .new_sequence(&sequence, self.codec.highest_spatial_layer)?;
-                        self.decoding_state = DecodingState::AwaitingFormat(sequence);
+                        self.await_format_change(sequence);
                     }
                 }
                 ObuType::TemporalDelimiter => {
@@ -513,6 +515,10 @@ where
             decoder.codec.sequence = Some(Rc::clone(sequence));
         })
     }
+
+    fn poll_fd(&self) -> BorrowedFd {
+        self.epoll_fd.0.as_fd()
+    }
 }
 
 #[cfg(test)]
@@ -529,7 +535,7 @@ pub mod tests {
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.
     fn test_decoder_dummy(test: &TestStream, blocking_mode: BlockingMode) {
-        let decoder = StatelessDecoder::<Av1, _>::new_dummy(blocking_mode);
+        let decoder = StatelessDecoder::<Av1, _>::new_dummy(blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, f| {

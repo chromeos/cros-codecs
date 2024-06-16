@@ -347,30 +347,27 @@ fn main() {
             let frame_iter = Box::new(NalIterator::<H264Nalu>::new(&input))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
-            let decoder = Box::new(StatelessDecoder::<H264, _>::new_vaapi(
-                display,
-                blocking_mode,
-            )) as Box<dyn StatelessVideoDecoder<_>>;
+            let decoder =
+                Box::new(StatelessDecoder::<H264, _>::new_vaapi(display, blocking_mode).unwrap())
+                    as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }
         EncodedFormat::VP8 => {
             let frame_iter = create_vpx_frame_iterator(&input);
 
-            let decoder = Box::new(StatelessDecoder::<Vp8, _>::new_vaapi(
-                display,
-                blocking_mode,
-            )) as Box<dyn StatelessVideoDecoder<_>>;
+            let decoder =
+                Box::new(StatelessDecoder::<Vp8, _>::new_vaapi(display, blocking_mode).unwrap())
+                    as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }
         EncodedFormat::VP9 => {
             let frame_iter = create_vpx_frame_iterator(&input);
 
-            let decoder = Box::new(StatelessDecoder::<Vp9, _>::new_vaapi(
-                display,
-                blocking_mode,
-            )) as Box<dyn StatelessVideoDecoder<_>>;
+            let decoder =
+                Box::new(StatelessDecoder::<Vp9, _>::new_vaapi(display, blocking_mode).unwrap())
+                    as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }
@@ -378,20 +375,18 @@ fn main() {
             let frame_iter = Box::new(NalIterator::<H265Nalu>::new(&input))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
-            let decoder = Box::new(StatelessDecoder::<H265, _>::new_vaapi(
-                display,
-                blocking_mode,
-            )) as Box<dyn StatelessVideoDecoder<_>>;
+            let decoder =
+                Box::new(StatelessDecoder::<H265, _>::new_vaapi(display, blocking_mode).unwrap())
+                    as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }
         EncodedFormat::AV1 => {
             let frame_iter = create_vpx_frame_iterator(&input);
 
-            let decoder = Box::new(StatelessDecoder::<Av1, _>::new_vaapi(
-                display,
-                blocking_mode,
-            )) as Box<dyn StatelessVideoDecoder<_>>;
+            let decoder =
+                Box::new(StatelessDecoder::<Av1, _>::new_vaapi(display, blocking_mode).unwrap())
+                    as Box<dyn StatelessVideoDecoder<_>>;
 
             (decoder, frame_iter)
         }

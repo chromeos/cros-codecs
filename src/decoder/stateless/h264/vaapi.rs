@@ -35,6 +35,7 @@ use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::Reference;
 use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::H264;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
@@ -573,7 +574,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H264, VaapiBackend<M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
+    pub fn new_vaapi<S>(
+        display: Rc<Display>,
+        blocking_mode: BlockingMode,
+    ) -> Result<Self, NewStatelessDecoderError>
     where
         M: From<S>,
         S: From<M>,
@@ -604,7 +608,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = StatelessDecoder::<H264, _>::new_vaapi::<()>(display, blocking_mode);
+        let decoder = StatelessDecoder::<H264, _>::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, f| {

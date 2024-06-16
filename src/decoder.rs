@@ -12,6 +12,11 @@
 pub mod stateless;
 
 use std::collections::VecDeque;
+use std::os::fd::AsFd;
+use std::os::fd::BorrowedFd;
+
+use nix::errno::Errno;
+use nix::sys::eventfd::EventFd;
 
 pub use crate::BlockingMode;
 
@@ -145,26 +150,47 @@ pub trait DecodedHandle {
 struct ReadyFramesQueue<T> {
     /// Queue of all the frames waiting to be sent to the client.
     queue: VecDeque<T>,
-}
 
-impl<T> Default for ReadyFramesQueue<T> {
-    fn default() -> Self {
-        Self {
-            queue: Default::default(),
-        }
-    }
+    /// EventFd signaling `EPOLLIN` whenever the queue is not empty.
+    poll_fd: EventFd,
 }
 
 impl<T> ReadyFramesQueue<T> {
+    /// Create a nwe `ReadyFramesQueue`.
+    ///
+    /// This can only fail if the `EventFd` creation fails ; in this case the corresponding `Errno`
+    /// is returned.
+    fn new() -> Result<Self, Errno> {
+        let poll_fd = EventFd::new()?;
+
+        Ok(Self {
+            queue: Default::default(),
+            poll_fd,
+        })
+    }
+
     /// Push `handle` to the back of the queue.
     fn push(&mut self, handle: T) {
-        self.queue.push_back(handle)
+        self.queue.push_back(handle);
+        if let Err(e) = self.poll_fd.write(1) {
+            log::error!("failed to write ready frames queue poll FD: {:#}", e);
+        }
+    }
+
+    /// Returns a file descriptor that signals `POLLIN` whenever an event is available on this
+    /// queue.
+    pub fn poll_fd(&self) -> BorrowedFd {
+        self.poll_fd.as_fd()
     }
 }
 
 impl<T> Extend<T> for ReadyFramesQueue<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        self.queue.extend(iter)
+        let len_before = self.queue.len();
+        self.queue.extend(iter);
+        if let Err(e) = self.poll_fd.write((self.queue.len() - len_before) as u64) {
+            log::error!("failed to write ready frames queue poll FD: {:#}", e);
+        }
     }
 }
 
@@ -175,6 +201,70 @@ impl<'a, T> Iterator for ReadyFramesQueue<T> {
 
     /// Returns the next frame (if any) waiting to be dequeued.
     fn next(&mut self) -> Option<T> {
-        self.queue.pop_front()
+        let next = self.queue.pop_front();
+
+        if next.is_some() && self.queue.is_empty() {
+            if let Err(e) = self.poll_fd.read() {
+                log::error!("failed to read ready frames queue poll FD: {:#}", e);
+            }
+        }
+
+        next
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use nix::sys::epoll::Epoll;
+    use nix::sys::epoll::EpollCreateFlags;
+    use nix::sys::epoll::EpollEvent;
+    use nix::sys::epoll::EpollFlags;
+    use nix::sys::epoll::EpollTimeout;
+
+    use super::ReadyFramesQueue;
+
+    #[test]
+    fn test_ready_frame_queue_poll() {
+        let mut queue = ReadyFramesQueue::<()>::new().unwrap();
+        let epoll = Epoll::new(EpollCreateFlags::empty()).unwrap();
+        epoll
+            .add(queue.poll_fd(), EpollEvent::new(EpollFlags::EPOLLIN, 1))
+            .unwrap();
+
+        // Empty queue should not signal.
+        let mut events = [EpollEvent::empty()];
+        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(events, [EpollEvent::empty()]);
+
+        // Events in the queue should signal.
+        queue.push(());
+        let mut events = [EpollEvent::empty()];
+        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
+
+        let _ = queue.next().unwrap();
+        let mut events = [EpollEvent::empty()];
+        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(events, [EpollEvent::empty()]);
+
+        queue.extend(std::iter::repeat(()).take(3));
+        let mut events = [EpollEvent::empty()];
+        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
+
+        let _ = queue.next().unwrap();
+        let mut events = [EpollEvent::empty()];
+        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
+
+        let _ = queue.next().unwrap();
+        let mut events = [EpollEvent::empty()];
+        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
+
+        let _ = queue.next().unwrap();
+        let mut events = [EpollEvent::empty()];
+        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(events, [EpollEvent::empty()]);
     }
 }

@@ -30,6 +30,7 @@ use crate::codec::av1::parser::SEG_LVL_MAX;
 use crate::codec::av1::parser::TOTAL_REFS_PER_FRAME;
 use crate::decoder::stateless::av1::Av1;
 use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
@@ -669,7 +670,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Av1, VaapiBackend<M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
+    pub fn new_vaapi<S>(
+        display: Rc<Display>,
+        blocking_mode: BlockingMode,
+    ) -> Result<Self, NewStatelessDecoderError>
     where
         M: From<S>,
         S: From<M>,
@@ -699,7 +703,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = StatelessDecoder::<Av1, _>::new_vaapi::<()>(display, blocking_mode);
+        let decoder = StatelessDecoder::<Av1, _>::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, f| {

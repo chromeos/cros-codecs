@@ -23,6 +23,7 @@ use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::vp8::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::vp8::Vp8;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
@@ -281,7 +282,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Vp8, VaapiBackend<M>> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi<S>(display: Rc<Display>, blocking_mode: BlockingMode) -> Self
+    pub fn new_vaapi<S>(
+        display: Rc<Display>,
+        blocking_mode: BlockingMode,
+    ) -> Result<Self, NewStatelessDecoderError>
     where
         M: From<S>,
         S: From<M>,
@@ -318,7 +322,7 @@ mod tests {
         blocking_mode: BlockingMode,
     ) {
         let display = Display::open().unwrap();
-        let decoder = StatelessDecoder::<Vp8, _>::new_vaapi::<()>(display, blocking_mode);
+        let decoder = StatelessDecoder::<Vp8, _>::new_vaapi::<()>(display, blocking_mode).unwrap();
 
         test_decode_stream(
             |d, s, c| {
