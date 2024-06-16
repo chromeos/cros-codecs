@@ -42,7 +42,6 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
-use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
@@ -1370,25 +1369,11 @@ where
     }
 
     fn next_event(&mut self) -> Option<DecoderEvent<B::Handle, B::FramePool>> {
-        // The next event is either the next frame, or, if we are awaiting negotiation, the format
-        // change event that will allow us to keep going.
-        (&mut self.ready_queue)
-            .next()
-            .map(DecoderEvent::FrameReady)
-            .or_else(|| {
-                if let DecodingState::AwaitingFormat(sps) = &self.decoding_state {
-                    Some(DecoderEvent::FormatChanged(Box::new(
-                        StatelessDecoderFormatNegotiator::new(self, sps.clone(), |decoder, sps| {
-                            // Apply the SPS settings to the decoder so we don't enter the AwaitingFormat state
-                            // on the next decode() call.
-                            decoder.apply_sps(sps);
-                            decoder.decoding_state = DecodingState::Decoding;
-                        }),
-                    )))
-                } else {
-                    None
-                }
-            })
+        self.query_next_event(|decoder, sps| {
+            // Apply the SPS settings to the decoder so we don't enter the AwaitingFormat state
+            // on the next decode() call.
+            decoder.apply_sps(sps);
+        })
     }
 
     fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool> {

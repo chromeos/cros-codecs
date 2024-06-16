@@ -311,7 +311,7 @@ where
 impl<C, B> StatelessDecoder<C, B>
 where
     C: StatelessCodec,
-    B: StatelessDecoderBackend + StatelessDecoderBackendPicture<C>,
+    B: StatelessDecoderBackend + StatelessDecoderBackendPicture<C> + TryFormat<C>,
     C::DecoderState<B::Handle, B::Picture>: Default,
 {
     pub fn new(backend: B, blocking_mode: BlockingMode) -> Self {
@@ -323,6 +323,41 @@ where
             ready_queue: Default::default(),
             codec: Default::default(),
         }
+    }
+
+    /// Returns the next pending event, if any, using `on_format_changed` as the format change
+    /// callback of the [`StatelessDecoderFormatNegotiator`] if there is a resolution change event
+    /// pending.
+    fn query_next_event<F>(
+        &mut self,
+        on_format_changed: F,
+    ) -> Option<DecoderEvent<B::Handle, B::FramePool>>
+    where
+        Self: StatelessVideoDecoder<B>,
+        C::FormatInfo: Clone,
+        F: Fn(&mut Self, &C::FormatInfo) + 'static,
+    {
+        // The next event is either the next frame, or, if we are awaiting negotiation, the format
+        // change event that will allow us to keep going.
+        (&mut self.ready_queue)
+            .next()
+            .map(DecoderEvent::FrameReady)
+            .or_else(|| {
+                if let DecodingState::AwaitingFormat(format_info) = &self.decoding_state {
+                    Some(DecoderEvent::FormatChanged(Box::new(
+                        StatelessDecoderFormatNegotiator::new(
+                            self,
+                            format_info.clone(),
+                            move |decoder, sps| {
+                                on_format_changed(decoder, sps);
+                                decoder.decoding_state = DecodingState::Decoding;
+                            },
+                        ),
+                    )))
+                } else {
+                    None
+                }
+            })
     }
 }
 

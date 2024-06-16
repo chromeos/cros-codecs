@@ -19,14 +19,12 @@ use crate::Resolution;
 
 use crate::codec::av1::parser::TileGroupObu;
 use crate::decoder::stateless::DecodeError;
-use crate::decoder::stateless::DecoderEvent;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
-use crate::decoder::stateless::StatelessDecoderFormatNegotiator;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
@@ -511,27 +509,9 @@ where
     }
 
     fn next_event(&mut self) -> Option<crate::decoder::DecoderEvent<B::Handle, B::FramePool>> {
-        // The next event is either the next frame, or, if we are awaiting negotiation, the format
-        // change event that will allow us to keep going.
-        (&mut self.ready_queue)
-            .next()
-            .map(DecoderEvent::FrameReady)
-            .or_else(|| {
-                if let DecodingState::AwaitingFormat(sequence) = &self.decoding_state {
-                    Some(DecoderEvent::FormatChanged(Box::new(
-                        StatelessDecoderFormatNegotiator::new(
-                            self,
-                            sequence.clone(),
-                            |decoder, sequence| {
-                                decoder.codec.sequence = Some(Rc::clone(sequence));
-                                decoder.decoding_state = DecodingState::Decoding;
-                            },
-                        ),
-                    )))
-                } else {
-                    None
-                }
-            })
+        self.query_next_event(|decoder, sequence| {
+            decoder.codec.sequence = Some(Rc::clone(sequence));
+        })
     }
 }
 
