@@ -1249,7 +1249,7 @@ where
     }
 }
 
-impl<B> StatelessVideoDecoder<B> for StatelessDecoder<H265, B>
+impl<B> StatelessVideoDecoder<B::Handle, B::FramePool> for StatelessDecoder<H265, B>
 where
     B: StatelessH265DecoderBackend + TryFormat<H265>,
     B::Handle: Clone + 'static,

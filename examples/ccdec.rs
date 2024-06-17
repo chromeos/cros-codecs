@@ -349,7 +349,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<H264, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_>>;
+                    as Box<dyn StatelessVideoDecoder<_, _>>;
 
             (decoder, frame_iter)
         }
@@ -358,7 +358,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<Vp8, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_>>;
+                    as Box<dyn StatelessVideoDecoder<_, _>>;
 
             (decoder, frame_iter)
         }
@@ -367,7 +367,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<Vp9, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_>>;
+                    as Box<dyn StatelessVideoDecoder<_, _>>;
 
             (decoder, frame_iter)
         }
@@ -377,7 +377,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<H265, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_>>;
+                    as Box<dyn StatelessVideoDecoder<_, _>>;
 
             (decoder, frame_iter)
         }
@@ -386,7 +386,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<Av1, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_>>;
+                    as Box<dyn StatelessVideoDecoder<_, _>>;
 
             (decoder, frame_iter)
         }
@@ -395,7 +395,7 @@ fn main() {
     let mut md5_context = md5::Context::new();
     let mut output_filename_idx = 0;
 
-    let mut on_new_frame = |handle: Rc<RefCell<VaapiDecodedHandle<_>>>| {
+    let mut on_new_frame = |handle: Rc<RefCell<VaapiDecodedHandle<BufferDescriptor>>>| {
         if args.output.is_some() || args.compute_md5.is_some() {
             handle.sync().unwrap();
             let picture = handle.dyn_picture();

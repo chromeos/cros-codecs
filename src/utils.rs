@@ -21,7 +21,6 @@ use crate::codec::h264::parser::Nalu as H264Nalu;
 use crate::codec::h265::parser::Nalu as H265Nalu;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::PoolLayer;
-use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
@@ -278,22 +277,18 @@ impl<W: Write> Drop for BitWriter<W> {
 
 /// Simple decoding loop that plays the stream once from start to finish.
 #[allow(clippy::type_complexity)]
-pub fn simple_playback_loop<D, R, I, B>(
+pub fn simple_playback_loop<D, R, I, H, FP>(
     decoder: &mut D,
     stream_iter: I,
-    on_new_frame: &mut dyn FnMut(B::Handle),
-    allocate_new_frames: &mut dyn FnMut(
-        &StreamInfo,
-        usize,
-    ) -> anyhow::Result<
-        Vec<<B::Handle as DecodedHandle>::Descriptor>,
-    >,
+    on_new_frame: &mut dyn FnMut(H),
+    allocate_new_frames: &mut dyn FnMut(&StreamInfo, usize) -> anyhow::Result<Vec<H::Descriptor>>,
     output_format: DecodedFormat,
     blocking_mode: BlockingMode,
 ) -> anyhow::Result<()>
 where
-    B: StatelessDecoderBackend,
-    D: StatelessVideoDecoder<B> + ?Sized,
+    H: DecodedHandle,
+    FP: FramePool<Descriptor = H::Descriptor>,
+    D: StatelessVideoDecoder<H, FP> + ?Sized,
     R: AsRef<[u8]>,
     I: Iterator<Item = R>,
 {

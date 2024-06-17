@@ -133,22 +133,25 @@ pub trait StatelessDecoderBackend {
 }
 
 /// Helper to implement [`DecoderFormatNegotiator`] for stateless decoders.
-struct StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
+struct StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
-    B: StatelessDecoderBackend,
-    D: StatelessVideoDecoder<B>,
+    H: DecodedHandle,
+    FP: FramePool<Descriptor = H::Descriptor>,
+    D: StatelessVideoDecoder<H, FP>,
     F: Fn(&mut D, &FH),
 {
     decoder: &'a mut D,
     format_hint: FH,
     apply_format: F,
-    _mem_desc: std::marker::PhantomData<<B::Handle as DecodedHandle>::Descriptor>,
+    _mem_desc: std::marker::PhantomData<H>,
+    _frame_pool: std::marker::PhantomData<FP>,
 }
 
-impl<'a, D, B, FH, F> StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
+impl<'a, H, FP, D, FH, F> StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
-    B: StatelessDecoderBackend,
-    D: StatelessVideoDecoder<B>,
+    H: DecodedHandle,
+    FP: FramePool<Descriptor = H::Descriptor>,
+    D: StatelessVideoDecoder<H, FP>,
     F: Fn(&mut D, &FH),
 {
     /// Creates a new format negotiator.
@@ -166,22 +169,24 @@ where
             format_hint,
             apply_format,
             _mem_desc: std::marker::PhantomData,
+            _frame_pool: std::marker::PhantomData,
         }
     }
 }
 
-impl<'a, D, B, FH, F> DecoderFormatNegotiator<'a, B::FramePool>
-    for StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
+impl<'a, H, FP, D, FH, F> DecoderFormatNegotiator<'a, FP>
+    for StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
-    B: StatelessDecoderBackend,
-    D: StatelessVideoDecoder<B> + private::StatelessVideoDecoder,
+    H: DecodedHandle,
+    FP: FramePool<Descriptor = H::Descriptor>,
+    D: StatelessVideoDecoder<H, FP> + private::StatelessVideoDecoder,
     F: Fn(&mut D, &FH),
 {
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()> {
         self.decoder.try_format(format)
     }
 
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool> {
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut FP> {
         self.decoder.frame_pool(layer)
     }
 
@@ -190,10 +195,11 @@ where
     }
 }
 
-impl<'a, D, B, FH, F> Drop for StatelessDecoderFormatNegotiator<'a, D, B, FH, F>
+impl<'a, H, FP, D, FH, F> Drop for StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
-    B: StatelessDecoderBackend,
-    D: StatelessVideoDecoder<B>,
+    H: DecodedHandle,
+    FP: FramePool<Descriptor = H::Descriptor>,
+    D: StatelessVideoDecoder<H, FP>,
     F: Fn(&mut D, &FH),
 {
     fn drop(&mut self) {
@@ -226,7 +232,7 @@ pub enum PoolLayer {
 /// The `M` generic parameter is the type of the memory descriptor backing the output frames.
 ///
 /// [`decode`]: StatelessVideoDecoder::decode
-pub trait StatelessVideoDecoder<B: StatelessDecoderBackend> {
+pub trait StatelessVideoDecoder<H: DecodedHandle, FP: FramePool<Descriptor = H::Descriptor>> {
     /// Attempts to decode `bitstream` if the current conditions allow it.
     ///
     /// This method will return [`DecodeError::CheckEvents`] if processing cannot take place until
@@ -257,12 +263,12 @@ pub trait StatelessVideoDecoder<B: StatelessDecoderBackend> {
     /// will receive its frames from a separate pool.
     ///
     /// Useful to add new frames as decode targets.
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool>;
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut FP>;
 
     fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the next event, if there is any pending.
-    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle, B::FramePool>>;
+    fn next_event(&mut self) -> Option<DecoderEvent<H, FP>>;
 
     /// Returns a file descriptor that signals `POLLIN` whenever an event is pending on this
     /// decoder.
@@ -391,7 +397,7 @@ where
         on_format_changed: F,
     ) -> Option<DecoderEvent<B::Handle, B::FramePool>>
     where
-        Self: StatelessVideoDecoder<B>,
+        Self: StatelessVideoDecoder<B::Handle, B::FramePool>,
         C::FormatInfo: Clone,
         F: Fn(&mut Self, &C::FormatInfo) + 'static,
     {
@@ -467,7 +473,7 @@ pub(crate) mod tests {
         dump_yuv: bool,
     ) where
         B: StatelessDecoderBackend,
-        D: StatelessVideoDecoder<B>,
+        D: StatelessVideoDecoder<B::Handle, B::FramePool>,
         L: Fn(&mut D, &[u8], &mut dyn FnMut(B::Handle)) -> anyhow::Result<()>,
     {
         let mut crcs = test.crcs.lines().enumerate();
