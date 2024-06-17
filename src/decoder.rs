@@ -196,7 +196,7 @@ impl<T> Extend<T> for ReadyFramesQueue<T> {
 
 /// Allows us to manipulate the frames list like an iterator without consuming it and resetting its
 /// display order counter.
-impl<'a, T> Iterator for ReadyFramesQueue<T> {
+impl<T> Iterator for ReadyFramesQueue<T> {
     type Item = T;
 
     /// Returns the next frame (if any) waiting to be dequeued.
@@ -242,7 +242,7 @@ mod tests {
         epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
         assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
 
-        let _ = queue.next().unwrap();
+        queue.next().unwrap();
         let mut events = [EpollEvent::empty()];
         epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
         assert_eq!(events, [EpollEvent::empty()]);
@@ -252,17 +252,17 @@ mod tests {
         epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
         assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
 
-        let _ = queue.next().unwrap();
+        queue.next().unwrap();
         let mut events = [EpollEvent::empty()];
         epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
         assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
 
-        let _ = queue.next().unwrap();
+        queue.next().unwrap();
         let mut events = [EpollEvent::empty()];
         epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
         assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
 
-        let _ = queue.next().unwrap();
+        queue.next().unwrap();
         let mut events = [EpollEvent::empty()];
         epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
         assert_eq!(events, [EpollEvent::empty()]);
