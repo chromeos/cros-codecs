@@ -61,12 +61,12 @@ pub(crate) trait LowDelayDelegate<Picture, Reference, Request> {
         input_meta: FrameMetadata,
     ) -> EncodeResult<Request>;
 
-    /// Checks if the [`_tunings`] can be applied
+    /// Checks if the `_tunings` can be applied
     fn try_tunings(&self, _tunings: &Tunings) -> EncodeResult<()> {
         Err(EncodeError::Unsupported)
     }
 
-    /// Applies [`_tunings`]
+    /// Applies `_tunings`
     fn apply_tunings(&mut self, _tunings: &Tunings) -> EncodeResult<()> {
         Err(EncodeError::Unsupported)
     }

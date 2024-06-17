@@ -80,7 +80,8 @@ where
 /// Trait for stateless encoder backend for H.264
 pub trait StatelessAV1EncoderBackend: StatelessVideoEncoderBackend<AV1> {
     /// Submit a [`BackendRequest`] to the backend. This operation returns both a
-    /// [`Self::CodedPromise`] and a [`Self::ReconPromise`] with resulting slice data.
+    /// [`StatelessVideoEncoderBackend::ReconPromise`] and a
+    /// [`StatelessVideoEncoderBackend::CodedPromise`] with resulting slice data.
     fn encode_tile_group(
         &mut self,
         request: BackendRequest<Self::Picture, Self::Reconstructed>,

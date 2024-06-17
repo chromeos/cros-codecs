@@ -143,7 +143,8 @@ where
 /// Trait for stateless encoder backend for H.264
 pub trait StatelessH264EncoderBackend: StatelessVideoEncoderBackend<H264> {
     /// Submit a [`BackendRequest`] to the backend. This operation returns both a
-    /// [`Self::CodedPromise`] and a [`Self::ReconPromise`] with resulting slice data.
+    /// [`StatelessVideoEncoderBackend::CodedPromise`] and a
+    /// [`StatelessVideoEncoderBackend::ReconPromise`] with resulting slice data.
     fn encode_slice(
         &mut self,
         request: BackendRequest<Self::Picture, Self::Reconstructed>,

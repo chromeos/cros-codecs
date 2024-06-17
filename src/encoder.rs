@@ -46,7 +46,7 @@ impl RateControl {
 #[derive(Clone)]
 pub enum PredictionStructure {
     /// Simplest prediction structure, suitable eg. for RTC. Interframe is produced at the start of
-    /// the stream and every time when [`limit`] frames are reached. Following interframe frames
+    /// the stream and every time when `limit` frames are reached. Following interframe frames
     /// are frames relying solely on the last frame.
     LowDelay { limit: u16 },
 }
@@ -128,8 +128,8 @@ pub type EncodeResult<T> = Result<T, EncodeError>;
 
 /// Generic video encoder interface.
 pub trait VideoEncoder<Handle> {
-    /// Changes dynamic parameters (aka [`Tunings`]) of the encoded stream. The change may not
-    /// be effective right away. Depending on the used prediction structure, the [`Predictor`] may
+    /// Changes dynamic parameters (aka [`Tunings`]) of the encoded stream. The change may not be
+    /// effective right away. Depending on the used prediction structure, the `Predictor` may
     /// choose to delay the change until entire or a some part of the structure had been encoded.
     ///
     /// Note: Currently changing the variant of [`RateControl`] is not supported.
@@ -144,22 +144,18 @@ pub trait VideoEncoder<Handle> {
 
     /// Drains the encoder. This means that encoder is required to finish processing of all the
     /// frames in the internal queue and yield output bitstream by the end of the call. The output
-    /// bitstream then can be polled using [`poll`] function.
+    /// bitstream then can be polled using [`Self::poll`] function.
     ///
     /// Drain does not enforce the flush of the internal state, ie. the enqueued frame handles
     /// do not have to be returned to user (dropped) and key frame is not enforced on the next
     /// frame.
-    ///
-    /// [`poll`]: StatelessVideoEncoder::poll
     fn drain(&mut self) -> EncodeResult<()>;
 
     /// Polls on the encoder for the available output bitstream with compressed frames that where
-    /// submitted with [`encode`].
+    /// submitted with [`Self::encode`].
     ///
     /// The call may also trigger a further processing aside of returning output. Therefore it
     /// *recommended* that this function is called frequently.
-    ///
-    /// [`encode`]: StatelessVideoEncoder::encode
     fn poll(&mut self) -> EncodeResult<Option<CodedBitstreamBuffer>>;
 }
 

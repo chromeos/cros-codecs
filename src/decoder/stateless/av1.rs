@@ -79,8 +79,8 @@ pub trait StatelessAV1DecoderBackend:
 
 /// State of the picture being currently decoded.
 ///
-/// Stored between calls to [`StatelessDecoder::handle_tile`] that belong to the
-/// same picture.
+/// Stored between calls to [`StatelessDecoder::decode_tile_group`] that belong to the same
+/// picture.
 enum CurrentPicState<H: DecodedHandle, P> {
     /// A regular frame
     RegularFrame {

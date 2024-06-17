@@ -192,16 +192,17 @@ where
     /// Backend's reconstructed frame handle.
     type Reconstructed: 'static;
 
-    /// Backend's specific [`BackendPromise`] for bitstream, a result of [`Request`] submission.
+    /// Backend's specific [`BackendPromise`] for bitstream, a result of
+    /// [`StatelessCodec::Request`] submission.
     type CodedPromise: BackendPromise<Output = Vec<u8>>;
 
     /// Backend's specific [`BackendPromise`] for [`StatelessVideoEncoderBackend::Reconstructed`],
-    /// a result of [`Request`] submission.
+    /// a result of [`StatelessCodec::Request`] submission.
     type ReconPromise: BackendPromise<Output = Self::Reconstructed>;
 }
 
 pub trait StatelessEncoderBackendImport<Handle, Picture> {
-    /// Imports the input [`Handle`] from client and transforms into [`Picture`]
+    /// Imports the input `handle` from client and transforms into `Picture`
     fn import_picture(
         &mut self,
         metadata: &FrameMetadata,
@@ -225,7 +226,7 @@ where
     /// [`StatelessVideoEncoderBackend::CodedPromise`]
     type CodedPromise: BackendPromise<Output = CodedBitstreamBuffer>;
 
-    /// Codec specific [`BackendPromise`] for [`StatelessCodecSpecific::Reference`] wrapping a
+    /// Codec specific [`BackendPromise`] for [`StatelessCodec::Reference`] wrapping a
     /// backend speficic [`StatelessVideoEncoderBackend::ReconPromise`]
     type ReferencePromise: BackendPromise<Output = Self::Reference>;
 }
@@ -263,17 +264,17 @@ where
     /// Number of the currently held frames by the predictor
     predictor_frame_count: usize,
 
-    /// [`StatelessVP9EncoderBackend`] instance to delegate [`BackendRequest`] to
+    /// [`StatelessVideoEncoderBackend`] instance to delegate work to
     backend: Backend,
 
     _phantom: std::marker::PhantomData<Handle>,
 }
 
 /// A bridge trait between [`StatelessEncoder`] and codec specific backend trait (eg.
-/// [`h264::StatelessH264EncoderBackend`] or [`vp9::StatelessVP9EncoderBackend`]).
-/// Accepts [`Request`] and is responsible for adding resutling [`BackendPromise`] to
-/// [`StatelessEncoder`] internal queues and  decrementing the internal predictor frame counter if
-/// the backend moved the frame outside predictor ownership.
+/// [`h264::StatelessH264EncoderBackend`] or [`vp9::StatelessVP9EncoderBackend`]). Accepts
+/// `Request` and is responsible for adding resutling [`BackendPromise`] to [`StatelessEncoder`]
+/// internal queues and  decrementing the internal predictor frame counter if the backend moved the
+/// frame outside predictor ownership.
 pub trait StatelessEncoderExecute<Codec, Handle, Backend>
 where
     Backend: StatelessVideoEncoderBackend<Codec>,

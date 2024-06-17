@@ -330,16 +330,16 @@ where
     /// Currently processed picture/surface.
     handle: Picture<PictureEnd, P>,
 
-    /// Hold reference frames/object from being dropped while [`handle`]
-    /// is processed.
+    /// Hold reference frames/object from being dropped while `handle` is processed.
     references: Vec<Rc<dyn Any>>,
 
     // VaBuffer where the coded output will be present after processing
     // is finished.
     coded_buf: EncCodedBuffer,
 
-    /// Container for the request output. Moved from [`StatelessVideoEncoderBackend`] request.
-    /// The output will be appended  to it
+    /// Container for the request output. Moved from
+    /// [`crate::encoder::stateless::StatelessVideoEncoderBackend`] request. The output will be
+    /// appended to it.
     coded_output: Vec<u8>,
 
     _phantom: PhantomData<M>,
