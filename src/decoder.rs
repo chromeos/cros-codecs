@@ -74,9 +74,10 @@ pub struct StreamInfo {
 /// Trait for objects allowing to negotiate the output format of a decoder.
 ///
 /// A decoder always has a valid output format set, but that format can change if the stream
-/// requests it. When this happens, the decoder stops accepting new input and a `FormatChanged`
-/// event is emitted, carrying a negotiator trait object that allows the client to acknowledge that
-/// the format change took place, and (in the future) negotiate its specifics.
+/// requests it. When this happens, the decoder stops accepting new input and a
+/// [`DecoderEvent::FormatChanged`] event is emitted, carrying a negotiator trait object that
+/// allows the client to acknowledge that the format change took place, and (in the future)
+/// negotiate its specifics.
 ///
 /// When the object is dropped, the decoder can accept and process new input again.
 pub trait DecoderFormatNegotiator<'a, P>
@@ -88,6 +89,7 @@ where
     /// Returns the frame pool in use for the decoder for `layer` set up for the
     /// new format.
     fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut P>;
+    /// Attempt to change the pixel format of output frames to `format`.
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
 
@@ -142,6 +144,8 @@ pub trait DecodedHandle {
     /// Wait until this handle has been completely rendered.
     fn sync(&self) -> anyhow::Result<()>;
 
+    /// Returns a reference to the internal [`DecodedHandle::Descriptor`]. Can be leveraged by
+    /// platform-specific code,
     fn resource(&self) -> std::cell::Ref<Self::Descriptor>;
 }
 

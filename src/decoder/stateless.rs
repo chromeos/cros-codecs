@@ -177,8 +177,6 @@ where
     D: StatelessVideoDecoder<B> + private::StatelessVideoDecoder,
     F: Fn(&mut D, &FH),
 {
-    /// Try to apply `format` to output frames. If successful, all frames emitted after the
-    /// call will be in the new format.
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()> {
         self.decoder.try_format(format)
     }
