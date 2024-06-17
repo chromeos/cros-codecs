@@ -427,8 +427,8 @@ fn y410_to_i410(
 /// Instructs on whether it should block on the operation(s).
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockingMode {
-    #[default]
     Blocking,
+    #[default]
     NonBlocking,
 }
 
