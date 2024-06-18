@@ -513,7 +513,7 @@ where
         self.backend.stream_info()
     }
 
-    fn next_event(&mut self) -> Option<crate::decoder::DecoderEvent<B::Handle, B::FramePool>> {
+    fn next_event(&mut self) -> Option<crate::decoder::DecoderEvent<B::Handle>> {
         self.query_next_event(|decoder, sequence| {
             decoder.codec.sequence = Some(Rc::clone(sequence));
         })

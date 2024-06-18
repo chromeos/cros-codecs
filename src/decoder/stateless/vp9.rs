@@ -293,7 +293,7 @@ where
         Ok(())
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle, B::FramePool>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle>> {
         self.query_next_event(|decoder, hdr| {
             decoder.codec.negotiation_info = hdr.into();
         })

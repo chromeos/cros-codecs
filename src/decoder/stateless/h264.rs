@@ -1374,7 +1374,7 @@ where
         Ok(())
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle, B::FramePool>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle>> {
         self.query_next_event(|decoder, sps| {
             // Apply the SPS settings to the decoder so we don't enter the AwaitingFormat state
             // on the next decode() call.

@@ -143,8 +143,6 @@ where
     decoder: &'a mut D,
     format_hint: FH,
     apply_format: F,
-    _mem_desc: std::marker::PhantomData<H>,
-    _frame_pool: std::marker::PhantomData<FP>,
 }
 
 impl<'a, H, FP, D, FH, F> StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
@@ -168,13 +166,11 @@ where
             decoder,
             format_hint,
             apply_format,
-            _mem_desc: std::marker::PhantomData,
-            _frame_pool: std::marker::PhantomData,
         }
     }
 }
 
-impl<'a, H, FP, D, FH, F> DecoderFormatNegotiator<'a>
+impl<'a, H, FP, D, FH, F> DecoderFormatNegotiator
     for StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
     H: DecodedHandle,
@@ -182,14 +178,21 @@ where
     D: StatelessVideoDecoder<Handle = H, FramePool = FP> + private::StatelessVideoDecoder,
     F: Fn(&mut D, &FH),
 {
-    type FramePool = FP;
+    type Descriptor = H::Descriptor;
 
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()> {
         self.decoder.try_format(format)
     }
 
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut FP> {
-        self.decoder.frame_pool(layer)
+    fn frame_pool(
+        &mut self,
+        layer: PoolLayer,
+    ) -> Vec<&mut dyn FramePool<Descriptor = Self::Descriptor>> {
+        self.decoder
+            .frame_pool(layer)
+            .into_iter()
+            .map(|p| p as &mut dyn FramePool<Descriptor = _>)
+            .collect()
     }
 
     fn stream_info(&self) -> &StreamInfo {
@@ -277,7 +280,7 @@ pub trait StatelessVideoDecoder {
     fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the next event, if there is any pending.
-    fn next_event(&mut self) -> Option<DecoderEvent<Self::Handle, Self::FramePool>>;
+    fn next_event(&mut self) -> Option<DecoderEvent<Self::Handle>>;
 
     /// Returns a file descriptor that signals `POLLIN` whenever an event is pending on this
     /// decoder.
@@ -401,10 +404,7 @@ where
     /// Returns the next pending event, if any, using `on_format_changed` as the format change
     /// callback of the [`StatelessDecoderFormatNegotiator`] if there is a resolution change event
     /// pending.
-    fn query_next_event<F>(
-        &mut self,
-        on_format_changed: F,
-    ) -> Option<DecoderEvent<B::Handle, B::FramePool>>
+    fn query_next_event<F>(&mut self, on_format_changed: F) -> Option<DecoderEvent<B::Handle>>
     where
         Self: StatelessVideoDecoder<Handle = B::Handle, FramePool = B::FramePool>,
         C::FormatInfo: Clone,

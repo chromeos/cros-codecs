@@ -271,7 +271,7 @@ where
         Ok(())
     }
 
-    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle, B::FramePool>> {
+    fn next_event(&mut self) -> Option<DecoderEvent<B::Handle>> {
         self.query_next_event(|decoder, hdr| {
             decoder.coded_resolution = Resolution {
                 width: hdr.width as u32,
