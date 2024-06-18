@@ -80,15 +80,14 @@ pub struct StreamInfo {
 /// negotiate its specifics.
 ///
 /// When the object is dropped, the decoder can accept and process new input again.
-pub trait DecoderFormatNegotiator<'a, P>
-where
-    P: FramePool,
-{
+pub trait DecoderFormatNegotiator<'a> {
+    type FramePool: FramePool;
+
     /// Returns the current decoding parameters, as extracted from the stream.
     fn stream_info(&self) -> &StreamInfo;
     /// Returns the frame pool in use for the decoder for `layer` set up for the
     /// new format.
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut P>;
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut Self::FramePool>;
     /// Attempt to change the pixel format of output frames to `format`.
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
@@ -98,7 +97,7 @@ pub enum DecoderEvent<'a, H: DecodedHandle, P: FramePool<Descriptor = H::Descrip
     /// The next frame has been decoded.
     FrameReady(H),
     /// The format of the stream has changed and action is required.
-    FormatChanged(Box<dyn DecoderFormatNegotiator<'a, P> + 'a>),
+    FormatChanged(Box<dyn DecoderFormatNegotiator<'a, FramePool = P> + 'a>),
 }
 
 pub trait DynHandle {

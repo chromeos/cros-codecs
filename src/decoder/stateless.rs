@@ -133,7 +133,7 @@ pub trait StatelessDecoderBackend {
 }
 
 /// Helper to implement [`DecoderFormatNegotiator`] for stateless decoders.
-struct StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
+pub struct StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor>,
@@ -174,7 +174,7 @@ where
     }
 }
 
-impl<'a, H, FP, D, FH, F> DecoderFormatNegotiator<'a, FP>
+impl<'a, H, FP, D, FH, F> DecoderFormatNegotiator<'a>
     for StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
     H: DecodedHandle,
@@ -182,6 +182,8 @@ where
     D: StatelessVideoDecoder<Handle = H, FramePool = FP> + private::StatelessVideoDecoder,
     F: Fn(&mut D, &FH),
 {
+    type FramePool = FP;
+
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()> {
         self.decoder.try_format(format)
     }
