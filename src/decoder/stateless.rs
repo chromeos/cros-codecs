@@ -238,7 +238,7 @@ pub trait StatelessVideoDecoder {
 
     /// [`FramePool`] providing frames to decode into. Its descriptor must be the same as
     /// [`StatelessVideoDecoder::Handle`].
-    type FramePool: FramePool<Descriptor = <Self::Handle as DecodedHandle>::Descriptor>;
+    type FramePool: FramePool<Descriptor = <Self::Handle as DecodedHandle>::Descriptor> + ?Sized;
 
     /// Attempts to decode `bitstream` if the current conditions allow it.
     ///

@@ -94,7 +94,7 @@ where
 }
 
 /// Events that can be retrieved using the `next_event` method of a decoder.
-pub enum DecoderEvent<'a, H: DecodedHandle, P: FramePool<Descriptor = H::Descriptor>> {
+pub enum DecoderEvent<'a, H: DecodedHandle, P: FramePool<Descriptor = H::Descriptor> + ?Sized> {
     /// The next frame has been decoded.
     FrameReady(H),
     /// The format of the stream has changed and action is required.
