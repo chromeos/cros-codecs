@@ -137,7 +137,7 @@ struct StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor>,
-    D: StatelessVideoDecoder<H, FP>,
+    D: StatelessVideoDecoder<Handle = H, FramePool = FP>,
     F: Fn(&mut D, &FH),
 {
     decoder: &'a mut D,
@@ -151,7 +151,7 @@ impl<'a, H, FP, D, FH, F> StatelessDecoderFormatNegotiator<'a, H, FP, D, FH, F>
 where
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor>,
-    D: StatelessVideoDecoder<H, FP>,
+    D: StatelessVideoDecoder<Handle = H, FramePool = FP>,
     F: Fn(&mut D, &FH),
 {
     /// Creates a new format negotiator.
@@ -179,7 +179,7 @@ impl<'a, H, FP, D, FH, F> DecoderFormatNegotiator<'a, FP>
 where
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor>,
-    D: StatelessVideoDecoder<H, FP> + private::StatelessVideoDecoder,
+    D: StatelessVideoDecoder<Handle = H, FramePool = FP> + private::StatelessVideoDecoder,
     F: Fn(&mut D, &FH),
 {
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()> {
@@ -199,7 +199,7 @@ impl<'a, H, FP, D, FH, F> Drop for StatelessDecoderFormatNegotiator<'a, H, FP, D
 where
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor>,
-    D: StatelessVideoDecoder<H, FP>,
+    D: StatelessVideoDecoder<Handle = H, FramePool = FP>,
     F: Fn(&mut D, &FH),
 {
     fn drop(&mut self) {
@@ -232,7 +232,14 @@ pub enum PoolLayer {
 /// The `M` generic parameter is the type of the memory descriptor backing the output frames.
 ///
 /// [`decode`]: StatelessVideoDecoder::decode
-pub trait StatelessVideoDecoder<H: DecodedHandle, FP: FramePool<Descriptor = H::Descriptor>> {
+pub trait StatelessVideoDecoder {
+    /// Type of the [`DecodedHandle`]s that decoded frames are returned into.
+    type Handle: DecodedHandle;
+
+    /// [`FramePool`] providing frames to decode into. Its descriptor must be the same as
+    /// [`StatelessVideoDecoder::Handle`].
+    type FramePool: FramePool<Descriptor = <Self::Handle as DecodedHandle>::Descriptor>;
+
     /// Attempts to decode `bitstream` if the current conditions allow it.
     ///
     /// This method will return [`DecodeError::CheckEvents`] if processing cannot take place until
@@ -263,12 +270,12 @@ pub trait StatelessVideoDecoder<H: DecodedHandle, FP: FramePool<Descriptor = H::
     /// will receive its frames from a separate pool.
     ///
     /// Useful to add new frames as decode targets.
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut FP>;
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut Self::FramePool>;
 
     fn stream_info(&self) -> Option<&StreamInfo>;
 
     /// Returns the next event, if there is any pending.
-    fn next_event(&mut self) -> Option<DecoderEvent<H, FP>>;
+    fn next_event(&mut self) -> Option<DecoderEvent<Self::Handle, Self::FramePool>>;
 
     /// Returns a file descriptor that signals `POLLIN` whenever an event is pending on this
     /// decoder.
@@ -397,7 +404,7 @@ where
         on_format_changed: F,
     ) -> Option<DecoderEvent<B::Handle, B::FramePool>>
     where
-        Self: StatelessVideoDecoder<B::Handle, B::FramePool>,
+        Self: StatelessVideoDecoder<Handle = B::Handle, FramePool = B::FramePool>,
         C::FormatInfo: Clone,
         F: Fn(&mut Self, &C::FormatInfo) + 'static,
     {
@@ -473,7 +480,7 @@ pub(crate) mod tests {
         dump_yuv: bool,
     ) where
         B: StatelessDecoderBackend,
-        D: StatelessVideoDecoder<B::Handle, B::FramePool>,
+        D: StatelessVideoDecoder<Handle = B::Handle, FramePool = B::FramePool>,
         L: Fn(&mut D, &[u8], &mut dyn FnMut(B::Handle)) -> anyhow::Result<()>,
     {
         let mut crcs = test.crcs.lines().enumerate();

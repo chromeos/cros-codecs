@@ -288,7 +288,7 @@ pub fn simple_playback_loop<D, R, I, H, FP>(
 where
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor>,
-    D: StatelessVideoDecoder<H, FP> + ?Sized,
+    D: StatelessVideoDecoder<Handle = H, FramePool = FP> + ?Sized,
     R: AsRef<[u8]>,
     I: Iterator<Item = R>,
 {

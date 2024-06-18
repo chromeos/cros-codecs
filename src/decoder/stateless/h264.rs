@@ -1314,11 +1314,14 @@ where
     }
 }
 
-impl<B> StatelessVideoDecoder<B::Handle, B::FramePool> for StatelessDecoder<H264, B>
+impl<B> StatelessVideoDecoder for StatelessDecoder<H264, B>
 where
     B: StatelessH264DecoderBackend + TryFormat<H264>,
     B::Handle: Clone + 'static,
 {
+    type Handle = B::Handle;
+    type FramePool = B::FramePool;
+
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let mut cursor = Cursor::new(bitstream);
         let nalu = Nalu::next(&mut cursor)?;

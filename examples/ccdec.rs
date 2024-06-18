@@ -349,7 +349,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<H264, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_, _>>;
+                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
 
             (decoder, frame_iter)
         }
@@ -358,7 +358,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<Vp8, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_, _>>;
+                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
 
             (decoder, frame_iter)
         }
@@ -367,7 +367,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<Vp9, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_, _>>;
+                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
 
             (decoder, frame_iter)
         }
@@ -377,7 +377,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<H265, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_, _>>;
+                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
 
             (decoder, frame_iter)
         }
@@ -386,7 +386,7 @@ fn main() {
 
             let decoder =
                 Box::new(StatelessDecoder::<Av1, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<_, _>>;
+                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
 
             (decoder, frame_iter)
         }

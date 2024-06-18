@@ -216,11 +216,14 @@ where
     }
 }
 
-impl<B> StatelessVideoDecoder<B::Handle, B::FramePool> for StatelessDecoder<Vp9, B>
+impl<B> StatelessVideoDecoder for StatelessDecoder<Vp9, B>
 where
     B: StatelessVp9DecoderBackend + TryFormat<Vp9>,
     B::Handle: Clone + 'static,
 {
+    type Handle = B::Handle;
+    type FramePool = B::FramePool;
+
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let frames = self.codec.parser.parse_chunk(bitstream)?;
 

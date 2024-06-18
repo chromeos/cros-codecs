@@ -320,11 +320,14 @@ where
     }
 }
 
-impl<B> StatelessVideoDecoder<B::Handle, B::FramePool> for StatelessDecoder<Av1, B>
+impl<B> StatelessVideoDecoder for StatelessDecoder<Av1, B>
 where
     B: StatelessAV1DecoderBackend + TryFormat<Av1>,
     B::Handle: Clone + 'static,
 {
+    type Handle = B::Handle;
+    type FramePool = B::FramePool;
+
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, super::DecodeError> {
         let mut consumed = 0;
 
