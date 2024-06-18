@@ -6,7 +6,6 @@
 //! input and writing the raw decoded frames to a file.
 
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Cursor;
@@ -16,11 +15,9 @@ use std::os::fd::AsFd;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::str::FromStr;
 
 use argh::FromArgs;
-use cros_codecs::backend::vaapi::decoder::VaapiDecodedHandle;
 use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
 use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
 use cros_codecs::decoder::stateless::av1::Av1;
@@ -32,6 +29,7 @@ use cros_codecs::decoder::stateless::StatelessDecoder;
 use cros_codecs::decoder::stateless::StatelessVideoDecoder;
 use cros_codecs::decoder::BlockingMode;
 use cros_codecs::decoder::DecodedHandle;
+use cros_codecs::decoder::DynDecodedHandle;
 use cros_codecs::decoder::StreamInfo;
 use cros_codecs::multiple_desc_type;
 use cros_codecs::utils::simple_playback_loop;
@@ -342,32 +340,35 @@ fn main() {
     };
 
     let display = libva::Display::open().expect("failed to open libva display");
+
+    // The created `decoder` is turned into a `DynStatelessVideoDecoder` trait object. This allows
+    // the same code to control the decoder no matter what codec or backend we are using.
     let (mut decoder, frame_iter) = match args.input_format {
         EncodedFormat::H264 => {
             let frame_iter = Box::new(NalIterator::<H264Nalu>::new(&input))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
-            let decoder =
-                Box::new(StatelessDecoder::<H264, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
+            let decoder = StatelessDecoder::<H264, _>::new_vaapi(display, blocking_mode)
+                .unwrap()
+                .into_trait_object();
 
             (decoder, frame_iter)
         }
         EncodedFormat::VP8 => {
             let frame_iter = create_vpx_frame_iterator(&input);
 
-            let decoder =
-                Box::new(StatelessDecoder::<Vp8, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
+            let decoder = StatelessDecoder::<Vp8, _>::new_vaapi(display, blocking_mode)
+                .unwrap()
+                .into_trait_object();
 
             (decoder, frame_iter)
         }
         EncodedFormat::VP9 => {
             let frame_iter = create_vpx_frame_iterator(&input);
 
-            let decoder =
-                Box::new(StatelessDecoder::<Vp9, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
+            let decoder = StatelessDecoder::<Vp9, _>::new_vaapi(display, blocking_mode)
+                .unwrap()
+                .into_trait_object();
 
             (decoder, frame_iter)
         }
@@ -375,18 +376,18 @@ fn main() {
             let frame_iter = Box::new(NalIterator::<H265Nalu>::new(&input))
                 as Box<dyn Iterator<Item = Cow<[u8]>>>;
 
-            let decoder =
-                Box::new(StatelessDecoder::<H265, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
+            let decoder = StatelessDecoder::<H265, _>::new_vaapi(display, blocking_mode)
+                .unwrap()
+                .into_trait_object();
 
             (decoder, frame_iter)
         }
         EncodedFormat::AV1 => {
             let frame_iter = create_vpx_frame_iterator(&input);
 
-            let decoder =
-                Box::new(StatelessDecoder::<Av1, _>::new_vaapi(display, blocking_mode).unwrap())
-                    as Box<dyn StatelessVideoDecoder<Handle = _, FramePool = _>>;
+            let decoder = StatelessDecoder::<Av1, _>::new_vaapi(display, blocking_mode)
+                .unwrap()
+                .into_trait_object();
 
             (decoder, frame_iter)
         }
@@ -395,7 +396,7 @@ fn main() {
     let mut md5_context = md5::Context::new();
     let mut output_filename_idx = 0;
 
-    let mut on_new_frame = |handle: Rc<RefCell<VaapiDecodedHandle<BufferDescriptor>>>| {
+    let mut on_new_frame = |handle: DynDecodedHandle<BufferDescriptor>| {
         if args.output.is_some() || args.compute_md5.is_some() {
             handle.sync().unwrap();
             let picture = handle.dyn_picture();

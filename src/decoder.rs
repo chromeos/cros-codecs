@@ -151,6 +151,45 @@ pub trait DecodedHandle {
     fn resource(&self) -> std::cell::Ref<Self::Descriptor>;
 }
 
+/// Implementation for any boxed [`DecodedHandle`], including trait objects.
+impl<H> DecodedHandle for Box<H>
+where
+    H: DecodedHandle + ?Sized,
+{
+    type Descriptor = H::Descriptor;
+
+    fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a> {
+        self.as_ref().dyn_picture()
+    }
+
+    fn timestamp(&self) -> u64 {
+        self.as_ref().timestamp()
+    }
+
+    fn coded_resolution(&self) -> Resolution {
+        self.as_ref().coded_resolution()
+    }
+
+    fn display_resolution(&self) -> Resolution {
+        self.as_ref().display_resolution()
+    }
+
+    fn is_ready(&self) -> bool {
+        self.as_ref().is_ready()
+    }
+
+    fn sync(&self) -> anyhow::Result<()> {
+        self.as_ref().sync()
+    }
+
+    fn resource(&self) -> std::cell::Ref<Self::Descriptor> {
+        self.as_ref().resource()
+    }
+}
+
+/// Trait object for [`DecodedHandle`]s using a specific `Descriptor`.
+pub type DynDecodedHandle<D> = Box<dyn DecodedHandle<Descriptor = D>>;
+
 /// A queue where decoding jobs wait until they are completed, at which point they can be
 /// retrieved.
 struct ReadyFramesQueue<T> {

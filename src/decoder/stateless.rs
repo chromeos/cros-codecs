@@ -32,6 +32,7 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::DecoderFormatNegotiator;
+use crate::decoder::DynDecodedHandle;
 use crate::decoder::FramePool;
 use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
@@ -285,7 +286,77 @@ pub trait StatelessVideoDecoder {
     /// Returns a file descriptor that signals `POLLIN` whenever an event is pending on this
     /// decoder.
     fn poll_fd(&self) -> BorrowedFd;
+
+    /// Transforms the decoder into a [`StatelessVideoDecoder`] trait object.
+    ///
+    /// All decoders going through this method present the same virtual interface when they return.
+    /// This is useful in order avoid monomorphization of application code that can control
+    /// decoders using various codecs or backends.
+    fn into_trait_object(
+        self,
+    ) -> DynStatelessVideoDecoder<<Self::Handle as DecodedHandle>::Descriptor>
+    where
+        Self: Sized + 'static,
+        Self::FramePool: Sized + 'static,
+        Self::Handle: 'static,
+    {
+        Box::new(DynStatelessVideoDecoderWrapper(self))
+    }
 }
+
+/// Wrapper type for a `StatelessVideoDecoder` that can be turned into a trait object with a common
+/// interface.
+struct DynStatelessVideoDecoderWrapper<D: StatelessVideoDecoder>(D);
+
+impl<D> StatelessVideoDecoder for DynStatelessVideoDecoderWrapper<D>
+where
+    D: StatelessVideoDecoder,
+    <D as StatelessVideoDecoder>::FramePool: Sized + 'static,
+    <D as StatelessVideoDecoder>::Handle: 'static,
+{
+    type Handle = DynDecodedHandle<<D::Handle as DecodedHandle>::Descriptor>;
+    type FramePool = dyn FramePool<Descriptor = <D::FramePool as FramePool>::Descriptor>;
+
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
+        self.0.decode(timestamp, bitstream)
+    }
+
+    fn flush(&mut self) -> Result<(), DecodeError> {
+        self.0.flush()
+    }
+
+    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut Self::FramePool> {
+        self.0
+            .frame_pool(layer)
+            .into_iter()
+            .map(|p| p as &mut Self::FramePool)
+            .collect()
+    }
+
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        self.0.stream_info()
+    }
+
+    fn next_event(&mut self) -> Option<DecoderEvent<Self::Handle>> {
+        self.0.next_event().map(|e| match e {
+            DecoderEvent::FrameReady(h) => {
+                DecoderEvent::FrameReady(Box::new(h) as DynDecodedHandle<_>)
+            }
+            DecoderEvent::FormatChanged(n) => DecoderEvent::FormatChanged(n),
+        })
+    }
+
+    fn poll_fd(&self) -> BorrowedFd {
+        self.0.poll_fd()
+    }
+}
+
+pub type DynStatelessVideoDecoder<D> = Box<
+    dyn StatelessVideoDecoder<
+        Handle = DynDecodedHandle<D>,
+        FramePool = dyn FramePool<Descriptor = D>,
+    >,
+>;
 
 pub trait StatelessCodec {
     /// Type providing current format information for the codec: resolution, color format, etc.
@@ -453,9 +524,9 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::decoder::stateless::StatelessDecoderBackend;
     use crate::decoder::stateless::StatelessVideoDecoder;
     use crate::decoder::DecodedHandle;
+    use crate::decoder::FramePool;
 
     /// Stream that can be used in tests, along with the CRC32 of all of its frames.
     pub struct TestStream {
@@ -474,16 +545,17 @@ pub(crate) mod tests {
     ///
     /// `dump_yuv` will dump all the decoded frames into `/tmp/framexxx.yuv`. Set this to true in
     /// order to debug the output of the test.
-    pub fn test_decode_stream<D, B, L>(
+    pub fn test_decode_stream<D, H, FP, L>(
         decoding_loop: L,
         mut decoder: D,
         test: &TestStream,
         check_crcs: bool,
         dump_yuv: bool,
     ) where
-        B: StatelessDecoderBackend,
-        D: StatelessVideoDecoder<Handle = B::Handle, FramePool = B::FramePool>,
-        L: Fn(&mut D, &[u8], &mut dyn FnMut(B::Handle)) -> anyhow::Result<()>,
+        H: DecodedHandle,
+        FP: FramePool,
+        D: StatelessVideoDecoder<Handle = H, FramePool = FP>,
+        L: Fn(&mut D, &[u8], &mut dyn FnMut(H)) -> anyhow::Result<()>,
     {
         let mut crcs = test.crcs.lines().enumerate();
 
