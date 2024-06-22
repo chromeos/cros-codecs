@@ -5,12 +5,12 @@
 use std::convert::TryFrom;
 use std::io::Cursor;
 
-use anyhow::anyhow;
 use bytes::Buf;
 use log::debug;
 use thiserror::Error;
 
 use crate::codec::vp8::bool_decoder::BoolDecoder;
+use crate::codec::vp8::bool_decoder::BoolDecoderError;
 use crate::codec::vp8::bool_decoder::BoolDecoderResult;
 use crate::codec::vp8::bool_decoder::BoolDecoderState;
 use crate::codec::vp8::probs::COEFF_DEFAULT_PROBS;
@@ -195,9 +195,17 @@ pub struct Header {
 }
 
 #[derive(Debug, Error)]
-enum ParseUncompressedChunkError {
+pub enum ParseUncompressedChunkError {
     #[error("invalid start code {0}")]
     InvalidStartCode(u32),
+}
+
+#[derive(Debug, Error)]
+pub enum ComputePartitionSizesError {
+    #[error("unexpected end of header")]
+    EndOfHeader,
+    #[error("partition size not fitting in a u32")]
+    PartitionTooLarge,
 }
 
 impl Header {
@@ -266,13 +274,13 @@ impl Header {
         Ok(header)
     }
 
-    fn compute_partition_sizes(&mut self, data: &[u8]) -> anyhow::Result<()> {
+    fn compute_partition_sizes(&mut self, data: &[u8]) -> Result<(), ComputePartitionSizesError> {
         let num_partitions = self.num_dct_partitions();
         let mut part_size_ofs = self.first_part_size as usize;
         let mut ofs = part_size_ofs + 3 * (num_partitions - 1);
 
         if ofs > data.len() {
-            return Err(anyhow!("Not enough bytes left to parse partition sizes.",));
+            return Err(ComputePartitionSizesError::EndOfHeader);
         }
 
         for i in 0..num_partitions - 1 {
@@ -288,12 +296,11 @@ impl Header {
         }
 
         if ofs > data.len() {
-            return Err(anyhow!(
-                "Not enough bytes left to determine the last partition size",
-            ));
+            return Err(ComputePartitionSizesError::EndOfHeader);
         }
 
-        self.partition_size[num_partitions - 1] = u32::try_from(data.len() - ofs)?;
+        self.partition_size[num_partitions - 1] = u32::try_from(data.len() - ofs)
+            .map_err(|_| ComputePartitionSizesError::PartitionTooLarge)?;
         Ok(())
     }
 }
@@ -327,6 +334,20 @@ pub struct Parser {
     mv_prob: [[u8; 19]; 2],
     /// Branch probabilities kept live across frames.
     mode_probs: ModeProbs,
+}
+
+#[derive(Debug, Error)]
+pub enum ParseFrameError {
+    #[error("error while parsing uncompressed chunk of frame: {0}")]
+    ParseUncompressedChunk(#[from] ParseUncompressedChunkError),
+    #[error("partition end {0} is bigger than bitstream length {1}")]
+    InvalidPartitionSize(usize, usize),
+    #[error("error while parsing frame header: {0}")]
+    ParseFrameHeader(#[from] BoolDecoderError),
+    #[error("error while computing frames partitions sizes: {0}")]
+    ComputePartitionSizes(#[from] ComputePartitionSizesError),
+    #[error("bitstream is shorter ({0} bytes) than computed length of frame {1}")]
+    BitstreamTooShort(usize, usize),
 }
 
 impl Parser {
@@ -629,17 +650,20 @@ impl Parser {
     }
 
     /// Parse a single frame from the chunk in `data`.
-    pub fn parse_frame<'a>(&mut self, bitstream: &'a [u8]) -> anyhow::Result<Frame<'a>> {
+    pub fn parse_frame<'a>(&mut self, bitstream: &'a [u8]) -> Result<Frame<'a>, ParseFrameError> {
         let mut header = Header::parse_uncompressed_data_chunk(bitstream)?;
         if header.key_frame {
             // Reset on every key frame.
             *self = Default::default();
         }
 
-        if usize::from(header.data_chunk_size) + usize::try_from(header.first_part_size)?
-            > bitstream.len()
-        {
-            return Err(anyhow!("Broken data"));
+        let first_part_end = header.data_chunk_size as usize + header.first_part_size as usize;
+
+        if first_part_end > bitstream.len() {
+            return Err(ParseFrameError::InvalidPartitionSize(
+                first_part_end,
+                bitstream.len(),
+            ));
         }
 
         let compressed_area = &bitstream[header.data_chunk_size as usize..];
@@ -649,8 +673,9 @@ impl Parser {
 
         let frame_len = header.frame_len();
         if frame_len > bitstream.as_ref().len() {
-            return Err(anyhow!(
-                "bitstream is shorter than computed length of frame"
+            return Err(ParseFrameError::BitstreamTooShort(
+                bitstream.as_ref().len(),
+                frame_len,
             ));
         }
 
