@@ -837,7 +837,7 @@ where
         if pic.ref_pic_marking.adaptive_ref_pic_marking_mode_flag {
             self.handle_memory_management_ops(pic)?;
         } else {
-            self.dpb.sliding_window_marking(pic, sps)?;
+            self.dpb.sliding_window_marking(pic, sps);
         }
 
         Ok(())
@@ -1030,7 +1030,7 @@ where
                 .dpb
                 .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
-            self.codec.dpb.sliding_window_marking(&mut pic, sps)?;
+            self.codec.dpb.sliding_window_marking(&mut pic, sps);
 
             self.ready_queue.extend(self.codec.bump_as_needed(&pic));
 

@@ -6,7 +6,6 @@ use std::cell::Ref;
 use std::cell::RefMut;
 use std::rc::Rc;
 
-use anyhow::Context;
 use log::debug;
 use thiserror::Error;
 
@@ -301,7 +300,7 @@ impl<T: Clone> Dpb<T> {
         pic: RcPictureData,
         handle: Option<T>,
         last_field: &mut Option<(RcPictureData, T)>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), StorePictureError> {
         if !self.interlaced() {
             assert!(last_field.is_none());
 
@@ -522,11 +521,7 @@ impl<T: Clone> Dpb<T> {
     }
 
     // 8.2.5.3
-    pub fn sliding_window_marking(
-        &mut self,
-        pic: &mut PictureData,
-        sps: &Sps,
-    ) -> anyhow::Result<()> {
+    pub fn sliding_window_marking(&mut self, pic: &mut PictureData, sps: &Sps) {
         // If the current picture is a coded field that is the second field in
         // decoding order of a complementary reference field pair, and the first
         // field has been marked as "used for short-term reference", the current
@@ -535,15 +530,15 @@ impl<T: Clone> Dpb<T> {
         if let FieldRank::Second(other_field) = pic.field_rank() {
             if matches!(other_field.borrow().reference(), Reference::ShortTerm) {
                 pic.set_reference(Reference::ShortTerm, false);
-                return Ok(());
+                return;
             }
         }
 
         let mut num_ref_pics = self.num_ref_frames();
-        let max_num_ref_frames = usize::try_from(std::cmp::max(1, sps.max_num_ref_frames)).unwrap();
+        let max_num_ref_frames = std::cmp::max(1, sps.max_num_ref_frames as usize);
 
         if num_ref_pics < max_num_ref_frames {
-            return Ok(());
+            return;
         }
 
         while num_ref_pics >= max_num_ref_frames {
@@ -559,8 +554,6 @@ impl<T: Clone> Dpb<T> {
         }
 
         self.remove_unused();
-
-        Ok(())
     }
 
     pub fn mmco_op_1(
