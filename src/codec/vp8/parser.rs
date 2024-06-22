@@ -265,6 +265,37 @@ impl Header {
 
         Ok(header)
     }
+
+    fn compute_partition_sizes(&mut self, data: &[u8]) -> anyhow::Result<()> {
+        let num_partitions = self.num_dct_partitions();
+        let mut part_size_ofs = self.first_part_size as usize;
+        let mut ofs = part_size_ofs + 3 * (num_partitions - 1);
+
+        if ofs > data.len() {
+            return Err(anyhow!("Not enough bytes left to parse partition sizes.",));
+        }
+
+        for i in 0..num_partitions - 1 {
+            let b0 = u32::from(data[part_size_ofs]);
+            let b1 = u32::from(data[part_size_ofs + 1]) << 8;
+            let b2 = u32::from(data[part_size_ofs + 2]) << 16;
+
+            let part_size = b0 | b1 | b2;
+            part_size_ofs += 3;
+
+            self.partition_size[i] = part_size;
+            ofs += part_size as usize;
+        }
+
+        if ofs > data.len() {
+            return Err(anyhow!(
+                "Not enough bytes left to determine the last partition size",
+            ));
+        }
+
+        self.partition_size[num_partitions - 1] = u32::try_from(data.len() - ofs)?;
+        Ok(())
+    }
 }
 
 /// A VP8 frame.
@@ -597,37 +628,6 @@ impl Parser {
         Ok(())
     }
 
-    fn compute_partition_sizes(frame: &mut Header, data: &[u8]) -> anyhow::Result<()> {
-        let num_partitions = frame.num_dct_partitions();
-        let mut part_size_ofs = frame.first_part_size as usize;
-        let mut ofs = part_size_ofs + 3 * (num_partitions - 1);
-
-        if ofs > data.len() {
-            return Err(anyhow!("Not enough bytes left to parse partition sizes.",));
-        }
-
-        for i in 0..num_partitions - 1 {
-            let b0 = u32::from(data[part_size_ofs]);
-            let b1 = u32::from(data[part_size_ofs + 1]) << 8;
-            let b2 = u32::from(data[part_size_ofs + 2]) << 16;
-
-            let part_size = b0 | b1 | b2;
-            part_size_ofs += 3;
-
-            frame.partition_size[i] = part_size;
-            ofs += part_size as usize;
-        }
-
-        if ofs > data.len() {
-            return Err(anyhow!(
-                "Not enough bytes left to determine the last partition size",
-            ));
-        }
-
-        frame.partition_size[num_partitions - 1] = u32::try_from(data.len() - ofs)?;
-        Ok(())
-    }
-
     /// Parse a single frame from the chunk in `data`.
     pub fn parse_frame<'a>(&mut self, bitstream: &'a [u8]) -> anyhow::Result<Frame<'a>> {
         let mut header = Header::parse_uncompressed_data_chunk(bitstream)?;
@@ -645,7 +645,7 @@ impl Parser {
         let compressed_area = &bitstream[header.data_chunk_size as usize..];
 
         self.parse_frame_header(compressed_area, &mut header)?;
-        Parser::compute_partition_sizes(&mut header, compressed_area)?;
+        header.compute_partition_sizes(compressed_area)?;
 
         let frame_len = header.frame_len();
         if frame_len > bitstream.as_ref().len() {
