@@ -547,15 +547,15 @@ impl<T: Clone> Dpb<T> {
         }
 
         while num_ref_pics >= max_num_ref_frames {
-            let to_unmark = self
-                .find_short_term_lowest_frame_num_wrap()
-                .context("Could not find a ShortTerm picture to unmark in the DPB")?;
-
-            to_unmark
-                .pic
-                .borrow_mut()
-                .set_reference(Reference::None, true);
-            num_ref_pics -= 1;
+            if let Some(to_unmark) = self.find_short_term_lowest_frame_num_wrap() {
+                to_unmark
+                    .pic
+                    .borrow_mut()
+                    .set_reference(Reference::None, true);
+                num_ref_pics -= 1;
+            } else {
+                log::warn!("could not find a ShortTerm picture to unmark in the DPB");
+            }
         }
 
         self.remove_unused();
