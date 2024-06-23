@@ -561,8 +561,7 @@ impl<T: Clone> Dpb<T> {
         pic: &PictureData,
         marking: &RefPicMarkingInner,
     ) -> Result<(), MmcoError> {
-        let pic_num_x =
-            pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1).unwrap() + 1);
+        let pic_num_x = pic.pic_num - (marking.difference_of_pic_nums_minus1 as i32 + 1);
 
         log::debug!("MMCO op 1 for pic_num_x {}", pic_num_x);
         log::trace!("Dpb state before MMCO=1: {:#?}", self);
@@ -608,8 +607,7 @@ impl<T: Clone> Dpb<T> {
         pic: &PictureData,
         marking: &RefPicMarkingInner,
     ) -> Result<(), MmcoError> {
-        let pic_num_x =
-            pic.pic_num - (i32::try_from(marking.difference_of_pic_nums_minus1).unwrap() + 1);
+        let pic_num_x = pic.pic_num - (marking.difference_of_pic_nums_minus1 as i32 + 1);
 
         log::debug!("MMCO op 3 for pic_num_x {}", pic_num_x);
         log::trace!("Dpb state before MMCO=3: {:#?}", self);
