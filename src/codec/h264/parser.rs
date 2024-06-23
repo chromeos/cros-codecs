@@ -2055,15 +2055,16 @@ impl Parser {
         }
 
         let key = sps.seq_parameter_set_id;
-        self.active_spses.insert(key, Rc::new(sps));
 
-        if self.active_spses.keys().len() > MAX_SPS_COUNT as usize {
+        if self.active_spses.keys().len() >= MAX_SPS_COUNT as usize {
             return Err(anyhow!(
                 "Broken data: Number of active SPSs > MAX_SPS_COUNT"
             ));
         }
 
-        Ok(self.get_sps(key).unwrap())
+        let sps = Rc::new(sps);
+        self.active_spses.remove(&key);
+        Ok(self.active_spses.entry(key).or_insert(sps))
     }
 
     pub fn parse_pps(&mut self, nalu: &Nalu) -> anyhow::Result<&Pps> {
@@ -2156,15 +2157,16 @@ impl Parser {
         }
 
         let key = pps.pic_parameter_set_id;
-        self.active_ppses.insert(key, Rc::new(pps));
 
-        if self.active_ppses.keys().len() > MAX_PPS_COUNT as usize {
+        if self.active_ppses.keys().len() >= MAX_PPS_COUNT as usize {
             return Err(anyhow!(
                 "Broken Data: number of active PPSs > MAX_PPS_COUNT"
             ));
         }
 
-        Ok(self.get_pps(key).unwrap())
+        let pps = Rc::new(pps);
+        self.active_ppses.remove(&key);
+        Ok(self.active_ppses.entry(key).or_insert(pps))
     }
 
     fn parse_ref_pic_list_modification(
