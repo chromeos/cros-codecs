@@ -51,17 +51,6 @@ pub const MAX_TILE_WIDTH_B64: u32 = 64;
 /// The number of pictures in the DPB
 pub const NUM_REF_FRAMES: usize = 8;
 
-/// A clamp such that min <= x <= max
-fn clamp<U: PartialOrd>(x: U, low: U, high: U) -> U {
-    if x > high {
-        high
-    } else if x < low {
-        low
-    } else {
-        x
-    }
-}
-
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, N)]
 pub enum InterpolationFilter {
     #[default]
@@ -261,7 +250,7 @@ impl Segmentation {
                             i32::from(seg.feature_data[usize::from(segment_id)][SEG_LVL_ALT_L]);
                     }
 
-                    lvl_seg = clamp(lvl_seg, 0, MAX_LOOP_FILTER as i32);
+                    lvl_seg = lvl_seg.clamp(0, MAX_LOOP_FILTER as i32);
                 }
 
                 if !lf.delta_enabled {
@@ -272,7 +261,7 @@ impl Segmentation {
 
                     lvl_lookup = segmentation[usize::from(segment_id)].lvl_lookup;
                     lvl_lookup[INTRA_FRAME][0] =
-                        u8::try_from(clamp(intra_lvl, 0, MAX_LOOP_FILTER as i32))?;
+                        u8::try_from(intra_lvl.clamp(0, MAX_LOOP_FILTER as i32))?;
 
                     // Note, this array has the [0] element unspecified/unused in
                     // VP9. Confusing, but we do start to index from 1.
@@ -285,7 +274,7 @@ impl Segmentation {
                             intra_lvl = lvl_seg + (ref_delta << n_shift) + (mode_delta << n_shift);
 
                             lvl_lookup[ref_][mode] =
-                                u8::try_from(clamp(intra_lvl, 0, MAX_LOOP_FILTER as i32))?;
+                                u8::try_from(intra_lvl.clamp(0, MAX_LOOP_FILTER as i32))?;
                         }
                     }
                 }
@@ -457,7 +446,7 @@ impl Header {
                 data += base_q_idx as i32;
             }
 
-            clamp(data, 0, 255) as u8
+            data.clamp(0, 255) as u8
         } else {
             base_q_idx
         }
@@ -471,7 +460,7 @@ impl Header {
             self.quant.delta_q_uv_dc
         } as i32;
         let qindex = self.get_qindex(segment_id);
-        let q_table_idx = clamp(qindex as i32 + delta_q_dc, 0, 255) as usize;
+        let q_table_idx = (qindex as i32 + delta_q_dc).clamp(0, 255) as usize;
         match self.bit_depth {
             BitDepth::Depth8 => Ok(DC_QLOOKUP[q_table_idx]),
             BitDepth::Depth10 => Ok(DC_QLOOKUP_10[q_table_idx]),
@@ -483,7 +472,7 @@ impl Header {
     pub fn get_ac_quant(&self, segment_id: u8, luma: bool) -> anyhow::Result<i16> {
         let delta_q_ac = if luma { 0 } else { self.quant.delta_q_uv_ac } as i32;
         let qindex = self.get_qindex(segment_id);
-        let q_table_idx = clamp(qindex as i32 + delta_q_ac, 0, 255) as usize;
+        let q_table_idx = (qindex as i32 + delta_q_ac).clamp(0, 255) as usize;
 
         match self.bit_depth {
             BitDepth::Depth8 => Ok(AC_QLOOKUP[q_table_idx]),
