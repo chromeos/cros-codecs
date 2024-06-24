@@ -846,7 +846,7 @@ where
             }
 
             for i in 0..REFS_PER_FRAME {
-                let ref_frame_idx = u32::try_from(self.obu.ref_frame_idx[i])?;
+                let ref_frame_idx = self.obu.ref_frame_idx[i] as u32;
                 if !self.obu.frame_refs_short_signaling {
                     self.f(3, ref_frame_idx)?;
                 }

@@ -202,7 +202,7 @@ where
 
         let mut ref_frame_idx = [0; 7];
         for (i, idx) in ref_frame_idx.iter_mut().enumerate() {
-            *idx = u8::try_from(request.frame.ref_frame_idx[i])?;
+            *idx = request.frame.ref_frame_idx[i];
         }
 
         let frame_width_minus_1 = u16::try_from(request.frame.frame_width - 1)?;

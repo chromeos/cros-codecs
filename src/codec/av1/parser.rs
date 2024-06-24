@@ -674,7 +674,7 @@ pub struct FrameHeaderObu {
     /// Specifies the reference frame to use for GOLDEN_FRAME.
     pub gold_frame_idx: u8,
     /// Specifies which reference frames are used by inter frames
-    pub ref_frame_idx: [i32; REFS_PER_FRAME],
+    pub ref_frame_idx: [u8; REFS_PER_FRAME],
     /// If not set, specifies that motion vectors are specified to quarter pel
     /// precision; If set, specifies that motion vectors are specified to eighth
     /// pel precision.
@@ -1266,7 +1266,7 @@ impl Parser {
         ref_order_hint: &[u32; NUM_REF_FRAMES],
     ) -> anyhow::Result<()> {
         let seq = self.sequence()?;
-        let mut ref_frame_idx = [-1; REFS_PER_FRAME];
+        let mut ref_frame_idx = [-1i32; REFS_PER_FRAME];
 
         ref_frame_idx[0] = fh.last_frame_idx.into();
         ref_frame_idx[ReferenceFrameType::Golden as usize - ReferenceFrameType::Last as usize] =
@@ -1337,19 +1337,19 @@ impl Parser {
             used_frame[ref_ as usize] = true;
         }
 
-        let ref_frame_list = [
-            ReferenceFrameType::Last2 as usize,
-            ReferenceFrameType::Last3 as usize,
-            ReferenceFrameType::BwdRef as usize,
-            ReferenceFrameType::AltRef2 as usize,
-            ReferenceFrameType::AltRef as usize,
+        const REF_FRAME_LIST: [usize; 5] = [
+            ReferenceFrameType::Last2 as usize - ReferenceFrameType::Last as usize,
+            ReferenceFrameType::Last3 as usize - ReferenceFrameType::Last as usize,
+            ReferenceFrameType::BwdRef as usize - ReferenceFrameType::Last as usize,
+            ReferenceFrameType::AltRef2 as usize - ReferenceFrameType::Last as usize,
+            ReferenceFrameType::AltRef as usize - ReferenceFrameType::Last as usize,
         ];
 
         #[allow(clippy::needless_range_loop)]
         for i in 0..REFS_PER_FRAME - 2 {
-            let ref_frame = ref_frame_list[i];
+            let ref_frame = REF_FRAME_LIST[i];
 
-            if ref_frame_idx[ref_frame - ReferenceFrameType::Last as usize] < 0 {
+            if ref_frame_idx[ref_frame] < 0 {
                 let ref_ = helpers::find_latest_forward(
                     &shifted_order_hints,
                     &used_frame,
@@ -1358,30 +1358,28 @@ impl Parser {
                 );
 
                 if ref_ >= 0 {
-                    ref_frame_idx[ref_frame - ReferenceFrameType::Last as usize] = ref_;
+                    ref_frame_idx[ref_frame] = ref_;
                     used_frame[ref_ as usize] = true;
                 }
             }
         }
 
-        let mut ref_ = -1;
+        let mut ref_ = 0;
+        earliest_order_hint = shifted_order_hints[0];
         #[allow(clippy::needless_range_loop)]
-        for i in 0..NUM_REF_FRAMES {
+        for i in 1..NUM_REF_FRAMES {
             let hint = shifted_order_hints[i];
-            if ref_ < 0 || hint < earliest_order_hint {
-                ref_ = i as i32;
+            if hint < earliest_order_hint {
+                ref_ = i as u8;
                 earliest_order_hint = hint;
             }
         }
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..REFS_PER_FRAME {
-            if ref_frame_idx[i] < 0 {
-                ref_frame_idx[i] = ref_;
-            }
-        }
+        fh.ref_frame_idx
+            .iter_mut()
+            .zip(ref_frame_idx.iter().copied())
+            .for_each(|(dest, src)| *dest = if src < 0 { ref_ } else { src as u8 });
 
-        fh.ref_frame_idx = ref_frame_idx;
         Ok(())
     }
 
@@ -2290,10 +2288,8 @@ impl Parser {
                 }
             } else {
                 /* copy from prev_frame */
-                let prev_frame = &self.ref_info[usize::try_from(
-                    fh.ref_frame_idx[fh.primary_ref_frame as usize],
-                )
-                .context("Invalid ref_frame_idx")?];
+                let prev_frame =
+                    &self.ref_info[fh.ref_frame_idx[fh.primary_ref_frame as usize] as usize];
 
                 if !prev_frame.ref_valid {
                     return Err(anyhow!("Reference is invalid"));
@@ -2519,8 +2515,7 @@ impl Parser {
             let mut forward_hint = 0;
             let mut backward_hint = 0;
             for i in 0..REFS_PER_FRAME {
-                let ref_hint =
-                    self.ref_info[usize::try_from(fh.ref_frame_idx[i]).unwrap()].ref_order_hint;
+                let ref_hint = self.ref_info[fh.ref_frame_idx[i] as usize].ref_order_hint;
                 if helpers::get_relative_dist(
                     enable_order_hint,
                     order_hint_bits,
@@ -2569,8 +2564,7 @@ impl Parser {
                 let mut second_forward_idx = -1;
                 let mut second_forward_hint = 0;
                 for i in 0..REFS_PER_FRAME {
-                    let ref_hint =
-                        self.ref_info[usize::try_from(fh.ref_frame_idx[i]).unwrap()].ref_order_hint;
+                    let ref_hint = self.ref_info[fh.ref_frame_idx[i] as usize].ref_order_hint;
                     if helpers::get_relative_dist(
                         enable_order_hint,
                         order_hint_bits,
@@ -2778,9 +2772,10 @@ impl Parser {
             // load_previous():
             // 1. The variable prevFrame is set equal to ref_frame_idx[ primary_ref_frame ].
             // 2. PrevGmParams is set equal to SavedGmParams[ prevFrame ].
-            let prev_frame =
-                usize::try_from(fh.ref_frame_idx[fh.primary_ref_frame as usize]).unwrap();
-            prev_gm_params = self.ref_info[prev_frame].global_motion_params.gm_params;
+            let prev_frame = fh.ref_frame_idx[fh.primary_ref_frame as usize];
+            prev_gm_params = self.ref_info[prev_frame as usize]
+                .global_motion_params
+                .gm_params;
         }
 
         for ref_frame in ReferenceFrameType::Last as usize..=ReferenceFrameType::AltRef as usize {
@@ -2911,7 +2906,7 @@ impl Parser {
             let temp_grain_seed = fg.grain_seed;
 
             if !fh.ref_frame_idx.iter().any(|&ref_frame_idx| {
-                ref_frame_idx == i32::try_from(fg.film_grain_params_ref_idx).unwrap()
+                ref_frame_idx == u8::try_from(fg.film_grain_params_ref_idx).unwrap()
             }) {
                 return Err(anyhow!("Invalid film_grain_params_ref_idx"));
             }
@@ -3390,8 +3385,7 @@ impl Parser {
                     expected_frame_id[i] =
                         (self.current_frame_id + shifted_id_len - delta_frame_id) % shifted_id_len;
 
-                    let actual_frame_id =
-                        self.ref_info[usize::try_from(fh.ref_frame_idx[i]).unwrap()].ref_frame_id;
+                    let actual_frame_id = self.ref_info[fh.ref_frame_idx[i] as usize].ref_frame_id;
 
                     if expected_frame_id[i] != actual_frame_id {
                         return Err(anyhow!(
@@ -3435,8 +3429,7 @@ impl Parser {
 
             for i in 0..REFS_PER_FRAME {
                 let ref_frame = ReferenceFrameType::Last as usize + i;
-                let hint =
-                    self.ref_info[usize::try_from(fh.ref_frame_idx[i]).unwrap()].ref_order_hint;
+                let hint = self.ref_info[fh.ref_frame_idx[i] as usize].ref_order_hint;
                 fh.order_hints[ref_frame] = hint;
 
                 if !enable_order_hint {
@@ -3462,8 +3455,8 @@ impl Parser {
             Self::setup_past_independence(&mut fh);
         } else {
             /* load from the past reference */
-            let prev_frame = &self.ref_info
-                [usize::try_from(fh.ref_frame_idx[fh.primary_ref_frame as usize]).unwrap()];
+            let prev_frame =
+                &self.ref_info[fh.ref_frame_idx[fh.primary_ref_frame as usize] as usize];
 
             if !prev_frame.ref_valid {
                 return Err(anyhow!("Reference is invalid"));

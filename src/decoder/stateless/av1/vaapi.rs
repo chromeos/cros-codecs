@@ -352,12 +352,6 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         .try_into()
         .unwrap();
 
-    let mut ref_frame_idx = [0u8; 7];
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..ref_frame_idx.len() {
-        ref_frame_idx[i] = u8::try_from(hdr.ref_frame_idx[i]).context("Invalid ref_frame_idx")?;
-    }
-
     let fg_info = build_fg_info(hdr)?;
 
     let width_in_sbs_minus_1 = {
@@ -490,7 +484,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         0, /* output_frame_width_in_tiles_minus_1 */
         0, /* output_frame_height_in_tiles_minus_1 */
         ref_frame_map,
-        ref_frame_idx,
+        hdr.ref_frame_idx,
         u8::try_from(hdr.primary_ref_frame).context("Invalid primary_ref_frame")?,
         u8::try_from(hdr.order_hint).context("Invalid order_hint")?,
         &seg_info,
