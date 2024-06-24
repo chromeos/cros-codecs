@@ -195,9 +195,26 @@ pub struct SegmentationParams {
     /// If unset, indicates that the corresponding feature is unused and has
     /// value equal to 0. if set, indicates that the feature value is coded in
     /// the bitstream.
-    pub feature_enabled: [[bool; SEG_LVL_MAX]; MAX_SEGMENTS],
+    feature_enabled: [[bool; SEG_LVL_MAX]; MAX_SEGMENTS],
     /// Specifies the magnitude of the feature data for a segment feature.
-    pub feature_data: [[i16; SEG_LVL_MAX]; MAX_SEGMENTS],
+    feature_data: [[i16; SEG_LVL_MAX]; MAX_SEGMENTS],
+}
+
+impl SegmentationParams {
+    /// Returns whether `feature` is enabled for `segment_id`.
+    fn is_feature_enabled(&self, segment_id: u8, feature: SegLvl) -> bool {
+        self.feature_enabled[segment_id as usize][feature as usize]
+    }
+
+    /// An implementation of seg_feature_active as per "6.4.9 Segmentation feature active syntax"
+    fn is_feature_active(&self, segment_id: u8, feature: SegLvl) -> bool {
+        self.enabled && self.is_feature_enabled(segment_id, feature)
+    }
+
+    /// Returns the data for `feature` on `segment_id`.
+    fn feature_data(&self, segment_id: u8, feature: SegLvl) -> i16 {
+        self.feature_data[segment_id as usize][feature as usize]
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -244,15 +261,11 @@ impl Segmentation {
                 let mut lvl_seg = i32::from(lf.level);
 
                 // 8.8.1 Loop filter frame init process
-                if hdr.seg_feature_active(segment_id, SegLvl::AltL) {
+                if hdr.seg.is_feature_active(segment_id, SegLvl::AltL) {
                     if seg.abs_or_delta_update {
-                        lvl_seg = i32::from(
-                            seg.feature_data[usize::from(segment_id)][SegLvl::AltL as usize],
-                        );
+                        lvl_seg = i32::from(seg.feature_data(segment_id, SegLvl::AltL));
                     } else {
-                        lvl_seg += i32::from(
-                            seg.feature_data[usize::from(segment_id)][SegLvl::AltL as usize],
-                        );
+                        lvl_seg += i32::from(seg.feature_data(segment_id, SegLvl::AltL));
                     }
                 }
 
@@ -291,12 +304,9 @@ impl Segmentation {
                 luma_dc_quant_scale,
                 chroma_ac_quant_scale,
                 chroma_dc_quant_scale,
-                reference_frame_enabled: seg.feature_enabled[segment_id as usize]
-                    [SegLvl::RefFrame as usize],
-                reference_frame: seg.feature_data[usize::from(segment_id)]
-                    [SegLvl::RefFrame as usize],
-                reference_skip_enabled: seg.feature_enabled[segment_id as usize]
-                    [SegLvl::LvlSkip as usize],
+                reference_frame_enabled: seg.is_feature_enabled(segment_id, SegLvl::RefFrame),
+                reference_frame: seg.feature_data(segment_id, SegLvl::RefFrame),
+                reference_skip_enabled: seg.is_feature_enabled(segment_id, SegLvl::LvlSkip),
             }
         }
     }
@@ -434,17 +444,12 @@ pub struct Header {
 }
 
 impl Header {
-    /// An implementation of seg_feature_active as per "6.4.9 Segmentation feature active syntax"
-    fn seg_feature_active(&self, segment_id: u8, feature: SegLvl) -> bool {
-        self.seg.enabled && self.seg.feature_enabled[segment_id as usize][feature as usize]
-    }
-
     /// An implementation of get_qindex as per "8.6.1 Dequantization functions"
     fn get_qindex(&self, segment_id: u8) -> u8 {
         let base_q_idx = self.quant.base_q_idx;
 
-        if self.seg_feature_active(segment_id, SegLvl::AltQ) {
-            let mut data = self.seg.feature_data[segment_id as usize][0] as i32;
+        if self.seg.is_feature_active(segment_id, SegLvl::AltQ) {
+            let mut data = self.seg.feature_data(segment_id, SegLvl::AltQ) as i32;
 
             if !self.seg.abs_or_delta_update {
                 data += base_q_idx as i32;
