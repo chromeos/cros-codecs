@@ -793,7 +793,7 @@ pub struct LoopFilterParams {
     /// horizontal luma edges, vertical luma edges, the U edges, and the V
     /// edges. If not set, specifies that the same loop filter delta is used for
     /// all edges.
-    pub delta_lf_multi: u32,
+    pub delta_lf_multi: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2220,14 +2220,14 @@ impl Parser {
     ) -> anyhow::Result<()> {
         lf.delta_lf_present = false;
         lf.delta_lf_res = 0;
-        lf.delta_lf_multi = 0;
+        lf.delta_lf_multi = false;
         if delta_q_present {
             if !allow_intrabc {
                 lf.delta_lf_present = r.read_bit()?;
             }
             if lf.delta_lf_present {
                 lf.delta_lf_res = r.read_bits(2)? as u8;
-                lf.delta_lf_multi = r.read_bits(1)?;
+                lf.delta_lf_multi = r.read_bit()?;
             }
         }
         Ok(())

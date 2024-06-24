@@ -275,7 +275,6 @@ where
         let qm_u = u16::try_from(request.frame.quantization_params.qm_u)?;
         let qm_v = u16::try_from(request.frame.quantization_params.qm_v)?;
 
-        let delta_lf_multi = request.frame.loop_filter_params.delta_lf_multi != 0;
         let tx_mode = request.frame.tx_mode as u32;
 
         // Make driver make decision use single reference or compound reference.
@@ -429,7 +428,7 @@ where
                 request.frame.quantization_params.delta_q_res,
                 request.frame.loop_filter_params.delta_lf_present,
                 request.frame.loop_filter_params.delta_lf_res as u32,
-                delta_lf_multi,
+                request.frame.loop_filter_params.delta_lf_multi,
                 tx_mode,
                 REFERENCE_MODE,
                 request.frame.skip_mode_present,
