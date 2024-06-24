@@ -27,7 +27,6 @@ use crate::codec::av1::parser::MAX_TILE_COLS;
 use crate::codec::av1::parser::MAX_TILE_ROWS;
 use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::codec::av1::parser::SEG_LVL_MAX;
-use crate::codec::av1::parser::TOTAL_REFS_PER_FRAME;
 use crate::decoder::stateless::av1::Av1;
 use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
 use crate::decoder::stateless::NewStatelessDecoderError;
@@ -352,21 +351,14 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         u8::from(lf.loop_filter_delta_update),
     );
 
-    let (lf_ref_deltas, lf_mode_deltas) = {
-        let mut ref_deltas = [0i8; TOTAL_REFS_PER_FRAME];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..ref_deltas.len() {
-            ref_deltas[i] = i8::try_from(lf.loop_filter_ref_deltas[i])
-                .context("Invalid loop_filter_ref_deltas")?;
-        }
+    let lf_mode_deltas = {
         let mut mode_deltas = [0i8; 2];
         #[allow(clippy::needless_range_loop)]
         for i in 0..mode_deltas.len() {
             mode_deltas[i] = i8::try_from(lf.loop_filter_mode_deltas[i])
                 .context("Invalid loop_filter_mode_deltas")?;
         }
-
-        (ref_deltas, mode_deltas)
+        mode_deltas
     };
 
     let quant = &hdr.quantization_params;
@@ -465,7 +457,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         lf.loop_filter_level[2],
         lf.loop_filter_level[3],
         &lf_fields,
-        lf_ref_deltas,
+        lf.loop_filter_ref_deltas,
         lf_mode_deltas,
         u8::try_from(quant.base_q_idx).context("Invalid base_q_idx")?,
         i8::try_from(quant.delta_q_y_dc).context("Invalid delta_q_y_dc")?,

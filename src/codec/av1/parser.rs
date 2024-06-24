@@ -779,7 +779,7 @@ pub struct LoopFilterParams {
     /// Contains the adjustment needed for the filter level based on the chosen
     /// reference frame. If this syntax element is not present, it maintains
     /// its previous value.
-    pub loop_filter_ref_deltas: [i32; TOTAL_REFS_PER_FRAME],
+    pub loop_filter_ref_deltas: [i8; TOTAL_REFS_PER_FRAME],
     /// Contains the adjustment needed for the filter level based on the chosen
     /// mode. If this syntax element is not present in the, it maintains its
     /// previous value.
@@ -2364,7 +2364,7 @@ impl Parser {
                 for i in 0..TOTAL_REFS_PER_FRAME {
                     let update_ref_delta = r.read_bit()?;
                     if update_ref_delta {
-                        lf.loop_filter_ref_deltas[i] = r.read_su(7)?;
+                        lf.loop_filter_ref_deltas[i] = r.read_su(7)? as i8;
                     }
                 }
 

@@ -255,7 +255,7 @@ where
 
         let mut loop_filter_ref_deltas = [0; 8];
         for (i, delta) in loop_filter_ref_deltas.iter_mut().enumerate() {
-            *delta = i8::try_from(request.frame.loop_filter_params.loop_filter_ref_deltas[i])?;
+            *delta = request.frame.loop_filter_params.loop_filter_ref_deltas[i];
         }
 
         let loop_filter_mode_deltas = [
