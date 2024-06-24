@@ -716,7 +716,7 @@ mod tests {
 
             frame_width_bits_minus_1: 16 - 1,
             frame_height_bits_minus_1: 16 - 1,
-            max_frame_width_minus_1: WIDTH - 1,
+            max_frame_width_minus_1: (WIDTH - 1) as u16,
             max_frame_height_minus_1: HEIGHT - 1,
 
             enable_order_hint: true,

@@ -292,7 +292,7 @@ where
             }
         }
 
-        let bits = u32::BITS - self.obu.max_frame_width_minus_1.leading_zeros();
+        let bits = u16::BITS - self.obu.max_frame_width_minus_1.leading_zeros();
         if self.obu.frame_width_bits_minus_1 as u32 + 1 < bits {
             self.invalid_element_value("frame_width_bits_minus_1")?;
         }
@@ -306,7 +306,7 @@ where
         self.f(4, self.obu.frame_height_bits_minus_1)?;
 
         let n = self.obu.frame_width_bits_minus_1 as usize + 1;
-        if (n as u32) < 32 - self.obu.max_frame_width_minus_1.leading_zeros() {
+        if (n as u32) < u16::BITS - self.obu.max_frame_width_minus_1.leading_zeros() {
             self.invalid_element_value("max_frame_width_minus_1")?;
         }
         self.f(n, self.obu.max_frame_width_minus_1)?;
@@ -963,7 +963,7 @@ where
             let n = sequence.frame_height_bits_minus_1 as usize + 1;
             self.f(n, self.obu.frame_height - 1)?;
         } else {
-            if self.obu.frame_width != sequence.max_frame_width_minus_1 + 1 {
+            if self.obu.frame_width != sequence.max_frame_width_minus_1 as u32 + 1 {
                 self.invalid_element_value("FrameWidth")?;
             }
             if self.obu.frame_height != sequence.max_frame_height_minus_1 + 1 {
@@ -1710,7 +1710,7 @@ mod tests {
 
             frame_width_bits_minus_1: 16 - 1,
             frame_height_bits_minus_1: 16 - 1,
-            max_frame_width_minus_1: WIDTH - 1,
+            max_frame_width_minus_1: (WIDTH - 1) as u16,
             max_frame_height_minus_1: HEIGHT - 1,
 
             seq_force_integer_mv: SELECT_INTEGER_MV as u32,

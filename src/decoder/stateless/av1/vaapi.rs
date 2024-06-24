@@ -93,7 +93,7 @@ impl VaStreamInfo for &Rc<SequenceHeaderObu> {
 
     fn coded_size(&self) -> (u32, u32) {
         (
-            self.max_frame_width_minus_1 + 1,
+            self.max_frame_width_minus_1 as u32 + 1,
             self.max_frame_height_minus_1 + 1,
         )
     }
@@ -513,7 +513,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
                 /* The spec mandates a 2:1 or 1.5:1 ratio, let's go with 2:1 to
                  * accomodate the other case. See 6.7.5 in the spec */
                 let layers = (0..=highest_layer).map(|layer| Resolution {
-                    width: (sequence.max_frame_width_minus_1 + 1) / (layer + 1),
+                    width: (sequence.max_frame_width_minus_1 as u32 + 1) / (layer + 1),
                     height: (sequence.max_frame_height_minus_1 + 1) / (layer + 1),
                 });
 

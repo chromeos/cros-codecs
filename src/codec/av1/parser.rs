@@ -398,7 +398,7 @@ pub struct SequenceHeaderObu {
     pub frame_height_bits_minus_1: u8,
     /// Specifies the maximum frame width minus 1 for the frames represented by
     /// this sequence header.
-    pub max_frame_width_minus_1: u32,
+    pub max_frame_width_minus_1: u16,
     /// Specifies the maximum frame height minus 1 for the frames represented by
     /// this sequence header.
     pub max_frame_height_minus_1: u32,
@@ -1393,7 +1393,7 @@ impl Parser {
             let n = seq.frame_height_bits_minus_1 + 1;
             fh.frame_height = r.read_bits(n)? + 1;
         } else {
-            fh.frame_width = seq.max_frame_width_minus_1 + 1;
+            fh.frame_width = seq.max_frame_width_minus_1 as u32 + 1;
             fh.frame_height = seq.max_frame_height_minus_1 + 1;
         }
 
@@ -1823,7 +1823,8 @@ impl Parser {
 
         s.frame_width_bits_minus_1 = r.read_bits(4)? as u8;
         s.frame_height_bits_minus_1 = r.read_bits(4)? as u8;
-        s.max_frame_width_minus_1 = r.read_bits(s.frame_width_bits_minus_1 + 1)?;
+        // frame_width_bits_minus_1 has been read from 4 bits, meaning we can read 16 bits at most.
+        s.max_frame_width_minus_1 = r.read_bits(s.frame_width_bits_minus_1 + 1)? as u16;
         s.max_frame_height_minus_1 = r.read_bits(s.frame_height_bits_minus_1 + 1)?;
         if s.reduced_still_picture_header {
             s.frame_id_numbers_present_flag = false;
