@@ -1039,7 +1039,7 @@ pub struct FilmGrainParams {
     pub grain_scale_shift: u8,
     /// Represents a multiplier for the cb component used in derivation of the
     /// input index to the cb component scaling function.
-    pub cb_mult: u32,
+    pub cb_mult: u8,
     /// Represents a multiplier for the average luma component used in
     /// derivation of the input index to the cb component scaling function.
     pub cb_luma_mult: u32,
@@ -3007,7 +3007,7 @@ impl Parser {
         fg.grain_scale_shift = r.read_bits(2)? as u8;
 
         if fg.num_cb_points > 0 {
-            fg.cb_mult = r.read_bits(8)?;
+            fg.cb_mult = r.read_bits(8)? as u8;
             fg.cb_luma_mult = r.read_bits(8)?;
             fg.cb_offset = r.read_bits(9)?;
         }
