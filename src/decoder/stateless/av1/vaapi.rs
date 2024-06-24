@@ -351,16 +351,6 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         u8::from(lf.loop_filter_delta_update),
     );
 
-    let lf_mode_deltas = {
-        let mut mode_deltas = [0i8; 2];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..mode_deltas.len() {
-            mode_deltas[i] = i8::try_from(lf.loop_filter_mode_deltas[i])
-                .context("Invalid loop_filter_mode_deltas")?;
-        }
-        mode_deltas
-    };
-
     let quant = &hdr.quantization_params;
     let qmatrix_fields = libva::AV1QMatrixFields::new(
         u16::from(quant.using_qmatrix),
@@ -458,7 +448,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         lf.loop_filter_level[3],
         &lf_fields,
         lf.loop_filter_ref_deltas,
-        lf_mode_deltas,
+        lf.loop_filter_mode_deltas,
         u8::try_from(quant.base_q_idx).context("Invalid base_q_idx")?,
         i8::try_from(quant.delta_q_y_dc).context("Invalid delta_q_y_dc")?,
         i8::try_from(quant.delta_q_u_dc).context("Invalid delta_q_u_dc")?,

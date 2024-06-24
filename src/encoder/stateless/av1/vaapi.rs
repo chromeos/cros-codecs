@@ -258,11 +258,6 @@ where
             *delta = request.frame.loop_filter_params.loop_filter_ref_deltas[i];
         }
 
-        let loop_filter_mode_deltas = [
-            i8::try_from(request.frame.loop_filter_params.loop_filter_mode_deltas[0])?,
-            i8::try_from(request.frame.loop_filter_params.loop_filter_mode_deltas[1])?,
-        ];
-
         let base_qindex = u8::try_from(request.frame.quantization_params.base_q_idx)?;
         let y_dc_delta_q = i8::try_from(request.frame.quantization_params.delta_q_y_dc)?;
         let u_dc_delta_q = i8::try_from(request.frame.quantization_params.delta_q_u_dc)?;
@@ -414,7 +409,7 @@ where
             superres_scale_denominator,
             interpolation_filter,
             loop_filter_ref_deltas,
-            loop_filter_mode_deltas,
+            request.frame.loop_filter_params.loop_filter_mode_deltas,
             base_qindex,
             y_dc_delta_q,
             u_dc_delta_q,

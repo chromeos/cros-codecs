@@ -783,7 +783,7 @@ pub struct LoopFilterParams {
     /// Contains the adjustment needed for the filter level based on the chosen
     /// mode. If this syntax element is not present in the, it maintains its
     /// previous value.
-    pub loop_filter_mode_deltas: [i32; 2],
+    pub loop_filter_mode_deltas: [i8; 2],
     /// Specifies whether loop filter delta values are present.
     pub delta_lf_present: bool,
     /// Specifies the left shift which should be applied to decoded loop filter
@@ -2326,9 +2326,7 @@ impl Parser {
             lf.loop_filter_level[1] = 0;
             lf.loop_filter_ref_deltas = [1, 0, 0, 0, -1, 0, -1, -1];
 
-            for delta in &mut lf.loop_filter_mode_deltas {
-                *delta = 0;
-            }
+            lf.loop_filter_mode_deltas = Default::default();
 
             return Ok(());
         }
@@ -2355,7 +2353,7 @@ impl Parser {
                 for i in 0..2 {
                     let update_mode_delta = r.read_bit()?;
                     if update_mode_delta {
-                        lf.loop_filter_mode_deltas[i] = r.read_su(7)?;
+                        lf.loop_filter_mode_deltas[i] = r.read_su(7)? as i8;
                     }
                 }
             }
