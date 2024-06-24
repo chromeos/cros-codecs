@@ -104,109 +104,109 @@ impl VaStreamInfo for &Rc<SequenceHeaderObu> {
     }
 }
 
-fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
-    let fg = &hdr.film_grain_params;
+impl From<&FrameHeaderObu> for libva::AV1FilmGrain {
+    fn from(hdr: &FrameHeaderObu) -> Self {
+        let fg = &hdr.film_grain_params;
 
-    if fg.apply_grain {
-        log::warn!("Film grain is not officially supported yet.")
+        if fg.apply_grain {
+            log::warn!("Film grain is not officially supported yet.")
+        }
+
+        let film_grain_fields = libva::AV1FilmGrainFields::new(
+            u32::from(fg.apply_grain),
+            u32::from(fg.chroma_scaling_from_luma),
+            u32::from(fg.grain_scaling_minus_8),
+            fg.ar_coeff_lag,
+            fg.ar_coeff_shift_minus_6 as u32,
+            fg.grain_scale_shift as u32,
+            u32::from(fg.overlap_flag),
+            u32::from(fg.clip_to_restricted_range),
+        );
+
+        const NUM_POINT_Y: usize = 14;
+        let fg_point_y_value = {
+            let mut fg_point_y_value = [0u8; NUM_POINT_Y];
+            fg_point_y_value.copy_from_slice(&fg.point_y_value[0..NUM_POINT_Y]);
+            fg_point_y_value
+        };
+        let fg_point_y_scaling = {
+            let mut fg_point_y_scaling = [0u8; NUM_POINT_Y];
+            fg_point_y_scaling.copy_from_slice(&fg.point_y_scaling[0..NUM_POINT_Y]);
+            fg_point_y_scaling
+        };
+
+        const NUM_POINT_CB: usize = 10;
+        let fg_point_cb_value = {
+            let mut fg_point_cb_value = [0u8; NUM_POINT_CB];
+            fg_point_cb_value.copy_from_slice(&fg.point_cb_value[0..NUM_POINT_CB]);
+            fg_point_cb_value
+        };
+        let fg_point_cb_scaling = {
+            let mut fg_point_cb_scaling = [0u8; NUM_POINT_CB];
+            fg_point_cb_scaling.copy_from_slice(&fg.point_cb_scaling[0..NUM_POINT_CB]);
+            fg_point_cb_scaling
+        };
+
+        const NUM_POINT_CR: usize = 10;
+        let fg_point_cr_value = {
+            let mut fg_point_cr_value = [0u8; NUM_POINT_CR];
+            fg_point_cr_value.copy_from_slice(&fg.point_cr_value[0..NUM_POINT_CR]);
+            fg_point_cr_value
+        };
+        let fg_point_cr_scaling = {
+            let mut fg_point_cr_scaling = [0u8; NUM_POINT_CR];
+            fg_point_cr_scaling.copy_from_slice(&fg.point_cr_scaling[0..NUM_POINT_CR]);
+            fg_point_cr_scaling
+        };
+
+        let fg_ar_coeffs_y = {
+            let mut fg_ar_coeffs_y = [0i8; 24];
+            fg_ar_coeffs_y
+                .iter_mut()
+                .zip(fg.ar_coeffs_y_plus_128.iter().copied())
+                .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
+            fg_ar_coeffs_y
+        };
+        let fg_ar_coeffs_cb = {
+            let mut fg_ar_coeffs_cb = [0i8; 25];
+            fg_ar_coeffs_cb
+                .iter_mut()
+                .zip(fg.ar_coeffs_cb_plus_128.iter().copied())
+                .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
+            fg_ar_coeffs_cb
+        };
+        let fg_ar_coeffs_cr = {
+            let mut fg_ar_coeffs_cr = [0i8; 25];
+            fg_ar_coeffs_cr
+                .iter_mut()
+                .zip(fg.ar_coeffs_cr_plus_128.iter().copied())
+                .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
+            fg_ar_coeffs_cr
+        };
+
+        libva::AV1FilmGrain::new(
+            &film_grain_fields,
+            fg.grain_seed,
+            fg.num_y_points,
+            fg_point_y_value,
+            fg_point_y_scaling,
+            fg.num_cb_points,
+            fg_point_cb_value,
+            fg_point_cb_scaling,
+            fg.num_cr_points,
+            fg_point_cr_value,
+            fg_point_cr_scaling,
+            fg_ar_coeffs_y,
+            fg_ar_coeffs_cb,
+            fg_ar_coeffs_cr,
+            fg.cb_mult,
+            fg.cb_luma_mult,
+            fg.cb_offset,
+            fg.cr_mult,
+            fg.cr_luma_mult,
+            fg.cr_offset,
+        )
     }
-
-    let film_grain_fields = libva::AV1FilmGrainFields::new(
-        u32::from(fg.apply_grain),
-        u32::from(fg.chroma_scaling_from_luma),
-        u32::from(fg.grain_scaling_minus_8),
-        fg.ar_coeff_lag,
-        fg.ar_coeff_shift_minus_6 as u32,
-        fg.grain_scale_shift as u32,
-        u32::from(fg.overlap_flag),
-        u32::from(fg.clip_to_restricted_range),
-    );
-
-    const NUM_POINT_Y: usize = 14;
-    let fg_point_y_value = {
-        let mut fg_point_y_value = [0u8; NUM_POINT_Y];
-        fg_point_y_value.copy_from_slice(&fg.point_y_value[0..NUM_POINT_Y]);
-        fg_point_y_value
-    };
-    let fg_point_y_scaling = {
-        let mut fg_point_y_scaling = [0u8; NUM_POINT_Y];
-        fg_point_y_scaling.copy_from_slice(&fg.point_y_scaling[0..NUM_POINT_Y]);
-        fg_point_y_scaling
-    };
-
-    const NUM_POINT_CB: usize = 10;
-    let fg_point_cb_value = {
-        let mut fg_point_cb_value = [0u8; NUM_POINT_CB];
-        fg_point_cb_value.copy_from_slice(&fg.point_cb_value[0..NUM_POINT_CB]);
-        fg_point_cb_value
-    };
-    let fg_point_cb_scaling = {
-        let mut fg_point_cb_scaling = [0u8; NUM_POINT_CB];
-        fg_point_cb_scaling.copy_from_slice(&fg.point_cb_scaling[0..NUM_POINT_CB]);
-        fg_point_cb_scaling
-    };
-
-    const NUM_POINT_CR: usize = 10;
-    let fg_point_cr_value = {
-        let mut fg_point_cr_value = [0u8; NUM_POINT_CR];
-        fg_point_cr_value.copy_from_slice(&fg.point_cr_value[0..NUM_POINT_CR]);
-        fg_point_cr_value
-    };
-    let fg_point_cr_scaling = {
-        let mut fg_point_cr_scaling = [0u8; NUM_POINT_CR];
-        fg_point_cr_scaling.copy_from_slice(&fg.point_cr_scaling[0..NUM_POINT_CR]);
-        fg_point_cr_scaling
-    };
-
-    let fg_ar_coeffs_y = {
-        let mut fg_ar_coeffs_y = [0i8; 24];
-        fg_ar_coeffs_y
-            .iter_mut()
-            .zip(fg.ar_coeffs_y_plus_128.iter().copied())
-            .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
-        fg_ar_coeffs_y
-    };
-    let fg_ar_coeffs_cb = {
-        let mut fg_ar_coeffs_cb = [0i8; 25];
-        fg_ar_coeffs_cb
-            .iter_mut()
-            .zip(fg.ar_coeffs_cb_plus_128.iter().copied())
-            .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
-        fg_ar_coeffs_cb
-    };
-    let fg_ar_coeffs_cr = {
-        let mut fg_ar_coeffs_cr = [0i8; 25];
-        fg_ar_coeffs_cr
-            .iter_mut()
-            .zip(fg.ar_coeffs_cr_plus_128.iter().copied())
-            .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
-        fg_ar_coeffs_cr
-    };
-
-    let fg_info = libva::AV1FilmGrain::new(
-        &film_grain_fields,
-        fg.grain_seed,
-        fg.num_y_points,
-        fg_point_y_value,
-        fg_point_y_scaling,
-        fg.num_cb_points,
-        fg_point_cb_value,
-        fg_point_cb_scaling,
-        fg.num_cr_points,
-        fg_point_cr_value,
-        fg_point_cr_scaling,
-        fg_ar_coeffs_y,
-        fg_ar_coeffs_cb,
-        fg_ar_coeffs_cr,
-        fg.cb_mult,
-        fg.cb_luma_mult,
-        fg.cb_offset,
-        fg.cr_mult,
-        fg.cr_luma_mult,
-        fg.cr_offset,
-    );
-
-    Ok(fg_info)
 }
 
 fn build_wm_info(hdr: &FrameHeaderObu) -> [libva::AV1WarpedMotionParams; 7] {
@@ -322,8 +322,6 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
-
-    let fg_info = build_fg_info(hdr)?;
 
     let width_in_sbs_minus_1 = {
         let mut width_in_sbs_minus_1 = [0; MAX_TILE_COLS - 1];
@@ -459,7 +457,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         u8::try_from(hdr.primary_ref_frame).context("Invalid primary_ref_frame")?,
         u8::try_from(hdr.order_hint).context("Invalid order_hint")?,
         &seg_info,
-        &fg_info,
+        &libva::AV1FilmGrain::from(hdr),
         u8::try_from(hdr.tile_info.tile_cols).context("Invalid tile_cols")?,
         u8::try_from(hdr.tile_info.tile_rows).context("Invalid tile_rows")?,
         width_in_sbs_minus_1,
