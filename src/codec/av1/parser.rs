@@ -938,7 +938,7 @@ pub struct LoopRestorationParams {
     pub lr_unit_shift: u8,
     /// Only present for 4:2:0 formats and specifies if the chroma size should
     /// be half the luma size.
-    pub lr_uv_shift: u32,
+    pub lr_uv_shift: u8,
     /// Same as FrameRestorationType in the specification.
     pub frame_restoration_type: [FrameRestorationType; MAX_NUM_PLANES],
     /// Same as LoopRestorationSize in the specification.
@@ -2470,7 +2470,7 @@ impl Parser {
 
             lr.loop_restoration_size[0] = RESTORATION_TILESIZE_MAX >> (2 - lr.lr_unit_shift);
             if subsampling_x && subsampling_y && lr.uses_chroma_lr {
-                lr.lr_uv_shift = r.read_bits(1)?;
+                lr.lr_uv_shift = r.read_bits(1)? as u8;
             } else {
                 lr.lr_uv_shift = 0;
             }
