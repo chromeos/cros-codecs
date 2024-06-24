@@ -670,9 +670,9 @@ pub struct FrameHeaderObu {
     /// signaled.
     pub frame_refs_short_signaling: bool,
     /// Specifies the reference frame to use for LAST_FRAME.
-    pub last_frame_idx: u32,
+    pub last_frame_idx: u8,
     /// Specifies the reference frame to use for GOLDEN_FRAME.
-    pub gold_frame_idx: u32,
+    pub gold_frame_idx: u8,
     /// Specifies which reference frames are used by inter frames
     pub ref_frame_idx: [i32; REFS_PER_FRAME],
     /// If not set, specifies that motion vectors are specified to quarter pel
@@ -1268,9 +1268,9 @@ impl Parser {
         let seq = self.sequence()?;
         let mut ref_frame_idx = [-1; REFS_PER_FRAME];
 
-        ref_frame_idx[0] = fh.last_frame_idx.try_into().unwrap();
+        ref_frame_idx[0] = fh.last_frame_idx.into();
         ref_frame_idx[ReferenceFrameType::Golden as usize - ReferenceFrameType::Last as usize] =
-            fh.gold_frame_idx.try_into().unwrap();
+            fh.gold_frame_idx.into();
 
         let mut used_frame = [false; NUM_REF_FRAMES];
         used_frame[fh.last_frame_idx as usize] = true;
@@ -3356,8 +3356,8 @@ impl Parser {
             } else {
                 fh.frame_refs_short_signaling = r.read_bit()?;
                 if fh.frame_refs_short_signaling {
-                    fh.last_frame_idx = r.read_bits(3)?;
-                    fh.gold_frame_idx = r.read_bits(3)?;
+                    fh.last_frame_idx = r.read_bits(3)? as u8;
+                    fh.gold_frame_idx = r.read_bits(3)? as u8;
                     let ref_order_hints = self
                         .ref_info
                         .iter()
