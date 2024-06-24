@@ -242,12 +242,12 @@ where
         const NUM_TILE_GROUPS_MINUS1: u8 = 0;
 
         let filter_level = [
-            u8::try_from(request.frame.loop_filter_params.loop_filter_level[0])?,
-            u8::try_from(request.frame.loop_filter_params.loop_filter_level[1])?,
+            request.frame.loop_filter_params.loop_filter_level[0],
+            request.frame.loop_filter_params.loop_filter_level[1],
         ];
 
-        let filter_level_u = u8::try_from(request.frame.loop_filter_params.loop_filter_level[2])?;
-        let filter_level_v = u8::try_from(request.frame.loop_filter_params.loop_filter_level[3])?;
+        let filter_level_u = request.frame.loop_filter_params.loop_filter_level[2];
+        let filter_level_v = request.frame.loop_filter_params.loop_filter_level[3];
 
         let sharpness_level = u8::try_from(request.frame.loop_filter_params.loop_filter_sharpness)?;
 

@@ -762,7 +762,7 @@ pub struct LoopFilterParams {
     /// strength values from the array are used depending on the image plane
     /// being filtered, and the edge direction (vertical or horizontal) being
     /// filtered.
-    pub loop_filter_level: [u32; 4],
+    pub loop_filter_level: [u8; 4],
     /// Indicates the sharpness level. The loop_filter_level and
     /// loop_filter_sharpness together determine when a block edge is filtered,
     /// and by how much the filtering can change the sample values.
@@ -2349,11 +2349,11 @@ impl Parser {
             return Ok(());
         }
 
-        lf.loop_filter_level[0] = r.read_bits(6)?;
-        lf.loop_filter_level[1] = r.read_bits(6)?;
+        lf.loop_filter_level[0] = r.read_bits(6)? as u8;
+        lf.loop_filter_level[1] = r.read_bits(6)? as u8;
         if num_planes > 1 && (lf.loop_filter_level[0] > 0 || lf.loop_filter_level[1] > 0) {
-            lf.loop_filter_level[2] = r.read_bits(6)?;
-            lf.loop_filter_level[3] = r.read_bits(6)?;
+            lf.loop_filter_level[2] = r.read_bits(6)? as u8;
+            lf.loop_filter_level[3] = r.read_bits(6)? as u8;
         }
 
         lf.loop_filter_sharpness = r.read_bits(3)?;

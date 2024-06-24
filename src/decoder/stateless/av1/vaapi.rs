@@ -344,14 +344,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     };
 
     let lf = &hdr.loop_filter_params;
-    let filter_level = {
-        let mut filter_level = [0u8; 2];
-        filter_level[0] =
-            u8::try_from(lf.loop_filter_level[0]).context("Invalid loop_filter_level")?;
-        filter_level[1] =
-            u8::try_from(lf.loop_filter_level[1]).context("Invalid loop_filter_level")?;
-        filter_level
-    };
+    let filter_level = [lf.loop_filter_level[0], lf.loop_filter_level[1]];
 
     let lf_fields = libva::AV1LoopFilterFields::new(
         u8::try_from(lf.loop_filter_sharpness).context("Invalid loop_filter_sharpness")?,
@@ -469,8 +462,8 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         u8::try_from(hdr.superres_denom).context("Invalid superres_denom")?,
         u8::try_from(hdr.interpolation_filter as u32).context("Invalid interpolation_filter")?,
         filter_level,
-        u8::try_from(lf.loop_filter_level[2]).context("Invalid loop_filter_level")?,
-        u8::try_from(lf.loop_filter_level[3]).context("Invalid loop_filter_level")?,
+        lf.loop_filter_level[2],
+        lf.loop_filter_level[3],
         &lf_fields,
         lf_ref_deltas,
         lf_mode_deltas,
