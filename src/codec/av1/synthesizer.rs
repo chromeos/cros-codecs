@@ -293,7 +293,7 @@ where
         }
 
         let bits = u32::BITS - self.obu.max_frame_width_minus_1.leading_zeros();
-        if self.obu.frame_width_bits_minus_1 + 1 < bits {
+        if self.obu.frame_width_bits_minus_1 as u32 + 1 < bits {
             self.invalid_element_value("frame_width_bits_minus_1")?;
         }
 
@@ -958,7 +958,7 @@ where
     /// Writes AV1 5.9.5. Frame size syntax
     fn frame_size(&mut self, sequence: &'o SequenceHeaderObu) -> SynthesizerResult<()> {
         if self.obu.frame_size_override_flag {
-            let n = usize::try_from(sequence.frame_width_bits_minus_1 + 1)?;
+            let n = sequence.frame_width_bits_minus_1 as usize + 1;
             self.f(n, self.obu.frame_width - 1)?;
             let n = usize::try_from(sequence.frame_height_bits_minus_1 + 1)?;
             self.f(n, self.obu.frame_height - 1)?;

@@ -392,7 +392,7 @@ pub struct SequenceHeaderObu {
     pub reduced_still_picture_header: bool,
     /// Specifies the number of bits minus 1 used for transmitting the frame
     /// width syntax elements.
-    pub frame_width_bits_minus_1: u32,
+    pub frame_width_bits_minus_1: u8,
     /// Specifies the number of bits minus 1 used for transmitting the frame
     /// height syntax elements.
     pub frame_height_bits_minus_1: u32,
@@ -1388,7 +1388,7 @@ impl Parser {
         let seq = self.sequence()?;
         if fh.frame_size_override_flag {
             let n = seq.frame_width_bits_minus_1 + 1;
-            fh.frame_width = r.read_bits(n.try_into().unwrap())? + 1;
+            fh.frame_width = r.read_bits(n)? + 1;
 
             let n = seq.frame_height_bits_minus_1 + 1;
             fh.frame_height = r.read_bits(n.try_into().unwrap())? + 1;
@@ -1821,10 +1821,9 @@ impl Parser {
             }
         }
 
-        s.frame_width_bits_minus_1 = r.read_bits(4)?;
+        s.frame_width_bits_minus_1 = r.read_bits(4)? as u8;
         s.frame_height_bits_minus_1 = r.read_bits(4)?;
-        s.max_frame_width_minus_1 =
-            r.read_bits(u8::try_from(s.frame_width_bits_minus_1).unwrap() + 1)?;
+        s.max_frame_width_minus_1 = r.read_bits(s.frame_width_bits_minus_1 + 1)?;
         s.max_frame_height_minus_1 =
             r.read_bits(u8::try_from(s.frame_height_bits_minus_1).unwrap() + 1)?;
         if s.reduced_still_picture_header {
