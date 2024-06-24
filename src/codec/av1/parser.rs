@@ -1036,7 +1036,7 @@ pub struct FilmGrainParams {
     pub ar_coeff_shift_minus_6: u8,
     /// Specifies how much the Gaussian random numbers should be scaled down
     /// during the grain synthesis process.
-    pub grain_scale_shift: u32,
+    pub grain_scale_shift: u8,
     /// Represents a multiplier for the cb component used in derivation of the
     /// input index to the cb component scaling function.
     pub cb_mult: u32,
@@ -3004,7 +3004,7 @@ impl Parser {
         }
 
         fg.ar_coeff_shift_minus_6 = r.read_bits(2)? as u8;
-        fg.grain_scale_shift = r.read_bits(2)?;
+        fg.grain_scale_shift = r.read_bits(2)? as u8;
 
         if fg.num_cb_points > 0 {
             fg.cb_mult = r.read_bits(8)?;
