@@ -1045,7 +1045,7 @@ pub struct FilmGrainParams {
     pub cb_luma_mult: u8,
     /// Represents an offset used in derivation of the input index to the cb
     /// component scaling function.
-    pub cb_offset: u32,
+    pub cb_offset: u16,
     /// Represents a multiplier for the cr component used in derivation of the
     /// input index to the cr component scaling function.
     pub cr_mult: u32,
@@ -3009,7 +3009,7 @@ impl Parser {
         if fg.num_cb_points > 0 {
             fg.cb_mult = r.read_bits(8)? as u8;
             fg.cb_luma_mult = r.read_bits(8)? as u8;
-            fg.cb_offset = r.read_bits(9)?;
+            fg.cb_offset = r.read_bits(9)? as u16;
         }
 
         if fg.num_cr_points > 0 {
