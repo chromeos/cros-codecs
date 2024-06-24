@@ -605,7 +605,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_profile(r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn parse_profile(r: &mut BitReader) -> anyhow::Result<Profile> {
         let low = r.read_u32(1)?;
         let high = r.read_u32(1)?;
 
@@ -616,10 +616,7 @@ impl Parser {
             let _ = r.read_bool()?;
         }
 
-        hdr.profile = Profile::n(profile)
-            .with_context(|| format!("Broken stream: invalid profile {:?}", profile))?;
-
-        Ok(())
+        Profile::n(profile).with_context(|| format!("Broken stream: invalid profile {:?}", profile))
     }
 
     fn parse_frame_sync_code(r: &mut BitReader) -> anyhow::Result<()> {
@@ -743,7 +740,7 @@ impl Parser {
         Self::parse_render_size(r, hdr)
     }
 
-    fn read_interpolation_filter(r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn read_interpolation_filter(r: &mut BitReader) -> bitreader::Result<InterpolationFilter> {
         const LITERAL_TO_TYPE: [InterpolationFilter; 4] = [
             InterpolationFilter::EightTapSmooth,
             InterpolationFilter::EightTap,
@@ -753,14 +750,12 @@ impl Parser {
 
         let is_filter_switchable = r.read_bool()?;
 
-        if is_filter_switchable {
-            hdr.interpolation_filter = InterpolationFilter::Switchable;
+        Ok(if is_filter_switchable {
+            InterpolationFilter::Switchable
         } else {
             let raw_interpolation_filter = r.read_u32(2)?;
-            hdr.interpolation_filter = LITERAL_TO_TYPE[raw_interpolation_filter as usize];
-        }
-
-        Ok(())
+            LITERAL_TO_TYPE[raw_interpolation_filter as usize]
+        })
     }
 
     fn setup_past_independence(&mut self, hdr: &mut Header) {
@@ -962,7 +957,7 @@ impl Parser {
         let mut hdr = Header::default();
 
         Self::parse_frame_marker(&mut r)?;
-        Self::parse_profile(&mut r, &mut hdr)?;
+        hdr.profile = Self::parse_profile(&mut r)?;
 
         hdr.show_existing_frame = r.read_bool()?;
 
@@ -1037,7 +1032,7 @@ impl Parser {
 
                 self.parse_frame_size_with_refs(&mut r, &mut hdr)?;
                 hdr.allow_high_precision_mv = r.read_bool()?;
-                Self::read_interpolation_filter(&mut r, &mut hdr)?;
+                hdr.interpolation_filter = Self::read_interpolation_filter(&mut r)?;
             }
         }
 
