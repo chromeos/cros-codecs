@@ -234,12 +234,13 @@ impl Segmentation {
             let chroma_dc_quant_scale = hdr.get_dc_quant(segment_id, false);
             let chroma_ac_quant_scale = hdr.get_ac_quant(segment_id, false);
 
-            let mut lvl_seg = i32::from(lf.level);
             let mut lvl_lookup: [[u8; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES];
 
-            if lvl_seg == 0 {
+            if lf.level == 0 {
                 lvl_lookup = Default::default()
             } else {
+                let mut lvl_seg = i32::from(lf.level);
+
                 // 8.8.1 Loop filter frame init process
                 if hdr.seg_feature_active(segment_id, SEG_LVL_ALT_L as u8) {
                     if seg.abs_or_delta_update {
