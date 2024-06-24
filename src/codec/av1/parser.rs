@@ -983,7 +983,7 @@ pub struct FilmGrainParams {
     pub update_grain: bool,
     /// Indicates which reference frame contains the film grain parameters to be
     /// used for this frame.
-    pub film_grain_params_ref_idx: u32,
+    pub film_grain_params_ref_idx: u8,
     /// Specifies the number of points for the piece-wise linear scaling
     /// function of the luma component.
     pub num_y_points: u32,
@@ -2902,12 +2902,14 @@ impl Parser {
         }
 
         if !fg.update_grain {
-            fg.film_grain_params_ref_idx = r.read_bits(3)?;
+            fg.film_grain_params_ref_idx = r.read_bits(3)? as u8;
             let temp_grain_seed = fg.grain_seed;
 
-            if !fh.ref_frame_idx.iter().any(|&ref_frame_idx| {
-                ref_frame_idx == u8::try_from(fg.film_grain_params_ref_idx).unwrap()
-            }) {
+            if !fh
+                .ref_frame_idx
+                .iter()
+                .any(|&ref_frame_idx| ref_frame_idx == fg.film_grain_params_ref_idx)
+            {
                 return Err(anyhow!("Invalid film_grain_params_ref_idx"));
             }
 
