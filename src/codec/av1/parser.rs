@@ -2924,10 +2924,15 @@ impl Parser {
         }
 
         fg.num_y_points = r.read_bits(4)? as u8;
-        for i in 0..fg.num_y_points as usize {
-            fg.point_y_value[i] = r.read_bits(8)?;
-            fg.point_y_scaling[i] = r.read_bits(8)?;
-        }
+        fg.point_y_value
+            .iter_mut()
+            .zip(fg.point_y_scaling.iter_mut())
+            .take(fg.num_y_points as usize)
+            .try_for_each(|(point_y_value, point_y_scaling)| {
+                *point_y_value = r.read_bits(8)?;
+                *point_y_scaling = r.read_bits(8)?;
+                Ok::<_, anyhow::Error>(())
+            })?;
 
         if mono_chrome {
             fg.chroma_scaling_from_luma = false;
