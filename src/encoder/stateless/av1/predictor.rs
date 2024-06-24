@@ -93,7 +93,7 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
 
             // Current resolution is the maximum resolution
             max_frame_width_minus_1: (width - 1) as u16,
-            max_frame_height_minus_1: height - 1,
+            max_frame_height_minus_1: (height - 1) as u16,
 
             seq_force_integer_mv: SELECT_INTEGER_MV as u32,
 

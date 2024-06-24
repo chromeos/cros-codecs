@@ -437,7 +437,7 @@ where
                             "Found new sequence, resolution: {:?}, profile: {:?}, bit depth: {:?}",
                             Resolution::from((
                                 sequence.max_frame_width_minus_1 as u32 + 1,
-                                sequence.max_frame_height_minus_1 + 1
+                                sequence.max_frame_height_minus_1 as u32 + 1
                             )),
                             sequence.seq_profile,
                             sequence.bit_depth
