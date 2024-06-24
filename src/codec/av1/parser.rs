@@ -977,7 +977,7 @@ pub struct FilmGrainParams {
     pub apply_grain: bool,
     /// Specifies the starting value for the pseudo-random numbers used during
     /// film grain synthesis.
-    pub grain_seed: u32,
+    pub grain_seed: u16,
     /// If set means that a new set of parameters should be sent.  If not set,
     /// means that the previous set of parameters should be used.
     pub update_grain: bool,
@@ -2894,7 +2894,7 @@ impl Parser {
             return Ok(());
         }
 
-        fg.grain_seed = r.read_bits(16)?;
+        fg.grain_seed = r.read_bits(16)? as u16;
         if fh.frame_type == FrameType::InterFrame {
             fg.update_grain = r.read_bit()?;
         } else {

@@ -214,7 +214,7 @@ fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
 
     let fg_info = libva::AV1FilmGrain::new(
         &film_grain_fields,
-        u16::try_from(fg.grain_seed).context("Invalid grain_seed")?,
+        fg.grain_seed,
         u8::try_from(fg.num_y_points).context("Invalid num_y_points")?,
         fg_point_y_value,
         fg_point_y_scaling,
