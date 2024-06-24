@@ -858,7 +858,7 @@ pub struct SegmentationParams {
     /// Same as SegIdPreSkip
     pub seg_id_pre_skip: bool,
     /// Same as LastActiveSegId
-    pub last_active_seg_id: u32,
+    pub last_active_seg_id: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2304,7 +2304,7 @@ impl Parser {
         for i in 0..MAX_SEGMENTS {
             for j in 0..SEG_LVL_MAX {
                 if s.feature_enabled[i][j] {
-                    s.last_active_seg_id = i as _;
+                    s.last_active_seg_id = i as u8;
                     if j >= SEG_LVL_REF_FRAME {
                         s.seg_id_pre_skip = true;
                     }
