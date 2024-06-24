@@ -992,10 +992,10 @@ pub struct FilmGrainParams {
     /// signaled on the scale of 0..255. (In case of 10 bit video, these values
     /// correspond to luma values divided by 4. In case of 12 bit video, these
     /// values correspond to luma values divided by 16.)
-    pub point_y_value: [u32; MAX_NUM_Y_POINTS],
+    pub point_y_value: [u8; MAX_NUM_Y_POINTS],
     /// Pepresents the scaling (output) value for the i-th point of the
     /// piecewise linear scaling function for luma component.
-    pub point_y_scaling: [u32; MAX_NUM_Y_POINTS],
+    pub point_y_scaling: [u8; MAX_NUM_Y_POINTS],
     /// Specifies that the chroma scaling is inferred from the luma scaling.
     pub chroma_scaling_from_luma: bool,
     /// Specifies the number of points for the piece-wise linear scaling
@@ -2929,8 +2929,8 @@ impl Parser {
             .zip(fg.point_y_scaling.iter_mut())
             .take(fg.num_y_points as usize)
             .try_for_each(|(point_y_value, point_y_scaling)| {
-                *point_y_value = r.read_bits(8)?;
-                *point_y_scaling = r.read_bits(8)?;
+                *point_y_value = r.read_bits(8)? as u8;
+                *point_y_scaling = r.read_bits(8)? as u8;
                 Ok::<_, anyhow::Error>(())
             })?;
 

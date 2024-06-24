@@ -122,23 +122,15 @@ fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
         u32::from(fg.clip_to_restricted_range),
     );
 
+    const NUM_POINT_Y: usize = 14;
     let fg_point_y_value = {
-        let mut fg_point_y_value = [0u8; 14];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..fg_point_y_value.len() {
-            fg_point_y_value[i] =
-                u8::try_from(fg.point_y_value[i]).context("Invalid point_y_value")?;
-        }
+        let mut fg_point_y_value = [0u8; NUM_POINT_Y];
+        fg_point_y_value.copy_from_slice(&fg.point_y_value[0..NUM_POINT_Y]);
         fg_point_y_value
     };
-
     let fg_point_y_scaling = {
-        let mut fg_point_y_scaling = [0u8; 14];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..fg_point_y_scaling.len() {
-            fg_point_y_scaling[i] =
-                u8::try_from(fg.point_y_scaling[i]).context("Invalid point_y_scaling")?;
-        }
+        let mut fg_point_y_scaling = [0u8; NUM_POINT_Y];
+        fg_point_y_scaling.copy_from_slice(&fg.point_y_scaling[0..NUM_POINT_Y]);
         fg_point_y_scaling
     };
 
