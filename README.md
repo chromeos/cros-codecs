@@ -10,8 +10,6 @@ It is developed for use in ChromeOS (particularly
 [crosvm](https://github.com/google/crosvm)), but has no dependency to ChromeOS
 and should be usable anywhere.
 
-This crate is still under heavy development and is not recommended for use yet.
-
 ## Current features
 
 - Simple decoder API,
