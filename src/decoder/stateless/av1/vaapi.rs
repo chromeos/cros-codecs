@@ -146,23 +146,15 @@ fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
         fg_point_cb_scaling
     };
 
+    const NUM_POINT_CR: usize = 10;
     let fg_point_cr_value = {
-        let mut fg_point_cr_value = [0u8; 10];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..fg_point_cr_value.len() {
-            fg_point_cr_value[i] =
-                u8::try_from(fg.point_cr_value[i]).context("Invalid point_cr_value")?;
-        }
+        let mut fg_point_cr_value = [0u8; NUM_POINT_CR];
+        fg_point_cr_value.copy_from_slice(&fg.point_cr_value[0..NUM_POINT_CR]);
         fg_point_cr_value
     };
-
     let fg_point_cr_scaling = {
-        let mut fg_point_cr_scaling = [0u8; 10];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..fg_point_cr_scaling.len() {
-            fg_point_cr_scaling[i] =
-                u8::try_from(fg.point_cr_scaling[i]).context("Invalid point_cr_scaling")?;
-        }
+        let mut fg_point_cr_scaling = [0u8; NUM_POINT_CR];
+        fg_point_cr_scaling.copy_from_slice(&fg.point_cr_scaling[0..NUM_POINT_CR]);
         fg_point_cr_scaling
     };
 
@@ -205,7 +197,7 @@ fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
         fg.num_cb_points,
         fg_point_cb_value,
         fg_point_cb_scaling,
-        u8::try_from(fg.num_cr_points).context("Invalid num_cr_points")?,
+        fg.num_cr_points,
         fg_point_cr_value,
         fg_point_cr_scaling,
         fg_ar_coeffs_y,

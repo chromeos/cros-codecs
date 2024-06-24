@@ -1010,14 +1010,14 @@ pub struct FilmGrainParams {
     pub point_cb_scaling: [u8; MAX_NUM_CB_POINTS],
     /// Specifies represents the number of points for the piece-wise linear
     /// scaling function of the cr component.
-    pub num_cr_points: u32,
+    pub num_cr_points: u8,
     /// Represents the x coordinate for the i-th point of the piece-wise linear
     /// scaling function for cr component. The values are signaled on the scale
     /// of 0..255.
-    pub point_cr_value: [u32; MAX_NUM_CR_POINTS],
+    pub point_cr_value: [u8; MAX_NUM_CR_POINTS],
     /// Represents the scaling (output) value for the i-th point of the
     /// piecewise linear scaling function for cr component.
-    pub point_cr_scaling: [u32; MAX_NUM_CR_POINTS],
+    pub point_cr_scaling: [u8; MAX_NUM_CR_POINTS],
     /// Represents the shift – 8 applied to the values of the chroma component.
     /// The grain_scaling_minus_8 can take values of 0..3 and determines the
     /// range and quantization step of the standard deviation of film grain.
@@ -2964,9 +2964,9 @@ impl Parser {
                 fg.point_cb_scaling[i] = r.read_bits(8)? as u8;
             }
 
-            fg.num_cr_points = r.read_bits(4)?;
+            fg.num_cr_points = r.read_bits(4)? as u8;
             for i in 0..fg.num_cr_points as usize {
-                fg.point_cr_value[i] = r.read_bits(8)?;
+                fg.point_cr_value[i] = r.read_bits(8)? as u8;
                 if i > 0 && fg.point_cr_value[i - 1] >= fg.point_cr_value[i] {
                     return Err(anyhow!(
                         "Invalid point_cr_value[{}] {}",
@@ -2974,7 +2974,7 @@ impl Parser {
                         fg.point_cr_value[i]
                     ));
                 }
-                fg.point_cr_scaling[i] = r.read_bits(8)?;
+                fg.point_cr_scaling[i] = r.read_bits(8)? as u8;
             }
         }
 
