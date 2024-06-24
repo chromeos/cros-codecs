@@ -1033,7 +1033,7 @@ pub struct FilmGrainParams {
     /// Specifies the range of the auto-regressive coefficients. Values of 0, 1,
     /// 2, and 3 correspond to the ranges for auto-regressive coefficients of
     /// [-2, 2), [-1, 1), [-0.5, 0.5) and [-0.25, 0.25) respectively.
-    pub ar_coeff_shift_minus_6: u32,
+    pub ar_coeff_shift_minus_6: u8,
     /// Specifies how much the Gaussian random numbers should be scaled down
     /// during the grain synthesis process.
     pub grain_scale_shift: u32,
@@ -3003,7 +3003,7 @@ impl Parser {
             }
         }
 
-        fg.ar_coeff_shift_minus_6 = r.read_bits(2)?;
+        fg.ar_coeff_shift_minus_6 = r.read_bits(2)? as u8;
         fg.grain_scale_shift = r.read_bits(2)?;
 
         if fg.num_cb_points > 0 {

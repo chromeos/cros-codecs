@@ -116,7 +116,7 @@ fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
         u32::from(fg.chroma_scaling_from_luma),
         u32::from(fg.grain_scaling_minus_8),
         fg.ar_coeff_lag,
-        fg.ar_coeff_shift_minus_6,
+        fg.ar_coeff_shift_minus_6 as u32,
         fg.grain_scale_shift,
         u32::from(fg.overlap_flag),
         u32::from(fg.clip_to_restricted_range),
