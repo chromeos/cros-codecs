@@ -1025,11 +1025,11 @@ pub struct FilmGrainParams {
     /// Specifies the number of auto-regressive coefficients for luma and chroma.
     pub ar_coeff_lag: u32,
     /// Specifies auto-regressive coefficients used for the Y plane.
-    pub ar_coeffs_y_plus_128: [u32; MAX_NUM_POS_LUMA],
+    pub ar_coeffs_y_plus_128: [u8; MAX_NUM_POS_LUMA],
     /// Specifies auto-regressive coefficients used for the U plane.
-    pub ar_coeffs_cb_plus_128: [u32; MAX_NUM_POS_LUMA],
+    pub ar_coeffs_cb_plus_128: [u8; MAX_NUM_POS_LUMA],
     /// Specifies auto-regressive coefficients used for the V plane.
-    pub ar_coeffs_cr_plus_128: [u32; MAX_NUM_POS_LUMA],
+    pub ar_coeffs_cr_plus_128: [u8; MAX_NUM_POS_LUMA],
     /// Specifies the range of the auto-regressive coefficients. Values of 0, 1,
     /// 2, and 3 correspond to the ranges for auto-regressive coefficients of
     /// [-2, 2), [-1, 1), [-0.5, 0.5) and [-0.25, 0.25) respectively.
@@ -2984,7 +2984,7 @@ impl Parser {
         let num_pos_luma = 2 * fg.ar_coeff_lag * (fg.ar_coeff_lag + 1);
         let num_pos_chroma = if fg.num_y_points > 0 {
             for i in 0..num_pos_luma as usize {
-                fg.ar_coeffs_y_plus_128[i] = r.read_bits(8)?;
+                fg.ar_coeffs_y_plus_128[i] = r.read_bits(8)? as u8;
             }
             num_pos_luma + 1
         } else {
@@ -2993,13 +2993,13 @@ impl Parser {
 
         if fg.chroma_scaling_from_luma || fg.num_cb_points > 0 {
             for i in 0..num_pos_chroma as usize {
-                fg.ar_coeffs_cb_plus_128[i] = r.read_bits(8)?;
+                fg.ar_coeffs_cb_plus_128[i] = r.read_bits(8)? as u8;
             }
         }
 
         if fg.chroma_scaling_from_luma || fg.num_cr_points > 0 {
             for i in 0..num_pos_chroma as usize {
-                fg.ar_coeffs_cr_plus_128[i] = r.read_bits(8)?;
+                fg.ar_coeffs_cr_plus_128[i] = r.read_bits(8)? as u8;
             }
         }
 

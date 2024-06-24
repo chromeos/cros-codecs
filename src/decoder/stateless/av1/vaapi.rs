@@ -160,31 +160,26 @@ fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
 
     let fg_ar_coeffs_y = {
         let mut fg_ar_coeffs_y = [0i8; 24];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..fg_ar_coeffs_y.len() {
-            fg_ar_coeffs_y[i] = i8::try_from(fg.ar_coeffs_y_plus_128[i] as i64 - 128)
-                .context("Invalid ar_coeffs_y")?
-        }
+        fg_ar_coeffs_y
+            .iter_mut()
+            .zip(fg.ar_coeffs_y_plus_128.iter().copied())
+            .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
         fg_ar_coeffs_y
     };
-
     let fg_ar_coeffs_cb = {
         let mut fg_ar_coeffs_cb = [0i8; 25];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..fg_ar_coeffs_cb.len() {
-            fg_ar_coeffs_cb[i] = i8::try_from(fg.ar_coeffs_cb_plus_128[i] as i64 - 128)
-                .context("Invalid ar_coeffs_cb")?
-        }
+        fg_ar_coeffs_cb
+            .iter_mut()
+            .zip(fg.ar_coeffs_cb_plus_128.iter().copied())
+            .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
         fg_ar_coeffs_cb
     };
-
     let fg_ar_coeffs_cr = {
         let mut fg_ar_coeffs_cr = [0i8; 25];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..fg_ar_coeffs_cr.len() {
-            fg_ar_coeffs_cr[i] = i8::try_from(fg.ar_coeffs_cr_plus_128[i] as i64 - 128)
-                .context("Invalid ar_coeffs_cr")?
-        }
+        fg_ar_coeffs_cr
+            .iter_mut()
+            .zip(fg.ar_coeffs_cr_plus_128.iter().copied())
+            .for_each(|(dest, src)| *dest = ((src as i16) - 128) as i8);
         fg_ar_coeffs_cr
     };
 
