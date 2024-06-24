@@ -42,7 +42,7 @@ pub const SUPERRES_NUM: usize = 8;
 pub const MAX_TILE_WIDTH: u32 = 4096;
 pub const MAX_TILE_HEIGHT: u32 = 2304;
 pub const MAX_TILE_AREA: u32 = MAX_TILE_WIDTH * MAX_TILE_HEIGHT;
-pub const RESTORATION_TILESIZE_MAX: u32 = 256;
+pub const RESTORATION_TILESIZE_MAX: u16 = 256;
 pub const WARPEDMODEL_PREC_BITS: u32 = 16;
 pub const WARP_PARAM_REDUCE_BITS: u32 = 6;
 pub const GM_ABS_ALPHA_BITS: u32 = 12;
@@ -942,7 +942,7 @@ pub struct LoopRestorationParams {
     /// Same as FrameRestorationType in the specification.
     pub frame_restoration_type: [FrameRestorationType; MAX_NUM_PLANES],
     /// Same as LoopRestorationSize in the specification.
-    pub loop_restoration_size: [u32; MAX_NUM_PLANES],
+    pub loop_restoration_size: [u16; MAX_NUM_PLANES],
     /// Same as UsesLr in the specification.
     pub uses_lr: bool,
     /// Same as UsesChromaLr in the specification.
