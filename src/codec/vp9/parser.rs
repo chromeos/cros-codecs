@@ -503,6 +503,7 @@ struct SuperframeHeader {
     /// superframe.
     frame_sizes: Vec<usize>,
 }
+
 /// A VP9 bitstream parser.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Parser {
