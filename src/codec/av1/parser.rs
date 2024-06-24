@@ -856,7 +856,7 @@ pub struct SegmentationParams {
     /// Specifies the feature data for a segment feature.
     pub feature_data: [[i16; SEG_LVL_MAX]; MAX_SEGMENTS],
     /// Same as SegIdPreSkip
-    pub seg_id_pre_skip: u32,
+    pub seg_id_pre_skip: bool,
     /// Same as LastActiveSegId
     pub last_active_seg_id: u32,
 }
@@ -2299,14 +2299,14 @@ impl Parser {
             }
         }
 
-        s.seg_id_pre_skip = 0;
+        s.seg_id_pre_skip = false;
         s.last_active_seg_id = 0;
         for i in 0..MAX_SEGMENTS {
             for j in 0..SEG_LVL_MAX {
                 if s.feature_enabled[i][j] {
                     s.last_active_seg_id = i as _;
                     if j >= SEG_LVL_REF_FRAME {
-                        s.seg_id_pre_skip = 1;
+                        s.seg_id_pre_skip = true;
                     }
                 }
             }
