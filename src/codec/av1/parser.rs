@@ -986,7 +986,7 @@ pub struct FilmGrainParams {
     pub film_grain_params_ref_idx: u8,
     /// Specifies the number of points for the piece-wise linear scaling
     /// function of the luma component.
-    pub num_y_points: u32,
+    pub num_y_points: u8,
     /// Represents the x (luma value) coordinate for the i-th point of the
     /// piecewise linear scaling function for luma component. The values are
     /// signaled on the scale of 0..255. (In case of 10 bit video, these values
@@ -2923,7 +2923,7 @@ impl Parser {
             return Ok(());
         }
 
-        fg.num_y_points = r.read_bits(4)?;
+        fg.num_y_points = r.read_bits(4)? as u8;
         for i in 0..fg.num_y_points as usize {
             fg.point_y_value[i] = r.read_bits(8)?;
             fg.point_y_scaling[i] = r.read_bits(8)?;
