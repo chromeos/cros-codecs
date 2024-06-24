@@ -459,7 +459,7 @@ impl Header {
             self.quant.delta_q_uv_dc
         } as i32;
         let qindex = self.get_qindex(segment_id);
-        let q_table_idx = (qindex as i32 + delta_q_dc).clamp(0, 255) as usize;
+        let q_table_idx = (qindex as i32 + delta_q_dc).clamp(0, 255) as u8;
 
         let table = match self.bit_depth {
             BitDepth::Depth8 => &DC_QLOOKUP,
@@ -467,14 +467,14 @@ impl Header {
             BitDepth::Depth12 => &DC_QLOOKUP_12,
         };
 
-        Ok(table[q_table_idx])
+        Ok(table[q_table_idx as usize])
     }
 
     /// An implementation of get_ac_quant as per "8.6.1 Dequantization functions"
     pub fn get_ac_quant(&self, segment_id: u8, luma: bool) -> anyhow::Result<i16> {
         let delta_q_ac = if luma { 0 } else { self.quant.delta_q_uv_ac } as i32;
         let qindex = self.get_qindex(segment_id);
-        let q_table_idx = (qindex as i32 + delta_q_ac).clamp(0, 255) as usize;
+        let q_table_idx = (qindex as i32 + delta_q_ac).clamp(0, 255) as u8;
 
         let table = match self.bit_depth {
             BitDepth::Depth8 => &AC_QLOOKUP,
@@ -482,7 +482,7 @@ impl Header {
             BitDepth::Depth12 => &AC_QLOOKUP_12,
         };
 
-        Ok(table[q_table_idx])
+        Ok(table[q_table_idx as usize])
     }
 }
 
