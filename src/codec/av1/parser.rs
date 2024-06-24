@@ -1021,7 +1021,7 @@ pub struct FilmGrainParams {
     /// Represents the shift – 8 applied to the values of the chroma component.
     /// The grain_scaling_minus_8 can take values of 0..3 and determines the
     /// range and quantization step of the standard deviation of film grain.
-    pub grain_scaling_minus_8: u32,
+    pub grain_scaling_minus_8: u8,
     /// Specifies the number of auto-regressive coefficients for luma and chroma.
     pub ar_coeff_lag: u32,
     /// Specifies auto-regressive coefficients used for the Y plane.
@@ -2978,7 +2978,7 @@ impl Parser {
             }
         }
 
-        fg.grain_scaling_minus_8 = r.read_bits(2)?;
+        fg.grain_scaling_minus_8 = r.read_bits(2)? as u8;
         fg.ar_coeff_lag = r.read_bits(2)?;
 
         let num_pos_luma = 2 * fg.ar_coeff_lag * (fg.ar_coeff_lag + 1);

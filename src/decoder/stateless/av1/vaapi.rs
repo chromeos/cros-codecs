@@ -114,7 +114,7 @@ fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
     let film_grain_fields = libva::AV1FilmGrainFields::new(
         u32::from(fg.apply_grain),
         u32::from(fg.chroma_scaling_from_luma),
-        fg.grain_scaling_minus_8,
+        u32::from(fg.grain_scaling_minus_8),
         fg.ar_coeff_lag,
         fg.ar_coeff_shift_minus_6,
         fg.grain_scale_shift,
