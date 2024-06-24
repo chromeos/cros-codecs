@@ -581,9 +581,8 @@ impl Parser {
         })
     }
 
-    fn read_signed_8(r: &mut BitReader, nbits: u8) -> anyhow::Result<i8> {
+    fn read_signed_8(r: &mut BitReader, nbits: u8) -> bitreader::Result<i8> {
         let value = r.read_u8(nbits)?;
-
         let negative = r.read_bool()?;
 
         if negative {
@@ -697,14 +696,14 @@ impl Parser {
         self.sb64_rows = (self.mi_rows + 7) >> 3;
     }
 
-    fn parse_frame_size(&mut self, r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn parse_frame_size(&mut self, r: &mut BitReader, hdr: &mut Header) -> bitreader::Result<()> {
         hdr.width = r.read_u32(16)? + 1;
         hdr.height = r.read_u32(16)? + 1;
         self.compute_image_size(hdr.width, hdr.height);
         Ok(())
     }
 
-    fn parse_render_size(r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn parse_render_size(r: &mut BitReader, hdr: &mut Header) -> bitreader::Result<()> {
         hdr.render_and_frame_size_different = r.read_bool()?;
         if hdr.render_and_frame_size_different {
             hdr.render_width = r.read_u32(16)? + 1;
@@ -721,7 +720,7 @@ impl Parser {
         &mut self,
         r: &mut BitReader,
         hdr: &mut Header,
-    ) -> anyhow::Result<()> {
+    ) -> bitreader::Result<()> {
         let mut found_ref = false;
 
         for i in 0..REFS_PER_FRAME {
@@ -782,7 +781,7 @@ impl Parser {
     fn parse_loop_filter_params(
         r: &mut BitReader,
         lf: &mut LoopFilterParams,
-    ) -> anyhow::Result<()> {
+    ) -> bitreader::Result<()> {
         lf.level = r.read_u8(6)?;
         lf.sharpness = r.read_u8(3)?;
         lf.delta_enabled = r.read_bool()?;
@@ -809,7 +808,7 @@ impl Parser {
         Ok(())
     }
 
-    fn read_delta_q(r: &mut BitReader, value: &mut i8) -> anyhow::Result<()> {
+    fn read_delta_q(r: &mut BitReader, value: &mut i8) -> bitreader::Result<()> {
         let delta_coded = r.read_bool()?;
 
         if delta_coded {
@@ -821,7 +820,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_quantization_params(r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn parse_quantization_params(r: &mut BitReader, hdr: &mut Header) -> bitreader::Result<()> {
         let quant = &mut hdr.quant;
 
         quant.base_q_idx = r.read_u8(8)?;
@@ -838,7 +837,7 @@ impl Parser {
         Ok(())
     }
 
-    fn read_prob(r: &mut BitReader) -> anyhow::Result<u8> {
+    fn read_prob(r: &mut BitReader) -> bitreader::Result<u8> {
         let prob_coded = r.read_bool()?;
 
         let prob = if prob_coded { r.read_u8(8)? } else { 255 };
@@ -849,7 +848,7 @@ impl Parser {
     fn parse_segmentation_params(
         r: &mut BitReader,
         seg: &mut SegmentationParams,
-    ) -> anyhow::Result<()> {
+    ) -> bitreader::Result<()> {
         const SEGMENTATION_FEATURE_BITS: [u8; SEG_LVL_MAX] = [8, 6, 2, 0];
         const SEGMENTATION_FEATURE_SIGNED: [bool; SEG_LVL_MAX] = [true, true, false, false];
 
@@ -928,7 +927,7 @@ impl Parser {
         max_log2 - 1
     }
 
-    fn parse_tile_info(&self, r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn parse_tile_info(&self, r: &mut BitReader, hdr: &mut Header) -> bitreader::Result<()> {
         let max_log2_tile_cols = Self::calc_max_log2_tile_cols(self.sb64_cols);
 
         hdr.tile_cols_log2 = Self::calc_min_log2_tile_cols(self.sb64_cols);
