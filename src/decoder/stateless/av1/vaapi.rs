@@ -203,7 +203,7 @@ fn build_fg_info(hdr: &FrameHeaderObu) -> anyhow::Result<libva::AV1FilmGrain> {
         fg.cb_offset,
         fg.cr_mult,
         fg.cr_luma_mult,
-        u16::try_from(fg.cr_offset).context("Invalid cr_offset")?,
+        fg.cr_offset,
     );
 
     Ok(fg_info)

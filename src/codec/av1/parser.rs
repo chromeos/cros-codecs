@@ -1054,7 +1054,7 @@ pub struct FilmGrainParams {
     pub cr_luma_mult: u8,
     /// Represents an offset used in derivation of the input index to the cr
     /// component scaling function.
-    pub cr_offset: u32,
+    pub cr_offset: u16,
     /// If set, indicates that the overlap between film grain blocks shall be
     /// applied. If not set, indicates that the overlap between film grain
     /// blocks shall not be applied.
@@ -3015,7 +3015,7 @@ impl Parser {
         if fg.num_cr_points > 0 {
             fg.cr_mult = r.read_bits(8)? as u8;
             fg.cr_luma_mult = r.read_bits(8)? as u8;
-            fg.cr_offset = r.read_bits(9)?;
+            fg.cr_offset = r.read_bits(9)? as u16;
         }
 
         fg.overlap_flag = r.read_bit()?;
