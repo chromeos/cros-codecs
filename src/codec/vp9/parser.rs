@@ -229,10 +229,10 @@ impl Segmentation {
         let n_shift = lf.level >> 5;
 
         for segment_id in 0..MAX_SEGMENTS as u8 {
-            let luma_dc_quant_scale = hdr.get_dc_quant(segment_id, true)?;
-            let luma_ac_quant_scale = hdr.get_ac_quant(segment_id, true)?;
-            let chroma_dc_quant_scale = hdr.get_dc_quant(segment_id, false)?;
-            let chroma_ac_quant_scale = hdr.get_ac_quant(segment_id, false)?;
+            let luma_dc_quant_scale = hdr.get_dc_quant(segment_id, true);
+            let luma_ac_quant_scale = hdr.get_ac_quant(segment_id, true);
+            let chroma_dc_quant_scale = hdr.get_dc_quant(segment_id, false);
+            let chroma_ac_quant_scale = hdr.get_ac_quant(segment_id, false);
 
             let mut lvl_seg = i32::from(lf.level);
             let mut lvl_lookup: [[u8; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES];
@@ -431,7 +431,7 @@ pub struct Header {
 impl Header {
     /// An implementation of seg_feature_active as per "6.4.9 Segmentation feature active syntax"
     fn seg_feature_active(&self, segment_id: u8, feature: u8) -> bool {
-        self.seg.enabled && self.seg.feature_enabled[usize::from(segment_id)][usize::from(feature)]
+        self.seg.enabled && self.seg.feature_enabled[segment_id as usize][feature as usize]
     }
 
     /// An implementation of get_qindex as per "8.6.1 Dequantization functions"
@@ -439,7 +439,7 @@ impl Header {
         let base_q_idx = self.quant.base_q_idx;
 
         if self.seg_feature_active(segment_id, 0) {
-            let mut data = self.seg.feature_data[usize::from(segment_id)][0] as i32;
+            let mut data = self.seg.feature_data[segment_id as usize][0] as i32;
 
             if !self.seg.abs_or_delta_update {
                 data += base_q_idx as i32;
@@ -452,7 +452,7 @@ impl Header {
     }
 
     /// An implementation of get_dc_quant as per "8.6.1 Dequantization functions"
-    pub fn get_dc_quant(&self, segment_id: u8, luma: bool) -> anyhow::Result<i16> {
+    fn get_dc_quant(&self, segment_id: u8, luma: bool) -> i16 {
         let delta_q_dc = if luma {
             self.quant.delta_q_y_dc
         } else {
@@ -467,11 +467,11 @@ impl Header {
             BitDepth::Depth12 => &DC_QLOOKUP_12,
         };
 
-        Ok(table[q_table_idx as usize])
+        table[q_table_idx as usize]
     }
 
     /// An implementation of get_ac_quant as per "8.6.1 Dequantization functions"
-    pub fn get_ac_quant(&self, segment_id: u8, luma: bool) -> anyhow::Result<i16> {
+    fn get_ac_quant(&self, segment_id: u8, luma: bool) -> i16 {
         let delta_q_ac = if luma { 0 } else { self.quant.delta_q_uv_ac } as i32;
         let qindex = self.get_qindex(segment_id);
         let q_table_idx = (qindex as i32 + delta_q_ac).clamp(0, 255) as u8;
@@ -482,7 +482,7 @@ impl Header {
             BitDepth::Depth12 => &AC_QLOOKUP_12,
         };
 
-        Ok(table[q_table_idx as usize])
+        table[q_table_idx as usize]
     }
 }
 
