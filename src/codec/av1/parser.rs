@@ -1963,15 +1963,7 @@ impl Parser {
         }
 
         fh.loop_filter_params.loop_filter_delta_enabled = true;
-        fh.loop_filter_params.loop_filter_ref_deltas[ReferenceFrameType::Intra as usize] = 1;
-        fh.loop_filter_params.loop_filter_ref_deltas[ReferenceFrameType::Last as usize] = 0;
-        fh.loop_filter_params.loop_filter_ref_deltas[ReferenceFrameType::Last2 as usize] = 0;
-        fh.loop_filter_params.loop_filter_ref_deltas[ReferenceFrameType::Last3 as usize] = 0;
-        fh.loop_filter_params.loop_filter_ref_deltas[ReferenceFrameType::BwdRef as usize] = 0;
-        fh.loop_filter_params.loop_filter_ref_deltas[ReferenceFrameType::Golden as usize] = -1;
-        fh.loop_filter_params.loop_filter_ref_deltas[ReferenceFrameType::AltRef as usize] = -1;
-        fh.loop_filter_params.loop_filter_ref_deltas[ReferenceFrameType::AltRef2 as usize] = -1;
-
+        fh.loop_filter_params.loop_filter_ref_deltas = [1, 0, 0, 0, -1, 0, -1, -1];
         fh.loop_filter_params.loop_filter_mode_deltas = Default::default();
     }
 
@@ -2332,15 +2324,7 @@ impl Parser {
         if fh.coded_lossless || fh.allow_intrabc {
             lf.loop_filter_level[0] = 0;
             lf.loop_filter_level[1] = 0;
-
-            lf.loop_filter_ref_deltas[ReferenceFrameType::Intra as usize] = 1;
-            lf.loop_filter_ref_deltas[ReferenceFrameType::Last as usize] = 0;
-            lf.loop_filter_ref_deltas[ReferenceFrameType::Last2 as usize] = 0;
-            lf.loop_filter_ref_deltas[ReferenceFrameType::Last3 as usize] = 0;
-            lf.loop_filter_ref_deltas[ReferenceFrameType::BwdRef as usize] = 0;
-            lf.loop_filter_ref_deltas[ReferenceFrameType::Golden as usize] = -1;
-            lf.loop_filter_ref_deltas[ReferenceFrameType::AltRef as usize] = -1;
-            lf.loop_filter_ref_deltas[ReferenceFrameType::AltRef2 as usize] = -1;
+            lf.loop_filter_ref_deltas = [1, 0, 0, 0, -1, 0, -1, -1];
 
             for delta in &mut lf.loop_filter_mode_deltas {
                 *delta = 0;
