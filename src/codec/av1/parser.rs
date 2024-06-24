@@ -766,7 +766,7 @@ pub struct LoopFilterParams {
     /// Indicates the sharpness level. The loop_filter_level and
     /// loop_filter_sharpness together determine when a block edge is filtered,
     /// and by how much the filtering can change the sample values.
-    pub loop_filter_sharpness: u32,
+    pub loop_filter_sharpness: u8,
     /// If set, means that the filter level depends on the mode and reference
     /// frame used to predict a block. If not set, means that the filter level
     /// does not depend on the mode and reference frame.
@@ -2356,7 +2356,7 @@ impl Parser {
             lf.loop_filter_level[3] = r.read_bits(6)? as u8;
         }
 
-        lf.loop_filter_sharpness = r.read_bits(3)?;
+        lf.loop_filter_sharpness = r.read_bits(3)? as u8;
         lf.loop_filter_delta_enabled = r.read_bit()?;
         if lf.loop_filter_delta_enabled {
             lf.loop_filter_delta_update = r.read_bit()?;

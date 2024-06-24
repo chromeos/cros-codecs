@@ -347,7 +347,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     let filter_level = [lf.loop_filter_level[0], lf.loop_filter_level[1]];
 
     let lf_fields = libva::AV1LoopFilterFields::new(
-        u8::try_from(lf.loop_filter_sharpness).context("Invalid loop_filter_sharpness")?,
+        lf.loop_filter_sharpness,
         u8::from(lf.loop_filter_delta_enabled),
         u8::from(lf.loop_filter_delta_update),
     );

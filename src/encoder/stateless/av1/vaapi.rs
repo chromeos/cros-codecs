@@ -249,8 +249,6 @@ where
         let filter_level_u = request.frame.loop_filter_params.loop_filter_level[2];
         let filter_level_v = request.frame.loop_filter_params.loop_filter_level[3];
 
-        let sharpness_level = u8::try_from(request.frame.loop_filter_params.loop_filter_sharpness)?;
-
         let superres_scale_denominator = u8::try_from(request.frame.superres_denom)?;
 
         let interpolation_filter = request.frame.interpolation_filter as u8;
@@ -409,7 +407,7 @@ where
             filter_level_u,
             filter_level_v,
             &AV1EncLoopFilterFlags::new(
-                sharpness_level,
+                request.frame.loop_filter_params.loop_filter_sharpness,
                 request.frame.loop_filter_params.loop_filter_delta_enabled,
                 request.frame.loop_filter_params.loop_filter_delta_update,
             ),
