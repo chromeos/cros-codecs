@@ -460,11 +460,14 @@ impl Header {
         } as i32;
         let qindex = self.get_qindex(segment_id);
         let q_table_idx = (qindex as i32 + delta_q_dc).clamp(0, 255) as usize;
-        match self.bit_depth {
-            BitDepth::Depth8 => Ok(DC_QLOOKUP[q_table_idx]),
-            BitDepth::Depth10 => Ok(DC_QLOOKUP_10[q_table_idx]),
-            BitDepth::Depth12 => Ok(DC_QLOOKUP_12[q_table_idx]),
-        }
+
+        let table = match self.bit_depth {
+            BitDepth::Depth8 => &DC_QLOOKUP,
+            BitDepth::Depth10 => &DC_QLOOKUP_10,
+            BitDepth::Depth12 => &DC_QLOOKUP_12,
+        };
+
+        Ok(table[q_table_idx])
     }
 
     /// An implementation of get_ac_quant as per "8.6.1 Dequantization functions"
@@ -473,11 +476,13 @@ impl Header {
         let qindex = self.get_qindex(segment_id);
         let q_table_idx = (qindex as i32 + delta_q_ac).clamp(0, 255) as usize;
 
-        match self.bit_depth {
-            BitDepth::Depth8 => Ok(AC_QLOOKUP[q_table_idx]),
-            BitDepth::Depth10 => Ok(AC_QLOOKUP_10[q_table_idx]),
-            BitDepth::Depth12 => Ok(AC_QLOOKUP_12[q_table_idx]),
-        }
+        let table = match self.bit_depth {
+            BitDepth::Depth8 => &AC_QLOOKUP,
+            BitDepth::Depth10 => &AC_QLOOKUP_10,
+            BitDepth::Depth12 => &AC_QLOOKUP_12,
+        };
+
+        Ok(table[q_table_idx])
     }
 }
 
