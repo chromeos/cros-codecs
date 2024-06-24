@@ -788,7 +788,7 @@ pub struct LoopFilterParams {
     pub delta_lf_present: bool,
     /// Specifies the left shift which should be applied to decoded loop filter
     /// delta values.
-    pub delta_lf_res: u32,
+    pub delta_lf_res: u8,
     /// If set, specifies that separate loop filter deltas are sent for
     /// horizontal luma edges, vertical luma edges, the U edges, and the V
     /// edges. If not set, specifies that the same loop filter delta is used for
@@ -2226,7 +2226,7 @@ impl Parser {
                 lf.delta_lf_present = r.read_bit()?;
             }
             if lf.delta_lf_present {
-                lf.delta_lf_res = r.read_bits(2)?;
+                lf.delta_lf_res = r.read_bits(2)? as u8;
                 lf.delta_lf_multi = r.read_bits(1)?;
             }
         }

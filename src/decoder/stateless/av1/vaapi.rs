@@ -363,7 +363,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         u32::from(quant.delta_q_present),
         quant.delta_q_res,
         u32::from(lf.delta_lf_present),
-        lf.delta_lf_res,
+        lf.delta_lf_res as u32,
         lf.delta_lf_multi,
         hdr.tx_mode as u32,
         u32::from(hdr.reference_select),

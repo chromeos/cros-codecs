@@ -428,7 +428,7 @@ where
                 request.frame.quantization_params.delta_q_present,
                 request.frame.quantization_params.delta_q_res,
                 request.frame.loop_filter_params.delta_lf_present,
-                request.frame.loop_filter_params.delta_lf_res,
+                request.frame.loop_filter_params.delta_lf_res as u32,
                 delta_lf_multi,
                 tx_mode,
                 REFERENCE_MODE,
