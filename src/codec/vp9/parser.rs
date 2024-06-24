@@ -430,12 +430,12 @@ pub struct Header {
 
 impl Header {
     /// An implementation of seg_feature_active as per "6.4.9 Segmentation feature active syntax"
-    pub fn seg_feature_active(&self, segment_id: u8, feature: u8) -> bool {
+    fn seg_feature_active(&self, segment_id: u8, feature: u8) -> bool {
         self.seg.enabled && self.seg.feature_enabled[usize::from(segment_id)][usize::from(feature)]
     }
 
     /// An implementation of get_qindex as per "8.6.1 Dequantization functions"
-    pub fn get_qindex(&self, segment_id: u8) -> u8 {
+    fn get_qindex(&self, segment_id: u8) -> u8 {
         let base_q_idx = self.quant.base_q_idx;
 
         if self.seg_feature_active(segment_id, 0) {
