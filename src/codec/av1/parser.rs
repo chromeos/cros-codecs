@@ -1051,7 +1051,7 @@ pub struct FilmGrainParams {
     pub cr_mult: u8,
     /// Represents a multiplier for the average luma component used in
     /// derivation of the input index to the cr component scaling function.
-    pub cr_luma_mult: u32,
+    pub cr_luma_mult: u8,
     /// Represents an offset used in derivation of the input index to the cr
     /// component scaling function.
     pub cr_offset: u32,
@@ -3014,7 +3014,7 @@ impl Parser {
 
         if fg.num_cr_points > 0 {
             fg.cr_mult = r.read_bits(8)? as u8;
-            fg.cr_luma_mult = r.read_bits(8)?;
+            fg.cr_luma_mult = r.read_bits(8)? as u8;
             fg.cr_offset = r.read_bits(9)?;
         }
 
