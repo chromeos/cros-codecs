@@ -935,7 +935,7 @@ pub struct CdefParams {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LoopRestorationParams {
     /// Specifies if the luma restoration size should be halved.
-    pub lr_unit_shift: u32,
+    pub lr_unit_shift: u8,
     /// Only present for 4:2:0 formats and specifies if the chroma size should
     /// be half the luma size.
     pub lr_uv_shift: u32,
@@ -2460,11 +2460,11 @@ impl Parser {
 
         if lr.uses_lr {
             if use_128x128_superblock {
-                lr.lr_unit_shift = r.read_bits(1)? + 1;
+                lr.lr_unit_shift = r.read_bits(1)? as u8 + 1;
             } else {
-                lr.lr_unit_shift = r.read_bits(1)?;
+                lr.lr_unit_shift = r.read_bits(1)? as u8;
                 if lr.lr_unit_shift > 0 {
-                    lr.lr_unit_shift += r.read_bits(1)?;
+                    lr.lr_unit_shift += r.read_bits(1)? as u8;
                 }
             }
 

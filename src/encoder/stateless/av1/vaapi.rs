@@ -351,7 +351,7 @@ where
         let crframe_restoration_type =
             request.frame.loop_restoration_params.frame_restoration_type[2] as u16;
 
-        let lr_unit_shift = u16::try_from(request.frame.loop_restoration_params.lr_unit_shift)?;
+        let lr_unit_shift = u16::from(request.frame.loop_restoration_params.lr_unit_shift);
         let lr_uv_shift = request.frame.loop_restoration_params.lr_uv_shift != 0;
 
         // Warped motion params

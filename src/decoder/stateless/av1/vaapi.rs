@@ -432,7 +432,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         lr.frame_restoration_type[0] as u16,
         lr.frame_restoration_type[1] as u16,
         lr.frame_restoration_type[2] as u16,
-        u16::try_from(lr.lr_unit_shift).context("Invalid lr_unit_shift")?,
+        u16::from(lr.lr_unit_shift),
         u16::try_from(lr.lr_uv_shift).context("Invalid lr_uv_shift")?,
     );
 
