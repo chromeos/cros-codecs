@@ -447,19 +447,19 @@ impl Header {
     }
 
     /// An implementation of get_qindex as per "8.6.1 Dequantization functions"
-    pub fn get_qindex(&self, segment_id: u8) -> i32 {
+    pub fn get_qindex(&self, segment_id: u8) -> u8 {
         let base_q_idx = self.quant.base_q_idx;
 
         if self.seg_feature_active(segment_id, 0) {
             let mut data = self.seg.feature_data[usize::from(segment_id)][0] as i32;
 
             if !self.seg.abs_or_delta_update {
-                data += i32::from(base_q_idx);
+                data += base_q_idx as i32;
             }
 
-            clamp(data, 0, 255)
+            clamp(data, 0, 255) as u8
         } else {
-            i32::from(base_q_idx)
+            base_q_idx
         }
     }
 
@@ -470,8 +470,8 @@ impl Header {
         } else {
             self.quant.delta_q_uv_dc
         } as i32;
-        let qindex = Self::get_qindex(self, segment_id);
-        let q_table_idx = clamp(qindex + delta_q_dc, 0, 255) as usize;
+        let qindex = self.get_qindex(segment_id);
+        let q_table_idx = clamp(qindex as i32 + delta_q_dc, 0, 255) as usize;
         match self.bit_depth {
             BitDepth::Depth8 => Ok(DC_QLOOKUP[q_table_idx]),
             BitDepth::Depth10 => Ok(DC_QLOOKUP_10[q_table_idx]),
@@ -483,7 +483,7 @@ impl Header {
     pub fn get_ac_quant(&self, segment_id: u8, luma: bool) -> anyhow::Result<i16> {
         let delta_q_ac = if luma { 0 } else { self.quant.delta_q_uv_ac } as i32;
         let qindex = self.get_qindex(segment_id);
-        let q_table_idx = clamp(qindex + delta_q_ac, 0, 255) as usize;
+        let q_table_idx = clamp(qindex as i32 + delta_q_ac, 0, 255) as usize;
 
         match self.bit_depth {
             BitDepth::Depth8 => Ok(AC_QLOOKUP[q_table_idx]),
