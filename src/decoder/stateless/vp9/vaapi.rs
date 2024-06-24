@@ -508,7 +508,7 @@ mod tests {
             _ => panic!(),
         };
 
-        Segmentation::update_segmentation(&mut segmentation, &frame.header).unwrap();
+        Segmentation::update_segmentation(&mut segmentation, &frame.header);
         let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
@@ -573,7 +573,7 @@ mod tests {
             _ => panic!(),
         };
 
-        Segmentation::update_segmentation(&mut segmentation, &frame.header).unwrap();
+        Segmentation::update_segmentation(&mut segmentation, &frame.header);
         let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,
@@ -634,7 +634,7 @@ mod tests {
             _ => panic!(),
         };
 
-        Segmentation::update_segmentation(&mut segmentation, &frame.header).unwrap();
+        Segmentation::update_segmentation(&mut segmentation, &frame.header);
         let slice_param = build_slice_param(&segmentation, frame.as_ref().len()).unwrap();
         let slice_param = match slice_param {
             BufferType::SliceParameter(SliceParameter::VP9(slice_param)) => slice_param,

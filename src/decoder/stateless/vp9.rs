@@ -172,7 +172,7 @@ where
             // Otherwise, we must actually arrange to decode a frame
             let refresh_frame_flags = frame.header.refresh_frame_flags;
 
-            Segmentation::update_segmentation(&mut self.codec.segmentation, &frame.header)?;
+            Segmentation::update_segmentation(&mut self.codec.segmentation, &frame.header);
             let decoded_handle = self.backend.submit_picture(
                 &frame.header,
                 &self.codec.reference_frames,

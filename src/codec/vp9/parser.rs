@@ -219,10 +219,7 @@ pub struct Segmentation {
 
 impl Segmentation {
     /// Update the state of the segmentation parameters after seeing a frame
-    pub fn update_segmentation(
-        segmentation: &mut [Segmentation; MAX_SEGMENTS],
-        hdr: &Header,
-    ) -> anyhow::Result<()> {
+    pub fn update_segmentation(segmentation: &mut [Segmentation; MAX_SEGMENTS], hdr: &Header) {
         let lf = &hdr.lf;
         let seg = &hdr.seg;
 
@@ -250,32 +247,32 @@ impl Segmentation {
                         lvl_seg +=
                             i32::from(seg.feature_data[usize::from(segment_id)][SEG_LVL_ALT_L]);
                     }
-
-                    lvl_seg = lvl_seg.clamp(0, MAX_LOOP_FILTER as i32);
                 }
 
-                if !lf.delta_enabled {
-                    lvl_lookup = [[u8::try_from(lvl_seg)?; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES]
-                } else {
-                    let intra_delta = i32::from(lf.ref_deltas[INTRA_FRAME]);
-                    let mut intra_lvl = lvl_seg + (intra_delta << n_shift);
+                let lvl_seg = lvl_seg.clamp(0, MAX_LOOP_FILTER as i32) as u8;
 
-                    lvl_lookup = segmentation[usize::from(segment_id)].lvl_lookup;
-                    lvl_lookup[INTRA_FRAME][0] =
-                        u8::try_from(intra_lvl.clamp(0, MAX_LOOP_FILTER as i32))?;
+                if !lf.delta_enabled {
+                    lvl_lookup = [[lvl_seg; MAX_MODE_LF_DELTAS]; MAX_REF_FRAMES]
+                } else {
+                    let intra_delta = lf.ref_deltas[INTRA_FRAME] as i32;
+                    let mut intra_lvl = lvl_seg as i32 + (intra_delta << n_shift);
+
+                    lvl_lookup = segmentation[segment_id as usize].lvl_lookup;
+                    lvl_lookup[INTRA_FRAME][0] = intra_lvl.clamp(0, MAX_LOOP_FILTER as i32) as u8;
 
                     // Note, this array has the [0] element unspecified/unused in
                     // VP9. Confusing, but we do start to index from 1.
                     #[allow(clippy::needless_range_loop)]
                     for ref_ in LAST_FRAME..MAX_REF_FRAMES {
                         for mode in 0..MAX_MODE_LF_DELTAS {
-                            let ref_delta = i32::from(lf.ref_deltas[ref_]);
-                            let mode_delta = i32::from(lf.mode_deltas[mode]);
+                            let ref_delta = lf.ref_deltas[ref_] as i32;
+                            let mode_delta = lf.mode_deltas[mode] as i32;
 
-                            intra_lvl = lvl_seg + (ref_delta << n_shift) + (mode_delta << n_shift);
+                            intra_lvl =
+                                lvl_seg as i32 + (ref_delta << n_shift) + (mode_delta << n_shift);
 
                             lvl_lookup[ref_][mode] =
-                                u8::try_from(intra_lvl.clamp(0, MAX_LOOP_FILTER as i32))?;
+                                intra_lvl.clamp(0, MAX_LOOP_FILTER as i32) as u8;
                         }
                     }
                 }
@@ -293,8 +290,6 @@ impl Segmentation {
                 reference_skip_enabled: seg.feature_enabled[usize::from(segment_id)][SEG_LVL_SKIP],
             }
         }
-
-        Ok(())
     }
 }
 
