@@ -29,9 +29,14 @@ pub const MAX_SEGMENTS: usize = 8;
 pub const SEG_TREE_PROBS: usize = MAX_SEGMENTS - 1;
 pub const PREDICTION_PROBS: usize = 3;
 
-pub const SEG_LVL_ALT_L: usize = 1;
-pub const SEG_LVL_REF_FRAME: usize = 2;
-pub const SEG_LVL_SKIP: usize = 3;
+/// Valid segment features values.
+#[repr(u8)]
+pub enum SegLvl {
+    AltQ = 0,
+    AltL = 1,
+    RefFrame = 2,
+    LvlSkip = 3,
+}
 pub const SEG_LVL_MAX: usize = 4;
 
 pub const MAX_LOOP_FILTER: u32 = 63;
@@ -239,13 +244,15 @@ impl Segmentation {
                 let mut lvl_seg = i32::from(lf.level);
 
                 // 8.8.1 Loop filter frame init process
-                if hdr.seg_feature_active(segment_id, SEG_LVL_ALT_L as u8) {
+                if hdr.seg_feature_active(segment_id, SegLvl::AltL) {
                     if seg.abs_or_delta_update {
-                        lvl_seg =
-                            i32::from(seg.feature_data[usize::from(segment_id)][SEG_LVL_ALT_L]);
+                        lvl_seg = i32::from(
+                            seg.feature_data[usize::from(segment_id)][SegLvl::AltL as usize],
+                        );
                     } else {
-                        lvl_seg +=
-                            i32::from(seg.feature_data[usize::from(segment_id)][SEG_LVL_ALT_L]);
+                        lvl_seg += i32::from(
+                            seg.feature_data[usize::from(segment_id)][SegLvl::AltL as usize],
+                        );
                     }
                 }
 
@@ -284,10 +291,12 @@ impl Segmentation {
                 luma_dc_quant_scale,
                 chroma_ac_quant_scale,
                 chroma_dc_quant_scale,
-                reference_frame_enabled: seg.feature_enabled[usize::from(segment_id)]
-                    [SEG_LVL_REF_FRAME],
-                reference_frame: seg.feature_data[usize::from(segment_id)][SEG_LVL_REF_FRAME],
-                reference_skip_enabled: seg.feature_enabled[usize::from(segment_id)][SEG_LVL_SKIP],
+                reference_frame_enabled: seg.feature_enabled[segment_id as usize]
+                    [SegLvl::RefFrame as usize],
+                reference_frame: seg.feature_data[usize::from(segment_id)]
+                    [SegLvl::RefFrame as usize],
+                reference_skip_enabled: seg.feature_enabled[segment_id as usize]
+                    [SegLvl::LvlSkip as usize],
             }
         }
     }
@@ -426,7 +435,7 @@ pub struct Header {
 
 impl Header {
     /// An implementation of seg_feature_active as per "6.4.9 Segmentation feature active syntax"
-    fn seg_feature_active(&self, segment_id: u8, feature: u8) -> bool {
+    fn seg_feature_active(&self, segment_id: u8, feature: SegLvl) -> bool {
         self.seg.enabled && self.seg.feature_enabled[segment_id as usize][feature as usize]
     }
 
@@ -434,7 +443,7 @@ impl Header {
     fn get_qindex(&self, segment_id: u8) -> u8 {
         let base_q_idx = self.quant.base_q_idx;
 
-        if self.seg_feature_active(segment_id, 0) {
+        if self.seg_feature_active(segment_id, SegLvl::AltQ) {
             let mut data = self.seg.feature_data[segment_id as usize][0] as i32;
 
             if !self.seg.abs_or_delta_update {
