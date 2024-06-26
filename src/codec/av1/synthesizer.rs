@@ -582,8 +582,8 @@ where
 
         self.f(5, dm.buffer_delay_length_minus_1)?;
         self.f(32, dm.num_units_in_decoding_tick)?;
-        self.f(32, dm.buffer_removal_time_length_minus_1)?;
-        self.f(32, dm.frame_presentation_time_length_minus_1)?;
+        self.f(5, dm.buffer_removal_time_length_minus_1)?;
+        self.f(5, dm.frame_presentation_time_length_minus_1)?;
 
         Ok(())
     }
