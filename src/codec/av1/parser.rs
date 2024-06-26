@@ -182,7 +182,7 @@ pub struct OperatingPoint {
     pub seq_level_idx: u8,
     /// Specifies the tier that the coded video sequence conforms to when
     /// operating point i is selected.
-    pub seq_tier: u32,
+    pub seq_tier: u8,
     /// Specifies the value of operating_point_idc for the selected operating
     /// point.
     pub idc: u32,
@@ -1792,7 +1792,7 @@ impl Parser {
                 s.operating_points[i].idc = r.read_bits(12)?;
                 s.operating_points[i].seq_level_idx = r.read_bits(5)? as u8;
                 if s.operating_points[i].seq_level_idx > 7 {
-                    s.operating_points[i].seq_tier = u32::from(r.read_bit()?);
+                    s.operating_points[i].seq_tier = r.read_bit()? as u8;
                 } else {
                     s.operating_points[i].seq_tier = 0;
                 }

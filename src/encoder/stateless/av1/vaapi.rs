@@ -104,7 +104,7 @@ where
 
         let seq_profile = request.sequence.seq_profile as u8;
         let seq_level_idx = request.sequence.operating_points[OPERATING_POINT].seq_level_idx;
-        let seq_tier = u8::try_from(request.sequence.operating_points[OPERATING_POINT].seq_tier)?;
+        let seq_tier = request.sequence.operating_points[OPERATING_POINT].seq_tier;
         let hierarchical_flag = 0;
 
         // TODO: Enable bitrate control
