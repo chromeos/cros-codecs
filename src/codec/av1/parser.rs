@@ -249,7 +249,7 @@ pub struct DecoderModelInfo {
     pub num_units_in_decoding_tick: u32,
     /// Plus 1 specifies the length of the buffer_removal_time syntax element,
     /// in bits.
-    pub buffer_removal_time_length_minus_1: u32,
+    pub buffer_removal_time_length_minus_1: u8,
     /// Plus 1 specifies the length of the frame_presentation_time syntax
     /// element, in bits.
     pub frame_presentation_time_length_minus_1: u32,
@@ -1691,7 +1691,7 @@ impl Parser {
     fn parse_decoder_model_info(dmi: &mut DecoderModelInfo, r: &mut Reader) -> anyhow::Result<()> {
         dmi.buffer_delay_length_minus_1 = r.read_bits(5)? as u8;
         dmi.num_units_in_decoding_tick = r.read_bits(32)?;
-        dmi.buffer_removal_time_length_minus_1 = r.read_bits(5)?;
+        dmi.buffer_removal_time_length_minus_1 = r.read_bits(5)? as u8;
         dmi.frame_presentation_time_length_minus_1 = r.read_bits(5)?;
         Ok(())
     }
@@ -3297,7 +3297,7 @@ impl Parser {
 
                         if op_pt_idc == 0 || (in_temporal_layer && in_spatial_layer) {
                             let n = buffer_removal_time_length_minus_1 + 1;
-                            fh.buffer_removal_time[op_num] = r.read_bits(n.try_into().unwrap())?;
+                            fh.buffer_removal_time[op_num] = r.read_bits(n)?;
                         }
                     }
                 }

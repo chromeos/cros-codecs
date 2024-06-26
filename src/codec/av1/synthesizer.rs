@@ -788,12 +788,12 @@ where
                         (op.idc >> (self.obu.obu_header.spatial_id + 8)) & 1 != 0;
 
                     if op.idc == 0 || (in_temporal_layer && in_spatial_layer) {
-                        let n = usize::try_from(
+                        let n = usize::from(
                             sequence
                                 .decoder_model_info
                                 .buffer_removal_time_length_minus_1
                                 + 1,
-                        )?;
+                        );
 
                         self.f(n, op.decoder_buffer_delay)?;
                     }
