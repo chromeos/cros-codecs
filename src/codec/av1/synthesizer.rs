@@ -592,7 +592,7 @@ where
     fn operating_parameters_info(&mut self, i: usize) -> SynthesizerResult<()> {
         let op = &self.obu.operating_points[i];
 
-        let n = usize::try_from(self.obu.decoder_model_info.buffer_delay_length_minus_1)? + 1;
+        let n = usize::from(self.obu.decoder_model_info.buffer_delay_length_minus_1) + 1;
         self.f(n, op.decoder_buffer_delay)?;
         self.f(n, op.encoder_buffer_delay)?;
         self.f(1, op.low_delay_mode_flag)?;

@@ -243,7 +243,7 @@ pub struct TimingInfo {
 pub struct DecoderModelInfo {
     /// Plus 1 specifies the length of the decoder_buffer_delay and the
     /// encoder_buffer_delay syntax elements, in bits.
-    pub buffer_delay_length_minus_1: u32,
+    pub buffer_delay_length_minus_1: u8,
     /// The number of time units of a decoding clock operating at the frequency
     /// time_scale Hz that corresponds to one increment of a clock tick counter:
     pub num_units_in_decoding_tick: u32,
@@ -1679,9 +1679,9 @@ impl Parser {
     fn parse_operating_parameters_info(
         opi: &mut OperatingPoint,
         r: &mut Reader,
-        buffer_delay_length_minus_1: u32,
+        buffer_delay_length_minus_1: u8,
     ) -> anyhow::Result<()> {
-        let n = u8::try_from(buffer_delay_length_minus_1 + 1).unwrap();
+        let n = buffer_delay_length_minus_1 + 1;
         opi.decoder_buffer_delay = r.read_bits(n)?;
         opi.encoder_buffer_delay = r.read_bits(n)?;
         opi.low_delay_mode_flag = r.read_bit()?;
@@ -1689,7 +1689,7 @@ impl Parser {
     }
 
     fn parse_decoder_model_info(dmi: &mut DecoderModelInfo, r: &mut Reader) -> anyhow::Result<()> {
-        dmi.buffer_delay_length_minus_1 = r.read_bits(5)?;
+        dmi.buffer_delay_length_minus_1 = r.read_bits(5)? as u8;
         dmi.num_units_in_decoding_tick = r.read_bits(32)?;
         dmi.buffer_removal_time_length_minus_1 = r.read_bits(5)?;
         dmi.frame_presentation_time_length_minus_1 = r.read_bits(5)?;
