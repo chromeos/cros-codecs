@@ -185,7 +185,7 @@ pub struct OperatingPoint {
     pub seq_tier: u8,
     /// Specifies the value of operating_point_idc for the selected operating
     /// point.
-    pub idc: u32,
+    pub idc: u16,
     /// If set, indicates that there is a decoder model associated with
     /// operating point i. If not set, indicates that there is not a decoder
     /// model associated with operating point i.
@@ -1139,7 +1139,7 @@ pub struct Parser {
     seen_frame_header: bool,
     /// We keep this to implement frame_header_copy() in the specification.
     last_frame_header: Option<FrameHeaderObu>,
-    operating_point_idc: u32,
+    operating_point_idc: u16,
     should_probe_for_annexb: bool,
     is_first_frame: bool,
     ref_info: [ReferenceFrameInfo; NUM_REF_FRAMES],
@@ -1789,7 +1789,7 @@ impl Parser {
             }
 
             for i in 0..=s.operating_points_cnt_minus_1 as usize {
-                s.operating_points[i].idc = r.read_bits(12)?;
+                s.operating_points[i].idc = r.read_bits(12)? as u16;
                 s.operating_points[i].seq_level_idx = r.read_bits(5)? as u8;
                 if s.operating_points[i].seq_level_idx > 7 {
                     s.operating_points[i].seq_tier = r.read_bit()? as u8;
@@ -3756,7 +3756,7 @@ impl Parser {
             /* No scalability information, all OBUs must be decoded */
             None
         } else {
-            Some(helpers::floor_log2(self.operating_point_idc >> 8))
+            Some(helpers::floor_log2((self.operating_point_idc >> 8) as u32))
         }
     }
 }
