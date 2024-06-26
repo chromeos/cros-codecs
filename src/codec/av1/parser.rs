@@ -179,7 +179,7 @@ pub struct TileGroupObu<'a> {
 pub struct OperatingPoint {
     /// Specifies the level that the coded video sequence conforms to when
     /// operating point i is selected.
-    pub seq_level_idx: u32,
+    pub seq_level_idx: u8,
     /// Specifies the tier that the coded video sequence conforms to when
     /// operating point i is selected.
     pub seq_tier: u32,
@@ -1763,7 +1763,7 @@ impl Parser {
             s.initial_display_delay_present_flag = false;
             s.operating_points_cnt_minus_1 = 0;
             s.operating_points[0].idc = 0;
-            s.operating_points[0].seq_level_idx = r.read_bits(5)?;
+            s.operating_points[0].seq_level_idx = r.read_bits(5)? as u8;
             s.operating_points[0].seq_tier = 0;
             s.operating_points[0].decoder_model_present_for_this_op = false;
             s.operating_points[0].initial_display_delay_present_for_this_op = false;
@@ -1790,7 +1790,7 @@ impl Parser {
 
             for i in 0..=s.operating_points_cnt_minus_1 as usize {
                 s.operating_points[i].idc = r.read_bits(12)?;
-                s.operating_points[i].seq_level_idx = r.read_bits(5)?;
+                s.operating_points[i].seq_level_idx = r.read_bits(5)? as u8;
                 if s.operating_points[i].seq_level_idx > 7 {
                     s.operating_points[i].seq_tier = u32::from(r.read_bit()?);
                 } else {
