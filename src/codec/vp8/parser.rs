@@ -5,7 +5,8 @@
 use std::convert::TryFrom;
 use std::io::Cursor;
 
-use bytes::Buf;
+use byteorder::ReadBytesExt;
+use byteorder::LE;
 use log::debug;
 use thiserror::Error;
 
@@ -198,6 +199,8 @@ pub struct Header {
 pub enum ParseUncompressedChunkError {
     #[error("invalid start code {0}")]
     InvalidStartCode(u32),
+    #[error("I/O error: {0}")]
+    IoError(#[from] std::io::Error),
 }
 
 #[derive(Debug, Error)]
@@ -243,7 +246,7 @@ impl Header {
 
         let mut reader = Cursor::new(bitstream);
 
-        let frame_tag = reader.get_uint_le(3) as u32;
+        let frame_tag = reader.read_u24::<LE>()?;
 
         let mut header = Header {
             key_frame: (frame_tag & 0x1) == 0,
@@ -254,17 +257,17 @@ impl Header {
         };
 
         if header.key_frame {
-            let start_code = reader.get_uint(3) as u32;
+            let start_code = reader.read_u24::<LE>()?;
 
-            if start_code != 0x9d012a {
+            if start_code != 0x2a019d {
                 return Err(ParseUncompressedChunkError::InvalidStartCode(start_code));
             }
 
-            let size_code = reader.get_uint_le(2) as u16;
+            let size_code = reader.read_u16::<LE>()?;
             header.horiz_scale_code = (size_code >> 14) as u8;
             header.width = size_code & 0x3fff;
 
-            let size_code = reader.get_uint_le(2) as u16;
+            let size_code = reader.read_u16::<LE>()?;
             header.vert_scale_code = (size_code >> 14) as u8;
             header.height = size_code & 0x3fff;
         }

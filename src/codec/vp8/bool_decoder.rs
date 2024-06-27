@@ -7,6 +7,7 @@
 use std::convert::TryFrom;
 use std::io::Cursor;
 
+use byteorder::ReadBytesExt;
 use bytes::Buf;
 use thiserror::Error;
 
@@ -88,7 +89,7 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
         if x < 0 || bits_left != 0 {
             while shift >= loop_end {
                 self.count += U8_BITS as isize;
-                self.value |= (self.data.get_u8() as usize) << shift;
+                self.value |= (self.data.read_u8().ok()? as usize) << shift;
                 shift -= U8_BITS as i32;
             }
             Some(())
