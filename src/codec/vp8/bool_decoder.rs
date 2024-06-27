@@ -194,7 +194,7 @@ impl<T: AsRef<[u8]>> BoolDecoder<T> {
         let mut bit_count = (self.count + 8) as usize;
 
         if bit_count > BD_VALUE_SIZE {
-            bit_count = std::cmp::max(0, bit_count - LOTS_OF_BITS as usize);
+            bit_count = bit_count.saturating_sub(LOTS_OF_BITS as usize)
         }
 
         let pos = self.data.position() as usize;
