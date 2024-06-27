@@ -136,7 +136,7 @@ where
                         }
                     }
 
-                    other => panic!("Invalid value: {}", other),
+                    other => anyhow::bail!("invalid copy_buffer_to_alternate value: {}", other),
                 }
             }
 
@@ -158,7 +158,7 @@ where
                         }
                     }
 
-                    other => panic!("Invalid value: {}", other),
+                    other => anyhow::bail!("invalid copy_buffer_to_golden value: {}", other),
                 }
             }
 
