@@ -2043,23 +2043,22 @@ impl Parser {
             Parser::parse_vui(&mut r, &mut sps)?;
         }
 
-        let mut width = sps.width();
-        let mut height = sps.height();
-
         if sps.frame_cropping_flag {
             let (crop_unit_x, crop_unit_y) = sps.crop_unit_x_y();
 
-            width = width
-                .checked_sub(
-                    (sps.frame_crop_left_offset + sps.frame_crop_right_offset) * crop_unit_x,
-                )
+            let width = sps
+                .frame_crop_left_offset
+                .checked_add(sps.frame_crop_right_offset)
+                .and_then(|r| r.checked_mul(crop_unit_x))
+                .and_then(|r| sps.width().checked_sub(r))
                 .ok_or(anyhow!("Invalid frame crop width"))?;
 
-            height = height
-                .checked_sub(
-                    (sps.frame_crop_top_offset + sps.frame_crop_bottom_offset) * crop_unit_y,
-                )
-                .ok_or(anyhow!("Invalid frame crop height"))?;
+            let height = sps
+                .frame_crop_top_offset
+                .checked_add(sps.frame_crop_bottom_offset)
+                .and_then(|r| r.checked_mul(crop_unit_y))
+                .and_then(|r| sps.height().checked_sub(r))
+                .ok_or(anyhow!("invalid frame crop height"))?;
 
             sps.crop_rect_width = width;
             sps.crop_rect_height = height;
