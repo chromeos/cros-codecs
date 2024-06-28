@@ -155,7 +155,7 @@ struct NegotiationInfo {
 impl From<&Sps> for NegotiationInfo {
     fn from(sps: &Sps) -> Self {
         NegotiationInfo {
-            coded_resolution: Resolution::from((sps.width, sps.height)),
+            coded_resolution: Resolution::from((sps.width(), sps.height())),
             profile_idc: sps.profile_idc,
             bit_depth_luma_minus8: sps.bit_depth_luma_minus8,
             bit_depth_chroma_minus8: sps.bit_depth_chroma_minus8,
@@ -886,10 +886,7 @@ where
     fn apply_sps(&mut self, sps: &Sps) {
         self.codec.apply_sps(sps);
 
-        self.coded_resolution = Resolution {
-            width: sps.width,
-            height: sps.height,
-        };
+        self.coded_resolution = Resolution::from((sps.width(), sps.height()));
     }
 
     fn drain(&mut self) -> anyhow::Result<()> {
