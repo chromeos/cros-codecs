@@ -607,6 +607,9 @@ where
             .find_short_term_with_pic_num(pic_num_lx)
             .with_context(|| format!("No ShortTerm reference found with pic_num {}", pic_num_lx))?;
 
+        if *ref_idx_lx >= ref_pic_list_x.len() {
+            anyhow::bail!("invalid ref_idx_lx index");
+        }
         ref_pic_list_x.insert(*ref_idx_lx, handle);
         *ref_idx_lx += 1;
 
@@ -651,6 +654,9 @@ where
                 )
             })?;
 
+        if *ref_idx_lx >= ref_pic_list_x.len() {
+            anyhow::bail!("invalid ref_idx_lx index");
+        }
         ref_pic_list_x.insert(*ref_idx_lx, handle);
         *ref_idx_lx += 1;
 
