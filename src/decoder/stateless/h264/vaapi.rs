@@ -101,7 +101,7 @@ impl VaStreamInfo for &Rc<Sps> {
     }
 
     fn coded_size(&self) -> (u32, u32) {
-        (self.width, self.height)
+        (self.width(), self.height())
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
