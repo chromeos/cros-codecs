@@ -5,6 +5,7 @@
 use std::io::Cursor;
 
 use anyhow::anyhow;
+use byteorder::ReadBytesExt;
 use bytes::Buf;
 use thiserror::Error;
 
@@ -205,11 +206,7 @@ impl<'a> NaluReader<'a> {
     }
 
     fn get_byte(&mut self) -> Result<u8, GetByteError> {
-        if self.data.remaining() == 0 {
-            return Err(GetByteError::OutOfBits);
-        }
-
-        Ok(self.data.get_u8())
+        self.data.read_u8().map_err(|_| GetByteError::OutOfBits)
     }
 
     fn update_curr_byte(&mut self) -> Result<(), GetByteError> {

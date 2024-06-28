@@ -14,6 +14,8 @@ use std::io::Write;
 use std::marker::PhantomData;
 use std::os::fd::OwnedFd;
 
+use byteorder::ReadBytesExt;
+use byteorder::LE;
 use bytes::Buf;
 use thiserror::Error;
 
@@ -58,9 +60,9 @@ impl<'a> Iterator for IvfIterator<'a> {
             return None;
         }
 
-        let len = self.cursor.get_u32_le() as usize;
+        let len = self.cursor.read_u32::<LE>().ok()? as usize;
         // Skip PTS.
-        let _ = self.cursor.get_u64_le();
+        let _ = self.cursor.read_u64::<LE>().ok()?;
 
         if self.cursor.remaining() < len {
             return None;
