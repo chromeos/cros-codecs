@@ -693,10 +693,6 @@ pub struct Sps {
     // Calculated
     /// Same as ChromaArrayType. See the definition in the specification.
     pub chroma_array_type: u8,
-    /// See 7-13 through 7-17 in the specification.
-    pub width: u32,
-    /// See 7-13 through 7-17 in the specification.
-    pub height: u32,
     /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
     /// the specification
     pub crop_rect_width: u32,
@@ -717,6 +713,20 @@ pub struct Sps {
 }
 
 impl Sps {
+    /// Returns the coded width of the stream.
+    ///
+    /// See 7-13 through 7-17 in the specification.
+    pub const fn width(&self) -> u32 {
+        (self.pic_width_in_mbs_minus1 + 1) * 16
+    }
+
+    /// Returns the coded height of the stream.
+    ///
+    /// See 7-13 through 7-17 in the specification.
+    pub const fn height(&self) -> u32 {
+        (self.pic_height_in_map_units_minus1 + 1) * 16 * (2 - self.frame_mbs_only_flag as u32)
+    }
+
     /// Same as MaxFrameNum. See 7-10 in the specification.
     pub fn max_frame_num(&self) -> u32 {
         1 << (self.log2_max_frame_num_minus4 + 4)
@@ -727,8 +737,8 @@ impl Sps {
             return Rect {
                 min: Point { x: 0, y: 0 },
                 max: Point {
-                    x: self.width,
-                    y: self.height,
+                    x: self.width(),
+                    y: self.height(),
                 },
             };
         }
@@ -756,8 +766,8 @@ impl Sps {
                 y: crop_top,
             },
             max: Point {
-                x: self.width - crop_left - crop_right,
-                y: self.height - crop_top - crop_bottom,
+                x: self.width() - crop_left - crop_right,
+                y: self.height() - crop_top - crop_bottom,
             },
         }
     }
@@ -799,8 +809,8 @@ impl Sps {
             Level::L6_2 => 696320,
         };
 
-        let width_mb = self.width / 16;
-        let height_mb = self.height / 16;
+        let width_mb = self.width() / 16;
+        let height_mb = self.height() / 16;
 
         let max_dpb_frames =
             std::cmp::min(max_dpb_mbs / (width_mb * height_mb), DPB_MAX_SIZE as u32) as usize;
@@ -880,8 +890,6 @@ impl Default for Sps {
             frame_crop_top_offset: Default::default(),
             frame_crop_bottom_offset: Default::default(),
             chroma_array_type: Default::default(),
-            width: Default::default(),
-            height: Default::default(),
             crop_rect_width: Default::default(),
             crop_rect_height: Default::default(),
             crop_rect_x: Default::default(),
@@ -2014,13 +2022,8 @@ impl Parser {
             Parser::parse_vui(&mut r, &mut sps)?;
         }
 
-        let mut width = (sps.pic_width_in_mbs_minus1 + 1) * 16;
-        let mut height = (sps.pic_height_in_map_units_minus1 + 1)
-            * 16
-            * (2 - u32::from(sps.frame_mbs_only_flag));
-
-        sps.width = width;
-        sps.height = height;
+        let mut width = sps.width();
+        let mut height = sps.height();
 
         if sps.frame_cropping_flag {
             // Table 6-1 in the spec.
@@ -2709,8 +2712,8 @@ mod tests {
             assert_eq!(sps.frame_crop_bottom_offset, 0);
             assert_eq!(sps.chroma_array_type, 1);
             assert_eq!(sps.max_frame_num(), 32);
-            assert_eq!(sps.width, 320);
-            assert_eq!(sps.height, 240);
+            assert_eq!(sps.width(), 320);
+            assert_eq!(sps.height(), 240);
             assert_eq!(sps.crop_rect_width, 0);
             assert_eq!(sps.crop_rect_height, 0);
             assert_eq!(sps.crop_rect_x, 0);
