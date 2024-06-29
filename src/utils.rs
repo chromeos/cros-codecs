@@ -54,7 +54,7 @@ impl<'a> Iterator for IvfIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         // Make sure we have a header.
-        if self.cursor.remaining() < 6 {
+        if self.cursor.remaining() < 12 {
             return None;
         }
 
