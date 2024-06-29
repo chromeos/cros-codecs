@@ -33,6 +33,10 @@ md5 = "0.7"
 drm = "0.11.0"
 gbm = { version = "0.14", default-features = false, features = ["drm-support"] }
 
+[lints.rust]
+# Required to allow #[cfg(fuzzing)]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
 [[example]]
 name = "ccdec"
 required-features = ["vaapi"]

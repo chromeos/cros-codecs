@@ -8,7 +8,7 @@
 //! VAAPI. This module contains backend-related code that is not tied to any particular codec and
 //! can be shared between various parts of this crate.
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 pub(crate) mod dummy;
 #[cfg(feature = "v4l2")]
 pub mod v4l2;

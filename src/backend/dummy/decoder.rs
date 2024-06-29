@@ -85,7 +85,7 @@ impl DecodedHandle for Handle {
 }
 
 /// Dummy backend that can be used for any codec.
-pub(crate) struct Backend {
+pub struct Backend {
     stream_info: StreamInfo,
 }
 
