@@ -297,7 +297,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         curr_pic,
         va_refs,
         sps.pic_width_in_mbs_minus1,
-        u16::try_from(picture_height_in_mbs_minus1)?,
+        picture_height_in_mbs_minus1,
         sps.bit_depth_luma_minus8,
         sps.bit_depth_chroma_minus8,
         u8::try_from(sps.max_num_ref_frames)?,

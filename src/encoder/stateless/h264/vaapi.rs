@@ -164,7 +164,7 @@ where
                 bits_per_second,
                 sps.max_num_ref_frames,
                 sps.pic_width_in_mbs_minus1 + 1,
-                (sps.pic_height_in_map_units_minus1 + 1) as u16,
+                sps.pic_height_in_map_units_minus1 + 1,
                 &seq_fields,
                 sps.bit_depth_luma_minus8,
                 sps.bit_depth_chroma_minus8,
