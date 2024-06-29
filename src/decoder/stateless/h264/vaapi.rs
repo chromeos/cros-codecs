@@ -270,7 +270,8 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         sps.delta_pic_order_always_zero_flag as u32,
     );
     let interlaced = !sps.frame_mbs_only_flag as u32;
-    let picture_height_in_mbs_minus1 = ((sps.pic_height_in_map_units_minus1 + 1) << interlaced) - 1;
+    let picture_height_in_mbs_minus1 =
+        ((sps.pic_height_in_map_units_minus1 as u16 + 1) << interlaced) - 1;
 
     let pic_fields = libva::H264PicFields::new(
         pps.entropy_coding_mode_flag as u32,
@@ -297,7 +298,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         curr_pic,
         va_refs,
         u16::from(sps.pic_width_in_mbs_minus1),
-        u16::try_from(picture_height_in_mbs_minus1)?,
+        picture_height_in_mbs_minus1,
         sps.bit_depth_luma_minus8,
         sps.bit_depth_chroma_minus8,
         u8::try_from(sps.max_num_ref_frames)?,
