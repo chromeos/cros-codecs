@@ -132,24 +132,20 @@ impl<'a> NaluReader<'a> {
 
     pub fn read_ue<U: TryFrom<u32>>(&mut self) -> anyhow::Result<U> {
         let mut num_bits = 0;
-        let mut bit = self.read_bits::<u32>(1)?;
 
-        while bit == 0 {
+        while self.read_bits::<u32>(1)? == 0 {
             num_bits += 1;
-            bit = self.read_bits(1)?;
         }
 
         if num_bits > 31 {
-            return Err(anyhow!("Invalid stream"));
+            return Err(anyhow!("invalid stream"));
         }
 
         let mut value = (1 << num_bits) - 1;
-        let rest;
 
         // Check for overflow
         if num_bits == 31 {
-            rest = self.read_bits::<u32>(num_bits)?;
-            if rest == 0 {
+            if self.read_bits::<u32>(num_bits)? == 0 {
                 return U::try_from(value).map_err(|_| anyhow!("Conversion error"));
             } else {
                 return Err(anyhow!("Invalid stream"));
