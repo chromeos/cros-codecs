@@ -650,7 +650,7 @@ pub struct Sps {
     pub pic_width_in_mbs_minus1: u16,
     /// Plus 1 specifies the height in slice group map units of a decoded frame
     /// or field.
-    pub pic_height_in_map_units_minus1: u32,
+    pub pic_height_in_map_units_minus1: u16,
 
     /// If true,  specifies that every coded picture of the coded video sequence
     /// is a coded frame containing only frame macroblocks, else specifies that
@@ -724,7 +724,9 @@ impl Sps {
     ///
     /// See 7-13 through 7-17 in the specification.
     pub const fn height(&self) -> u32 {
-        (self.pic_height_in_map_units_minus1 + 1) * 16 * (2 - self.frame_mbs_only_flag as u32)
+        (self.pic_height_in_map_units_minus1 as u32 + 1)
+            * 16
+            * (2 - self.frame_mbs_only_flag as u32)
     }
 
     /// Same as MaxFrameNum. See 7-10 in the specification.
@@ -955,7 +957,7 @@ impl SpsBuilder {
         let mb_height = (height + MB_SIZE - 1) / MB_SIZE;
 
         self.0.pic_width_in_mbs_minus1 = (mb_width - 1) as u16;
-        self.0.pic_height_in_map_units_minus1 = mb_height - 1;
+        self.0.pic_height_in_map_units_minus1 = (mb_height - 1) as u16;
 
         let compressed_width = mb_width * MB_SIZE;
         let compressed_height = mb_height * MB_SIZE;
