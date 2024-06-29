@@ -916,12 +916,6 @@ impl SpsBuilder {
         self
     }
 
-    pub fn resolution_in_mbs(mut self, width: u32, height: u32) -> Self {
-        self.0.pic_width_in_mbs_minus1 = width - 1;
-        self.0.pic_height_in_map_units_minus1 = height - 1;
-        self
-    }
-
     pub fn frame_crop_offsets(mut self, top: u32, bottom: u32, left: u32, right: u32) -> Self {
         self.0.frame_cropping_flag = true;
         self.0.frame_crop_top_offset = top;
@@ -952,7 +946,8 @@ impl SpsBuilder {
         let mb_width = (width + MB_SIZE - 1) / MB_SIZE;
         let mb_height = (height + MB_SIZE - 1) / MB_SIZE;
 
-        self = self.resolution_in_mbs(mb_width, mb_height);
+        self.0.pic_width_in_mbs_minus1 = mb_width - 1;
+        self.0.pic_height_in_map_units_minus1 = mb_height - 1;
 
         let compressed_width = mb_width * MB_SIZE;
         let compressed_height = mb_height * MB_SIZE;

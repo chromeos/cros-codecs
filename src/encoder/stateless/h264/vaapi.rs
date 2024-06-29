@@ -585,7 +585,7 @@ pub(super) mod tests {
             .seq_parameter_set_id(0)
             .profile_idc(Profile::Main)
             .level_idc(Level::L4)
-            .resolution_in_mbs(WIDTH / 16, HEIGHT / 16)
+            .resolution(WIDTH, HEIGHT)
             .chroma_format_idc(3)
             .frame_mbs_only_flag(true)
             .direct_8x8_inference_flag(true)
