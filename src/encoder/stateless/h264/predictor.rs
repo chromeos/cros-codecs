@@ -173,8 +173,8 @@ impl<Picture, Reference>
             self.delegate.update_params_sets = false;
         }
 
-        let num_macroblocks =
-            ((sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1)) as usize;
+        let num_macroblocks = (sps.pic_width_in_mbs_minus1 as usize + 1)
+            * (sps.pic_height_in_map_units_minus1 as usize + 1);
 
         let request = BackendRequest {
             sps,
@@ -245,8 +245,8 @@ impl<Picture, Reference>
             self.delegate.update_params_sets = false;
         }
 
-        let num_macroblocks =
-            ((sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1)) as usize;
+        let num_macroblocks = (sps.pic_width_in_mbs_minus1 as usize + 1)
+            * (sps.pic_height_in_map_units_minus1 as usize + 1);
 
         let request = BackendRequest {
             sps,
