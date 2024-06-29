@@ -296,7 +296,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     let pic_param = PictureParameterBufferH264::new(
         curr_pic,
         va_refs,
-        u16::try_from(sps.pic_width_in_mbs_minus1)?,
+        sps.pic_width_in_mbs_minus1,
         u16::try_from(picture_height_in_mbs_minus1)?,
         sps.bit_depth_luma_minus8,
         sps.bit_depth_chroma_minus8,
