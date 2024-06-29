@@ -647,7 +647,7 @@ pub struct Sps {
 
     /// Plus 1 specifies the width of each decoded picture in units of
     /// macroblocks.
-    pub pic_width_in_mbs_minus1: u32,
+    pub pic_width_in_mbs_minus1: u8,
     /// Plus 1 specifies the height in slice group map units of a decoded frame
     /// or field.
     pub pic_height_in_map_units_minus1: u32,
@@ -717,7 +717,7 @@ impl Sps {
     ///
     /// See 7-13 through 7-17 in the specification.
     pub fn width(&self) -> u32 {
-        (self.pic_width_in_mbs_minus1 + 1) * 16
+        (self.pic_width_in_mbs_minus1 as u32 + 1) * 16
     }
 
     /// Returns the coded height of the stream.
