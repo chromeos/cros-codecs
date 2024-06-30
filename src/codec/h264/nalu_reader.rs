@@ -5,6 +5,7 @@
 use std::io::Cursor;
 
 use anyhow::anyhow;
+use anyhow::Context;
 use byteorder::ReadBytesExt;
 use bytes::Buf;
 use thiserror::Error;
@@ -141,22 +142,11 @@ impl<'a> NaluReader<'a> {
             return Err(anyhow!("invalid stream"));
         }
 
-        let mut value = (1 << num_bits) - 1;
+        let value = ((1u32 << num_bits) - 1)
+            .checked_add(self.read_bits::<u32>(num_bits)?)
+            .context("read number cannot fit in 32 bits")?;
 
-        // Check for overflow
-        if num_bits == 31 {
-            if self.read_bits::<u32>(num_bits)? == 0 {
-                return U::try_from(value).map_err(|_| anyhow!("Conversion error"));
-            } else {
-                return Err(anyhow!("Invalid stream"));
-            }
-        }
-
-        if num_bits > 0 {
-            value += self.read_bits::<u32>(num_bits)?;
-        }
-
-        U::try_from(value).map_err(|_| anyhow!("Conversion error"))
+        U::try_from(value).map_err(|_| anyhow!("conversion error"))
     }
 
     pub fn read_ue_bounded<U: TryFrom<u32>>(&mut self, min: u32, max: u32) -> anyhow::Result<U> {
