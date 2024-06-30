@@ -20,7 +20,7 @@ pub(crate) struct NaluReader<'a> {
     /// Number of bits remaining in `curr_byte`
     num_remaining_bits_in_curr_byte: usize,
     /// Used in epb detection.
-    prev_two_bytes: u32,
+    prev_two_bytes: u16,
     /// Number of epbs (i.e. 0x000003) we found.
     num_epb: usize,
 }
@@ -208,7 +208,7 @@ impl<'a> NaluReader<'a> {
     fn update_curr_byte(&mut self) -> Result<(), GetByteError> {
         let mut byte = self.get_byte()?;
 
-        if (self.prev_two_bytes & 0xffff) == 0 && byte == 0x03 {
+        if self.prev_two_bytes == 0 && byte == 0x03 {
             // We found an epb
             self.num_epb += 1;
             // Read another byte
@@ -218,7 +218,7 @@ impl<'a> NaluReader<'a> {
         }
 
         self.num_remaining_bits_in_curr_byte = 8;
-        self.prev_two_bytes = ((self.prev_two_bytes & 0xff) << 8) | u32::from(byte);
+        self.prev_two_bytes = (self.prev_two_bytes << 8) | u16::from(byte);
 
         self.curr_byte = u32::from(byte);
         Ok(())
