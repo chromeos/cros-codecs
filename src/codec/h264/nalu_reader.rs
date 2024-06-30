@@ -16,7 +16,7 @@ pub(crate) struct NaluReader<'a> {
     data: Cursor<&'a [u8]>,
     /// Contents of the current byte. First unread bit starting at position 8 -
     /// num_remaining_bits_in_curr_bytes.
-    curr_byte: u32,
+    curr_byte: u8,
     /// Number of bits remaining in `curr_byte`
     num_remaining_bits_in_curr_byte: usize,
     /// Used in epb detection.
@@ -69,15 +69,15 @@ impl<'a> NaluReader<'a> {
         }
 
         let mut bits_left = num_bits;
-        let mut out = 0;
+        let mut out = 0u32;
 
         while self.num_remaining_bits_in_curr_byte < bits_left {
-            out |= self.curr_byte << (bits_left - self.num_remaining_bits_in_curr_byte);
+            out |= (self.curr_byte as u32) << (bits_left - self.num_remaining_bits_in_curr_byte);
             bits_left -= self.num_remaining_bits_in_curr_byte;
             self.update_curr_byte()?;
         }
 
-        out |= self.curr_byte >> (self.num_remaining_bits_in_curr_byte - bits_left);
+        out |= (self.curr_byte >> (self.num_remaining_bits_in_curr_byte - bits_left)) as u32;
         out &= (1 << num_bits) - 1;
         self.num_remaining_bits_in_curr_byte -= bits_left;
 
@@ -220,7 +220,7 @@ impl<'a> NaluReader<'a> {
         self.num_remaining_bits_in_curr_byte = 8;
         self.prev_two_bytes = (self.prev_two_bytes << 8) | u16::from(byte);
 
-        self.curr_byte = u32::from(byte);
+        self.curr_byte = byte;
         Ok(())
     }
 }
