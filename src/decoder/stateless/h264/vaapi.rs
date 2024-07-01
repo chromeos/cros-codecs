@@ -101,7 +101,7 @@ impl VaStreamInfo for &Rc<Sps> {
     }
 
     fn coded_size(&self) -> (u32, u32) {
-        (self.width, self.height)
+        (self.width(), self.height())
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
@@ -270,7 +270,8 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         sps.delta_pic_order_always_zero_flag as u32,
     );
     let interlaced = !sps.frame_mbs_only_flag as u32;
-    let picture_height_in_mbs_minus1 = ((sps.pic_height_in_map_units_minus1 + 1) << interlaced) - 1;
+    let picture_height_in_mbs_minus1 =
+        ((sps.pic_height_in_map_units_minus1 as u16 + 1) << interlaced) - 1;
 
     let pic_fields = libva::H264PicFields::new(
         pps.entropy_coding_mode_flag as u32,
@@ -296,8 +297,8 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     let pic_param = PictureParameterBufferH264::new(
         curr_pic,
         va_refs,
-        u16::try_from(sps.pic_width_in_mbs_minus1)?,
-        u16::try_from(picture_height_in_mbs_minus1)?,
+        u16::from(sps.pic_width_in_mbs_minus1),
+        picture_height_in_mbs_minus1,
         sps.bit_depth_luma_minus8,
         sps.bit_depth_chroma_minus8,
         u8::try_from(sps.max_num_ref_frames)?,
@@ -391,7 +392,7 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
             luma_offset_l0[i] = i16::from(pwt.luma_offset_l0[i]);
         }
 
-        chroma_weight_l0_flag = sps.chroma_array_type != 0;
+        chroma_weight_l0_flag = sps.chroma_array_type() != 0;
         if chroma_weight_l0_flag {
             for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
                 for j in 0..2 {
@@ -412,7 +413,7 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
             &pwt.luma_offset_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
         );
 
-        chroma_weight_l1_flag = sps.chroma_array_type != 0;
+        chroma_weight_l1_flag = sps.chroma_array_type() != 0;
         if chroma_weight_l1_flag {
             for i in 0..=hdr.num_ref_idx_l1_active_minus1 as usize {
                 for j in 0..2 {

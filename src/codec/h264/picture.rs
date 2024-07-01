@@ -214,9 +214,7 @@ impl PictureData {
             ),
         };
 
-        let width = sps.width;
-        let height = sps.height;
-        let coded_resolution = Resolution { width, height };
+        let coded_resolution = Resolution::from((sps.width(), sps.height()));
 
         let visible_rect = sps.visible_rectangle();
 

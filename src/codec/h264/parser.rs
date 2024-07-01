@@ -647,10 +647,10 @@ pub struct Sps {
 
     /// Plus 1 specifies the width of each decoded picture in units of
     /// macroblocks.
-    pub pic_width_in_mbs_minus1: u32,
+    pub pic_width_in_mbs_minus1: u8,
     /// Plus 1 specifies the height in slice group map units of a decoded frame
     /// or field.
-    pub pic_height_in_map_units_minus1: u32,
+    pub pic_height_in_map_units_minus1: u8,
 
     /// If true,  specifies that every coded picture of the coded video sequence
     /// is a coded frame containing only frame macroblocks, else specifies that
@@ -691,24 +691,6 @@ pub struct Sps {
     pub frame_crop_bottom_offset: u32,
 
     // Calculated
-    /// Same as ChromaArrayType. See the definition in the specification.
-    pub chroma_array_type: u8,
-    /// See 7-13 through 7-17 in the specification.
-    pub width: u32,
-    /// See 7-13 through 7-17 in the specification.
-    pub height: u32,
-    /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
-    /// the specification
-    pub crop_rect_width: u32,
-    /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
-    /// the specification
-    pub crop_rect_height: u32,
-    /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
-    /// the specification
-    pub crop_rect_x: u32,
-    /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
-    /// the specification
-    pub crop_rect_y: u32,
     /// Same as ExpectedDeltaPerPicOrderCntCycle, see 7-12 in the specification.
     pub expected_delta_per_pic_order_cnt_cycle: i32,
 
@@ -717,6 +699,59 @@ pub struct Sps {
 }
 
 impl Sps {
+    /// Returns the coded width of the stream.
+    ///
+    /// See 7-13 through 7-17 in the specification.
+    pub fn width(&self) -> u32 {
+        (self.pic_width_in_mbs_minus1 as u32 + 1) * 16
+    }
+
+    /// Returns the coded height of the stream.
+    ///
+    /// See 7-13 through 7-17 in the specification.
+    pub fn height(&self) -> u32 {
+        (self.pic_height_in_map_units_minus1 as u32 + 1)
+            * 16
+            * (2 - u32::from(self.frame_mbs_only_flag))
+    }
+
+    /// Returns `ChromaArrayType`, as computed in the specification.
+    pub fn chroma_array_type(&self) -> u8 {
+        match self.separate_colour_plane_flag {
+            false => self.chroma_format_idc,
+            true => 0,
+        }
+    }
+
+    /// Returns `SubWidthC` and `SubHeightC`.
+    ///
+    /// See table 6-1 in the specification.
+    fn sub_width_height_c(&self) -> (u32, u32) {
+        match (self.chroma_format_idc, self.separate_colour_plane_flag) {
+            (1, false) => (2, 2),
+            (2, false) => (2, 1),
+            (3, false) => (1, 1),
+            // undefined.
+            _ => (1, 1),
+        }
+    }
+
+    /// Returns `CropUnitX` and `CropUnitY`.
+    ///
+    /// See 7-19 through 7-22 in the specification.
+    fn crop_unit_x_y(&self) -> (u32, u32) {
+        match self.chroma_array_type() {
+            0 => (1, 2 - u32::from(self.frame_mbs_only_flag)),
+            _ => {
+                let (sub_width_c, sub_height_c) = self.sub_width_height_c();
+                (
+                    sub_width_c,
+                    sub_height_c * (2 - u32::from(self.frame_mbs_only_flag)),
+                )
+            }
+        }
+    }
+
     /// Same as MaxFrameNum. See 7-10 in the specification.
     pub fn max_frame_num(&self) -> u32 {
         1 << (self.log2_max_frame_num_minus4 + 4)
@@ -727,23 +762,13 @@ impl Sps {
             return Rect {
                 min: Point { x: 0, y: 0 },
                 max: Point {
-                    x: self.width,
-                    y: self.height,
+                    x: self.width(),
+                    y: self.height(),
                 },
             };
         }
 
-        let crop_unit_x;
-        let crop_unit_y;
-        if self.chroma_array_type == 0 {
-            crop_unit_x = 1;
-            crop_unit_y = if self.frame_mbs_only_flag { 1 } else { 2 };
-        } else {
-            let sub_width_c = if self.chroma_format_idc > 2 { 1 } else { 2 };
-            let sub_height_c = if self.chroma_format_idc > 1 { 1 } else { 2 };
-            crop_unit_x = sub_width_c;
-            crop_unit_y = sub_height_c * (if self.frame_mbs_only_flag { 1 } else { 2 });
-        }
+        let (crop_unit_x, crop_unit_y) = self.crop_unit_x_y();
 
         let crop_left = crop_unit_x * self.frame_crop_left_offset;
         let crop_right = crop_unit_x * self.frame_crop_right_offset;
@@ -756,8 +781,8 @@ impl Sps {
                 y: crop_top,
             },
             max: Point {
-                x: self.width - crop_left - crop_right,
-                y: self.height - crop_top - crop_bottom,
+                x: self.width() - crop_left - crop_right,
+                y: self.height() - crop_top - crop_bottom,
             },
         }
     }
@@ -799,8 +824,8 @@ impl Sps {
             Level::L6_2 => 696320,
         };
 
-        let width_mb = self.width / 16;
-        let height_mb = self.height / 16;
+        let width_mb = self.width() / 16;
+        let height_mb = self.height() / 16;
 
         let max_dpb_frames =
             std::cmp::min(max_dpb_mbs / (width_mb * height_mb), DPB_MAX_SIZE as u32) as usize;
@@ -879,13 +904,6 @@ impl Default for Sps {
             frame_crop_right_offset: Default::default(),
             frame_crop_top_offset: Default::default(),
             frame_crop_bottom_offset: Default::default(),
-            chroma_array_type: Default::default(),
-            width: Default::default(),
-            height: Default::default(),
-            crop_rect_width: Default::default(),
-            crop_rect_height: Default::default(),
-            crop_rect_x: Default::default(),
-            crop_rect_y: Default::default(),
             expected_delta_per_pic_order_cnt_cycle: Default::default(),
             vui_parameters_present_flag: Default::default(),
             vui_parameters: Default::default(),
@@ -913,12 +931,6 @@ impl SpsBuilder {
 
     pub fn level_idc(mut self, value: Level) -> Self {
         self.0.level_idc = value;
-        self
-    }
-
-    pub fn resolution_in_mbs(mut self, width: u32, height: u32) -> Self {
-        self.0.pic_width_in_mbs_minus1 = width - 1;
-        self.0.pic_height_in_map_units_minus1 = height - 1;
         self
     }
 
@@ -952,7 +964,8 @@ impl SpsBuilder {
         let mb_width = (width + MB_SIZE - 1) / MB_SIZE;
         let mb_height = (height + MB_SIZE - 1) / MB_SIZE;
 
-        self = self.resolution_in_mbs(mb_width, mb_height);
+        self.0.pic_width_in_mbs_minus1 = (mb_width - 1) as u8;
+        self.0.pic_height_in_map_units_minus1 = (mb_height - 1) as u8;
 
         let compressed_width = mb_width * MB_SIZE;
         let compressed_height = mb_height * MB_SIZE;
@@ -1964,12 +1977,6 @@ impl Parser {
             Parser::fill_scaling_list_flat(&mut sps.scaling_lists_4x4, &mut sps.scaling_lists_8x8);
         }
 
-        if sps.separate_colour_plane_flag {
-            sps.chroma_array_type = 0;
-        } else {
-            sps.chroma_array_type = sps.chroma_format_idc;
-        }
-
         sps.log2_max_frame_num_minus4 = r.read_ue_max(12)?;
 
         sps.pic_order_cnt_type = r.read_ue_max(2)?;
@@ -2012,46 +2019,28 @@ impl Parser {
             sps.frame_crop_right_offset = r.read_ue()?;
             sps.frame_crop_top_offset = r.read_ue()?;
             sps.frame_crop_bottom_offset = r.read_ue()?;
+
+            // Validate that cropping info is valid.
+            let (crop_unit_x, crop_unit_y) = sps.crop_unit_x_y();
+
+            let _ = sps
+                .frame_crop_left_offset
+                .checked_add(sps.frame_crop_right_offset)
+                .and_then(|r| r.checked_mul(crop_unit_x))
+                .and_then(|r| sps.width().checked_sub(r))
+                .ok_or(anyhow!("Invalid frame crop width"))?;
+
+            let _ = sps
+                .frame_crop_top_offset
+                .checked_add(sps.frame_crop_bottom_offset)
+                .and_then(|r| r.checked_mul(crop_unit_y))
+                .and_then(|r| sps.height().checked_sub(r))
+                .ok_or(anyhow!("invalid frame crop height"))?;
         }
 
         sps.vui_parameters_present_flag = r.read_bit()?;
         if sps.vui_parameters_present_flag {
             Parser::parse_vui(&mut r, &mut sps)?;
-        }
-
-        let mut width = (sps.pic_width_in_mbs_minus1 + 1) * 16;
-        let mut height = (sps.pic_height_in_map_units_minus1 + 1)
-            * 16
-            * (2 - u32::from(sps.frame_mbs_only_flag));
-
-        sps.width = width;
-        sps.height = height;
-
-        if sps.frame_cropping_flag {
-            // Table 6-1 in the spec.
-            let sub_width_c = [1, 2, 2, 1];
-            let sub_height_c = [1, 2, 1, 1];
-
-            let crop_unit_x = sub_width_c[usize::from(sps.chroma_format_idc)];
-            let crop_unit_y = sub_height_c[usize::from(sps.chroma_format_idc)]
-                * (2 - u32::from(sps.frame_mbs_only_flag));
-
-            width = width
-                .checked_sub(
-                    (sps.frame_crop_left_offset + sps.frame_crop_right_offset) * crop_unit_x,
-                )
-                .ok_or(anyhow!("Invalid frame crop width"))?;
-
-            height = height
-                .checked_sub(
-                    (sps.frame_crop_top_offset + sps.frame_crop_bottom_offset) * crop_unit_y,
-                )
-                .ok_or(anyhow!("Invalid frame crop height"))?;
-
-            sps.crop_rect_width = width;
-            sps.crop_rect_height = height;
-            sps.crop_rect_x = sps.frame_crop_left_offset * crop_unit_x;
-            sps.crop_rect_y = sps.frame_crop_top_offset * crop_unit_y;
         }
 
         let key = sps.seq_parameter_set_id;
@@ -2261,7 +2250,7 @@ impl Parser {
             }
         }
 
-        if sps.chroma_array_type != 0 {
+        if sps.chroma_array_type() != 0 {
             pt.chroma_log2_weight_denom = r.read_ue_max(7)?;
             let default_chroma_weight = 1 << pt.chroma_log2_weight_denom;
 
@@ -2290,7 +2279,7 @@ impl Parser {
                 pt.luma_offset_l0[usize::from(i)] = r.read_se_bounded(-128, 127)?;
             }
 
-            if sps.chroma_array_type != 0 {
+            if sps.chroma_array_type() != 0 {
                 let chroma_weight_l0_flag = r.read_bit()?;
                 if chroma_weight_l0_flag {
                     for j in 0..2 {
@@ -2310,7 +2299,7 @@ impl Parser {
                     pt.luma_offset_l1[usize::from(i)] = r.read_se_bounded(-128, 127)?;
                 }
 
-                if sps.chroma_array_type != 0 {
+                if sps.chroma_array_type() != 0 {
                     let chroma_weight_l1_flag = r.read_bit()?;
                     if chroma_weight_l1_flag {
                         for j in 0..2 {
@@ -2712,14 +2701,10 @@ mod tests {
             assert_eq!(sps.frame_crop_right_offset, 0);
             assert_eq!(sps.frame_crop_top_offset, 0);
             assert_eq!(sps.frame_crop_bottom_offset, 0);
-            assert_eq!(sps.chroma_array_type, 1);
+            assert_eq!(sps.chroma_array_type(), 1);
             assert_eq!(sps.max_frame_num(), 32);
-            assert_eq!(sps.width, 320);
-            assert_eq!(sps.height, 240);
-            assert_eq!(sps.crop_rect_width, 0);
-            assert_eq!(sps.crop_rect_height, 0);
-            assert_eq!(sps.crop_rect_x, 0);
-            assert_eq!(sps.crop_rect_y, 0);
+            assert_eq!(sps.width(), 320);
+            assert_eq!(sps.height(), 240);
         }
 
         for pps_id in &pps_ids {

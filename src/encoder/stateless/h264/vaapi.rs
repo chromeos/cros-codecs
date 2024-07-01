@@ -163,8 +163,8 @@ where
                 ip_period,
                 bits_per_second,
                 sps.max_num_ref_frames,
-                (sps.pic_width_in_mbs_minus1 + 1) as u16,
-                (sps.pic_height_in_map_units_minus1 + 1) as u16,
+                sps.pic_width_in_mbs_minus1 as u16 + 1,
+                sps.pic_height_in_map_units_minus1 as u16 + 1,
                 &seq_fields,
                 sps.bit_depth_luma_minus8,
                 sps.bit_depth_chroma_minus8,
@@ -585,7 +585,7 @@ pub(super) mod tests {
             .seq_parameter_set_id(0)
             .profile_idc(Profile::Main)
             .level_idc(Level::L4)
-            .resolution_in_mbs(WIDTH / 16, HEIGHT / 16)
+            .resolution(WIDTH, HEIGHT)
             .chroma_format_idc(3)
             .frame_mbs_only_flag(true)
             .direct_8x8_inference_flag(true)

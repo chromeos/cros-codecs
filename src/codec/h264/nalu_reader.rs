@@ -5,6 +5,7 @@
 use std::io::Cursor;
 
 use anyhow::anyhow;
+use anyhow::Context;
 use byteorder::ReadBytesExt;
 use bytes::Buf;
 use thiserror::Error;
@@ -16,11 +17,11 @@ pub(crate) struct NaluReader<'a> {
     data: Cursor<&'a [u8]>,
     /// Contents of the current byte. First unread bit starting at position 8 -
     /// num_remaining_bits_in_curr_bytes.
-    curr_byte: u32,
+    curr_byte: u8,
     /// Number of bits remaining in `curr_byte`
     num_remaining_bits_in_curr_byte: usize,
     /// Used in epb detection.
-    prev_two_bytes: u32,
+    prev_two_bytes: u16,
     /// Number of epbs (i.e. 0x000003) we found.
     num_epb: usize,
 }
@@ -69,15 +70,15 @@ impl<'a> NaluReader<'a> {
         }
 
         let mut bits_left = num_bits;
-        let mut out = 0;
+        let mut out = 0u32;
 
         while self.num_remaining_bits_in_curr_byte < bits_left {
-            out |= self.curr_byte << (bits_left - self.num_remaining_bits_in_curr_byte);
+            out |= (self.curr_byte as u32) << (bits_left - self.num_remaining_bits_in_curr_byte);
             bits_left -= self.num_remaining_bits_in_curr_byte;
             self.update_curr_byte()?;
         }
 
-        out |= self.curr_byte >> (self.num_remaining_bits_in_curr_byte - bits_left);
+        out |= (self.curr_byte >> (self.num_remaining_bits_in_curr_byte - bits_left)) as u32;
         out &= (1 << num_bits) - 1;
         self.num_remaining_bits_in_curr_byte -= bits_left;
 
@@ -132,35 +133,20 @@ impl<'a> NaluReader<'a> {
 
     pub fn read_ue<U: TryFrom<u32>>(&mut self) -> anyhow::Result<U> {
         let mut num_bits = 0;
-        let mut bit = self.read_bits::<u32>(1)?;
 
-        while bit == 0 {
+        while self.read_bits::<u32>(1)? == 0 {
             num_bits += 1;
-            bit = self.read_bits(1)?;
         }
 
         if num_bits > 31 {
-            return Err(anyhow!("Invalid stream"));
+            return Err(anyhow!("invalid stream"));
         }
 
-        let mut value = (1 << num_bits) - 1;
-        let rest;
+        let value = ((1u32 << num_bits) - 1)
+            .checked_add(self.read_bits::<u32>(num_bits)?)
+            .context("read number cannot fit in 32 bits")?;
 
-        // Check for overflow
-        if num_bits == 31 {
-            rest = self.read_bits::<u32>(num_bits)?;
-            if rest == 0 {
-                return U::try_from(value).map_err(|_| anyhow!("Conversion error"));
-            } else {
-                return Err(anyhow!("Invalid stream"));
-            }
-        }
-
-        if num_bits > 0 {
-            value += self.read_bits::<u32>(num_bits)?;
-        }
-
-        U::try_from(value).map_err(|_| anyhow!("Conversion error"))
+        U::try_from(value).map_err(|_| anyhow!("conversion error"))
     }
 
     pub fn read_ue_bounded<U: TryFrom<u32>>(&mut self, min: u32, max: u32) -> anyhow::Result<U> {
@@ -212,7 +198,7 @@ impl<'a> NaluReader<'a> {
     fn update_curr_byte(&mut self) -> Result<(), GetByteError> {
         let mut byte = self.get_byte()?;
 
-        if (self.prev_two_bytes & 0xffff) == 0 && byte == 0x03 {
+        if self.prev_two_bytes == 0 && byte == 0x03 {
             // We found an epb
             self.num_epb += 1;
             // Read another byte
@@ -222,9 +208,9 @@ impl<'a> NaluReader<'a> {
         }
 
         self.num_remaining_bits_in_curr_byte = 8;
-        self.prev_two_bytes = ((self.prev_two_bytes & 0xff) << 8) | u32::from(byte);
+        self.prev_two_bytes = (self.prev_two_bytes << 8) | u16::from(byte);
 
-        self.curr_byte = u32::from(byte);
+        self.curr_byte = byte;
         Ok(())
     }
 }
@@ -284,5 +270,40 @@ mod tests {
         assert_eq!(reader.num_bits_left(), 8);
 
         assert!(!reader.has_more_rsbp_data());
+    }
+
+    // Check that read_ue behaves properly with input at the limits.
+    #[test]
+    fn read_ue() {
+        // Regular value.
+        let mut reader = NaluReader::new(&[0b0001_1010]);
+        assert_eq!(reader.read_ue::<u32>().unwrap(), 12);
+        assert_eq!(reader.data.position(), 1);
+        assert_eq!(reader.num_remaining_bits_in_curr_byte, 1);
+
+        // 0 value.
+        let mut reader = NaluReader::new(&[0b1000_0000]);
+        assert_eq!(reader.read_ue::<u32>().unwrap(), 0);
+        assert_eq!(reader.data.position(), 1);
+        assert_eq!(reader.num_remaining_bits_in_curr_byte, 7);
+
+        // No prefix stop bit.
+        let mut reader = NaluReader::new(&[0b0000_0000]);
+        reader.read_ue::<u32>().unwrap_err();
+
+        // u32 max value: 31 0-bits, 1 bit marker, 31 bits 1-bits.
+        let mut reader = NaluReader::new(&[
+            0b0000_0000,
+            0b0000_0000,
+            0b0000_0000,
+            0b0000_0001,
+            0b1111_1111,
+            0b1111_1111,
+            0b1111_1111,
+            0b1111_1110,
+        ]);
+        assert_eq!(reader.read_ue::<u32>().unwrap(), 0xffff_fffe);
+        assert_eq!(reader.data.position(), 8);
+        assert_eq!(reader.num_remaining_bits_in_curr_byte, 1);
     }
 }
