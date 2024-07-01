@@ -729,6 +729,35 @@ impl Sps {
             * (2 - self.frame_mbs_only_flag as u32)
     }
 
+    /// Returns `SubWidthC` and `SubHeightC`.
+    ///
+    /// See table 6-1 in the specification.
+    fn sub_width_height_c(&self) -> (u32, u32) {
+        match (self.chroma_format_idc, self.separate_colour_plane_flag) {
+            (1, false) => (2, 2),
+            (2, false) => (2, 1),
+            (3, false) => (1, 1),
+            // undefined.
+            _ => (1, 1),
+        }
+    }
+
+    /// Returns `CropUnitX` and `CropUnitY`.
+    ///
+    /// See 7-19 through 7-22 in the specification.
+    fn crop_unit_x_y(&self) -> (u32, u32) {
+        match self.chroma_array_type {
+            0 => (1, 2 - u32::from(self.frame_mbs_only_flag)),
+            _ => {
+                let (sub_width_c, sub_height_c) = self.sub_width_height_c();
+                (
+                    sub_width_c,
+                    sub_height_c * (2 - u32::from(self.frame_mbs_only_flag)),
+                )
+            }
+        }
+    }
+
     /// Same as MaxFrameNum. See 7-10 in the specification.
     pub fn max_frame_num(&self) -> u32 {
         1 << (self.log2_max_frame_num_minus4 + 4)
@@ -745,17 +774,7 @@ impl Sps {
             };
         }
 
-        let crop_unit_x;
-        let crop_unit_y;
-        if self.chroma_array_type == 0 {
-            crop_unit_x = 1;
-            crop_unit_y = if self.frame_mbs_only_flag { 1 } else { 2 };
-        } else {
-            let sub_width_c = if self.chroma_format_idc > 2 { 1 } else { 2 };
-            let sub_height_c = if self.chroma_format_idc > 1 { 1 } else { 2 };
-            crop_unit_x = sub_width_c;
-            crop_unit_y = sub_height_c * (if self.frame_mbs_only_flag { 1 } else { 2 });
-        }
+        let (crop_unit_x, crop_unit_y) = self.crop_unit_x_y();
 
         let crop_left = crop_unit_x * self.frame_crop_left_offset;
         let crop_right = crop_unit_x * self.frame_crop_right_offset;
@@ -2028,13 +2047,7 @@ impl Parser {
         let mut height = sps.height();
 
         if sps.frame_cropping_flag {
-            // Table 6-1 in the spec.
-            let sub_width_c = [1, 2, 2, 1];
-            let sub_height_c = [1, 2, 1, 1];
-
-            let crop_unit_x = sub_width_c[usize::from(sps.chroma_format_idc)];
-            let crop_unit_y = sub_height_c[usize::from(sps.chroma_format_idc)]
-                * (2 - u32::from(sps.frame_mbs_only_flag));
+            let (crop_unit_x, crop_unit_y) = sps.crop_unit_x_y();
 
             width = width
                 .checked_sub(
