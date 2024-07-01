@@ -391,7 +391,7 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
             luma_offset_l0[i] = i16::from(pwt.luma_offset_l0[i]);
         }
 
-        chroma_weight_l0_flag = sps.chroma_array_type != 0;
+        chroma_weight_l0_flag = sps.chroma_array_type() != 0;
         if chroma_weight_l0_flag {
             for i in 0..=hdr.num_ref_idx_l0_active_minus1 as usize {
                 for j in 0..2 {
@@ -412,7 +412,7 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
             &pwt.luma_offset_l1[..(hdr.num_ref_idx_l1_active_minus1 as usize + 1)],
         );
 
-        chroma_weight_l1_flag = sps.chroma_array_type != 0;
+        chroma_weight_l1_flag = sps.chroma_array_type() != 0;
         if chroma_weight_l1_flag {
             for i in 0..=hdr.num_ref_idx_l1_active_minus1 as usize {
                 for j in 0..2 {
