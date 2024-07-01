@@ -693,18 +693,6 @@ pub struct Sps {
     // Calculated
     /// Same as ChromaArrayType. See the definition in the specification.
     pub chroma_array_type: u8,
-    /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
-    /// the specification
-    pub crop_rect_width: u32,
-    /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
-    /// the specification
-    pub crop_rect_height: u32,
-    /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
-    /// the specification
-    pub crop_rect_x: u32,
-    /// See the documentation for frame_crop_{left|right|top|bottom}_offset in
-    /// the specification
-    pub crop_rect_y: u32,
     /// Same as ExpectedDeltaPerPicOrderCntCycle, see 7-12 in the specification.
     pub expected_delta_per_pic_order_cnt_cycle: i32,
 
@@ -911,10 +899,6 @@ impl Default for Sps {
             frame_crop_top_offset: Default::default(),
             frame_crop_bottom_offset: Default::default(),
             chroma_array_type: Default::default(),
-            crop_rect_width: Default::default(),
-            crop_rect_height: Default::default(),
-            crop_rect_x: Default::default(),
-            crop_rect_y: Default::default(),
             expected_delta_per_pic_order_cnt_cycle: Default::default(),
             vui_parameters_present_flag: Default::default(),
             vui_parameters: Default::default(),
@@ -2036,34 +2020,28 @@ impl Parser {
             sps.frame_crop_right_offset = r.read_ue()?;
             sps.frame_crop_top_offset = r.read_ue()?;
             sps.frame_crop_bottom_offset = r.read_ue()?;
-        }
 
-        sps.vui_parameters_present_flag = r.read_bit()?;
-        if sps.vui_parameters_present_flag {
-            Parser::parse_vui(&mut r, &mut sps)?;
-        }
-
-        if sps.frame_cropping_flag {
+            // Validate that cropping info is valid.
             let (crop_unit_x, crop_unit_y) = sps.crop_unit_x_y();
 
-            let width = sps
+            let _ = sps
                 .frame_crop_left_offset
                 .checked_add(sps.frame_crop_right_offset)
                 .and_then(|r| r.checked_mul(crop_unit_x))
                 .and_then(|r| sps.width().checked_sub(r))
                 .ok_or(anyhow!("Invalid frame crop width"))?;
 
-            let height = sps
+            let _ = sps
                 .frame_crop_top_offset
                 .checked_add(sps.frame_crop_bottom_offset)
                 .and_then(|r| r.checked_mul(crop_unit_y))
                 .and_then(|r| sps.height().checked_sub(r))
                 .ok_or(anyhow!("invalid frame crop height"))?;
+        }
 
-            sps.crop_rect_width = width;
-            sps.crop_rect_height = height;
-            sps.crop_rect_x = sps.frame_crop_left_offset * crop_unit_x;
-            sps.crop_rect_y = sps.frame_crop_top_offset * crop_unit_y;
+        sps.vui_parameters_present_flag = r.read_bit()?;
+        if sps.vui_parameters_present_flag {
+            Parser::parse_vui(&mut r, &mut sps)?;
         }
 
         let key = sps.seq_parameter_set_id;
@@ -2728,10 +2706,6 @@ mod tests {
             assert_eq!(sps.max_frame_num(), 32);
             assert_eq!(sps.width(), 320);
             assert_eq!(sps.height(), 240);
-            assert_eq!(sps.crop_rect_width, 0);
-            assert_eq!(sps.crop_rect_height, 0);
-            assert_eq!(sps.crop_rect_x, 0);
-            assert_eq!(sps.crop_rect_y, 0);
         }
 
         for pps_id in &pps_ids {
