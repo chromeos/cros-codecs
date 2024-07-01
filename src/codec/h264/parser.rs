@@ -691,8 +691,6 @@ pub struct Sps {
     pub frame_crop_bottom_offset: u32,
 
     // Calculated
-    /// Same as ChromaArrayType. See the definition in the specification.
-    pub chroma_array_type: u8,
     /// Same as ExpectedDeltaPerPicOrderCntCycle, see 7-12 in the specification.
     pub expected_delta_per_pic_order_cnt_cycle: i32,
 
@@ -717,6 +715,14 @@ impl Sps {
             * (2 - self.frame_mbs_only_flag as u32)
     }
 
+    /// Returns `ChromaArrayType`, as computed in the specification.
+    pub const fn chroma_array_type(&self) -> u8 {
+        match self.separate_colour_plane_flag {
+            false => self.chroma_format_idc,
+            true => 0,
+        }
+    }
+
     /// Returns `SubWidthC` and `SubHeightC`.
     ///
     /// See table 6-1 in the specification.
@@ -734,7 +740,7 @@ impl Sps {
     ///
     /// See 7-19 through 7-22 in the specification.
     fn crop_unit_x_y(&self) -> (u32, u32) {
-        match self.chroma_array_type {
+        match self.chroma_array_type() {
             0 => (1, 2 - u32::from(self.frame_mbs_only_flag)),
             _ => {
                 let (sub_width_c, sub_height_c) = self.sub_width_height_c();
@@ -898,7 +904,6 @@ impl Default for Sps {
             frame_crop_right_offset: Default::default(),
             frame_crop_top_offset: Default::default(),
             frame_crop_bottom_offset: Default::default(),
-            chroma_array_type: Default::default(),
             expected_delta_per_pic_order_cnt_cycle: Default::default(),
             vui_parameters_present_flag: Default::default(),
             vui_parameters: Default::default(),
@@ -1972,12 +1977,6 @@ impl Parser {
             Parser::fill_scaling_list_flat(&mut sps.scaling_lists_4x4, &mut sps.scaling_lists_8x8);
         }
 
-        if sps.separate_colour_plane_flag {
-            sps.chroma_array_type = 0;
-        } else {
-            sps.chroma_array_type = sps.chroma_format_idc;
-        }
-
         sps.log2_max_frame_num_minus4 = r.read_ue_max(12)?;
 
         sps.pic_order_cnt_type = r.read_ue_max(2)?;
@@ -2251,7 +2250,7 @@ impl Parser {
             }
         }
 
-        if sps.chroma_array_type != 0 {
+        if sps.chroma_array_type() != 0 {
             pt.chroma_log2_weight_denom = r.read_ue_max(7)?;
             let default_chroma_weight = 1 << pt.chroma_log2_weight_denom;
 
@@ -2280,7 +2279,7 @@ impl Parser {
                 pt.luma_offset_l0[usize::from(i)] = r.read_se_bounded(-128, 127)?;
             }
 
-            if sps.chroma_array_type != 0 {
+            if sps.chroma_array_type() != 0 {
                 let chroma_weight_l0_flag = r.read_bit()?;
                 if chroma_weight_l0_flag {
                     for j in 0..2 {
@@ -2300,7 +2299,7 @@ impl Parser {
                     pt.luma_offset_l1[usize::from(i)] = r.read_se_bounded(-128, 127)?;
                 }
 
-                if sps.chroma_array_type != 0 {
+                if sps.chroma_array_type() != 0 {
                     let chroma_weight_l1_flag = r.read_bit()?;
                     if chroma_weight_l1_flag {
                         for j in 0..2 {
@@ -2702,7 +2701,7 @@ mod tests {
             assert_eq!(sps.frame_crop_right_offset, 0);
             assert_eq!(sps.frame_crop_top_offset, 0);
             assert_eq!(sps.frame_crop_bottom_offset, 0);
-            assert_eq!(sps.chroma_array_type, 1);
+            assert_eq!(sps.chroma_array_type(), 1);
             assert_eq!(sps.max_frame_num(), 32);
             assert_eq!(sps.width(), 320);
             assert_eq!(sps.height(), 240);
