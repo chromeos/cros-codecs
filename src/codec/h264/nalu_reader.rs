@@ -271,4 +271,39 @@ mod tests {
 
         assert!(!reader.has_more_rsbp_data());
     }
+
+    // Check that read_ue behaves properly with input at the limits.
+    #[test]
+    fn read_ue() {
+        // Regular value.
+        let mut reader = NaluReader::new(&[0b0001_1010]);
+        assert_eq!(reader.read_ue::<u32>().unwrap(), 12);
+        assert_eq!(reader.data.position(), 1);
+        assert_eq!(reader.num_remaining_bits_in_curr_byte, 1);
+
+        // 0 value.
+        let mut reader = NaluReader::new(&[0b1000_0000]);
+        assert_eq!(reader.read_ue::<u32>().unwrap(), 0);
+        assert_eq!(reader.data.position(), 1);
+        assert_eq!(reader.num_remaining_bits_in_curr_byte, 7);
+
+        // No prefix stop bit.
+        let mut reader = NaluReader::new(&[0b0000_0000]);
+        reader.read_ue::<u32>().unwrap_err();
+
+        // u32 max value: 31 0-bits, 1 bit marker, 31 bits 1-bits.
+        let mut reader = NaluReader::new(&[
+            0b0000_0000,
+            0b0000_0000,
+            0b0000_0000,
+            0b0000_0001,
+            0b1111_1111,
+            0b1111_1111,
+            0b1111_1111,
+            0b1111_1110,
+        ]);
+        assert_eq!(reader.read_ue::<u32>().unwrap(), 0xffff_fffe);
+        assert_eq!(reader.data.position(), 8);
+        assert_eq!(reader.num_remaining_bits_in_curr_byte, 1);
+    }
 }
