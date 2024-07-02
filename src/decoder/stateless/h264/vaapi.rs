@@ -300,7 +300,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         picture_height_in_mbs_minus1,
         sps.bit_depth_luma_minus8,
         sps.bit_depth_chroma_minus8,
-        u8::try_from(sps.max_num_ref_frames)?,
+        sps.max_num_ref_frames,
         &seq_fields,
         0, /* FMO not supported by VA */
         0, /* FMO not supported by VA */
