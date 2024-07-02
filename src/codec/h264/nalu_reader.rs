@@ -170,7 +170,7 @@ impl<'a> NaluReader<'a> {
         let ue = self.read_ue::<u32>()? as i32;
 
         if ue % 2 == 0 {
-            Ok(U::try_from(-ue / 2).map_err(|_| anyhow!("Conversion error"))?)
+            Ok(U::try_from(-(ue / 2)).map_err(|_| anyhow!("Conversion error"))?)
         } else {
             Ok(U::try_from(ue / 2 + 1).map_err(|_| anyhow!("Conversion error"))?)
         }
