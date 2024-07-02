@@ -136,10 +136,9 @@ impl<'a> NaluReader<'a> {
 
         while self.read_bits::<u32>(1)? == 0 {
             num_bits += 1;
-        }
-
-        if num_bits > 31 {
-            return Err(anyhow!("invalid stream"));
+            if num_bits > 31 {
+                return Err(anyhow!("invalid stream"));
+            }
         }
 
         let value = ((1u32 << num_bits) - 1)
