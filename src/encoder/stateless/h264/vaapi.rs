@@ -162,7 +162,7 @@ where
                 intra_idr_period,
                 ip_period,
                 bits_per_second,
-                sps.max_num_ref_frames,
+                sps.max_num_ref_frames as u32,
                 sps.pic_width_in_mbs_minus1 + 1,
                 sps.pic_height_in_map_units_minus1 + 1,
                 &seq_fields,

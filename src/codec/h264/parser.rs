@@ -638,7 +638,7 @@ pub struct Sps {
     /// any picture in the coded video sequence. Also
     /// determines the size of the sliding window operation as specified in
     /// clause 8.2.5.3.
-    pub max_num_ref_frames: u32,
+    pub max_num_ref_frames: u8,
 
     /// Specifies the allowed values of frame_num as specified in clause 7.4.3
     /// and the decoding process in case of an inferred gap between values of
@@ -982,7 +982,7 @@ impl SpsBuilder {
         self
     }
 
-    pub fn max_num_ref_frames(mut self, value: u32) -> Self {
+    pub fn max_num_ref_frames(mut self, value: u8) -> Self {
         self.0.max_num_ref_frames = value;
         self
     }
@@ -2001,7 +2001,7 @@ impl Parser {
             sps.expected_delta_per_pic_order_cnt_cycle = offset_acc;
         }
 
-        sps.max_num_ref_frames = r.read_ue()?;
+        sps.max_num_ref_frames = r.read_ue_max(DPB_MAX_SIZE as u32)?;
         sps.gaps_in_frame_num_value_allowed_flag = r.read_bit()?;
         sps.pic_width_in_mbs_minus1 = r.read_ue()?;
         sps.pic_height_in_map_units_minus1 = r.read_ue()?;
