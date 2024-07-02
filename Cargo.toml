@@ -42,5 +42,9 @@ name = "ccdec"
 required-features = ["vaapi"]
 
 [[example]]
+name = "ccdec-v4l2-stateless"
+required-features = ["v4l2"]
+
+[[example]]
 name = "ccenc"
 required-features = ["vaapi"]
