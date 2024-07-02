@@ -35,7 +35,7 @@ pub(crate) enum GetByteError {
 #[derive(Debug, Error)]
 pub(crate) enum ReadBitsError {
     #[error("more than 31 ({0}) bits were requested")]
-    TooManyBytesRequested(usize),
+    TooManyBitsRequested(usize),
     #[error("failed to advance the current byte")]
     GetByte(#[from] GetByteError),
     #[error("failed to convert read input to target type")]
@@ -66,7 +66,7 @@ impl<'a> NaluReader<'a> {
     /// Read up to 31 bits from the stream.
     pub fn read_bits<U: TryFrom<u32>>(&mut self, num_bits: usize) -> Result<U, ReadBitsError> {
         if num_bits > 31 {
-            return Err(ReadBitsError::TooManyBytesRequested(num_bits));
+            return Err(ReadBitsError::TooManyBitsRequested(num_bits));
         }
 
         let mut bits_left = num_bits;
