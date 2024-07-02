@@ -550,6 +550,7 @@ impl<T: Clone> Dpb<T> {
                 num_ref_pics -= 1;
             } else {
                 log::warn!("could not find a ShortTerm picture to unmark in the DPB");
+                break;
             }
         }
 
