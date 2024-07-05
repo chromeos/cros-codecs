@@ -6,7 +6,6 @@
 // DO NOT SUBMIT: Add license before submitting.
 rust_test {
     name: "cros-codecs_test_src_lib",
-    host_supported: true,
     crate_name: "cros_codecs",
     cargo_env_compat: true,
     cargo_pkg_version: "0.0.4",
@@ -30,22 +29,20 @@ rust_test {
         "libbytes",
         "libcrc32fast",
         "libcros_libva",
-        "libdrm",
+        "libdrm_rust",
         "libenv_logger",
-        "libgbm",
+        "libgbm_rust",
         "liblog_rust",
-        "libmatroska_demuxer",
-        "libmd5",
         "libnix",
         "libthiserror",
     ],
     proc_macros: ["libenumn"],
     aliases: ["cros_libva:libva"],
+    vendor: true,
 }
 
 rust_library {
     name: "libcros_codecs",
-    host_supported: true,
     crate_name: "cros_codecs",
     cargo_env_compat: true,
     cargo_pkg_version: "0.0.4",
@@ -73,4 +70,5 @@ rust_library {
         "//apex_available:platform",
         "//apex_available:anyapex",
     ],
+    vendor: true,
 }
