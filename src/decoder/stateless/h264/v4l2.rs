@@ -5,6 +5,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use v4l2r::bindings::v4l2_ctrl_h264_pps;
+use v4l2r::bindings::v4l2_ctrl_h264_sps;
+use v4l2r::controls::codec::H264Pps;
+use v4l2r::controls::codec::H264Sps;
+use v4l2r::controls::SafeExtControl;
+
 use crate::backend::v4l2::decoder::stateless::BackendHandle;
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
@@ -25,9 +31,7 @@ use crate::decoder::BlockingMode;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeMode;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeParams;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DpbEntry;
-use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264Pps;
 //TODO use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264ScalingMatrix;
-use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264Sps;
 use crate::Resolution;
 
 impl StatelessDecoderBackendPicture<H264> for V4l2StatelessDecoderBackend {
@@ -87,12 +91,10 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             });
             ref_pictures.push(ref_picture);
         }
-        let mut h264_sps = V4l2CtrlH264Sps::new();
-        let mut h264_pps = V4l2CtrlH264Pps::new();
         //TODO let mut h264_scaling_matrix = V4l2CtrlH264ScalingMatrix::new();
         let mut h264_decode_params = V4l2CtrlH264DecodeParams::new();
-        h264_sps.set(sps);
-        h264_pps.set(pps);
+        let h264_sps = SafeExtControl::<H264Sps>::from(v4l2_ctrl_h264_sps::from(sps));
+        let h264_pps = SafeExtControl::<H264Pps>::from(v4l2_ctrl_h264_pps::from(pps));
         h264_decode_params
             .set_picture_data(picture_data)
             .set_dpb_entries(dpb_entries)
@@ -100,8 +102,8 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         let mut picture = picture.borrow_mut();
         picture
             .request()
-            .ioctl(&h264_sps)
-            .ioctl(&h264_pps)
+            .ioctl(h264_sps)
+            .ioctl(h264_pps)
             //TODO.ioctl(&h264_scaling_matrix)
             .ioctl(&h264_decode_params)
             .ioctl(V4l2CtrlH264DecodeMode::FrameBased);

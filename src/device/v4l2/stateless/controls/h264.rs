@@ -48,9 +48,7 @@ use v4l2r::bindings::V4L2_H264_SPS_FLAG_QPPRIME_Y_ZERO_TRANSFORM_BYPASS;
 use v4l2r::bindings::V4L2_H264_SPS_FLAG_SEPARATE_COLOUR_PLANE;
 use v4l2r::controls::codec::H264DecodeMode;
 use v4l2r::controls::codec::H264DecodeParams;
-use v4l2r::controls::codec::H264Pps;
 use v4l2r::controls::codec::H264ScalingMatrix;
-use v4l2r::controls::codec::H264Sps;
 use v4l2r::controls::SafeExtControl;
 
 impl From<&Sps> for v4l2_ctrl_h264_sps {
@@ -198,48 +196,6 @@ impl From<&V4l2CtrlH264DpbEntry> for v4l2_h264_dpb_entry {
             flags,
             ..Default::default()
         }
-    }
-}
-
-#[derive(Default)]
-pub struct V4l2CtrlH264Sps {
-    handle: v4l2_ctrl_h264_sps,
-}
-
-impl V4l2CtrlH264Sps {
-    pub fn new() -> Self {
-        Default::default()
-    }
-    pub fn set(&mut self, sps: &Sps) -> &mut Self {
-        self.handle = v4l2_ctrl_h264_sps::from(sps);
-        self
-    }
-}
-
-impl From<&V4l2CtrlH264Sps> for SafeExtControl<H264Sps> {
-    fn from(sps: &V4l2CtrlH264Sps) -> Self {
-        SafeExtControl::<H264Sps>::from(sps.handle)
-    }
-}
-
-#[derive(Default)]
-pub struct V4l2CtrlH264Pps {
-    handle: v4l2_ctrl_h264_pps,
-}
-
-impl V4l2CtrlH264Pps {
-    pub fn new() -> Self {
-        Default::default()
-    }
-    pub fn set(&mut self, pps: &Pps) -> &mut Self {
-        self.handle = v4l2_ctrl_h264_pps::from(pps);
-        self
-    }
-}
-
-impl From<&V4l2CtrlH264Pps> for SafeExtControl<H264Pps> {
-    fn from(pps: &V4l2CtrlH264Pps) -> Self {
-        SafeExtControl::<H264Pps>::from(pps.handle)
     }
 }
 
