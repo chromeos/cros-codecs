@@ -120,7 +120,7 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         _: &[&DpbEntry<Self::Handle>],
         _: &[&DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {
-        picture.borrow().request().write(slice.nalu.as_ref());
+        picture.borrow_mut().request().write(slice.nalu.as_ref());
         Ok(())
     }
 
@@ -128,7 +128,7 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         let handle = Rc::new(RefCell::new(BackendHandle {
             picture: picture.clone(),
         }));
-        picture.borrow().request().submit();
+        picture.borrow_mut().request().submit();
         Ok(V4l2StatelessDecoderHandle { handle })
     }
 }

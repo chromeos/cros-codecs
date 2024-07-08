@@ -128,16 +128,19 @@ impl RequestHandle {
         };
         self
     }
-    fn submit(self) -> Self {
-        match self {
-            Self::Init(handle) => Self::Pending(handle.submit()),
+
+    // This method can modify in-place instead of returning a new value. This removes the need for
+    // a RefCell in V4l2Request.
+    fn submit(&mut self) {
+        match std::mem::take(self) {
+            Self::Init(handle) => *self = Self::Pending(handle.submit()),
             _ => panic!("ERROR"),
         }
     }
-    fn sync(self) -> Self {
-        match self {
-            Self::Pending(handle) => Self::Done(handle.sync()),
-            Self::Done(_) => self,
+    fn sync(&mut self) {
+        match std::mem::take(self) {
+            Self::Pending(handle) => *self = Self::Done(handle.sync()),
+            s @ Self::Done(_) => *self = s,
             _ => panic!("ERROR"),
         }
     }
@@ -149,9 +152,7 @@ impl RequestHandle {
     }
 }
 
-pub struct V4l2Request {
-    handle: RefCell<RequestHandle>,
-}
+pub struct V4l2Request(RequestHandle);
 
 impl V4l2Request {
     pub fn new(
@@ -160,35 +161,31 @@ impl V4l2Request {
         handle: ioctl::Request,
         buffer: V4l2OutputBuffer,
     ) -> Self {
-        Self {
-            handle: RefCell::new(RequestHandle::new(device, timestamp, handle, buffer)),
-        }
+        Self(RequestHandle::new(device, timestamp, handle, buffer))
     }
     pub fn timestamp(&self) -> u64 {
-        self.handle.borrow().timestamp()
+        self.0.timestamp()
     }
-    pub fn ioctl<C, T>(&self, ctrl: C) -> &Self
+    pub fn ioctl<C, T>(&mut self, ctrl: C) -> &mut Self
     where
         C: Into<SafeExtControl<T>>,
         T: ExtControlTrait,
     {
-        self.handle.borrow_mut().ioctl(ctrl);
+        self.0.ioctl(ctrl);
         self
     }
-    pub fn write(&self, data: &[u8]) -> &Self {
-        self.handle.borrow_mut().write(data);
+    pub fn write(&mut self, data: &[u8]) -> &mut Self {
+        self.0.write(data);
         self
     }
-    pub fn submit(&self) -> &Self {
-        self.handle.replace(self.handle.take().submit());
-        self
+    pub fn submit(&mut self) {
+        self.0.submit();
     }
-    pub fn sync(&self) -> &Self {
-        self.handle.replace(self.handle.take().sync());
-        self
+    pub fn sync(&mut self) {
+        self.0.sync();
     }
     pub fn result(&self) -> V4l2Result {
-        self.handle.borrow().result()
+        self.0.result()
     }
 }
 

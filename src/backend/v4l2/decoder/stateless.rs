@@ -50,8 +50,8 @@ impl V4l2Picture {
         self.ref_pictures = None;
         self
     }
-    pub fn request(&self) -> &V4l2Request {
-        &self.request
+    pub fn request(&mut self) -> &mut V4l2Request {
+        &mut self.request
     }
 }
 
