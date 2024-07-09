@@ -1060,20 +1060,14 @@ where
     fn init_current_pic(
         &mut self,
         slice: &Slice,
+        sps: &Sps,
         first_field: Option<&RcPictureData>,
         timestamp: u64,
     ) -> anyhow::Result<PictureData> {
-        let pps = self
-            .codec
-            .parser
-            .get_pps(slice.header.pic_parameter_set_id)
-            .context("Invalid SPS in init_current_pic")?;
-
-        let sps = Rc::clone(&pps.sps);
         let max_frame_num = sps.max_frame_num();
 
-        let mut pic = PictureData::new_from_slice(slice, &sps, timestamp, first_field);
-        self.codec.compute_pic_order_count(&mut pic, &sps)?;
+        let mut pic = PictureData::new_from_slice(slice, sps, timestamp, first_field);
+        self.codec.compute_pic_order_count(&mut pic, sps)?;
 
         if matches!(pic.is_idr, IsIdr::Yes { .. }) {
             // C.4.5.3 "Bumping process"
@@ -1152,7 +1146,12 @@ where
         }
 
         let first_field = self.codec.find_first_field(&slice.header)?;
-        let pic = self.init_current_pic(slice, first_field.as_ref().map(|f| &f.0), timestamp)?;
+        let pic = self.init_current_pic(
+            slice,
+            &pps.sps,
+            first_field.as_ref().map(|f| &f.0),
+            timestamp,
+        )?;
         let ref_pic_lists = self.codec.dpb.build_ref_pic_lists(&pic);
 
         debug!("Decode picture POC {:?}", pic.pic_order_cnt);
