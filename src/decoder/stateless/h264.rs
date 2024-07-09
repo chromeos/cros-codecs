@@ -1064,8 +1064,6 @@ where
         first_field: Option<&RcPictureData>,
         timestamp: u64,
     ) -> anyhow::Result<PictureData> {
-        let max_frame_num = sps.max_frame_num();
-
         let mut pic = PictureData::new_from_slice(slice, sps, timestamp, first_field);
         self.codec.compute_pic_order_count(&mut pic, sps)?;
 
@@ -1088,9 +1086,11 @@ where
             }
         }
 
-        self.codec
-            .dpb
-            .update_pic_nums(u32::from(slice.header.frame_num), max_frame_num, &pic);
+        self.codec.dpb.update_pic_nums(
+            u32::from(slice.header.frame_num),
+            sps.max_frame_num(),
+            &pic,
+        );
 
         Ok(pic)
     }
