@@ -25,8 +25,13 @@ impl StatelessVp8DecoderBackend for Backend {
         Ok(())
     }
 
+    fn new_picture(&mut self, _: u64) -> StatelessBackendResult<Self::Picture> {
+        Ok(())
+    }
+
     fn submit_picture(
         &mut self,
+        _: Self::Picture,
         _: &Header,
         _: &Option<Self::Handle>,
         _: &Option<Self::Handle>,
@@ -34,7 +39,6 @@ impl StatelessVp8DecoderBackend for Backend {
         _: &[u8],
         _: &Segmentation,
         _: &MbLfAdjustments,
-        _: u64,
     ) -> StatelessBackendResult<Self::Handle> {
         Ok(Handle {
             handle: Rc::new(RefCell::new(Default::default())),
