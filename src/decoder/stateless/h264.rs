@@ -84,11 +84,7 @@ pub trait StatelessH264DecoderBackend:
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a frame or field was found.
-    fn new_picture(
-        &mut self,
-        picture: &PictureData,
-        timestamp: u64,
-    ) -> StatelessBackendResult<Self::Picture>;
+    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture>;
 
     /// Called when the decoder determines that a second field was found.
     /// Indicates that the underlying BackendHandle is to be shared between the
@@ -96,7 +92,6 @@ pub trait StatelessH264DecoderBackend:
     /// resource and can thus be presented together as a single frame.
     fn new_field_picture(
         &mut self,
-        picture: &PictureData,
         timestamp: u64,
         first_field: &Self::Handle,
     ) -> StatelessBackendResult<Self::Picture>;
@@ -1154,10 +1149,9 @@ where
         debug!("Decode picture POC {:?}", pic.pic_order_cnt);
 
         let mut backend_pic = if let Some(first_field) = first_field {
-            self.backend
-                .new_field_picture(&pic, timestamp, &first_field.1)?
+            self.backend.new_field_picture(timestamp, &first_field.1)?
         } else {
-            self.backend.new_picture(&pic, timestamp)?
+            self.backend.new_picture(timestamp)?
         };
 
         self.backend.start_picture(

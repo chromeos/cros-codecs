@@ -41,12 +41,7 @@ impl StatelessH264DecoderBackend for Backend {
         Ok(())
     }
 
-    fn new_field_picture(
-        &mut self,
-        _: &PictureData,
-        _: u64,
-        _: &Self::Handle,
-    ) -> StatelessBackendResult<()> {
+    fn new_field_picture(&mut self, _: u64, _: &Self::Handle) -> StatelessBackendResult<()> {
         Ok(())
     }
 
@@ -68,7 +63,7 @@ impl StatelessH264DecoderBackend for Backend {
         })
     }
 
-    fn new_picture(&mut self, _: &PictureData, _: u64) -> StatelessBackendResult<()> {
+    fn new_picture(&mut self, _: u64) -> StatelessBackendResult<()> {
         Ok(())
     }
 }
