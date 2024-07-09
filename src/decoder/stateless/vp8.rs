@@ -10,8 +10,6 @@ mod vaapi;
 use std::os::fd::AsFd;
 use std::os::fd::BorrowedFd;
 
-use anyhow::anyhow;
-
 use crate::codec::vp8::parser::Frame;
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
@@ -20,20 +18,19 @@ use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::PoolLayer;
+use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
-
-use super::StatelessDecoderBackendPicture;
 
 /// Stateless backend methods specific to VP8.
 pub trait StatelessVp8DecoderBackend:
@@ -41,6 +38,9 @@ pub trait StatelessVp8DecoderBackend:
 {
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
+
+    /// Called when the decoder determines that a frame or field was found.
+    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture>;
 
     /// Called when the decoder wants the backend to finish the decoding
     /// operations for `picture`.
@@ -50,14 +50,14 @@ pub trait StatelessVp8DecoderBackend:
     #[allow(clippy::too_many_arguments)]
     fn submit_picture(
         &mut self,
-        picture: &Header,
+        picture: Self::Picture,
+        hdr: &Header,
         last_ref: &Option<Self::Handle>,
         golden_ref: &Option<Self::Handle>,
         alt_ref: &Option<Self::Handle>,
         bitstream: &[u8],
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
-        timestamp: u64,
     ) -> StatelessBackendResult<Self::Handle>;
 }
 
@@ -178,20 +178,15 @@ where
 {
     /// Handle a single frame.
     fn handle_frame(&mut self, frame: Frame, timestamp: u64) -> Result<(), DecodeError> {
-        if self
-            .backend
-            .frame_pool(PoolLayer::Highest)
-            .pop()
-            .ok_or(DecodeError::DecoderError(anyhow!("No pool found")))?
-            .num_free_frames()
-            == 0
-        {
-            return Err(DecodeError::NotEnoughOutputBuffers(1));
-        }
-
         let show_frame = frame.header.show_frame;
 
+        let picture = self.backend.new_picture(timestamp).map_err(|e| match e {
+            StatelessBackendError::OutOfResources => DecodeError::NotEnoughOutputBuffers(1),
+            e => DecodeError::BackendError(e),
+        })?;
+
         let decoded_handle = self.backend.submit_picture(
+            picture,
             &frame.header,
             &self.codec.last_picture,
             &self.codec.golden_ref_picture,
@@ -199,7 +194,6 @@ where
             frame.as_ref(),
             self.codec.parser.segmentation(),
             self.codec.parser.mb_lf_adjust(),
-            timestamp,
         )?;
 
         if self.blocking_mode == BlockingMode::Blocking {

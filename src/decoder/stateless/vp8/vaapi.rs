@@ -18,6 +18,7 @@ use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
+use crate::backend::vaapi::decoder::VaapiPicture;
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
@@ -208,7 +209,7 @@ fn build_slice_param(frame_hdr: &Header, slice_size: usize) -> anyhow::Result<li
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp8> for VaapiBackend<M> {
-    type Picture = ();
+    type Picture = VaapiPicture<M>;
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiBackend<M> {
@@ -216,40 +217,52 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
         self.new_sequence(header, PoolCreationMode::Highest)
     }
 
+    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture> {
+        let highest_pool = self.highest_pool();
+        let surface = highest_pool
+            .get_surface()
+            .ok_or(StatelessBackendError::OutOfResources)?;
+
+        let metadata = self.metadata_state.get_parsed()?;
+
+        Ok(VaPicture::new(
+            timestamp,
+            Rc::clone(&metadata.context),
+            surface,
+        ))
+    }
+
     fn submit_picture(
         &mut self,
-        picture: &Header,
+        mut picture: Self::Picture,
+        hdr: &Header,
         last_ref: &Option<Self::Handle>,
         golden_ref: &Option<Self::Handle>,
         alt_ref: &Option<Self::Handle>,
         bitstream: &[u8],
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
-        timestamp: u64,
     ) -> StatelessBackendResult<Self::Handle> {
+        let highest_pool = self.highest_pool();
         let last_ref = va_surface_id(last_ref);
         let golden_ref = va_surface_id(golden_ref);
         let alt_ref = va_surface_id(alt_ref);
-        let highest_pool = self.highest_pool();
-        let surface = highest_pool
-            .get_surface()
-            .ok_or(StatelessBackendError::OutOfResources)?;
 
         let coded_resolution = highest_pool.coded_resolution();
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
         let iq_buffer = context
-            .create_buffer(build_iq_matrix(picture, segmentation)?)
+            .create_buffer(build_iq_matrix(hdr, segmentation)?)
             .context("while creating IQ matrix buffer")?;
 
         let probs = context
-            .create_buffer(build_probability_table(picture))
+            .create_buffer(build_probability_table(hdr))
             .context("while creating probability table buffer")?;
 
         let pic_param = context
             .create_buffer(build_pic_param(
-                picture,
+                hdr,
                 &coded_resolution,
                 segmentation,
                 mb_lf_adjust,
@@ -260,23 +273,21 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp8DecoderBackend for VaapiB
             .context("while creating pic params buffer")?;
 
         let slice_param = context
-            .create_buffer(build_slice_param(picture, bitstream.len())?)
+            .create_buffer(build_slice_param(hdr, bitstream.len())?)
             .context("while creating slice params buffer")?;
 
         let slice_data = context
             .create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))
             .context("while creating slice data buffer")?;
 
-        let mut va_picture = VaPicture::new(timestamp, Rc::clone(context), surface);
-
         // Add buffers with the parsed data.
-        va_picture.add_buffer(iq_buffer);
-        va_picture.add_buffer(probs);
-        va_picture.add_buffer(pic_param);
-        va_picture.add_buffer(slice_param);
-        va_picture.add_buffer(slice_data);
+        picture.add_buffer(iq_buffer);
+        picture.add_buffer(probs);
+        picture.add_buffer(pic_param);
+        picture.add_buffer(slice_param);
+        picture.add_buffer(slice_data);
 
-        self.process_picture::<Vp8>(va_picture)
+        self.process_picture::<Vp8>(picture)
     }
 }
 
