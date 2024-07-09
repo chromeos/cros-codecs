@@ -41,6 +41,7 @@ use crate::codec::h264::picture::Reference;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::PoolLayer;
+use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -50,7 +51,6 @@ use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
 
@@ -1093,6 +1093,18 @@ where
         timestamp: u64,
         slice: &Slice,
     ) -> Result<CurrentPicState<B::Picture>, DecodeError> {
+        // Start by securing the backend picture before modifying our state.
+        let first_field = self.codec.find_first_field(&slice.header)?;
+        let mut backend_pic = if let Some(first_field) = &first_field {
+            self.backend.new_field_picture(timestamp, &first_field.1)
+        } else {
+            self.backend.new_picture(timestamp)
+        }
+        .map_err(|e| match e {
+            StatelessBackendError::OutOfResources => DecodeError::NotEnoughOutputBuffers(1),
+            e => DecodeError::BackendError(e),
+        })?;
+
         let nalu_hdr = &slice.nalu.header;
 
         if nalu_hdr.idr_pic_flag {
@@ -1115,17 +1127,6 @@ where
             return Err(DecodeError::CheckEvents);
         }
 
-        if self
-            .backend
-            .frame_pool(PoolLayer::Highest)
-            .pop()
-            .ok_or(anyhow!("No pool found"))?
-            .num_free_frames()
-            == 0
-        {
-            return Err(DecodeError::NotEnoughOutputBuffers(1));
-        }
-
         let current_macroblock = match pps.sps.separate_colour_plane_flag {
             true => CurrentMacroblockTracking::SeparateColorPlane(Default::default()),
             false => CurrentMacroblockTracking::NonSeparateColorPlane(0),
@@ -1137,7 +1138,6 @@ where
             self.handle_frame_num_gap(&pps.sps, frame_num, timestamp)?;
         }
 
-        let first_field = self.codec.find_first_field(&slice.header)?;
         let pic = self.init_current_pic(
             slice,
             &pps.sps,
@@ -1147,12 +1147,6 @@ where
         let ref_pic_lists = self.codec.dpb.build_ref_pic_lists(&pic);
 
         debug!("Decode picture POC {:?}", pic.pic_order_cnt);
-
-        let mut backend_pic = if let Some(first_field) = first_field {
-            self.backend.new_field_picture(timestamp, &first_field.1)?
-        } else {
-            self.backend.new_picture(timestamp)?
-        };
 
         self.backend.start_picture(
             &mut backend_pic,
