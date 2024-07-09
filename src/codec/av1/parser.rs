@@ -602,7 +602,7 @@ pub struct FrameHeaderObu {
     pub show_existing_frame: bool,
     /// Specifies the frame to be output. It is only available if
     /// show_existing_frame is set.
-    pub frame_to_show_map_idx: u32,
+    pub frame_to_show_map_idx: u8,
     /// Specifies the length of the frame_presentation_time syntax element, in
     /// bits.
     pub frame_presentation_time: u32,
@@ -1920,8 +1920,7 @@ impl Parser {
     /// bitstream. We also save some internal parser state which will be useful
     /// later.
     fn load_reference_frame(&mut self, fh: &mut FrameHeaderObu) -> anyhow::Result<()> {
-        let idx = usize::try_from(fh.frame_to_show_map_idx).unwrap();
-        let rf = &self.ref_info[idx];
+        let rf = &self.ref_info[fh.frame_to_show_map_idx as usize];
 
         // Section 6.8.1: It is a requirement of bitstream conformance that a
         // sequence header OBU has been received before a frame header OBU.
@@ -3083,7 +3082,7 @@ impl Parser {
                 return Err(anyhow!("If obu_type is equal to OBU_FRAME, it is a requirement of bitstream conformance that show_existing_frame is equal to 0."));
             }
             if fh.show_existing_frame {
-                fh.frame_to_show_map_idx = r.read_bits(3)?;
+                fh.frame_to_show_map_idx = r.read_bits(3)? as u8;
 
                 if decoder_model_info_present_flag && !equal_picture_interval {
                     fh.frame_presentation_time = r.read_bits(
@@ -3091,7 +3090,7 @@ impl Parser {
                     )?;
                 }
 
-                let ref_frame = &self.ref_info[usize::try_from(fh.frame_to_show_map_idx).unwrap()];
+                let ref_frame = &self.ref_info[fh.frame_to_show_map_idx as usize];
 
                 fh.refresh_frame_flags = 0;
                 if frame_id_numbers_present_flag {

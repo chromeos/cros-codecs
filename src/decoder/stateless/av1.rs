@@ -192,9 +192,8 @@ where
         );
 
         if frame_header.show_existing_frame {
-            let idx = usize::try_from(frame_header.frame_to_show_map_idx)
-                .context("Broken stream: invalid frame_to_show_map_idx")?;
-            let ref_frame = self.codec.reference_frames[idx]
+            let ref_frame = self.codec.reference_frames
+                [frame_header.frame_to_show_map_idx as usize]
                 .as_ref()
                 .ok_or(anyhow!("Broken stream: no reference picture to display"))?;
             self.codec.current_pic = Some(CurrentPicState::ShowExistingFrame {
