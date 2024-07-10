@@ -29,7 +29,6 @@ pub struct PictureData {
     pub no_output_of_prior_pics_flag: bool,
 
     // Internal state.
-    pub is_irap: bool,
     pub first_picture_after_eos: bool,
     reference: Reference,
     pub pic_latency_cnt: i32,
@@ -54,7 +53,6 @@ impl PictureData {
     ) -> Self {
         let hdr = &slice.header;
         let nalu_type = slice.nalu.header.type_;
-        let is_irap = nalu_type.is_irap();
 
         // We assume HandleCraAsBlafFLag == 0, as it is only set through
         // external means, which we do not provide.
@@ -81,7 +79,7 @@ impl PictureData {
 
         // Compute the Picture Order Count. See 8.3.1 Decoding Process for
         // Picture Order Count
-        if !(is_irap && no_rasl_output_flag) {
+        if !(nalu_type.is_irap() && no_rasl_output_flag) {
             if let Some(prev_tid0_pic) = prev_tid0_pic {
                 // Equation (8-1)
                 let prev_pic_order_cnt_lsb = prev_tid0_pic.slice_pic_order_cnt_lsb;
@@ -131,7 +129,6 @@ impl PictureData {
             pic_order_cnt_msb,
             // Equation (8-2)
             pic_order_cnt_val: pic_order_cnt_msb + slice_pic_order_cnt_lsb,
-            is_irap,
             first_picture_after_eos,
             reference: Default::default(),
             pic_latency_cnt: 0,
