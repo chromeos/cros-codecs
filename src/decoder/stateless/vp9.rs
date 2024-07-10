@@ -275,11 +275,16 @@ where
                     .ok_or(DecodeError::DecoderError(anyhow!("No pool found")))?
                     .num_free_frames();
 
+                let num_required_frames = frames
+                    .iter()
+                    .filter(|f| !f.header.show_existing_frame)
+                    .count();
+
                 if matches!(self.decoding_state, DecodingState::Decoding)
-                    && num_free_frames < frames.len()
+                    && num_free_frames < num_required_frames
                 {
                     return Err(DecodeError::NotEnoughOutputBuffers(
-                        frames.len() - num_free_frames,
+                        num_required_frames - num_free_frames,
                     ));
                 }
 
