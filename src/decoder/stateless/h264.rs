@@ -16,6 +16,7 @@ use std::rc::Rc;
 use anyhow::anyhow;
 use anyhow::Context;
 use log::debug;
+use thiserror::Error;
 
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
@@ -314,6 +315,14 @@ impl StatelessCodec for H264 {
     type DecoderState<H: DecodedHandle, P> = H264DecoderState<H, P>;
 }
 
+#[derive(Debug, Error)]
+enum FindFirstFieldError {
+    #[error("expected complementary field {0:?}, got {1:?}")]
+    ExpectedComplementaryField(Field, Field),
+    #[error("the previous field's frame_num value {0} differs from the current one's {1}")]
+    FrameNumDiffers(u32, u32),
+}
+
 impl<H, P> H264DecoderState<H, P>
 where
     H: DecodedHandle + Clone,
@@ -505,8 +514,10 @@ where
     }
 
     /// Find the first field for the picture started by `slice`, if any.
-    #[allow(clippy::type_complexity)]
-    fn find_first_field(&self, hdr: &SliceHeader) -> anyhow::Result<Option<(RcPictureData, H)>> {
+    fn find_first_field(
+        &self,
+        hdr: &SliceHeader,
+    ) -> Result<Option<(RcPictureData, H)>, FindFirstFieldError> {
         let mut prev_field = None;
 
         if self.dpb.interlaced() {
@@ -528,10 +539,9 @@ where
         if !hdr.field_pic_flag {
             if let Some(prev_field) = prev_field {
                 let field = prev_field.0.borrow().field;
-                return Err(anyhow!(
-                    "Expecting complementary field {:?}, got {:?}",
+                return Err(FindFirstFieldError::ExpectedComplementaryField(
                     field.opposite(),
-                    field
+                    field,
                 ));
             }
         }
@@ -542,11 +552,10 @@ where
                 let prev_field_pic = prev_field.0.borrow();
 
                 if prev_field_pic.frame_num != u32::from(hdr.frame_num) {
-                    return Err(anyhow!(
-                "The previous field differs in frame_num value wrt. the current field. {:?} vs {:?}",
-                prev_field_pic.frame_num,
-                hdr.frame_num
-            ));
+                    return Err(FindFirstFieldError::FrameNumDiffers(
+                        prev_field_pic.frame_num,
+                        hdr.frame_num as u32,
+                    ));
                 } else {
                     let cur_field = if hdr.bottom_field_flag {
                         Field::Bottom
@@ -556,10 +565,9 @@ where
 
                     if cur_field == prev_field_pic.field {
                         let field = prev_field_pic.field;
-                        return Err(anyhow!(
-                            "Expecting complementary field {:?}, got {:?}",
+                        return Err(FindFirstFieldError::ExpectedComplementaryField(
                             field.opposite(),
-                            field
+                            field,
                         ));
                     }
                 }
@@ -1092,23 +1100,7 @@ where
         timestamp: u64,
         slice: &Slice,
     ) -> Result<CurrentPicState<B::Picture>, DecodeError> {
-        // Start by securing the backend picture before modifying our state.
-        let first_field = self.codec.find_first_field(&slice.header)?;
-        let mut backend_pic = if let Some(first_field) = &first_field {
-            self.backend.new_field_picture(timestamp, &first_field.1)
-        } else {
-            self.backend.new_picture(timestamp)
-        }?;
-
-        let nalu_hdr = &slice.nalu.header;
-
-        if nalu_hdr.idr_pic_flag {
-            self.codec.prev_ref_pic_info.frame_num = 0;
-        }
-
         let hdr = &slice.header;
-        let frame_num = u32::from(hdr.frame_num);
-
         let pps = Rc::clone(
             self.codec
                 .parser
@@ -1121,6 +1113,25 @@ where
         if let DecodingState::AwaitingFormat(_) = &self.decoding_state {
             return Err(DecodeError::CheckEvents);
         }
+
+        // Start by securing the backend picture before modifying our state.
+        let first_field = self
+            .codec
+            .find_first_field(&slice.header)
+            .context("while looking for first field")?;
+        let mut backend_pic = if let Some(first_field) = &first_field {
+            self.backend.new_field_picture(timestamp, &first_field.1)
+        } else {
+            self.backend.new_picture(timestamp)
+        }?;
+
+        let nalu_hdr = &slice.nalu.header;
+
+        if nalu_hdr.idr_pic_flag {
+            self.codec.prev_ref_pic_info.frame_num = 0;
+        }
+
+        let frame_num = u32::from(hdr.frame_num);
 
         let current_macroblock = match pps.sps.separate_colour_plane_flag {
             true => CurrentMacroblockTracking::SeparateColorPlane(Default::default()),
