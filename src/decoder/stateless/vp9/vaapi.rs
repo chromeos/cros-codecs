@@ -253,17 +253,17 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
         timestamp: u64,
         segmentation: &[Segmentation; MAX_SEGMENTS],
     ) -> StatelessBackendResult<Self::Handle> {
+        let highest_pool = self.highest_pool();
+        let surface = highest_pool
+            .get_surface()
+            .ok_or(StatelessBackendError::OutOfResources)?;
+
         let reference_frames: [u32; NUM_REF_FRAMES] = reference_frames
             .iter()
             .map(va_surface_id)
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-
-        let highest_pool = self.highest_pool();
-        let surface = highest_pool
-            .get_surface()
-            .ok_or(StatelessBackendError::OutOfResources)?;
 
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
