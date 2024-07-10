@@ -594,11 +594,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         self.new_sequence(sps, PoolCreationMode::Highest)
     }
 
-    fn new_picture(
-        &mut self,
-        _: &PictureData,
-        timestamp: u64,
-    ) -> StatelessBackendResult<Self::Picture> {
+    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture> {
         let highest_pool = self.highest_pool();
         let surface = highest_pool
             .get_surface()

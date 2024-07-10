@@ -113,11 +113,7 @@ pub trait StatelessH265DecoderBackend:
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a frame or field was found.
-    fn new_picture(
-        &mut self,
-        picture: &PictureData,
-        timestamp: u64,
-    ) -> StatelessBackendResult<Self::Picture>;
+    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture>;
 
     /// Called by the decoder for every frame or field found.
     #[allow(clippy::too_many_arguments)]
@@ -994,7 +990,7 @@ where
         self.decode_rps(slice, &pic)?;
         self.update_dpb_before_decoding(&pic)?;
 
-        let mut backend_pic = self.backend.new_picture(&pic, timestamp)?;
+        let mut backend_pic = self.backend.new_picture(timestamp)?;
 
         self.backend.begin_picture(
             &mut backend_pic,
