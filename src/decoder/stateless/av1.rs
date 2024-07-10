@@ -7,7 +7,6 @@ use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 
 use anyhow::anyhow;
-use anyhow::Context;
 
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::FrameObu;
@@ -16,10 +15,8 @@ use crate::codec::av1::parser::ObuType;
 use crate::codec::av1::parser::ParsedObu;
 use crate::codec::av1::parser::Parser;
 use crate::codec::av1::parser::SequenceHeaderObu;
-use crate::codec::av1::parser::NUM_REF_FRAMES;
-use crate::Resolution;
-
 use crate::codec::av1::parser::TileGroupObu;
+use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::StatelessBackendResult;
@@ -33,6 +30,7 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::FramePool;
 use crate::decoder::PoolLayer;
+use crate::Resolution;
 
 #[cfg(test)]
 mod dummy;
@@ -157,29 +155,6 @@ where
     B: StatelessAV1DecoderBackend,
     B::Handle: Clone,
 {
-    fn count_frames(&mut self, bitstream: &[u8]) -> usize {
-        let mut nframes = 0;
-        let mut consumed = 0;
-
-        while let Ok(obu) = self.codec.parser.parse_obu(&bitstream[consumed..]) {
-            let obu = match obu {
-                ParsedObu::Process(obu) => obu,
-                ParsedObu::Drop(length) => {
-                    consumed += usize::try_from(length).unwrap();
-                    continue;
-                }
-            };
-
-            if matches!(obu.header.obu_type, ObuType::Frame | ObuType::FrameHeader) {
-                nframes += 1;
-            }
-
-            consumed += obu.data.len();
-        }
-
-        nframes
-    }
-
     fn decode_frame_header(
         &mut self,
         frame_header: FrameHeaderObu,
@@ -327,10 +302,19 @@ where
     type Handle = B::Handle;
     type FramePool = B::FramePool;
 
+    /// Decode an AV1 stream.
+    ///
+    /// `bitstream` should initially be submitted as a whole temporal unit, however a call to this
+    /// method will only consume a single OBU. The caller must be careful to check the return value
+    /// and resubmit the remainder if the whole bitstream has not been consumed.
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, super::DecodeError> {
-        let mut consumed = 0;
+        let obu = match self.codec.parser.parse_obu(bitstream)? {
+            ParsedObu::Process(obu) => obu,
+            // This OBU should be dropped.
+            ParsedObu::Drop(length) => return Ok(length as usize),
+        };
+        let obu_length = obu.data.len();
 
-        let nframes = self.count_frames(bitstream);
         /* we do not know the resolution at this point, as we haven't parsed the
          * frames yet. Be conservative and check whether we have enough frames
          * across all layers */
@@ -340,160 +324,137 @@ where
             .iter()
             .map(|x| x.num_free_frames())
             .min()
-            .ok_or(anyhow!("No pool found"))?;
+            .ok_or(anyhow!("no pool found"))?;
 
-        if matches!(self.decoding_state, DecodingState::Decoding) && num_free_frames < nframes {
-            return Err(DecodeError::NotEnoughOutputBuffers(
-                nframes - num_free_frames,
-            ));
+        if matches!(self.decoding_state, DecodingState::Decoding) && num_free_frames < 1 {
+            return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
-        while let Ok(obu) = self.codec.parser.parse_obu(&bitstream[consumed..]) {
-            let obu = match obu {
-                ParsedObu::Process(obu) => obu,
-                // This OBU should be dropped.
-                ParsedObu::Drop(length) => {
-                    consumed += usize::try_from(length).context("OBU length too large")?;
-                    continue;
+        let is_decode_op = matches!(
+            obu.header.obu_type,
+            ObuType::Frame | ObuType::FrameHeader | ObuType::TileGroup
+        );
+
+        if is_decode_op {
+            match self.decoding_state {
+                /* we want to be here */
+                DecodingState::Decoding => (),
+
+                /* otherwise... */
+                DecodingState::AwaitingStreamInfo => {
+                    /* Skip input until we get information from the stream. */
+                    return Ok(obu_length);
                 }
-            };
+                /* Ask the client to confirm the format before we can process this. */
+                DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
+                DecodingState::Reset => {
+                    let mut parser = self.codec.parser.clone();
 
-            let obu_length = obu.data.len();
-
-            let is_decode_op = matches!(
-                obu.header.obu_type,
-                ObuType::Frame | ObuType::FrameHeader | ObuType::TileGroup
-            );
-
-            if is_decode_op {
-                match self.decoding_state {
-                    /* we want to be here */
-                    DecodingState::Decoding => (),
-
-                    /* otherwise... */
-                    DecodingState::AwaitingStreamInfo => {
-                        /* Skip input until we get information from the stream. */
-                        consumed += obu_length;
-                        continue;
-                    }
-                    /* Ask the client to confirm the format before we can process this. */
-                    DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
-                    DecodingState::Reset => {
-                        let mut parser = self.codec.parser.clone();
-
-                        let is_key_frame = match obu.header.obu_type {
-                            ObuType::Frame => {
-                                let frame = parser.parse_frame_obu(obu.clone())?;
-                                frame.header.frame_type == FrameType::KeyFrame
-                            }
-                            ObuType::FrameHeader => {
-                                let fh = parser.parse_frame_header_obu(&obu)?;
-                                fh.frame_type == FrameType::KeyFrame
-                            }
-                            _ => false,
-                        };
-
-                        /* we can only resume from key frames */
-                        if !is_key_frame {
-                            consumed += obu_length;
-                            continue;
-                        } else {
-                            self.decoding_state = DecodingState::Decoding;
+                    let is_key_frame = match obu.header.obu_type {
+                        ObuType::Frame => {
+                            let frame = parser.parse_frame_obu(obu.clone())?;
+                            frame.header.frame_type == FrameType::KeyFrame
                         }
+                        ObuType::FrameHeader => {
+                            let fh = parser.parse_frame_header_obu(&obu)?;
+                            fh.frame_type == FrameType::KeyFrame
+                        }
+                        _ => false,
+                    };
+
+                    /* we can only resume from key frames */
+                    if !is_key_frame {
+                        return Ok(obu_length);
+                    } else {
+                        self.decoding_state = DecodingState::Decoding;
                     }
                 }
             }
+        }
 
-            match obu.header.obu_type {
-                ObuType::SequenceHeader => {
-                    let sequence = self.codec.parser.parse_sequence_header_obu(&obu)?;
-                    let sequence_differs = match &self.codec.sequence {
-                        Some(old_sequence) => **old_sequence != *sequence,
-                        None => true,
-                    };
+        match obu.header.obu_type {
+            ObuType::SequenceHeader => {
+                let sequence = self.codec.parser.parse_sequence_header_obu(&obu)?;
+                let sequence_differs = match &self.codec.sequence {
+                    Some(old_sequence) => **old_sequence != *sequence,
+                    None => true,
+                };
 
-                    if matches!(self.decoding_state, DecodingState::AwaitingStreamInfo)
-                        || sequence_differs
-                    {
-                        if self.codec.current_pic.is_some() {
-                            return Err(DecodeError::DecoderError(anyhow!(
-                                "Broken stream: a picture is being decoded while a new sequence header is encountered"
-                            )));
-                        }
-
-                        /* make sure we sync *before* we clear any state in the backend */
-                        for f in &mut self.ready_queue.queue {
-                            /* TODO: this fixes av1-1-b8-03-sizeup on Intel
-                             * gen12, but we apparently do not do the same in
-                             * VP9. How is it that we do not get similar crashes there?
-                             *
-                             * TODO: syncing before calling new_sequence() in VP9 may fix some tests
-                             */
-                            f.sync()?;
-                        }
-
-                        log::debug!(
-                            "Found new sequence, resolution: {:?}, profile: {:?}, bit depth: {:?}",
-                            Resolution::from((
-                                sequence.max_frame_width_minus_1 as u32 + 1,
-                                sequence.max_frame_height_minus_1 as u32 + 1
-                            )),
-                            sequence.seq_profile,
-                            sequence.bit_depth
-                        );
-                        /* there is nothing to drain, much like vp8 and vp9 */
-                        self.codec.highest_spatial_layer =
-                            self.codec.parser.highest_operating_point();
-                        self.backend
-                            .new_sequence(&sequence, self.codec.highest_spatial_layer)?;
-                        self.await_format_change(sequence);
-                    }
-                }
-                ObuType::TemporalDelimiter => {
-                    self.codec.parser.parse_temporal_delimiter_obu(&obu)?
-                }
-                ObuType::FrameHeader => {
+                if matches!(self.decoding_state, DecodingState::AwaitingStreamInfo)
+                    || sequence_differs
+                {
                     if self.codec.current_pic.is_some() {
-                        /* submit this frame immediately, as we need to update the
-                         * DPB and the reference info state *before* processing the
-                         * next frame */
-                        self.submit_frame(timestamp)?;
+                        return Err(DecodeError::DecoderError(anyhow!(
+                                "broken stream: a picture is being decoded while a new sequence header is encountered"
+                            )));
                     }
-                    let frame_header = self.codec.parser.parse_frame_header_obu(&obu)?;
-                    self.decode_frame_header(frame_header, timestamp)?;
+
+                    /* make sure we sync *before* we clear any state in the backend */
+                    for f in &mut self.ready_queue.queue {
+                        /* TODO: this fixes av1-1-b8-03-sizeup on Intel
+                         * gen12, but we apparently do not do the same in
+                         * VP9. How is it that we do not get similar crashes there?
+                         *
+                         * TODO: syncing before calling new_sequence() in VP9 may fix some tests
+                         */
+                        f.sync()?;
+                    }
+
+                    log::debug!(
+                        "found new sequence, resolution: {:?}, profile: {:?}, bit depth: {:?}",
+                        Resolution::from((
+                            sequence.max_frame_width_minus_1 as u32 + 1,
+                            sequence.max_frame_height_minus_1 as u32 + 1
+                        )),
+                        sequence.seq_profile,
+                        sequence.bit_depth
+                    );
+                    /* there is nothing to drain, much like vp8 and vp9 */
+                    self.codec.highest_spatial_layer = self.codec.parser.highest_operating_point();
+                    self.backend
+                        .new_sequence(&sequence, self.codec.highest_spatial_layer)?;
+                    self.await_format_change(sequence);
                 }
-                ObuType::TileGroup => {
-                    let tile_group = self.codec.parser.parse_tile_group_obu(obu)?;
-                    self.decode_tile_group(tile_group)?;
-                }
-                ObuType::Frame => {
-                    let frame = self.codec.parser.parse_frame_obu(obu)?;
-                    self.decode_frame(frame, timestamp)?;
+            }
+            ObuType::TemporalDelimiter => self.codec.parser.parse_temporal_delimiter_obu(&obu)?,
+            ObuType::FrameHeader => {
+                if self.codec.current_pic.is_some() {
                     /* submit this frame immediately, as we need to update the
                      * DPB and the reference info state *before* processing the
                      * next frame */
                     self.submit_frame(timestamp)?;
                 }
-                ObuType::TileList => {
-                    return Err(DecodeError::DecoderError(anyhow!(
-                        "Large tile scale mode is not supported"
-                    )));
-                }
-                other => {
-                    log::debug!("Skipping OBU of type {:?}", other);
-                }
+                let frame_header = self.codec.parser.parse_frame_header_obu(&obu)?;
+                self.decode_frame_header(frame_header, timestamp)?;
             }
-
-            consumed += obu_length;
+            ObuType::TileGroup => {
+                let tile_group = self.codec.parser.parse_tile_group_obu(obu)?;
+                self.decode_tile_group(tile_group)?;
+            }
+            ObuType::Frame => {
+                let frame = self.codec.parser.parse_frame_obu(obu)?;
+                self.decode_frame(frame, timestamp)?;
+                /* submit this frame immediately, as we need to update the
+                 * DPB and the reference info state *before* processing the
+                 * next frame */
+                self.submit_frame(timestamp)?;
+            }
+            ObuType::TileList => {
+                return Err(DecodeError::DecoderError(anyhow!(
+                    "large tile scale mode is not supported"
+                )));
+            }
+            other => {
+                log::debug!("skipping OBU of type {:?}", other);
+            }
         }
 
-        /* we may already have dispatched work if we got ObuType::Frame */
-        if self.codec.current_pic.is_some() {
-            /* dispatch work to the backend */
+        /* Submit the last frame if we have reached the end of the temporal unit. */
+        if bitstream.len() == obu_length && self.codec.current_pic.is_some() {
             self.submit_frame(timestamp)?;
         }
 
-        Ok(consumed)
+        Ok(obu_length)
     }
 
     fn flush(&mut self) -> Result<(), super::DecodeError> {
