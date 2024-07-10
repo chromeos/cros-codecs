@@ -924,6 +924,13 @@ where
         timestamp: u64,
         slice: &Slice,
     ) -> Result<Option<CurrentPicState<B::Handle, B::Picture>>, DecodeError> {
+        self.update_current_set_ids(slice.header.pic_parameter_set_id)?;
+        self.renegotiate_if_needed(RenegotiationType::CurrentSps)?;
+        // We renegotiated and must return the NALU and wait.
+        if matches!(self.decoding_state, DecodingState::AwaitingFormat(_)) {
+            return Err(DecodeError::CheckEvents);
+        }
+
         let layer = PoolLayer::Layer(self.coded_resolution);
         if self
             .backend
@@ -934,14 +941,6 @@ where
             == 0
         {
             return Err(DecodeError::NotEnoughOutputBuffers(1));
-        }
-
-        self.update_current_set_ids(slice.header.pic_parameter_set_id)?;
-        self.renegotiate_if_needed(RenegotiationType::CurrentSps)?;
-
-        // We renegotiated and must return the NALU and wait.
-        if matches!(self.decoding_state, DecodingState::AwaitingFormat(_)) {
-            return Err(DecodeError::CheckEvents);
         }
 
         let pic = PictureData::new_from_slice(
