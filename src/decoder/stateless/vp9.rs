@@ -272,13 +272,15 @@ where
             }
         }
 
-        for frame in frames {
-            match &mut self.decoding_state {
-                // Skip input until we get information from the stream.
-                DecodingState::AwaitingStreamInfo | DecodingState::Reset => (),
-                // Ask the client to confirm the format before we can process this.
-                DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
-                DecodingState::Decoding => self.handle_frame(&frame, timestamp)?,
+        match &mut self.decoding_state {
+            // Skip input until we get information from the stream.
+            DecodingState::AwaitingStreamInfo | DecodingState::Reset => (),
+            // Ask the client to confirm the format before we can process this.
+            DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
+            DecodingState::Decoding => {
+                for frame in frames {
+                    self.handle_frame(&frame, timestamp)?;
+                }
             }
         }
 
