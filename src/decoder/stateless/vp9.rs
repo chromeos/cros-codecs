@@ -153,55 +153,54 @@ where
         Ok(())
     }
 
-    /// Handle a single frame.
+    /// Handle a frame which `show_existing_frame` flag is `true`.
+    fn handle_show_existing_frame(&mut self, frame_to_show_map_idx: u8) -> Result<(), DecodeError> {
+        // Frame to be shown. Because the spec mandates that frame_to_show_map_idx references a
+        // valid entry in the DPB, an non-existing index means that the stream is invalid.
+        let idx = usize::from(frame_to_show_map_idx);
+        let ref_frame = self
+            .codec
+            .reference_frames
+            .get(idx)
+            .ok_or_else(|| anyhow::anyhow!("invalid reference frame index in header"))?
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("empty reference frame referenced in frame header"))?;
+
+        // We are done, no further processing needed.
+        let decoded_handle = ref_frame.clone();
+
+        self.ready_queue.push(decoded_handle);
+
+        Ok(())
+    }
+
+    /// Decode a single frame.
     fn handle_frame(&mut self, frame: &Frame, timestamp: u64) -> Result<(), DecodeError> {
-        let decoded_handle = if frame.header.show_existing_frame {
-            // Frame to be shown. Because the spec mandates that frame_to_show_map_idx references a
-            // valid entry in the DPB, an non-existing index means that the stream is invalid.
-            let idx = usize::from(frame.header.frame_to_show_map_idx);
-            let ref_frame = self
-                .codec
-                .reference_frames
-                .get(idx)
-                .ok_or_else(|| anyhow::anyhow!("invalid reference frame index in header"))?
-                .as_ref()
-                .ok_or_else(|| {
-                    anyhow::anyhow!("empty reference frame referenced in frame header")
-                })?;
+        let refresh_frame_flags = frame.header.refresh_frame_flags;
 
-            // We are done, no further processing needed.
-            ref_frame.clone()
-        } else {
-            // Otherwise, we must actually arrange to decode a frame
-            let refresh_frame_flags = frame.header.refresh_frame_flags;
+        Segmentation::update_segmentation(&mut self.codec.segmentation, &frame.header);
+        let picture = self.backend.new_picture(timestamp)?;
 
-            Segmentation::update_segmentation(&mut self.codec.segmentation, &frame.header);
-            let picture = self.backend.new_picture(timestamp)?;
+        let decoded_handle = self.backend.submit_picture(
+            picture,
+            &frame.header,
+            &self.codec.reference_frames,
+            frame.as_ref(),
+            &self.codec.segmentation,
+        )?;
 
-            let decoded_handle = self.backend.submit_picture(
-                picture,
-                &frame.header,
-                &self.codec.reference_frames,
-                frame.as_ref(),
-                &self.codec.segmentation,
-            )?;
+        if self.blocking_mode == BlockingMode::Blocking {
+            decoded_handle.sync()?;
+        }
 
-            if self.blocking_mode == BlockingMode::Blocking {
-                decoded_handle.sync()?;
-            }
+        // Do DPB management
+        Self::update_references(
+            &mut self.codec.reference_frames,
+            &decoded_handle,
+            refresh_frame_flags,
+        )?;
 
-            // Do DPB management
-            Self::update_references(
-                &mut self.codec.reference_frames,
-                &decoded_handle,
-                refresh_frame_flags,
-            )?;
-
-            decoded_handle
-        };
-
-        let show_existing_frame = frame.header.show_existing_frame;
-        if frame.header.show_frame || show_existing_frame {
+        if frame.header.show_frame {
             self.ready_queue.push(decoded_handle);
         }
 
@@ -285,7 +284,11 @@ where
                 }
 
                 for frame in frames {
-                    self.handle_frame(&frame, timestamp)?;
+                    if frame.header.show_existing_frame {
+                        self.handle_show_existing_frame(frame.header.frame_to_show_map_idx)?;
+                    } else {
+                        self.handle_frame(&frame, timestamp)?;
+                    }
                 }
             }
         }
