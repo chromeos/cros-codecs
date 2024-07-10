@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use crate::codec::h265::parser::NaluType;
-use crate::codec::h265::parser::Pps;
 use crate::codec::h265::parser::Slice;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
@@ -48,7 +47,6 @@ impl PictureData {
     /// correctly initialize the POC values.
     pub fn new_from_slice(
         slice: &Slice,
-        pps: &Pps,
         first_picture_in_bitstream: bool,
         first_picture_after_eos: bool,
         prev_tid0_pic: Option<&PictureData>,
@@ -111,7 +109,7 @@ impl PictureData {
         //
         // Use this flag to correctly set up the field in the decoder during
         // `finish_picture`.
-        let valid_for_prev_tid0_pic = pps.temporal_id == 0
+        let valid_for_prev_tid0_pic = slice.nalu.header.nuh_temporal_id() == 0
             && !nalu_type.is_radl()
             && !nalu_type.is_rasl()
             && !nalu_type.is_slnr();

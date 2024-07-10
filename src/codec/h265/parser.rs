@@ -181,6 +181,12 @@ pub struct NaluHeader {
     pub nuh_temporal_id_plus1: u8,
 }
 
+impl NaluHeader {
+    pub fn nuh_temporal_id(&self) -> u8 {
+        self.nuh_temporal_id_plus1.saturating_sub(1)
+    }
+}
+
 impl Header for NaluHeader {
     fn parse<T: AsRef<[u8]>>(cursor: &std::io::Cursor<T>) -> anyhow::Result<Self> {
         let data = &cursor.chunk()[0..2];
@@ -1218,9 +1224,6 @@ pub struct Pps {
     // Internal variables.
     /// Equivalent to QpBdOffsetY in the specification.
     pub qp_bd_offset_y: u32,
-
-    /// The nuh_temporal_id_plus1 - 1 of the associated NALU.
-    pub temporal_id: u8,
 }
 
 impl Default for Pps {
@@ -1271,7 +1274,6 @@ impl Default for Pps {
             qp_bd_offset_y: Default::default(),
             scc_extension: Default::default(),
             scc_extension_flag: Default::default(),
-            temporal_id: Default::default(),
         }
     }
 }
@@ -3475,8 +3477,6 @@ impl Parser {
 
             r.skip_bits(4)?; // pps_extension_4bits
         }
-
-        pps.temporal_id = nalu.header.nuh_temporal_id_plus1 - 1;
 
         log::debug!(
             "Parsed PPS({}), NAL size was {}",

@@ -935,10 +935,6 @@ where
 
         let pic = PictureData::new_from_slice(
             slice,
-            self.codec
-                .parser
-                .get_pps(slice.header.pic_parameter_set_id)
-                .context("Invalid PPS")?,
             self.codec.first_picture_in_bitstream,
             self.codec.first_picture_after_eos,
             self.codec.prev_tid_0_pic.as_ref(),
