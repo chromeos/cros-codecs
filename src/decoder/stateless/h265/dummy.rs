@@ -27,7 +27,6 @@ impl StatelessH265DecoderBackend for Backend {
 
     fn new_picture(
         &mut self,
-        _: &crate::codec::h265::picture::PictureData,
         _: u64,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
         Ok(())
