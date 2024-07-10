@@ -15,6 +15,7 @@ use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
+use crate::backend::vaapi::decoder::VaapiPicture;
 use crate::codec::vp9::parser::BitDepth;
 use crate::codec::vp9::parser::Header;
 use crate::codec::vp9::parser::Profile;
@@ -237,7 +238,7 @@ fn build_slice_param(
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp9> for VaapiBackend<M> {
-    type Picture = ();
+    type Picture = VaapiPicture<M>;
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiBackend<M> {
@@ -245,18 +246,27 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
         self.new_sequence(header, PoolCreationMode::Highest)
     }
 
-    fn submit_picture(
-        &mut self,
-        picture: &Header,
-        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
-        bitstream: &[u8],
-        timestamp: u64,
-        segmentation: &[Segmentation; MAX_SEGMENTS],
-    ) -> StatelessBackendResult<Self::Handle> {
+    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture> {
         let highest_pool = self.highest_pool();
         let surface = highest_pool
             .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
+        let metadata = self.metadata_state.get_parsed()?;
+        let context = &metadata.context;
+
+        Ok(VaPicture::new(timestamp, Rc::clone(context), surface))
+    }
+
+    fn submit_picture(
+        &mut self,
+        mut picture: Self::Picture,
+        hdr: &Header,
+        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
+        bitstream: &[u8],
+        segmentation: &[Segmentation; MAX_SEGMENTS],
+    ) -> StatelessBackendResult<Self::Handle> {
+        let metadata = self.metadata_state.get_parsed()?;
+        let context = &metadata.context;
 
         let reference_frames: [u32; NUM_REF_FRAMES] = reference_frames
             .iter()
@@ -265,11 +275,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
             .try_into()
             .unwrap();
 
-        let metadata = self.metadata_state.get_parsed()?;
-        let context = &metadata.context;
-
         let pic_param = context
-            .create_buffer(build_pic_param(picture, reference_frames)?)
+            .create_buffer(build_pic_param(hdr, reference_frames)?)
             .context("while creating pic params buffer")?;
 
         let slice_param = context
@@ -280,14 +287,12 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
             .create_buffer(libva::BufferType::SliceData(Vec::from(bitstream)))
             .context("while creating slice data buffer")?;
 
-        let mut va_picture = VaPicture::new(timestamp, Rc::clone(context), surface);
-
         // Add buffers with the parsed data.
-        va_picture.add_buffer(pic_param);
-        va_picture.add_buffer(slice_param);
-        va_picture.add_buffer(slice_data);
+        picture.add_buffer(pic_param);
+        picture.add_buffer(slice_param);
+        picture.add_buffer(slice_data);
 
-        self.process_picture::<Vp9>(va_picture)
+        self.process_picture::<Vp9>(picture)
     }
 }
 

@@ -46,6 +46,9 @@ pub trait StatelessVp9DecoderBackend:
     /// Called when new stream parameters are found.
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
+    /// Allocate all resources required to process a new picture.
+    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture>;
+
     /// Called when the decoder wants the backend to finish the decoding
     /// operations for `picture`.
     ///
@@ -53,10 +56,10 @@ pub trait StatelessVp9DecoderBackend:
     /// and then assign the ownership of the Picture to the Handle.
     fn submit_picture(
         &mut self,
-        picture: &Header,
+        picture: Self::Picture,
+        hdr: &Header,
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
         bitstream: &[u8],
-        timestamp: u64,
         segmentation: &[Segmentation; MAX_SEGMENTS],
     ) -> StatelessBackendResult<Self::Handle>;
 }
@@ -173,11 +176,13 @@ where
             let refresh_frame_flags = frame.header.refresh_frame_flags;
 
             Segmentation::update_segmentation(&mut self.codec.segmentation, &frame.header);
+            let picture = self.backend.new_picture(timestamp)?;
+
             let decoded_handle = self.backend.submit_picture(
+                picture,
                 &frame.header,
                 &self.codec.reference_frames,
                 frame.as_ref(),
-                timestamp,
                 &self.codec.segmentation,
             )?;
 
