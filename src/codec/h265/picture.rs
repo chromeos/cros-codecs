@@ -53,7 +53,6 @@ impl PictureData {
         first_picture_after_eos: bool,
         prev_tid0_pic: Option<&PictureData>,
         max_pic_order_cnt_lsb: i32,
-        _timestamp: u64,
     ) -> Self {
         let hdr = &slice.header;
         let nalu_type = slice.nalu.header.type_;
