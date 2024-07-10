@@ -51,15 +51,23 @@ pub trait StatelessAV1DecoderBackend:
         highest_spatial_layer: Option<u32>,
     ) -> StatelessBackendResult<()>;
 
-    /// Called when the decoder determines that a new picture was found.
+    /// Called when the decoder determines that a new picture was found. The backend allocates all
+    /// the resources it needs to process that picture.
     fn new_picture(
         &mut self,
-        sequence: &SequenceHeaderObu,
-        picture: &FrameHeaderObu,
+        hdr: &FrameHeaderObu,
         timestamp: u64,
-        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
         highest_spatial_layer: Option<u32>,
     ) -> StatelessBackendResult<Self::Picture>;
+
+    /// Called to set the global parameters of a picture.
+    fn begin_picture(
+        &mut self,
+        picture: &mut Self::Picture,
+        sequence: &SequenceHeaderObu,
+        hdr: &FrameHeaderObu,
+        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
+    ) -> StatelessBackendResult<()>;
 
     /// Called to dispatch a decode operation to the backend.
     #[allow(clippy::too_many_arguments)]
@@ -176,12 +184,17 @@ where
                 handle: ref_frame.clone(),
             });
         } else if let Some(sequence) = &self.codec.sequence {
-            let backend_picture = self.backend.new_picture(
-                sequence,
+            let mut backend_picture = self.backend.new_picture(
                 &frame_header,
                 timestamp,
-                &self.codec.reference_frames,
                 self.codec.highest_spatial_layer,
+            )?;
+
+            self.backend.begin_picture(
+                &mut backend_picture,
+                sequence,
+                &frame_header,
+                &self.codec.reference_frames,
             )?;
 
             self.codec.current_pic = Some(CurrentPicState::RegularFrame {
