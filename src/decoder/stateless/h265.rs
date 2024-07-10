@@ -887,7 +887,10 @@ where
 
     // See C.5.2.2
     fn update_dpb_before_decoding(&mut self, cur_pic: &PictureData) -> anyhow::Result<()> {
-        if cur_pic.is_irap && cur_pic.no_rasl_output_flag && !self.codec.first_picture_after_eos {
+        if cur_pic.nalu_type.is_irap()
+            && cur_pic.no_rasl_output_flag
+            && !self.codec.first_picture_after_eos
+        {
             if cur_pic.no_output_of_prior_pics_flag {
                 self.codec.dpb.clear();
             } else {
@@ -944,7 +947,7 @@ where
         self.codec.first_picture_after_eos = false;
         self.codec.first_picture_in_bitstream = false;
 
-        if pic.is_irap {
+        if pic.nalu_type.is_irap() {
             self.codec.irap_no_rasl_output_flag = pic.no_rasl_output_flag;
         } else if pic.nalu_type.is_rasl() && self.codec.irap_no_rasl_output_flag {
             // NOTE – All RASL pictures are leading pictures of an associated
