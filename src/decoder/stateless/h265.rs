@@ -936,14 +936,7 @@ where
             return Err(DecodeError::NotEnoughOutputBuffers(1));
         }
 
-        let pps = self
-            .codec
-            .parser
-            .get_pps(slice.header.pic_parameter_set_id)
-            .context("Invalid PPS in handle_picture")?;
-
-        let pps_id = pps.pic_parameter_set_id;
-        self.update_current_set_ids(pps_id)?;
+        self.update_current_set_ids(slice.header.pic_parameter_set_id)?;
         self.renegotiate_if_needed(RenegotiationType::CurrentSps)?;
 
         // We renegotiated and must return the NALU and wait.
