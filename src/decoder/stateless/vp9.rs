@@ -227,20 +227,6 @@ where
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let frames = self.codec.parser.parse_chunk(bitstream)?;
 
-        let num_free_frames = self
-            .backend
-            .frame_pool(PoolLayer::Highest)
-            .pop()
-            .ok_or(DecodeError::DecoderError(anyhow!("No pool found")))?
-            .num_free_frames();
-
-        if matches!(self.decoding_state, DecodingState::Decoding) && num_free_frames < frames.len()
-        {
-            return Err(DecodeError::NotEnoughOutputBuffers(
-                frames.len() - num_free_frames,
-            ));
-        }
-
         // With SVC, the first frame will usually be a key-frame, with
         // inter-frames carrying the other layers.
         //
@@ -278,6 +264,21 @@ where
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
             DecodingState::Decoding => {
+                let num_free_frames = self
+                    .backend
+                    .frame_pool(PoolLayer::Highest)
+                    .pop()
+                    .ok_or(DecodeError::DecoderError(anyhow!("No pool found")))?
+                    .num_free_frames();
+
+                if matches!(self.decoding_state, DecodingState::Decoding)
+                    && num_free_frames < frames.len()
+                {
+                    return Err(DecodeError::NotEnoughOutputBuffers(
+                        frames.len() - num_free_frames,
+                    ));
+                }
+
                 for frame in frames {
                     self.handle_frame(&frame, timestamp)?;
                 }
