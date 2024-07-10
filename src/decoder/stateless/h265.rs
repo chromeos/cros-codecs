@@ -961,7 +961,6 @@ where
             self.codec.first_picture_after_eos,
             self.codec.prev_tid_0_pic.as_ref(),
             self.codec.max_pic_order_cnt_lsb,
-            timestamp,
         );
 
         self.codec.first_picture_after_eos = false;
