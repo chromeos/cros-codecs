@@ -532,29 +532,24 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
         highest_spatial_layer: Option<u32>,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
-        let surface = match highest_spatial_layer {
+        let pool = match highest_spatial_layer {
             Some(_) => {
                 let layer = Resolution {
                     width: hdr.upscaled_width,
                     height: hdr.frame_height,
                 };
 
-                let pool = self
-                    .pool(layer)
+                self.pool(layer)
                     .ok_or(StatelessBackendError::Other(anyhow!(
                         "No pool available for this layer"
-                    )))?;
-
-                pool.get_surface()
-                    .ok_or(StatelessBackendError::OutOfResources)?
+                    )))?
             }
-            None => {
-                let highest_pool = self.highest_pool();
-                highest_pool
-                    .get_surface()
-                    .ok_or(StatelessBackendError::OutOfResources)?
-            }
+            None => self.highest_pool(),
         };
+
+        let surface = pool
+            .get_surface()
+            .ok_or(StatelessBackendError::OutOfResources)?;
 
         let metadata = self.metadata_state.get_parsed()?;
         let mut picture = VaPicture::new(timestamp, Rc::clone(&metadata.context), surface);
