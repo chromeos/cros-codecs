@@ -31,6 +31,7 @@ use crate::decoder::stateless::av1::Av1;
 use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendError;
+use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
@@ -507,7 +508,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
         &mut self,
         sequence: &Rc<SequenceHeaderObu>,
         highest_spatial_layer: Option<u32>,
-    ) -> crate::decoder::stateless::StatelessBackendResult<()> {
+    ) -> StatelessBackendResult<()> {
         let pool_creation_mode = match highest_spatial_layer {
             Some(highest_layer) => {
                 /* The spec mandates a 2:1 or 1.5:1 ratio, let's go with 2:1 to
@@ -526,12 +527,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
 
     fn new_picture(
         &mut self,
-        sequence: &SequenceHeaderObu,
         hdr: &FrameHeaderObu,
         timestamp: u64,
-        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
         highest_spatial_layer: Option<u32>,
-    ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
+    ) -> StatelessBackendResult<Self::Picture> {
         let pool = match highest_spatial_layer {
             Some(_) => {
                 let layer = Resolution {
@@ -552,11 +551,23 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
             .ok_or(StatelessBackendError::OutOfResources)?;
 
         let metadata = self.metadata_state.get_parsed()?;
-        let mut picture = VaPicture::new(timestamp, Rc::clone(&metadata.context), surface);
+        Ok(VaPicture::new(
+            timestamp,
+            Rc::clone(&metadata.context),
+            surface,
+        ))
+    }
 
-        let surface_id = picture.surface().id();
+    fn begin_picture(
+        &mut self,
+        picture: &mut Self::Picture,
+        sequence: &SequenceHeaderObu,
+        hdr: &FrameHeaderObu,
+        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
+    ) -> StatelessBackendResult<()> {
+        let metadata = self.metadata_state.get_parsed()?;
 
-        let pic_param = build_pic_param(hdr, sequence, surface_id, reference_frames)
+        let pic_param = build_pic_param(hdr, sequence, picture.surface().id(), reference_frames)
             .context("Failed to build picture parameter")?;
         let pic_param = metadata
             .context
@@ -564,7 +575,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
             .context("Failed to create picture parameter buffer")?;
         picture.add_buffer(pic_param);
 
-        Ok(picture)
+        Ok(())
     }
 
     fn decode_tile_group(
@@ -593,10 +604,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
         Ok(())
     }
 
-    fn submit_picture(
-        &mut self,
-        picture: Self::Picture,
-    ) -> crate::decoder::stateless::StatelessBackendResult<Self::Handle> {
+    fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle> {
         self.process_picture::<Av1>(picture)
     }
 }

@@ -28,12 +28,20 @@ impl StatelessAV1DecoderBackend for Backend {
 
     fn new_picture(
         &mut self,
-        _: &crate::codec::av1::parser::SequenceHeaderObu,
         _: &crate::codec::av1::parser::FrameHeaderObu,
         _: u64,
-        _: &[Option<Self::Handle>; crate::codec::av1::parser::NUM_REF_FRAMES],
         _: Option<u32>,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
+        Ok(())
+    }
+
+    fn begin_picture(
+        &mut self,
+        _: &mut Self::Picture,
+        _: &crate::codec::av1::parser::SequenceHeaderObu,
+        _: &crate::codec::av1::parser::FrameHeaderObu,
+        _: &[Option<Self::Handle>; crate::codec::av1::parser::NUM_REF_FRAMES],
+    ) -> crate::decoder::stateless::StatelessBackendResult<()> {
         Ok(())
     }
 
