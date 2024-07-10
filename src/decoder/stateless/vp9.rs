@@ -10,7 +10,6 @@ mod vaapi;
 use std::os::fd::AsFd;
 use std::os::fd::BorrowedFd;
 
-use anyhow::anyhow;
 use log::debug;
 
 use crate::codec::vp9::parser::BitDepth;
@@ -33,10 +32,10 @@ use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
 
+use super::StatelessBackendError;
 use super::StatelessDecoderBackendPicture;
 
 /// Stateless backend methods specific to VP9.
@@ -175,11 +174,10 @@ where
     }
 
     /// Decode a single frame.
-    fn handle_frame(&mut self, frame: &Frame, timestamp: u64) -> Result<(), DecodeError> {
+    fn handle_frame(&mut self, frame: &Frame, picture: B::Picture) -> Result<(), DecodeError> {
         let refresh_frame_flags = frame.header.refresh_frame_flags;
 
         Segmentation::update_segmentation(&mut self.codec.segmentation, &frame.header);
-        let picture = self.backend.new_picture(timestamp)?;
 
         let decoded_handle = self.backend.submit_picture(
             picture,
@@ -268,31 +266,40 @@ where
             // Ask the client to confirm the format before we can process this.
             DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
             DecodingState::Decoding => {
-                let num_free_frames = self
-                    .backend
-                    .frame_pool(PoolLayer::Highest)
-                    .pop()
-                    .ok_or(DecodeError::DecoderError(anyhow!("No pool found")))?
-                    .num_free_frames();
-
-                let num_required_frames = frames
+                // First allocate all the pictures we need for this superframe.
+                let num_required_pictures = frames
                     .iter()
                     .filter(|f| !f.header.show_existing_frame)
                     .count();
+                let frames_with_pictures = frames
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, frame)| {
+                        if frame.header.show_existing_frame {
+                            Ok((frame, None))
+                        } else {
+                            self.backend
+                                .new_picture(timestamp)
+                                .map_err(|e| match e {
+                                    StatelessBackendError::OutOfResources => {
+                                        DecodeError::NotEnoughOutputBuffers(
+                                            num_required_pictures - i,
+                                        )
+                                    }
+                                    e => DecodeError::BackendError(e),
+                                })
+                                .map(|picture| (frame, Some(picture)))
+                        }
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                if matches!(self.decoding_state, DecodingState::Decoding)
-                    && num_free_frames < num_required_frames
-                {
-                    return Err(DecodeError::NotEnoughOutputBuffers(
-                        num_required_frames - num_free_frames,
-                    ));
-                }
-
-                for frame in frames {
-                    if frame.header.show_existing_frame {
-                        self.handle_show_existing_frame(frame.header.frame_to_show_map_idx)?;
-                    } else {
-                        self.handle_frame(&frame, timestamp)?;
+                // Then process each frame.
+                for (frame, picture) in frames_with_pictures {
+                    match picture {
+                        None => {
+                            self.handle_show_existing_frame(frame.header.frame_to_show_map_idx)?
+                        }
+                        Some(picture) => self.handle_frame(&frame, picture)?,
                     }
                 }
             }
