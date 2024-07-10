@@ -26,12 +26,16 @@ impl StatelessVp9DecoderBackend for Backend {
         Ok(())
     }
 
+    fn new_picture(&mut self, _: u64) -> StatelessBackendResult<Self::Picture> {
+        Ok(())
+    }
+
     fn submit_picture(
         &mut self,
+        _: Self::Picture,
         _: &Header,
         _: &[Option<Self::Handle>; NUM_REF_FRAMES],
         _: &[u8],
-        _: u64,
         _: &[Segmentation; MAX_SEGMENTS],
     ) -> StatelessBackendResult<Self::Handle> {
         Ok(Handle {
