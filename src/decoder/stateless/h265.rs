@@ -1009,20 +1009,6 @@ where
         // is not the one currently in use.
         self.update_current_set_ids(slice.header.pic_parameter_set_id)?;
 
-        let sps = self
-            .codec
-            .parser
-            .get_sps(self.codec.cur_sps_id)
-            .context("Invalid SPS")?;
-
-        // Make sure that no negotiation is possible mid-picture. How could it?
-        // We'd lose the context with the previous slices on it.
-        assert!(!Self::negotiation_possible(
-            sps,
-            &self.codec.dpb,
-            &self.codec.negotiation_info,
-        ));
-
         pic.ref_pic_lists = self.build_ref_pic_lists(&slice.header, &pic.pic)?;
 
         let pps = self
@@ -1030,10 +1016,18 @@ where
             .parser
             .get_pps(slice.header.pic_parameter_set_id)
             .context("invalid PPS ID")?;
+        let sps = pps.sps.as_ref();
+
+        // Make sure that no negotiation is possible mid-picture. How could it?
+        // We'd lose the context with the previous slices on it.
+        if Self::negotiation_possible(sps, &self.codec.dpb, &self.codec.negotiation_info) {
+            anyhow::bail!("invalid stream: mid-frame format negotiation requested");
+        }
+
         self.backend.decode_slice(
             &mut pic.backend_pic,
             slice,
-            pps.sps.as_ref(),
+            sps,
             pps,
             &pic.ref_pic_lists.ref_pic_list0,
             &pic.ref_pic_lists.ref_pic_list1,
