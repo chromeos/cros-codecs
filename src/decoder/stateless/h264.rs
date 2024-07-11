@@ -527,22 +527,13 @@ where
                 // Use the last entry in the DPB
                 let last_pic = last_dpb_entry.pic.borrow();
 
+                // If the picture is interlaced but doesn't have its other field set yet, then it must
+                // be the first field.
                 if !matches!(last_pic.field, Field::Frame) && last_pic.other_field().is_none() {
                     if let Some(handle) = &last_dpb_entry.reference {
-                        // Still waiting for the second field
                         prev_field = Some((&last_dpb_entry.pic, handle));
                     }
                 }
-            }
-        }
-
-        if !hdr.field_pic_flag {
-            if let Some(prev_field) = prev_field {
-                let field = prev_field.0.borrow().field;
-                return Err(FindFirstFieldError::ExpectedComplementaryField(
-                    field.opposite(),
-                    field,
-                ));
             }
         }
 
@@ -556,23 +547,23 @@ where
                         prev_field_pic.frame_num,
                         hdr.frame_num as u32,
                     ));
-                } else {
-                    let cur_field = if hdr.bottom_field_flag {
-                        Field::Bottom
-                    } else {
-                        Field::Top
-                    };
-
-                    if cur_field == prev_field_pic.field {
-                        let field = prev_field_pic.field;
-                        return Err(FindFirstFieldError::ExpectedComplementaryField(
-                            field.opposite(),
-                            field,
-                        ));
-                    }
                 }
 
-                drop(prev_field_pic);
+                let cur_field = if hdr.bottom_field_flag {
+                    Field::Bottom
+                } else {
+                    Field::Top
+                };
+
+                if !hdr.field_pic_flag || cur_field == prev_field_pic.field {
+                    let field = prev_field_pic.field;
+
+                    return Err(FindFirstFieldError::ExpectedComplementaryField(
+                        field.opposite(),
+                        field,
+                    ));
+                }
+
                 Ok(Some((prev_field.0.clone(), prev_field.1.clone())))
             }
         }
