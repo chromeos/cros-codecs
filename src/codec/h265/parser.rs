@@ -2226,16 +2226,15 @@ impl Parser {
 
         vps.extension_flag = r.read_bit()?;
 
-        let key = vps.video_parameter_set_id;
-        self.active_vpses.insert(key, vps);
-
-        if self.active_vpses.keys().len() > MAX_VPS_COUNT {
+        if self.active_vpses.keys().len() >= MAX_VPS_COUNT {
             return Err(anyhow!(
                 "Broken data: Number of active VPSs > MAX_VPS_COUNT"
             ));
         }
 
-        Ok(self.get_vps(key).unwrap())
+        let key = vps.video_parameter_set_id;
+        self.active_vpses.remove(&key);
+        Ok(self.active_vpses.entry(key).or_insert(vps))
     }
 
     fn parse_profile_tier_level(
@@ -3171,17 +3170,16 @@ impl Parser {
             nalu.size
         );
 
-        let key = sps.seq_parameter_set_id;
-        let sps = Rc::new(sps);
-        self.active_spses.insert(key, sps);
-
-        if self.active_spses.keys().len() > MAX_SPS_COUNT {
+        if self.active_spses.keys().len() >= MAX_SPS_COUNT {
             return Err(anyhow!(
                 "Broken data: Number of active SPSs > MAX_SPS_COUNT"
             ));
         }
 
-        Ok(self.get_sps(key).unwrap())
+        let key = sps.seq_parameter_set_id;
+        let sps = Rc::new(sps);
+        self.active_spses.remove(&key);
+        Ok(self.active_spses.entry(key).or_insert(sps))
     }
 
     fn parse_pps_scc_extension(pps: &mut Pps, sps: &Sps, r: &mut NaluReader) -> anyhow::Result<()> {
@@ -3481,17 +3479,17 @@ impl Parser {
             nalu.size
         );
 
-        let key = pps.pic_parameter_set_id;
-        let pps = Rc::new(pps);
-        self.active_ppses.insert(key, pps);
-
-        if self.active_ppses.keys().len() > MAX_PPS_COUNT {
+        if self.active_ppses.keys().len() >= MAX_PPS_COUNT {
             return Err(anyhow!(
                 "Broken Data: number of active PPSs > MAX_PPS_COUNT"
             ));
         }
 
-        Ok(self.get_pps(key).unwrap())
+        let key = pps.pic_parameter_set_id;
+
+        let pps = Rc::new(pps);
+        self.active_ppses.remove(&key);
+        Ok(self.active_ppses.entry(key).or_insert(pps))
     }
 
     fn parse_pred_weight_table(
