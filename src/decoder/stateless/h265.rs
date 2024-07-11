@@ -286,8 +286,6 @@ pub struct H265DecoderState<H: DecodedHandle, P> {
 
     /// The current active SPS id.
     cur_sps_id: u8,
-    /// The current active PPS id.
-    cur_pps_id: u8,
 
     /// Used to identify first picture in decoding order or first picture that
     /// follows an EOS NALU.
@@ -326,7 +324,6 @@ where
             rps: Default::default(),
             dpb: Default::default(),
             cur_sps_id: Default::default(),
-            cur_pps_id: Default::default(),
             first_picture_after_eos: true,
             first_picture_in_bitstream: true,
             prev_tid_0_pic: Default::default(),
@@ -947,7 +944,7 @@ where
             slice,
             self.codec
                 .parser
-                .get_pps(self.codec.cur_pps_id)
+                .get_pps(slice.header.pic_parameter_set_id)
                 .context("Invalid PPS")?,
             self.codec.first_picture_in_bitstream,
             self.codec.first_picture_after_eos,
@@ -992,7 +989,7 @@ where
                 .context("Invalid SPS")?,
             self.codec
                 .parser
-                .get_pps(self.codec.cur_pps_id)
+                .get_pps(slice.header.pic_parameter_set_id)
                 .context("Invalid PPS")?,
             &self.codec.dpb,
             &self.codec.rps,
@@ -1009,7 +1006,6 @@ where
     fn update_current_set_ids(&mut self, pps_id: u8) -> anyhow::Result<()> {
         let pps = self.codec.parser.get_pps(pps_id).context("Invalid PPS")?;
 
-        self.codec.cur_pps_id = pps.pic_parameter_set_id;
         self.codec.cur_sps_id = pps.seq_parameter_set_id;
         Ok(())
     }
@@ -1049,7 +1045,7 @@ where
                 .context("Invalid SPS id")?,
             self.codec
                 .parser
-                .get_pps(self.codec.cur_pps_id)
+                .get_pps(slice.header.pic_parameter_set_id)
                 .context("Invalid PPS id")?,
             &pic.ref_pic_lists.ref_pic_list0,
             &pic.ref_pic_lists.ref_pic_list1,
