@@ -19,6 +19,7 @@ use crate::codec::av1::parser::TileGroupObu;
 use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -28,7 +29,6 @@ use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
-use crate::decoder::FramePool;
 use crate::decoder::PoolLayer;
 use crate::Resolution;
 
@@ -167,7 +167,7 @@ where
         &mut self,
         frame_header: FrameHeaderObu,
         timestamp: u64,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), DecodeError> {
         log::debug!(
             "Processing frame {} with timestamp {}",
             self.codec.frame_count,
@@ -184,11 +184,13 @@ where
                 handle: ref_frame.clone(),
             });
         } else if let Some(sequence) = &self.codec.sequence {
-            let mut backend_picture = self.backend.new_picture(
-                &frame_header,
-                timestamp,
-                self.codec.highest_spatial_layer,
-            )?;
+            let mut backend_picture = self
+                .backend
+                .new_picture(&frame_header, timestamp, self.codec.highest_spatial_layer)
+                .map_err(|e| match e {
+                    StatelessBackendError::OutOfResources => DecodeError::NotEnoughOutputBuffers(1),
+                    e => DecodeError::BackendError(e),
+                })?;
 
             self.backend.begin_picture(
                 &mut backend_picture,
@@ -227,7 +229,7 @@ where
         Ok(())
     }
 
-    fn decode_frame(&mut self, frame: FrameObu, timestamp: u64) -> anyhow::Result<()> {
+    fn decode_frame(&mut self, frame: FrameObu, timestamp: u64) -> Result<(), DecodeError> {
         let FrameObu { header, tile_group } = frame;
         self.decode_frame_header(header, timestamp)?;
         self.decode_tile_group(tile_group)?;
@@ -320,28 +322,13 @@ where
     /// `bitstream` should initially be submitted as a whole temporal unit, however a call to this
     /// method will only consume a single OBU. The caller must be careful to check the return value
     /// and resubmit the remainder if the whole bitstream has not been consumed.
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, super::DecodeError> {
+    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let obu = match self.codec.parser.parse_obu(bitstream)? {
             ParsedObu::Process(obu) => obu,
             // This OBU should be dropped.
             ParsedObu::Drop(length) => return Ok(length as usize),
         };
         let obu_length = obu.data.len();
-
-        /* we do not know the resolution at this point, as we haven't parsed the
-         * frames yet. Be conservative and check whether we have enough frames
-         * across all layers */
-        let num_free_frames = self
-            .backend
-            .frame_pool(PoolLayer::All)
-            .iter()
-            .map(|x| x.num_free_frames())
-            .min()
-            .ok_or(anyhow!("no pool found"))?;
-
-        if matches!(self.decoding_state, DecodingState::Decoding) && num_free_frames < 1 {
-            return Err(DecodeError::NotEnoughOutputBuffers(1));
-        }
 
         let is_decode_op = matches!(
             obu.header.obu_type,
@@ -384,6 +371,8 @@ where
                 }
             }
         }
+
+        /* We are in `Decoding` state if we reached here */
 
         match obu.header.obu_type {
             ObuType::SequenceHeader => {
