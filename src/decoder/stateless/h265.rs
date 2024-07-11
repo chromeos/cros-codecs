@@ -218,6 +218,176 @@ pub struct RefPicSet<T> {
     ref_pic_set_lt_foll: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
 }
 
+impl<T> RefPicSet<T>
+where
+    T: Clone,
+{
+    // See 8.3.4.
+    // Builds the reference picture list for `hdr` for P and B slices.
+    fn build_ref_pic_lists(
+        &self,
+        hdr: &SliceHeader,
+        pps: &Pps,
+        cur_pic: &PictureData,
+    ) -> anyhow::Result<ReferencePicLists<T>> {
+        let mut ref_pic_lists = ReferencePicLists::default();
+
+        // I slices do not use inter prediction.
+        if !hdr.type_.is_p() && !hdr.type_.is_b() {
+            return Ok(ref_pic_lists);
+        }
+
+        if self.num_poc_st_curr_before == 0
+            && self.num_poc_st_curr_after == 0
+            && self.num_poc_lt_curr == 0
+            && pps.scc_extension_flag
+            && !pps.scc_extension.curr_pic_ref_enabled_flag
+        {
+            // Let's try and keep going, if it is a broken stream then maybe it
+            // will sort itself out as we go. In any case, we must not loop
+            // infinitely here.
+            log::error!("Bug or broken stream: out of pictures and can't build ref pic lists.");
+            return Ok(ref_pic_lists);
+        }
+
+        let rplm = &hdr.ref_pic_list_modification;
+
+        let num_rps_curr_temp_list0 = std::cmp::max(
+            u32::from(hdr.num_ref_idx_l0_active_minus1) + 1,
+            hdr.num_pic_total_curr,
+        );
+
+        // This could be simplified using a Vec, but lets not change the
+        // algorithm from the spec too much.
+        let mut ref_pic_list_temp0: [Option<RefPicListEntry<T>>; MAX_DPB_SIZE] = Default::default();
+
+        // Equation 8-8
+        let mut r_idx = 0;
+        assert!(num_rps_curr_temp_list0 as usize <= MAX_DPB_SIZE);
+        while r_idx < num_rps_curr_temp_list0 {
+            let mut i = 0;
+            while i < self.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_st_curr_before[i]
+                    .clone()
+                    .map(RefPicListEntry::DpbEntry);
+
+                i += 1;
+                r_idx += 1;
+            }
+
+            let mut i = 0;
+            while i < self.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_st_curr_after[i]
+                    .clone()
+                    .map(RefPicListEntry::DpbEntry);
+
+                i += 1;
+                r_idx += 1;
+            }
+
+            let mut i = 0;
+            while i < self.num_poc_lt_curr && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_lt_curr[i]
+                    .clone()
+                    .map(RefPicListEntry::DpbEntry);
+
+                i += 1;
+                r_idx += 1;
+            }
+
+            if pps.scc_extension.curr_pic_ref_enabled_flag {
+                ref_pic_list_temp0[r_idx as usize] =
+                    Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
+
+                r_idx += 1;
+            }
+        }
+
+        // Equation 8-9
+        for r_idx in 0..=usize::from(hdr.num_ref_idx_l0_active_minus1) {
+            let entry = if rplm.ref_pic_list_modification_flag_l0 {
+                let idx = rplm.list_entry_l0[r_idx];
+                ref_pic_list_temp0[idx as usize].clone()
+            } else {
+                ref_pic_list_temp0[r_idx].clone()
+            };
+
+            ref_pic_lists.ref_pic_list0[r_idx] = entry;
+        }
+
+        if pps.scc_extension.curr_pic_ref_enabled_flag
+            && !rplm.ref_pic_list_modification_flag_l0
+            && num_rps_curr_temp_list0 > (u32::from(hdr.num_ref_idx_l0_active_minus1) + 1)
+        {
+            ref_pic_lists.ref_pic_list0[r_idx as usize] =
+                Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
+        }
+
+        if hdr.type_.is_b() {
+            let mut ref_pic_list_temp1: [Option<RefPicListEntry<T>>; MAX_DPB_SIZE] =
+                Default::default();
+
+            let num_rps_curr_temp_list1 = std::cmp::max(
+                u32::from(hdr.num_ref_idx_l1_active_minus1) + 1,
+                hdr.num_pic_total_curr,
+            );
+
+            // Equation 8-10
+            let mut r_idx = 0;
+            assert!(num_rps_curr_temp_list1 as usize <= MAX_DPB_SIZE);
+            while r_idx < num_rps_curr_temp_list1 {
+                let mut i = 0;
+                while i < self.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_st_curr_after[i]
+                        .clone()
+                        .map(RefPicListEntry::DpbEntry);
+                    i += 1;
+                    r_idx += 1;
+                }
+
+                let mut i = 0;
+                while i < self.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_st_curr_before[i]
+                        .clone()
+                        .map(RefPicListEntry::DpbEntry);
+                    i += 1;
+                    r_idx += 1;
+                }
+
+                let mut i = 0;
+                while i < self.num_poc_lt_curr && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_lt_curr[i]
+                        .clone()
+                        .map(RefPicListEntry::DpbEntry);
+                    i += 1;
+                    r_idx += 1;
+                }
+
+                if pps.scc_extension.curr_pic_ref_enabled_flag {
+                    ref_pic_list_temp1[r_idx as usize] =
+                        Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
+
+                    r_idx += 1;
+                }
+            }
+
+            // Equation 8-11
+            for r_idx in 0..=usize::from(hdr.num_ref_idx_l1_active_minus1) {
+                let entry = if rplm.ref_pic_list_modification_flag_l1 {
+                    let idx = rplm.list_entry_l1[r_idx];
+                    ref_pic_list_temp1[idx as usize].clone()
+                } else {
+                    ref_pic_list_temp1[r_idx].clone()
+                };
+
+                ref_pic_lists.ref_pic_list1[r_idx] = entry;
+            }
+        }
+
+        Ok(ref_pic_lists)
+    }
+}
+
 impl<T: Clone> Default for RefPicSet<T> {
     fn default() -> Self {
         Self {
@@ -639,179 +809,6 @@ where
         Ok(())
     }
 
-    // See 8.3.4.
-    // Builds the reference picture list for `hdr` for P and B slices.
-    fn build_ref_pic_lists(
-        &self,
-        hdr: &SliceHeader,
-        cur_pic: &PictureData,
-    ) -> anyhow::Result<ReferencePicLists<B::Handle>> {
-        let mut ref_pic_lists = ReferencePicLists::default();
-
-        // I slices do not use inter prediction.
-        if !hdr.type_.is_p() && !hdr.type_.is_b() {
-            return Ok(ref_pic_lists);
-        }
-
-        let pps = self
-            .codec
-            .parser
-            .get_pps(hdr.pic_parameter_set_id)
-            .context("Invalid PPS in build_ref_pic_lists")?;
-
-        if self.codec.rps.num_poc_st_curr_before == 0
-            && self.codec.rps.num_poc_st_curr_after == 0
-            && self.codec.rps.num_poc_lt_curr == 0
-            && pps.scc_extension_flag
-            && !pps.scc_extension.curr_pic_ref_enabled_flag
-        {
-            // Let's try and keep going, if it is a broken stream then maybe it
-            // will sort itself out as we go. In any case, we must not loop
-            // infinitely here.
-            log::error!("Bug or broken stream: out of pictures and can't build ref pic lists.");
-            return Ok(ref_pic_lists);
-        }
-
-        let rplm = &hdr.ref_pic_list_modification;
-
-        let num_rps_curr_temp_list0 = std::cmp::max(
-            u32::from(hdr.num_ref_idx_l0_active_minus1) + 1,
-            hdr.num_pic_total_curr,
-        );
-
-        // This could be simplified using a Vec, but lets not change the
-        // algorithm from the spec too much.
-        let mut ref_pic_list_temp0: [Option<RefPicListEntry<B::Handle>>; MAX_DPB_SIZE] =
-            Default::default();
-
-        // Equation 8-8
-        let mut r_idx = 0;
-        assert!(num_rps_curr_temp_list0 as usize <= MAX_DPB_SIZE);
-        while r_idx < num_rps_curr_temp_list0 {
-            let mut i = 0;
-            while i < self.codec.rps.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.codec.rps.ref_pic_set_st_curr_before[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
-
-                i += 1;
-                r_idx += 1;
-            }
-
-            let mut i = 0;
-            while i < self.codec.rps.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.codec.rps.ref_pic_set_st_curr_after[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
-
-                i += 1;
-                r_idx += 1;
-            }
-
-            let mut i = 0;
-            while i < self.codec.rps.num_poc_lt_curr && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.codec.rps.ref_pic_set_lt_curr[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
-
-                i += 1;
-                r_idx += 1;
-            }
-
-            if pps.scc_extension.curr_pic_ref_enabled_flag {
-                ref_pic_list_temp0[r_idx as usize] =
-                    Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
-
-                r_idx += 1;
-            }
-        }
-
-        // Equation 8-9
-        for r_idx in 0..=usize::from(hdr.num_ref_idx_l0_active_minus1) {
-            let entry = if rplm.ref_pic_list_modification_flag_l0 {
-                let idx = rplm.list_entry_l0[r_idx];
-                ref_pic_list_temp0[idx as usize].clone()
-            } else {
-                ref_pic_list_temp0[r_idx].clone()
-            };
-
-            ref_pic_lists.ref_pic_list0[r_idx] = entry;
-        }
-
-        if pps.scc_extension.curr_pic_ref_enabled_flag
-            && !rplm.ref_pic_list_modification_flag_l0
-            && num_rps_curr_temp_list0 > (u32::from(hdr.num_ref_idx_l0_active_minus1) + 1)
-        {
-            ref_pic_lists.ref_pic_list0[r_idx as usize] =
-                Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
-        }
-
-        if hdr.type_.is_b() {
-            let mut ref_pic_list_temp1: [Option<RefPicListEntry<B::Handle>>; MAX_DPB_SIZE] =
-                Default::default();
-
-            let num_rps_curr_temp_list1 = std::cmp::max(
-                u32::from(hdr.num_ref_idx_l1_active_minus1) + 1,
-                hdr.num_pic_total_curr,
-            );
-
-            // Equation 8-10
-            let mut r_idx = 0;
-            assert!(num_rps_curr_temp_list1 as usize <= MAX_DPB_SIZE);
-            while r_idx < num_rps_curr_temp_list1 {
-                let mut i = 0;
-                while i < self.codec.rps.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.codec.rps.ref_pic_set_st_curr_after
-                        [i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
-                    i += 1;
-                    r_idx += 1;
-                }
-
-                let mut i = 0;
-                while i < self.codec.rps.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.codec.rps.ref_pic_set_st_curr_before
-                        [i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
-                    i += 1;
-                    r_idx += 1;
-                }
-
-                let mut i = 0;
-                while i < self.codec.rps.num_poc_lt_curr && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.codec.rps.ref_pic_set_lt_curr[i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
-                    i += 1;
-                    r_idx += 1;
-                }
-
-                if pps.scc_extension.curr_pic_ref_enabled_flag {
-                    ref_pic_list_temp1[r_idx as usize] =
-                        Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
-
-                    r_idx += 1;
-                }
-            }
-
-            // Equation 8-11
-            for r_idx in 0..=usize::from(hdr.num_ref_idx_l1_active_minus1) {
-                let entry = if rplm.ref_pic_list_modification_flag_l1 {
-                    let idx = rplm.list_entry_l1[r_idx];
-                    ref_pic_list_temp1[idx as usize].clone()
-                } else {
-                    ref_pic_list_temp1[r_idx].clone()
-                };
-
-                ref_pic_lists.ref_pic_list1[r_idx] = entry;
-            }
-        }
-
-        Ok(ref_pic_lists)
-    }
-
     /// Drain the decoder, processing all pending frames.
     fn drain(&mut self) -> anyhow::Result<()> {
         log::debug!("Draining the decoder");
@@ -1009,14 +1006,17 @@ where
         // is not the one currently in use.
         self.update_current_set_ids(slice.header.pic_parameter_set_id)?;
 
-        pic.ref_pic_lists = self.build_ref_pic_lists(&slice.header, &pic.pic)?;
-
         let pps = self
             .codec
             .parser
             .get_pps(slice.header.pic_parameter_set_id)
             .context("invalid PPS ID")?;
         let sps = pps.sps.as_ref();
+
+        pic.ref_pic_lists = self
+            .codec
+            .rps
+            .build_ref_pic_lists(&slice.header, pps, &pic.pic)?;
 
         // Make sure that no negotiation is possible mid-picture. How could it?
         // We'd lose the context with the previous slices on it.
