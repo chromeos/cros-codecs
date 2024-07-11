@@ -2275,9 +2275,9 @@ impl Parser {
         let key = vps.video_parameter_set_id;
         self.active_vpses.insert(key, vps);
 
-        if self.active_spses.keys().len() > MAX_VPS_COUNT {
+        if self.active_vpses.keys().len() > MAX_VPS_COUNT {
             return Err(anyhow!(
-                "Broken data: Number of active SPSs > MAX_SPS_COUNT"
+                "Broken data: Number of active VPSs > MAX_VPS_COUNT"
             ));
         }
 
