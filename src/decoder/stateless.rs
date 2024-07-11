@@ -45,6 +45,8 @@ use crate::Resolution;
 pub enum StatelessBackendError {
     #[error("not enough resources to proceed with the operation now")]
     OutOfResources,
+    #[error("no frame pool can satisfy the requested frame resolution {0:?}")]
+    NoFramePool(Resolution),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
