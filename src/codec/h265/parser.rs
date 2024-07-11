@@ -2091,7 +2091,7 @@ impl Default for VuiParams {
 pub struct Parser {
     active_vpses: BTreeMap<u8, Vps>,
     active_spses: BTreeMap<u8, Rc<Sps>>,
-    active_ppses: BTreeMap<u8, Pps>,
+    active_ppses: BTreeMap<u8, Rc<Pps>>,
 }
 
 impl Parser {
@@ -3482,6 +3482,7 @@ impl Parser {
         );
 
         let key = pps.pic_parameter_set_id;
+        let pps = Rc::new(pps);
         self.active_ppses.insert(key, pps);
 
         if self.active_ppses.keys().len() > MAX_PPS_COUNT {
@@ -4047,7 +4048,7 @@ impl Parser {
     }
 
     /// Returns a previously parsed pps given `pps_id`, if any.
-    pub fn get_pps(&self, pps_id: u8) -> Option<&Pps> {
+    pub fn get_pps(&self, pps_id: u8) -> Option<&Rc<Pps>> {
         self.active_ppses.get(&pps_id)
     }
 }
