@@ -16,6 +16,7 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::BlockingMode;
 
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
+use crate::Resolution;
 
 impl StatelessH265DecoderBackend for Backend {
     fn new_sequence(
@@ -27,6 +28,7 @@ impl StatelessH265DecoderBackend for Backend {
 
     fn new_picture(
         &mut self,
+        _: Resolution,
         _: u64,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
         Ok(())

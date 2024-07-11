@@ -38,11 +38,14 @@ use crate::decoder::stateless::h265::RefPicSet;
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
 use crate::decoder::stateless::h265::H265;
 use crate::decoder::stateless::NewStatelessDecoderError;
+use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::Resolution;
 
 enum ScalingListType {
     Sps,
@@ -594,9 +597,17 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         self.new_sequence(sps, PoolCreationMode::Highest)
     }
 
-    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture> {
-        let highest_pool = self.highest_pool();
-        let surface = highest_pool
+    fn new_picture(
+        &mut self,
+        coded_resolution: Resolution,
+        timestamp: u64,
+    ) -> StatelessBackendResult<Self::Picture> {
+        let layer = PoolLayer::Layer(coded_resolution);
+        let pool = self
+            .frame_pool(layer)
+            .pop()
+            .ok_or(StatelessBackendError::NoFramePool(coded_resolution))?;
+        let surface = pool
             .get_surface()
             .ok_or(StatelessBackendError::OutOfResources)?;
         let metadata = self.metadata_state.get_parsed()?;

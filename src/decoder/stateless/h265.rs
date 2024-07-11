@@ -31,6 +31,7 @@ use crate::codec::h265::picture::Reference;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::PoolLayer;
+use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -40,7 +41,6 @@ use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
 
@@ -113,7 +113,11 @@ pub trait StatelessH265DecoderBackend:
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a frame or field was found.
-    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture>;
+    fn new_picture(
+        &mut self,
+        coded_resolution: Resolution,
+        timestamp: u64,
+    ) -> StatelessBackendResult<Self::Picture>;
 
     /// Called by the decoder for every frame or field found.
     #[allow(clippy::too_many_arguments)]
@@ -928,17 +932,13 @@ where
             return Err(DecodeError::CheckEvents);
         }
 
-        let layer = PoolLayer::Layer(self.coded_resolution);
-        if self
+        let mut backend_pic = self
             .backend
-            .frame_pool(layer)
-            .pop()
-            .ok_or(anyhow!("Pool not found"))?
-            .num_free_frames()
-            == 0
-        {
-            return Err(DecodeError::NotEnoughOutputBuffers(1));
-        }
+            .new_picture(self.coded_resolution, timestamp)
+            .map_err(|e| match e {
+                StatelessBackendError::OutOfResources => DecodeError::NotEnoughOutputBuffers(1),
+                e => DecodeError::BackendError(e),
+            })?;
 
         let pic = PictureData::new_from_slice(
             slice,
@@ -977,8 +977,6 @@ where
 
         self.decode_rps(slice, &pic)?;
         self.update_dpb_before_decoding(&pic)?;
-
-        let mut backend_pic = self.backend.new_picture(timestamp)?;
 
         let pps = self
             .codec
