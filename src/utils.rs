@@ -13,6 +13,7 @@ use std::io::Seek;
 use std::io::Write;
 use std::marker::PhantomData;
 use std::os::fd::OwnedFd;
+use std::time::Duration;
 
 use byteorder::ReadBytesExt;
 use byteorder::LE;
@@ -346,6 +347,7 @@ where
                     }
                 }
                 Err(DecodeError::CheckEvents) | Err(DecodeError::NotEnoughOutputBuffers(_)) => {
+                    decoder.wait_for_next_event(Duration::from_secs(3))?;
                     check_events(decoder)?
                 }
                 Err(e) => anyhow::bail!(e),
