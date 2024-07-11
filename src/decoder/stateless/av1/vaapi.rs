@@ -539,9 +539,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
                 };
 
                 self.pool(layer)
-                    .ok_or(StatelessBackendError::Other(anyhow!(
-                        "No pool available for this layer"
-                    )))?
+                    .ok_or(StatelessBackendError::NoFramePool(layer))?
             }
             None => self.highest_pool(),
         };
