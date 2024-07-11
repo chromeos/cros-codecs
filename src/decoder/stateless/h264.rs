@@ -537,36 +537,37 @@ where
             }
         }
 
-        match prev_field {
-            None => Ok(None),
-            Some(prev_field) => {
-                let prev_field_pic = prev_field.0.borrow();
+        let prev_field = match prev_field {
+            None => return Ok(None),
+            Some(prev_field) => prev_field,
+        };
 
-                if prev_field_pic.frame_num != u32::from(hdr.frame_num) {
-                    return Err(FindFirstFieldError::FrameNumDiffers(
-                        prev_field_pic.frame_num,
-                        hdr.frame_num as u32,
-                    ));
-                }
+        let prev_field_pic = prev_field.0.borrow();
 
-                let cur_field = if hdr.bottom_field_flag {
-                    Field::Bottom
-                } else {
-                    Field::Top
-                };
-
-                if !hdr.field_pic_flag || cur_field == prev_field_pic.field {
-                    let field = prev_field_pic.field;
-
-                    return Err(FindFirstFieldError::ExpectedComplementaryField(
-                        field.opposite(),
-                        field,
-                    ));
-                }
-
-                Ok(Some((prev_field.0.clone(), prev_field.1.clone())))
-            }
+        if prev_field_pic.frame_num != u32::from(hdr.frame_num) {
+            return Err(FindFirstFieldError::FrameNumDiffers(
+                prev_field_pic.frame_num,
+                hdr.frame_num as u32,
+            ));
         }
+
+        let cur_field = if hdr.bottom_field_flag {
+            Field::Bottom
+        } else {
+            Field::Top
+        };
+
+        if !hdr.field_pic_flag || cur_field == prev_field_pic.field {
+            let field = prev_field_pic.field;
+
+            return Err(FindFirstFieldError::ExpectedComplementaryField(
+                field.opposite(),
+                field,
+            ));
+        }
+
+        drop(prev_field_pic);
+        Ok(Some((prev_field.0.clone(), prev_field.1.clone())))
     }
 
     // 8.2.4.3.1 Modification process of reference picture lists for short-term
