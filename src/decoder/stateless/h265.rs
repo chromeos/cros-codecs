@@ -567,7 +567,12 @@ where
     }
 
     // See 8.3.2.
-    fn decode_rps(&mut self, slice: &Slice, cur_pic: &PictureData) -> anyhow::Result<()> {
+    fn decode_rps(
+        &mut self,
+        slice: &Slice,
+        sps: &Sps,
+        cur_pic: &PictureData,
+    ) -> anyhow::Result<()> {
         let hdr = &slice.header;
 
         if cur_pic.nalu_type.is_irap() && cur_pic.no_rasl_output_flag {
@@ -587,12 +592,6 @@ where
             self.codec.rps.num_poc_lt_curr = 0;
             self.codec.rps.num_poc_lt_foll = 0;
         } else {
-            let sps = self
-                .codec
-                .parser
-                .get_sps(self.codec.cur_sps_id)
-                .context("Invalid SPS")?;
-
             let curr_st_rps = Self::st_ref_pic_set(hdr, sps);
             let mut j = 0;
             let mut k = 0;
@@ -964,19 +963,21 @@ where
 
         log::debug!("Decode picture POC {}", pic.pic_order_cnt_val);
 
-        self.decode_rps(slice, &pic)?;
-        self.update_dpb_before_decoding(&pic)?;
-
         let pps = self
             .codec
             .parser
             .get_pps(slice.header.pic_parameter_set_id)
-            .context("invalid PPS ID")?;
+            .context("invalid PPS ID")?
+            .clone();
+
+        self.decode_rps(slice, &pps.sps, &pic)?;
+        self.update_dpb_before_decoding(&pic)?;
+
         self.backend.begin_picture(
             &mut backend_pic,
             &pic,
             pps.sps.as_ref(),
-            pps,
+            &pps,
             &self.codec.dpb,
             &self.codec.rps,
             slice,
