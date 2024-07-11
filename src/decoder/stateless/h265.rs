@@ -972,15 +972,10 @@ where
             .parser
             .get_pps(slice.header.pic_parameter_set_id)
             .context("invalid PPS ID")?;
-        let sps = self
-            .codec
-            .parser
-            .get_sps(pps.seq_parameter_set_id)
-            .context("invalid SPS ID")?;
         self.backend.begin_picture(
             &mut backend_pic,
             &pic,
-            sps,
+            pps.sps.as_ref(),
             pps,
             &self.codec.dpb,
             &self.codec.rps,
@@ -1032,15 +1027,10 @@ where
             .parser
             .get_pps(slice.header.pic_parameter_set_id)
             .context("invalid PPS ID")?;
-        let sps = self
-            .codec
-            .parser
-            .get_sps(pps.seq_parameter_set_id)
-            .context("invalid SPS ID")?;
         self.backend.decode_slice(
             &mut pic.backend_pic,
             slice,
-            sps,
+            pps.sps.as_ref(),
             pps,
             &pic.ref_pic_lists.ref_pic_list0,
             &pic.ref_pic_lists.ref_pic_list1,

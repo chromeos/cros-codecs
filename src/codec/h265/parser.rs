@@ -7,6 +7,7 @@
 //! Parses VPSs, SPSs, PPSs and Slices from NALUs.
 
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use anyhow::anyhow;
 use anyhow::Context;
@@ -1224,58 +1225,9 @@ pub struct Pps {
     // Internal variables.
     /// Equivalent to QpBdOffsetY in the specification.
     pub qp_bd_offset_y: u32,
-}
 
-impl Default for Pps {
-    fn default() -> Self {
-        Self {
-            pic_parameter_set_id: Default::default(),
-            seq_parameter_set_id: Default::default(),
-            dependent_slice_segments_enabled_flag: Default::default(),
-            output_flag_present_flag: Default::default(),
-            num_extra_slice_header_bits: Default::default(),
-            sign_data_hiding_enabled_flag: Default::default(),
-            cabac_init_present_flag: Default::default(),
-            num_ref_idx_l0_default_active_minus1: Default::default(),
-            num_ref_idx_l1_default_active_minus1: Default::default(),
-            init_qp_minus26: Default::default(),
-            constrained_intra_pred_flag: Default::default(),
-            transform_skip_enabled_flag: Default::default(),
-            cu_qp_delta_enabled_flag: Default::default(),
-            diff_cu_qp_delta_depth: Default::default(),
-            cb_qp_offset: Default::default(),
-            cr_qp_offset: Default::default(),
-            slice_chroma_qp_offsets_present_flag: Default::default(),
-            weighted_pred_flag: Default::default(),
-            weighted_bipred_flag: Default::default(),
-            transquant_bypass_enabled_flag: Default::default(),
-            tiles_enabled_flag: Default::default(),
-            entropy_coding_sync_enabled_flag: Default::default(),
-            num_tile_columns_minus1: Default::default(),
-            num_tile_rows_minus1: Default::default(),
-            uniform_spacing_flag: true,
-            column_width_minus1: Default::default(),
-            row_height_minus1: Default::default(),
-            loop_filter_across_tiles_enabled_flag: true,
-            loop_filter_across_slices_enabled_flag: Default::default(),
-            deblocking_filter_control_present_flag: Default::default(),
-            deblocking_filter_override_enabled_flag: Default::default(),
-            deblocking_filter_disabled_flag: Default::default(),
-            beta_offset_div2: Default::default(),
-            tc_offset_div2: Default::default(),
-            scaling_list_data_present_flag: Default::default(),
-            scaling_list: Default::default(),
-            lists_modification_present_flag: Default::default(),
-            log2_parallel_merge_level_minus2: Default::default(),
-            slice_segment_header_extension_present_flag: Default::default(),
-            extension_present_flag: Default::default(),
-            range_extension_flag: Default::default(),
-            range_extension: Default::default(),
-            qp_bd_offset_y: Default::default(),
-            scc_extension: Default::default(),
-            scc_extension_flag: Default::default(),
-        }
-    }
+    /// The SPS referenced by this PPS.
+    pub sps: Rc<Sps>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2138,7 +2090,7 @@ impl Default for VuiParams {
 #[derive(Clone, Debug, Default)]
 pub struct Parser {
     active_vpses: BTreeMap<u8, Vps>,
-    active_spses: BTreeMap<u8, Sps>,
+    active_spses: BTreeMap<u8, Rc<Sps>>,
     active_ppses: BTreeMap<u8, Pps>,
 }
 
@@ -3220,6 +3172,7 @@ impl Parser {
         );
 
         let key = sps.seq_parameter_set_id;
+        let sps = Rc::new(sps);
         self.active_spses.insert(key, sps);
 
         if self.active_spses.keys().len() > MAX_SPS_COUNT {
@@ -3325,18 +3278,62 @@ impl Parser {
         // Skip the header
         let mut r = NaluReader::new(&data[hdr_len..]);
 
-        let mut pps = Pps {
-            loop_filter_across_tiles_enabled_flag: true,
-            ..Default::default()
-        };
+        let pic_parameter_set_id = r.read_ue_max(MAX_PPS_COUNT as u32 - 1)?;
+        let seq_parameter_set_id = r.read_ue_max(MAX_SPS_COUNT as u32 - 1)?;
 
-        pps.pic_parameter_set_id = r.read_ue_max(MAX_PPS_COUNT as u32 - 1)?;
-        pps.seq_parameter_set_id = r.read_ue_max(MAX_SPS_COUNT as u32 - 1)?;
-
-        let sps = self.get_sps(pps.seq_parameter_set_id).context(format!(
+        let sps = self.get_sps(seq_parameter_set_id).context(format!(
             "Broken stream: stream references SPS {} that has not been successfully parsed",
-            pps.seq_parameter_set_id
+            seq_parameter_set_id
         ))?;
+
+        let mut pps = Pps {
+            pic_parameter_set_id,
+            seq_parameter_set_id,
+            dependent_slice_segments_enabled_flag: Default::default(),
+            output_flag_present_flag: Default::default(),
+            num_extra_slice_header_bits: Default::default(),
+            sign_data_hiding_enabled_flag: Default::default(),
+            cabac_init_present_flag: Default::default(),
+            num_ref_idx_l0_default_active_minus1: Default::default(),
+            num_ref_idx_l1_default_active_minus1: Default::default(),
+            init_qp_minus26: Default::default(),
+            constrained_intra_pred_flag: Default::default(),
+            transform_skip_enabled_flag: Default::default(),
+            cu_qp_delta_enabled_flag: Default::default(),
+            diff_cu_qp_delta_depth: Default::default(),
+            cb_qp_offset: Default::default(),
+            cr_qp_offset: Default::default(),
+            slice_chroma_qp_offsets_present_flag: Default::default(),
+            weighted_pred_flag: Default::default(),
+            weighted_bipred_flag: Default::default(),
+            transquant_bypass_enabled_flag: Default::default(),
+            tiles_enabled_flag: Default::default(),
+            entropy_coding_sync_enabled_flag: Default::default(),
+            num_tile_columns_minus1: Default::default(),
+            num_tile_rows_minus1: Default::default(),
+            uniform_spacing_flag: true,
+            column_width_minus1: Default::default(),
+            row_height_minus1: Default::default(),
+            loop_filter_across_tiles_enabled_flag: true,
+            loop_filter_across_slices_enabled_flag: Default::default(),
+            deblocking_filter_control_present_flag: Default::default(),
+            deblocking_filter_override_enabled_flag: Default::default(),
+            deblocking_filter_disabled_flag: Default::default(),
+            beta_offset_div2: Default::default(),
+            tc_offset_div2: Default::default(),
+            scaling_list_data_present_flag: Default::default(),
+            scaling_list: Default::default(),
+            lists_modification_present_flag: Default::default(),
+            log2_parallel_merge_level_minus2: Default::default(),
+            slice_segment_header_extension_present_flag: Default::default(),
+            extension_present_flag: Default::default(),
+            range_extension_flag: Default::default(),
+            range_extension: Default::default(),
+            qp_bd_offset_y: Default::default(),
+            scc_extension: Default::default(),
+            scc_extension_flag: Default::default(),
+            sps: Rc::clone(sps),
+        };
 
         pps.dependent_slice_segments_enabled_flag = r.read_bit()?;
         pps.output_flag_present_flag = r.read_bit()?;
@@ -3681,11 +3678,7 @@ impl Parser {
             )
         })?;
 
-        let sps = self.get_sps(pps.seq_parameter_set_id).with_context(|| {
-            format!(
-            "Broken stream: slice's PPS references SPS {} that has not been successfully parsed.", pps.seq_parameter_set_id
-        )
-        })?;
+        let sps = &pps.sps;
 
         Self::slice_header_set_defaults(&mut hdr, sps, pps);
 
@@ -4049,7 +4042,7 @@ impl Parser {
     }
 
     /// Returns a previously parsed sps given `sps_id`, if any.
-    pub fn get_sps(&self, sps_id: u8) -> Option<&Sps> {
+    pub fn get_sps(&self, sps_id: u8) -> Option<&Rc<Sps>> {
         self.active_spses.get(&sps_id)
     }
 
