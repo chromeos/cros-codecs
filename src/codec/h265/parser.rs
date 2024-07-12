@@ -2089,7 +2089,7 @@ impl Default for VuiParams {
 
 #[derive(Clone, Debug, Default)]
 pub struct Parser {
-    active_vpses: BTreeMap<u8, Vps>,
+    active_vpses: BTreeMap<u8, Rc<Vps>>,
     active_spses: BTreeMap<u8, Rc<Sps>>,
     active_ppses: BTreeMap<u8, Rc<Pps>>,
 }
@@ -2233,6 +2233,7 @@ impl Parser {
         }
 
         let key = vps.video_parameter_set_id;
+        let vps = Rc::new(vps);
         self.active_vpses.remove(&key);
         Ok(self.active_vpses.entry(key).or_insert(vps))
     }
@@ -4036,7 +4037,7 @@ impl Parser {
     }
 
     /// Returns a previously parsed vps given `vps_id`, if any.
-    pub fn get_vps(&self, vps_id: u8) -> Option<&Vps> {
+    pub fn get_vps(&self, vps_id: u8) -> Option<&Rc<Vps>> {
         self.active_vpses.get(&vps_id)
     }
 
