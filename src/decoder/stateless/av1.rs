@@ -11,8 +11,8 @@ use anyhow::anyhow;
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::FrameObu;
 use crate::codec::av1::parser::FrameType;
+use crate::codec::av1::parser::ObuAction;
 use crate::codec::av1::parser::ObuType;
-use crate::codec::av1::parser::ParsedObu;
 use crate::codec::av1::parser::Parser;
 use crate::codec::av1::parser::SequenceHeaderObu;
 use crate::codec::av1::parser::TileGroupObu;
@@ -321,10 +321,10 @@ where
     /// method will only consume a single OBU. The caller must be careful to check the return value
     /// and resubmit the remainder if the whole bitstream has not been consumed.
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
-        let obu = match self.codec.parser.parse_obu(bitstream)? {
-            ParsedObu::Process(obu) => obu,
+        let obu = match self.codec.parser.read_obu(bitstream)? {
+            ObuAction::Process(obu) => obu,
             // This OBU should be dropped.
-            ParsedObu::Drop(length) => return Ok(length as usize),
+            ObuAction::Drop(length) => return Ok(length as usize),
         };
         let obu_length = obu.bytes_used;
 

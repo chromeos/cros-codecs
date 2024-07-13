@@ -59,7 +59,8 @@ pub const FEATURE_SIGNED: [bool; SEG_LVL_MAX] = [true, true, true, true, true, f
 // Same as Segmentation_Feature_Max in the specification. See 5.9.14
 pub const FEATURE_MAX: [i32; SEG_LVL_MAX] = [255, 63, 63, 63, 63, 7, 0, 0];
 
-pub enum ParsedObu<'a> {
+/// Tells what should be done with the OBU after [`Parser::read_obu`] is called.
+pub enum ObuAction<'a> {
     /// We should process the OBU normally.
     Process(Obu<'a>),
     /// We should drop this OBU and advance to the next one. The u32 is how much
@@ -117,6 +118,7 @@ impl ObuHeader {
     }
 }
 
+/// Contains the OBU header and a reference to its data. The OBU itself hasn't been parsed yet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Obu<'a> {
     /// The OBU header.
@@ -1491,7 +1493,7 @@ impl Parser {
     /// format.
     ///
     /// `None` may eventually be returned if the OBU is to be dropped.
-    pub fn parse_obu<'a>(&mut self, data: &'a [u8]) -> anyhow::Result<ParsedObu<'a>> {
+    pub fn read_obu<'a>(&mut self, data: &'a [u8]) -> anyhow::Result<ObuAction<'a>> {
         if data.is_empty() {
             return Err(anyhow!("Empty data"));
         }
@@ -1517,7 +1519,7 @@ impl Parser {
             let obu_length = reader.current_annexb_obu_length(annexb_state)?;
             match obu_length {
                 Some(length) => length,
-                None => return Ok(ParsedObu::Drop(reader.consumed(0))),
+                None => return Ok(ObuAction::Drop(reader.consumed(0))),
             }
         } else {
             0
@@ -1572,11 +1574,11 @@ impl Parser {
             let in_spatial_layer = ((self.operating_point_idc >> (header.spatial_id + 8)) & 1) != 0;
             if !in_temporal_layer || !in_spatial_layer {
                 log::debug!("Dropping obu as per drop_obu() in the specification",);
-                return Ok(ParsedObu::Drop(reader.consumed(0)));
+                return Ok(ObuAction::Drop(reader.consumed(0)));
             }
         }
 
-        Ok(ParsedObu::Process(Obu {
+        Ok(ObuAction::Process(Obu {
             header,
             data: Cow::from(&data[start_offset..start_offset + obu_size]),
             bytes_used: start_offset + obu_size,
@@ -3820,7 +3822,7 @@ impl Clone for Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::av1::parser::{ParsedObu, Parser, StreamFormat};
+    use crate::codec::av1::parser::{ObuAction, Parser, StreamFormat};
     use crate::utils::IvfIterator;
 
     use super::ObuType;
@@ -3848,11 +3850,11 @@ mod tests {
         for packet in ivf_iter {
             let mut consumed = 0;
 
-            while let Ok(obu) = parser.parse_obu(&packet[consumed..]) {
+            while let Ok(obu) = parser.read_obu(&packet[consumed..]) {
                 let obu = match obu {
-                    ParsedObu::Process(obu) => obu,
+                    ObuAction::Process(obu) => obu,
                     // This OBU should be dropped.
-                    ParsedObu::Drop(length) => {
+                    ObuAction::Drop(length) => {
                         consumed += usize::try_from(length).unwrap();
                         continue;
                     }
@@ -3876,14 +3878,14 @@ mod tests {
         let mut ivf_iter = IvfIterator::new(STREAM_TEST_25_FPS);
         let packet = ivf_iter.next().unwrap();
 
-        parser.parse_obu(packet).unwrap();
+        parser.read_obu(packet).unwrap();
         assert!(matches!(parser.stream_format, StreamFormat::LowOverhead));
 
         let mut parser = Parser::default();
         let mut ivf_iter = IvfIterator::new(STREAM_ANNEXB);
         let packet = ivf_iter.next().unwrap();
 
-        parser.parse_obu(packet).unwrap();
+        parser.read_obu(packet).unwrap();
         assert!(matches!(parser.stream_format, StreamFormat::AnnexB { .. }));
     }
 
@@ -3897,11 +3899,11 @@ mod tests {
         for packet in ivf_iter {
             let mut consumed = 0;
 
-            while let Ok(obu) = parser.parse_obu(&packet[consumed..]) {
+            while let Ok(obu) = parser.read_obu(&packet[consumed..]) {
                 let obu = match obu {
-                    ParsedObu::Process(obu) => obu,
+                    ObuAction::Process(obu) => obu,
                     // This OBU should be dropped.
-                    ParsedObu::Drop(length) => {
+                    ObuAction::Drop(length) => {
                         consumed += usize::try_from(length).unwrap();
                         continue;
                     }
@@ -3918,11 +3920,11 @@ mod tests {
         for packet in ivf_iter {
             let mut consumed = 0;
 
-            while let Ok(obu) = parser.parse_obu(&packet[consumed..]) {
+            while let Ok(obu) = parser.read_obu(&packet[consumed..]) {
                 let obu = match obu {
-                    ParsedObu::Process(obu) => obu,
+                    ObuAction::Process(obu) => obu,
                     // This OBU should be dropped.
-                    ParsedObu::Drop(length) => {
+                    ObuAction::Drop(length) => {
                         consumed += usize::try_from(length).unwrap();
                         continue;
                     }
@@ -3956,11 +3958,11 @@ mod tests {
         for packet in ivf_iter {
             let mut consumed = 0;
 
-            while let Ok(obu) = parser.parse_obu(&packet[consumed..]) {
+            while let Ok(obu) = parser.read_obu(&packet[consumed..]) {
                 let obu = match obu {
-                    ParsedObu::Process(obu) => obu,
+                    ObuAction::Process(obu) => obu,
                     // This OBU should be dropped.
-                    ParsedObu::Drop(length) => {
+                    ObuAction::Drop(length) => {
                         consumed += usize::try_from(length).unwrap();
                         continue;
                     }
