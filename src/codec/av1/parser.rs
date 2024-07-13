@@ -121,17 +121,15 @@ impl ObuHeader {
 pub struct Obu<'a> {
     /// The OBU header.
     pub header: ObuHeader,
-    /// The data backing the OBU.
-    pub data: Cow<'a, [u8]>,
-    /// Where the OBU data starts, after the size has been read.
-    pub start_offset: usize,
-    /// The OBU size as per the specification after `start_offset`.
-    pub size: usize,
+    /// Amount of bytes from the input consumed to parse this OBU.
+    pub bytes_used: usize,
+    /// The slice backing the OBU.
+    data: Cow<'a, [u8]>,
 }
 
 impl<'a> AsRef<[u8]> for Obu<'a> {
     fn as_ref(&self) -> &[u8] {
-        &self.data[self.start_offset..self.start_offset + self.size]
+        self.data.as_ref()
     }
 }
 
@@ -1453,7 +1451,7 @@ impl Parser {
         // We can't have that in parse_obu as per the spec, because the reader
         // is not initialized on our design at that point, so move the check to
         // inside this function.
-        if obu.size == 0
+        if obu.data.len() == 0
             || matches!(
                 obu.header.obu_type,
                 ObuType::TileList | ObuType::TileGroup | ObuType::Frame
@@ -1580,9 +1578,8 @@ impl Parser {
 
         Ok(ParsedObu::Process(Obu {
             header,
-            data: Cow::from(&data[..start_offset + obu_size]),
-            start_offset,
-            size: obu_size,
+            data: Cow::from(&data[start_offset..start_offset + obu_size]),
+            bytes_used: start_offset + obu_size,
         }))
     }
 
@@ -3648,9 +3645,11 @@ impl Parser {
         let frame_header_obu = self.parse_frame_header_obu(&obu)?;
         let obu = Obu {
             header: obu.header,
-            data: obu.data,
-            start_offset: obu.start_offset + frame_header_obu.header_bytes,
-            size: obu.size - frame_header_obu.header_bytes,
+            data: match obu.data {
+                Cow::Borrowed(d) => Cow::Borrowed(&d[frame_header_obu.header_bytes..]),
+                Cow::Owned(d) => Cow::Owned(d[frame_header_obu.header_bytes..].to_owned()),
+            },
+            bytes_used: obu.bytes_used,
         };
         let tile_group_obu = self.parse_tile_group_obu(obu)?;
 
@@ -3858,7 +3857,7 @@ mod tests {
                         continue;
                     }
                 };
-                consumed += obu.data.len();
+                consumed += obu.bytes_used;
                 num_obus += 1;
             }
         }
@@ -3908,7 +3907,7 @@ mod tests {
                     }
                 };
                 assert!(matches!(parser.stream_format, StreamFormat::LowOverhead));
-                consumed += obu.data.len();
+                consumed += obu.bytes_used;
             }
         }
 
@@ -3929,7 +3928,7 @@ mod tests {
                     }
                 };
                 assert!(matches!(parser.stream_format, StreamFormat::AnnexB { .. }));
-                consumed += obu.data.len();
+                consumed += obu.bytes_used;
                 num_obus += 1;
             }
         }
@@ -3967,7 +3966,7 @@ mod tests {
                     }
                 };
 
-                let data_len = obu.data.len();
+                let data_len = obu.bytes_used;
 
                 match obu.header.obu_type {
                     ObuType::SequenceHeader => {
