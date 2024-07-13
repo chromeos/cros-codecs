@@ -13,6 +13,7 @@ use crate::codec::av1::parser::FrameObu;
 use crate::codec::av1::parser::FrameType;
 use crate::codec::av1::parser::ObuAction;
 use crate::codec::av1::parser::ObuType;
+use crate::codec::av1::parser::ParsedObu;
 use crate::codec::av1::parser::Parser;
 use crate::codec::av1::parser::SequenceHeaderObu;
 use crate::codec::av1::parser::TileGroupObu;
@@ -368,9 +369,8 @@ where
 
         /* We are in `Decoding` state if we reached here */
 
-        match obu.header.obu_type {
-            ObuType::SequenceHeader => {
-                let sequence = self.codec.parser.parse_sequence_header_obu(&obu)?;
+        match self.codec.parser.parse_obu(obu)? {
+            ParsedObu::SequenceHeader(sequence) => {
                 let sequence_differs = match &self.codec.sequence {
                     Some(old_sequence) => **old_sequence != *sequence,
                     None => true,
@@ -412,23 +412,19 @@ where
                     self.await_format_change(sequence);
                 }
             }
-            ObuType::TemporalDelimiter => self.codec.parser.parse_temporal_delimiter_obu(&obu)?,
-            ObuType::FrameHeader => {
+            ParsedObu::FrameHeader(frame_header) => {
                 if self.codec.current_pic.is_some() {
                     /* submit this frame immediately, as we need to update the
                      * DPB and the reference info state *before* processing the
                      * next frame */
                     self.submit_frame(timestamp)?;
                 }
-                let frame_header = self.codec.parser.parse_frame_header_obu(&obu)?;
                 self.decode_frame_header(frame_header, timestamp)?;
             }
-            ObuType::TileGroup => {
-                let tile_group = self.codec.parser.parse_tile_group_obu(obu)?;
+            ParsedObu::TileGroup(tile_group) => {
                 self.decode_tile_group(tile_group)?;
             }
-            ObuType::Frame => {
-                let frame = self.codec.parser.parse_frame_obu(obu)?;
+            ParsedObu::Frame(frame) => {
                 if self.codec.current_pic.is_some() {
                     /* submit this frame immediately, as we need to update the
                      * DPB and the reference info state *before* processing the
@@ -441,13 +437,13 @@ where
                  * next frame */
                 self.submit_frame(timestamp)?;
             }
-            ObuType::TileList => {
+            ParsedObu::TileList => {
                 return Err(DecodeError::DecoderError(anyhow!(
                     "large tile scale mode is not supported"
                 )));
             }
             other => {
-                log::debug!("skipping OBU of type {:?}", other);
+                log::debug!("skipping OBU of type {:?}", other.obu_type());
             }
         }
 
