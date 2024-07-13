@@ -349,11 +349,7 @@ where
                     let mut parser = self.codec.parser.clone();
 
                     let is_key_frame = match obu.header.obu_type {
-                        ObuType::Frame => {
-                            let frame = parser.parse_frame_obu(obu.clone())?;
-                            frame.header.frame_type == FrameType::KeyFrame
-                        }
-                        ObuType::FrameHeader => {
+                        ObuType::Frame | ObuType::FrameHeader => {
                             let fh = parser.parse_frame_header_obu(&obu)?;
                             fh.frame_type == FrameType::KeyFrame
                         }
