@@ -433,6 +433,12 @@ where
             }
             ObuType::Frame => {
                 let frame = self.codec.parser.parse_frame_obu(obu)?;
+                if self.codec.current_pic.is_some() {
+                    /* submit this frame immediately, as we need to update the
+                     * DPB and the reference info state *before* processing the
+                     * next frame */
+                    self.submit_frame(timestamp)?;
+                }
                 self.decode_frame(frame, timestamp)?;
                 /* submit this frame immediately, as we need to update the
                  * DPB and the reference info state *before* processing the
