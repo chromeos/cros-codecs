@@ -15,6 +15,7 @@ use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::vp8::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::vp8::Vp8;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
@@ -25,7 +26,7 @@ impl StatelessVp8DecoderBackend for Backend {
         Ok(())
     }
 
-    fn new_picture(&mut self, _: u64) -> StatelessBackendResult<Self::Picture> {
+    fn new_picture(&mut self, _: u64) -> NewPictureResult<Self::Picture> {
         Ok(())
     }
 

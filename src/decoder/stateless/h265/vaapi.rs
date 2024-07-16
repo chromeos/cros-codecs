@@ -37,9 +37,10 @@ use crate::decoder::stateless::h265::RefPicListEntry;
 use crate::decoder::stateless::h265::RefPicSet;
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
 use crate::decoder::stateless::h265::H265;
+use crate::decoder::stateless::NewPictureError;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::PoolLayer;
-use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -601,15 +602,15 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         &mut self,
         coded_resolution: Resolution,
         timestamp: u64,
-    ) -> StatelessBackendResult<Self::Picture> {
+    ) -> NewPictureResult<Self::Picture> {
         let layer = PoolLayer::Layer(coded_resolution);
         let pool = self
             .frame_pool(layer)
             .pop()
-            .ok_or(StatelessBackendError::NoFramePool(coded_resolution))?;
+            .ok_or(NewPictureError::NoFramePool(coded_resolution))?;
         let surface = pool
             .get_surface()
-            .ok_or(StatelessBackendError::OutOfResources)?;
+            .ok_or(NewPictureError::OutOfOutputBuffers)?;
         let metadata = self.metadata_state.get_parsed()?;
 
         Ok(VaapiH265Picture {

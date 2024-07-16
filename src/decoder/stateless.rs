@@ -40,13 +40,28 @@ use crate::decoder::StreamInfo;
 use crate::DecodedFormat;
 use crate::Resolution;
 
+/// Error returned by `new_picture` methods of the backend, usually to indicate which kind of
+/// resource is needed before the picture can be successfully created.
+#[derive(Error, Debug)]
+pub enum NewPictureError {
+    /// Indicates that the backend needs one output buffer to be returned to the pool before it can
+    /// proceed.
+    #[error("need one output buffer to be returned before operation can proceed")]
+    OutOfOutputBuffers,
+    /// No frame pool could satisfy the frame requirements. This indicate either an unhandled DRC
+    /// or an invalid stream.
+    #[error("no frame pool can satisfy the requested frame resolution {0:?}")]
+    NoFramePool(Resolution),
+    /// An unrecoverable backend error has occured.
+    #[error(transparent)]
+    BackendError(#[from] anyhow::Error),
+}
+
+pub type NewPictureResult<T> = Result<T, NewPictureError>;
+
 /// Error returned by stateless backend methods.
 #[derive(Error, Debug)]
 pub enum StatelessBackendError {
-    #[error("not enough resources to proceed with the operation now")]
-    OutOfResources,
-    #[error("no frame pool can satisfy the requested frame resolution {0:?}")]
-    NoFramePool(Resolution),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -85,6 +100,21 @@ pub enum DecodeError {
     DecoderError(#[from] anyhow::Error),
     #[error(transparent)]
     BackendError(#[from] StatelessBackendError),
+}
+
+/// Convenience conversion for codecs that process a single frame per decode call.
+impl From<NewPictureError> for DecodeError {
+    fn from(err: NewPictureError) -> Self {
+        match err {
+            NewPictureError::OutOfOutputBuffers => DecodeError::NotEnoughOutputBuffers(1),
+            e @ NewPictureError::NoFramePool(_) => {
+                DecodeError::BackendError(StatelessBackendError::Other(anyhow::anyhow!(e)))
+            }
+            NewPictureError::BackendError(e) => {
+                DecodeError::BackendError(StatelessBackendError::Other(e))
+            }
+        }
+    }
 }
 
 mod private {

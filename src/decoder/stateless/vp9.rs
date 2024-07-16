@@ -22,11 +22,14 @@ use crate::codec::vp9::parser::MAX_SEGMENTS;
 use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::NewPictureError;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
@@ -34,9 +37,6 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
-
-use super::StatelessBackendError;
-use super::StatelessDecoderBackendPicture;
 
 /// Stateless backend methods specific to VP9.
 pub trait StatelessVp9DecoderBackend:
@@ -46,7 +46,7 @@ pub trait StatelessVp9DecoderBackend:
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
     /// Allocate all resources required to process a new picture.
-    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture>;
+    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture>;
 
     /// Called when the decoder wants the backend to finish the decoding
     /// operations for `picture`.
@@ -281,12 +281,12 @@ where
                             self.backend
                                 .new_picture(timestamp)
                                 .map_err(|e| match e {
-                                    StatelessBackendError::OutOfResources => {
+                                    NewPictureError::OutOfOutputBuffers => {
                                         DecodeError::NotEnoughOutputBuffers(
                                             num_required_pictures - i,
                                         )
                                     }
-                                    e => DecodeError::BackendError(e),
+                                    e => DecodeError::from(e),
                                 })
                                 .map(|picture| (frame, Some(picture)))
                         }

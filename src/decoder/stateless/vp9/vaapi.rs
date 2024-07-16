@@ -27,8 +27,9 @@ use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::Segmentation;
 use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::vp9::Vp9;
+use crate::decoder::stateless::NewPictureError;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
-use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
@@ -246,11 +247,11 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
         self.new_sequence(header, PoolCreationMode::Highest)
     }
 
-    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture> {
+    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
         let highest_pool = self.highest_pool();
         let surface = highest_pool
             .get_surface()
-            .ok_or(StatelessBackendError::OutOfResources)?;
+            .ok_or(NewPictureError::OutOfOutputBuffers)?;
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 

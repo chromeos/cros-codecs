@@ -19,6 +19,7 @@ use crate::codec::h264::parser::Sps;
 use crate::codec::h264::picture::PictureData;
 use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::H264;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
@@ -41,7 +42,7 @@ impl StatelessH264DecoderBackend for Backend {
         Ok(())
     }
 
-    fn new_field_picture(&mut self, _: u64, _: &Self::Handle) -> StatelessBackendResult<()> {
+    fn new_field_picture(&mut self, _: u64, _: &Self::Handle) -> NewPictureResult<()> {
         Ok(())
     }
 
@@ -63,7 +64,7 @@ impl StatelessH264DecoderBackend for Backend {
         })
     }
 
-    fn new_picture(&mut self, _: u64) -> StatelessBackendResult<()> {
+    fn new_picture(&mut self, _: u64) -> NewPictureResult<()> {
         Ok(())
     }
 }

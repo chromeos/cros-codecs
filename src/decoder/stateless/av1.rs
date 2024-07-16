@@ -19,7 +19,7 @@ use crate::codec::av1::parser::TileGroupObu;
 use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
-use crate::decoder::stateless::StatelessBackendError;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -58,7 +58,7 @@ pub trait StatelessAV1DecoderBackend:
         hdr: &FrameHeaderObu,
         timestamp: u64,
         highest_spatial_layer: Option<u32>,
-    ) -> StatelessBackendResult<Self::Picture>;
+    ) -> NewPictureResult<Self::Picture>;
 
     /// Called to set the global parameters of a picture.
     fn begin_picture(
@@ -184,13 +184,11 @@ where
                 handle: ref_frame.clone(),
             });
         } else if let Some(sequence) = &self.codec.sequence {
-            let mut backend_picture = self
-                .backend
-                .new_picture(&frame_header, timestamp, self.codec.highest_spatial_layer)
-                .map_err(|e| match e {
-                    StatelessBackendError::OutOfResources => DecodeError::NotEnoughOutputBuffers(1),
-                    e => DecodeError::BackendError(e),
-                })?;
+            let mut backend_picture = self.backend.new_picture(
+                &frame_header,
+                timestamp,
+                self.codec.highest_spatial_layer,
+            )?;
 
             self.backend.begin_picture(
                 &mut backend_picture,

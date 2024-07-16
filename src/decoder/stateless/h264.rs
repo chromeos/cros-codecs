@@ -40,12 +40,13 @@ use crate::codec::h264::picture::RcPictureData;
 use crate::codec::h264::picture::Reference;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::PoolLayer;
-use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
@@ -53,8 +54,6 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
-
-use super::StatelessDecoderBackendPicture;
 
 fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
     const ZIGZAG_8X8: [usize; 64] = [
@@ -84,7 +83,7 @@ pub trait StatelessH264DecoderBackend:
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a frame or field was found.
-    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture>;
+    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture>;
 
     /// Called when the decoder determines that a second field was found.
     /// Indicates that the underlying BackendHandle is to be shared between the
@@ -94,7 +93,7 @@ pub trait StatelessH264DecoderBackend:
         &mut self,
         timestamp: u64,
         first_field: &Self::Handle,
-    ) -> StatelessBackendResult<Self::Picture>;
+    ) -> NewPictureResult<Self::Picture>;
 
     /// Called by the decoder when starting a new frame or field.
     fn start_picture(
@@ -1099,11 +1098,7 @@ where
             self.backend.new_field_picture(timestamp, &first_field.1)
         } else {
             self.backend.new_picture(timestamp)
-        }
-        .map_err(|e| match e {
-            StatelessBackendError::OutOfResources => DecodeError::NotEnoughOutputBuffers(1),
-            e => DecodeError::BackendError(e),
-        })?;
+        }?;
 
         let nalu_hdr = &slice.nalu.header;
 

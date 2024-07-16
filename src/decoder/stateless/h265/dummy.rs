@@ -30,7 +30,7 @@ impl StatelessH265DecoderBackend for Backend {
         &mut self,
         _: Resolution,
         _: u64,
-    ) -> crate::decoder::stateless::StatelessBackendResult<Self::Picture> {
+    ) -> crate::decoder::stateless::NewPictureResult<Self::Picture> {
         Ok(())
     }
 
