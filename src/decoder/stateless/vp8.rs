@@ -17,8 +17,8 @@ use crate::codec::vp8::parser::Parser;
 use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::PoolLayer;
-use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -40,7 +40,7 @@ pub trait StatelessVp8DecoderBackend:
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a frame or field was found.
-    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture>;
+    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture>;
 
     /// Called when the decoder wants the backend to finish the decoding
     /// operations for `picture`.
@@ -180,11 +180,7 @@ where
     fn handle_frame(&mut self, frame: Frame, timestamp: u64) -> Result<(), DecodeError> {
         let show_frame = frame.header.show_frame;
 
-        let picture = self.backend.new_picture(timestamp).map_err(|e| match e {
-            StatelessBackendError::OutOfResources => DecodeError::NotEnoughOutputBuffers(1),
-            e => DecodeError::BackendError(e),
-        })?;
-
+        let picture = self.backend.new_picture(timestamp)?;
         let decoded_handle = self.backend.submit_picture(
             picture,
             &frame.header,

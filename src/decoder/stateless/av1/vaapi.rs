@@ -29,8 +29,9 @@ use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::codec::av1::parser::SEG_LVL_MAX;
 use crate::decoder::stateless::av1::Av1;
 use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
+use crate::decoder::stateless::NewPictureError;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
-use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
@@ -530,7 +531,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
         hdr: &FrameHeaderObu,
         timestamp: u64,
         highest_spatial_layer: Option<u32>,
-    ) -> StatelessBackendResult<Self::Picture> {
+    ) -> NewPictureResult<Self::Picture> {
         let pool = match highest_spatial_layer {
             Some(_) => {
                 let layer = Resolution {
@@ -539,14 +540,14 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
                 };
 
                 self.pool(layer)
-                    .ok_or(StatelessBackendError::NoFramePool(layer))?
+                    .ok_or(NewPictureError::NoFramePool(layer))?
             }
             None => self.highest_pool(),
         };
 
         let surface = pool
             .get_surface()
-            .ok_or(StatelessBackendError::OutOfResources)?;
+            .ok_or(NewPictureError::OutOfOutputBuffers)?;
 
         let metadata = self.metadata_state.get_parsed()?;
         Ok(VaPicture::new(

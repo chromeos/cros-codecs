@@ -30,12 +30,13 @@ use crate::codec::h265::picture::PictureData;
 use crate::codec::h265::picture::Reference;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::PoolLayer;
-use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
@@ -43,8 +44,6 @@ use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
 use crate::Resolution;
-
-use super::StatelessDecoderBackendPicture;
 
 const MAX_DPB_SIZE: usize = 16;
 
@@ -117,7 +116,7 @@ pub trait StatelessH265DecoderBackend:
         &mut self,
         coded_resolution: Resolution,
         timestamp: u64,
-    ) -> StatelessBackendResult<Self::Picture>;
+    ) -> NewPictureResult<Self::Picture>;
 
     /// Called by the decoder for every frame or field found.
     #[allow(clippy::too_many_arguments)]
@@ -932,13 +931,7 @@ where
             return Err(DecodeError::CheckEvents);
         }
 
-        let mut backend_pic = self
-            .backend
-            .new_picture(self.coded_resolution, timestamp)
-            .map_err(|e| match e {
-                StatelessBackendError::OutOfResources => DecodeError::NotEnoughOutputBuffers(1),
-                e => DecodeError::BackendError(e),
-            })?;
+        let mut backend_pic = self.backend.new_picture(self.coded_resolution, timestamp)?;
 
         let pic = PictureData::new_from_slice(
             slice,

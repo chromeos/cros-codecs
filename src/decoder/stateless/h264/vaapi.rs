@@ -35,8 +35,9 @@ use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::Reference;
 use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::H264;
+use crate::decoder::stateless::NewPictureError;
+use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
-use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
@@ -540,11 +541,11 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         self.process_picture::<H264>(picture)
     }
 
-    fn new_picture(&mut self, timestamp: u64) -> StatelessBackendResult<Self::Picture> {
+    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
         let highest_pool = self.highest_pool();
         let surface = highest_pool
             .get_surface()
-            .ok_or(StatelessBackendError::OutOfResources)?;
+            .ok_or(NewPictureError::OutOfOutputBuffers)?;
 
         let metadata = self.metadata_state.get_parsed()?;
 
@@ -559,7 +560,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         &mut self,
         timestamp: u64,
         first_field: &Self::Handle,
-    ) -> StatelessBackendResult<Self::Picture> {
+    ) -> NewPictureResult<Self::Picture> {
         // Decode to the same surface as the first field picture.
         Ok(first_field
             .borrow()
