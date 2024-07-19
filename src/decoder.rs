@@ -278,38 +278,46 @@ mod tests {
 
         // Empty queue should not signal.
         let mut events = [EpollEvent::empty()];
-        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
-        assert_eq!(events, [EpollEvent::empty()]);
+        let nb_fds = epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(nb_fds, 0);
 
         // Events in the queue should signal.
         queue.push(());
         let mut events = [EpollEvent::empty()];
-        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        let nb_fds = epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(nb_fds, 1);
         assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
 
+        // The queue is empty again and should not signal.
         queue.next().unwrap();
         let mut events = [EpollEvent::empty()];
-        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        let nb_fds = epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(nb_fds, 0);
         assert_eq!(events, [EpollEvent::empty()]);
 
+        // Add 3 elements to the queue, it should signal until we remove them all.
         queue.extend(std::iter::repeat(()).take(3));
         let mut events = [EpollEvent::empty()];
-        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        let nb_fds = epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(nb_fds, 1);
         assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
 
         queue.next().unwrap();
         let mut events = [EpollEvent::empty()];
-        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        let nb_fds = epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(nb_fds, 1);
         assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
 
         queue.next().unwrap();
         let mut events = [EpollEvent::empty()];
-        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        let nb_fds = epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(nb_fds, 1);
         assert_eq!(events, [EpollEvent::new(EpollFlags::EPOLLIN, 1)]);
 
         queue.next().unwrap();
         let mut events = [EpollEvent::empty()];
-        epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        let nb_fds = epoll.wait(&mut events, EpollTimeout::ZERO).unwrap();
+        assert_eq!(nb_fds, 0);
         assert_eq!(events, [EpollEvent::empty()]);
     }
 }
