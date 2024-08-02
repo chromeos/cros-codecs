@@ -150,10 +150,11 @@ dependencies = [
 
 [[package]]
 name = "cros-libva"
-version = "0.0.6"
-source = "git+https://github.com/chromeos/cros-libva?rev=843cef6#843cef6897ab056caef8d971294ccf0b67ca6c0c"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b1546af142fbf11a5cad3d1ee2ef64e4d7b69a28b244a79484024a1bc931c17"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.5.0",
  "log",
  "pkg-config",
  "thiserror",
