@@ -57,10 +57,9 @@ Options:
 
 ## Testing
 
-Fluster can be used for testing, using the `ccdec` example program described
-above. [This branch](https://github.com/Gnurou/fluster/tree/cros-codecs)
-contains support for cros-codecs testing. Just make sure the `ccdec` binary is
-in your `PATH`, and run Fluster using one of the `ccdec` decoders, e.g.
+[Fluster](https://github.com/fluendo/fluster) can be used for testing, using the
+`ccdec` example program described above. Just make sure the `ccdec` binary is in
+your `PATH`, and run Fluster using one of the `ccdec` decoders, e.g.
 
 ```shell
 python fluster.py run -d ccdec-H.264 -ts JVT-AVC_V1
