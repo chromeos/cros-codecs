@@ -266,6 +266,10 @@ pub struct SliceHeader {
     /// the bottom field of a coded frame specified in clause 8.2.1.
     pub delta_pic_order_cnt: [i32; 2],
 
+    /// This value is required by V4L2 stateless decode params so it is calculated
+    /// by parser while processing slice header.
+    pub pic_order_cnt_bit_size: usize,
+
     /// Shall be equal to 0 for slices and slice data partitions belonging to
     /// the primary coded picture. The value of `redundant_pic_cnt shall` be
     /// greater than 0 for coded slices or coded slice data partitions of a
@@ -314,6 +318,10 @@ pub struct SliceHeader {
 
     /// Decoded reference picture marking parsed using 7.3.3.3
     pub dec_ref_pic_marking: RefPicMarking,
+
+    /// This value is required by V4L2 stateless decode params so it is calculated
+    /// by parser while processing slice header.
+    pub dec_ref_pic_marking_bit_size: usize,
 
     /// Specifies the index for determining the initialization table used in the
     /// initialization process for context variables.
@@ -2323,6 +2331,7 @@ impl Parser {
     ) -> anyhow::Result<()> {
         let rpm = &mut header.dec_ref_pic_marking;
 
+        let num_bits_left = r.num_bits_left();
         if nalu.header.idr_pic_flag {
             rpm.no_output_of_prior_pics_flag = r.read_bit()?;
             rpm.long_term_reference_flag = r.read_bit()?;
@@ -2361,6 +2370,7 @@ impl Parser {
                 }
             }
         }
+        header.dec_ref_pic_marking_bit_size = num_bits_left - r.num_bits_left();
 
         Ok(())
     }
@@ -2425,6 +2435,7 @@ impl Parser {
             header.idr_pic_id = r.read_ue_max(0xffff)?;
         }
 
+        let num_bits_left = r.num_bits_left();
         if sps.pic_order_cnt_type == 0 {
             header.pic_order_cnt_lsb =
                 r.read_bits(usize::from(sps.log2_max_pic_order_cnt_lsb_minus4) + 4)?;
@@ -2440,6 +2451,7 @@ impl Parser {
                 header.delta_pic_order_cnt[1] = r.read_se()?;
             }
         }
+        header.pic_order_cnt_bit_size = num_bits_left - r.num_bits_left();
 
         if pps.redundant_pic_cnt_present_flag {
             header.redundant_pic_cnt = r.read_ue_max(127)?;
