@@ -1,13 +1,11 @@
 // Copyright 2024 The ChromiumOS Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+use std::fmt;
 use std::io::Write;
 
-use log::error;
-use thiserror::Error;
-
-use crate::utils::BitWriter;
-use crate::utils::BitWriterError;
+use crate::bitstream_utils::BitWriter;
+use crate::bitstream_utils::BitWriterError;
 
 /// Internal wrapper over [`std::io::Write`] for possible emulation prevention
 struct EmulationPrevention<W: Write> {
@@ -97,14 +95,33 @@ impl<W: Write> Drop for EmulationPrevention<W> {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum NaluWriterError {
-    #[error("value increment caused value overflow")]
     Overflow,
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    BitWriterError(#[from] BitWriterError),
+    Io(std::io::Error),
+    BitWriterError(BitWriterError),
+}
+
+impl fmt::Display for NaluWriterError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NaluWriterError::Overflow => write!(f, "value increment caused value overflow"),
+            NaluWriterError::Io(x) => write!(f, "{}", x.to_string()),
+            NaluWriterError::BitWriterError(x) => write!(f, "{}", x.to_string()),
+        }
+    }
+}
+
+impl From<std::io::Error> for NaluWriterError {
+    fn from(err: std::io::Error) -> Self {
+        NaluWriterError::Io(err)
+    }
+}
+
+impl From<BitWriterError> for NaluWriterError {
+    fn from(err: BitWriterError) -> Self {
+        NaluWriterError::BitWriterError(err)
+    }
 }
 
 pub type NaluWriterResult<T> = std::result::Result<T, NaluWriterError>;
@@ -185,7 +202,7 @@ impl<W: Write> NaluWriter<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codec::h264::nalu_reader::NaluReader;
+    use crate::bitstream_utils::BitReader;
 
     #[test]
     fn simple_bits() {
@@ -238,7 +255,7 @@ mod tests {
             writer.write_ue(5u32).unwrap();
         }
 
-        let mut reader = NaluReader::new(&buf);
+        let mut reader = BitReader::new(&buf, true);
 
         assert_eq!(reader.read_ue::<u32>().unwrap(), 10);
         assert_eq!(reader.read_se::<i32>().unwrap(), -42);
@@ -254,7 +271,7 @@ mod tests {
             writer.write_ue(50u32).unwrap();
         }
 
-        let mut reader = NaluReader::new(&buf);
+        let mut reader = BitReader::new(&buf, true);
 
         assert_eq!(reader.read_se::<i32>().unwrap(), 30);
         assert_eq!(reader.read_ue::<u32>().unwrap(), 100);
@@ -274,7 +291,7 @@ mod tests {
             }
             assert_eq!(buf, bitstream);
             {
-                let mut reader = NaluReader::new(&buf);
+                let mut reader = BitReader::new(&buf, true);
                 for byte in input {
                     assert_eq!(*byte, reader.read_bits::<u8>(8).unwrap());
                 }

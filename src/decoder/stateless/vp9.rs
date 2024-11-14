@@ -227,7 +227,11 @@ where
     type FramePool = B::FramePool;
 
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
-        let frames = self.codec.parser.parse_chunk(bitstream)?;
+        let frames = self
+            .codec
+            .parser
+            .parse_chunk(bitstream)
+            .map_err(|err| DecodeError::ParseFrameError(err))?;
 
         // With SVC, the first frame will usually be a key-frame, with
         // inter-frames carrying the other layers.
@@ -337,6 +341,7 @@ where
 
 #[cfg(test)]
 pub mod tests {
+    use crate::bitstream_utils::IvfIterator;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
     use crate::decoder::stateless::vp9::Vp9;
@@ -344,7 +349,6 @@ pub mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.

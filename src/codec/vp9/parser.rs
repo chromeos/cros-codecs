@@ -2,11 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use anyhow::anyhow;
-use anyhow::Context;
-use bitreader::BitReader;
-use enumn::N;
-
+use crate::bitstream_utils::BitReader;
 use crate::codec::vp9::lookups::AC_QLOOKUP;
 use crate::codec::vp9::lookups::AC_QLOOKUP_10;
 use crate::codec::vp9::lookups::AC_QLOOKUP_12;
@@ -56,7 +52,7 @@ pub const MAX_TILE_WIDTH_B64: u32 = 64;
 /// The number of pictures in the DPB
 pub const NUM_REF_FRAMES: usize = 8;
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, N)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum InterpolationFilter {
     #[default]
     EightTap = 0,
@@ -66,7 +62,22 @@ pub enum InterpolationFilter {
     Switchable = 4,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, N)]
+impl TryFrom<u32> for InterpolationFilter {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(InterpolationFilter::EightTap),
+            1 => Ok(InterpolationFilter::EightTapSmooth),
+            2 => Ok(InterpolationFilter::EightTapSharp),
+            3 => Ok(InterpolationFilter::Bilinear),
+            4 => Ok(InterpolationFilter::Switchable),
+            _ => Err(format!("Invalid InterpolationFilter {}", value)),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ReferenceFrameType {
     Intra = 0,
     Last = 1,
@@ -74,15 +85,40 @@ pub enum ReferenceFrameType {
     AltRef = 3,
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, N)]
+impl TryFrom<u32> for ReferenceFrameType {
+    type Error = String;
 
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ReferenceFrameType::Intra),
+            1 => Ok(ReferenceFrameType::Last),
+            2 => Ok(ReferenceFrameType::Golden),
+            3 => Ok(ReferenceFrameType::AltRef),
+            _ => Err(format!("Invalid ReferenceFrameType {}", value)),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum FrameType {
     #[default]
     KeyFrame = 0,
     InterFrame = 1,
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, N)]
+impl TryFrom<u8> for FrameType {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(FrameType::KeyFrame),
+            1 => Ok(FrameType::InterFrame),
+            _ => Err(format!("Invalid FrameType {}", value)),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Profile {
     #[default]
     Profile0 = 0,
@@ -91,7 +127,21 @@ pub enum Profile {
     Profile3 = 3,
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, N)]
+impl TryFrom<u32> for Profile {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Profile::Profile0),
+            1 => Ok(Profile::Profile1),
+            2 => Ok(Profile::Profile2),
+            3 => Ok(Profile::Profile3),
+            _ => Err(format!("Invalid Profile {}", value)),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum BitDepth {
     #[default]
     Depth8 = 8,
@@ -99,7 +149,20 @@ pub enum BitDepth {
     Depth12 = 12,
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, N)]
+impl TryFrom<u32> for BitDepth {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            8 => Ok(BitDepth::Depth8),
+            10 => Ok(BitDepth::Depth10),
+            12 => Ok(BitDepth::Depth12),
+            _ => Err(format!("Invalid BitDepth {}", value)),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum ColorSpace {
     #[default]
     Unknown = 0,
@@ -112,11 +175,41 @@ pub enum ColorSpace {
     CsSrgb = 7,
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, N)]
+impl TryFrom<u32> for ColorSpace {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ColorSpace::Unknown),
+            1 => Ok(ColorSpace::Bt601),
+            2 => Ok(ColorSpace::Bt709),
+            3 => Ok(ColorSpace::Smpte170),
+            4 => Ok(ColorSpace::Smpte240),
+            5 => Ok(ColorSpace::Bt2020),
+            6 => Ok(ColorSpace::Reserved2),
+            7 => Ok(ColorSpace::CsSrgb),
+            _ => Err(format!("Invalid ColorSpace {}", value)),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum ColorRange {
     #[default]
     StudioSwing = 0,
     FullSwing = 1,
+}
+
+impl TryFrom<u32> for ColorRange {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ColorRange::StudioSwing),
+            1 => Ok(ColorRange::FullSwing),
+            _ => Err(format!("Invalid ColorRange {}", value)),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -528,14 +621,14 @@ pub struct Parser {
 }
 
 impl Parser {
-    fn parse_superframe_hdr(resource: impl AsRef<[u8]>) -> anyhow::Result<SuperframeHeader> {
+    fn parse_superframe_hdr(resource: impl AsRef<[u8]>) -> Result<SuperframeHeader, String> {
         let bitstream = resource.as_ref();
 
         // Skip to the end of the chunk.
-        let mut reader = BitReader::new(&bitstream[bitstream.len() - 1..]);
+        let mut reader = BitReader::new(&bitstream[bitstream.len() - 1..], false);
 
         // Try reading a superframe marker.
-        let marker = reader.read_u32(3)?;
+        let marker = reader.read_bits::<u32>(3)?;
 
         if marker != SUPERFRAME_MARKER {
             // Not a superframe
@@ -545,11 +638,11 @@ impl Parser {
             });
         }
 
-        let bytes_per_framesize = reader.read_u32(2)? + 1;
-        let frames_in_superframe = reader.read_u32(3)? + 1;
+        let bytes_per_framesize = reader.read_bits::<u32>(2)? + 1;
+        let frames_in_superframe = reader.read_bits::<u32>(3)? + 1;
 
         if frames_in_superframe > MAX_FRAMES_IN_SUPERFRAME as u32 {
-            return Err(anyhow!(
+            return Err(format!(
                 "Broken stream: too many frames in superframe, expected a maximum of {:?}, found {:?}",
                 MAX_FRAMES_IN_SUPERFRAME,
                 frames_in_superframe
@@ -563,7 +656,7 @@ impl Parser {
         let first_byte = data[index_offset];
         let last_byte = *data
             .last()
-            .ok_or_else(|| anyhow!("superframe header is empty"))?;
+            .ok_or_else(|| String::from("superframe header is empty"))?;
 
         if first_byte != last_byte {
             // Also not a superframe, we must pass both tests as per the specification.
@@ -574,16 +667,16 @@ impl Parser {
         }
 
         let mut frame_sizes = vec![];
-        let mut reader = BitReader::new(&bitstream[index_offset..]);
+        let mut reader = BitReader::new(&bitstream[index_offset..], false);
 
         // Skip the superframe header.
-        let _ = reader.read_u32(8)?;
+        let _ = reader.read_bits::<u32>(8)?;
 
         for _ in 0..frames_in_superframe {
             let mut frame_size = 0;
 
             for j in 0..bytes_per_framesize {
-                frame_size |= reader.read_u32(8)? << (j * 8);
+                frame_size |= reader.read_bits::<u32>(8)? << (j * 8);
             }
 
             frame_sizes.push(frame_size as usize);
@@ -595,9 +688,9 @@ impl Parser {
         })
     }
 
-    fn read_signed_8(r: &mut BitReader, nbits: u8) -> bitreader::Result<i8> {
-        let value = r.read_u8(nbits)?;
-        let negative = r.read_bool()?;
+    fn read_signed_8(r: &mut BitReader, nbits: u8) -> Result<i8, String> {
+        let value = r.read_bits::<u8>(nbits as usize)?;
+        let negative = r.read_bit()?;
 
         if negative {
             Ok(-(value as i8))
@@ -606,11 +699,11 @@ impl Parser {
         }
     }
 
-    fn parse_frame_marker(r: &mut BitReader) -> anyhow::Result<()> {
-        let marker = r.read_u32(2)?;
+    fn parse_frame_marker(r: &mut BitReader) -> Result<(), String> {
+        let marker = r.read_bits::<u32>(2)?;
 
         if marker != FRAME_MARKER {
-            return Err(anyhow!(
+            return Err(format!(
                 "Broken stream: expected frame marker, found {:?}",
                 marker
             ));
@@ -619,37 +712,36 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_profile(r: &mut BitReader) -> anyhow::Result<Profile> {
-        let low = r.read_u32(1)?;
-        let high = r.read_u32(1)?;
+    fn parse_profile(r: &mut BitReader) -> Result<Profile, String> {
+        let low = r.read_bits::<u32>(1)?;
+        let high = r.read_bits::<u32>(1)?;
 
         let profile = (high << 1) | low;
 
         if profile == 3 {
             // Skip the reserved bit
-            let _ = r.read_bool()?;
+            let _ = r.read_bit()?;
         }
 
-        Profile::n(profile).with_context(|| format!("Broken stream: invalid profile {:?}", profile))
+        Profile::try_from(profile)
     }
 
-    fn parse_frame_sync_code(r: &mut BitReader) -> anyhow::Result<()> {
-        let sync_code = r.read_u32(24)?;
+    fn parse_frame_sync_code(r: &mut BitReader) -> Result<(), String> {
+        let sync_code = r.read_bits::<u32>(24)?;
 
         if sync_code != SYNC_CODE {
-            return Err(anyhow!(
+            return Err(format!(
                 "Broken stream: expected sync code == {:?}, found {:?}",
-                SYNC_CODE,
-                sync_code
+                SYNC_CODE, sync_code
             ));
         }
 
         Ok(())
     }
 
-    fn parse_color_config(&mut self, r: &mut BitReader, hdr: &mut Header) -> anyhow::Result<()> {
+    fn parse_color_config(&mut self, r: &mut BitReader, hdr: &mut Header) -> Result<(), String> {
         if matches!(hdr.profile, Profile::Profile2 | Profile::Profile3) {
-            let ten_or_twelve_bit = r.read_bool()?;
+            let ten_or_twelve_bit = r.read_bit()?;
             if ten_or_twelve_bit {
                 hdr.bit_depth = BitDepth::Depth12;
             } else {
@@ -659,23 +751,20 @@ impl Parser {
             hdr.bit_depth = BitDepth::Depth8;
         }
 
-        let color_space = r.read_u32(3)?;
-        hdr.color_space = ColorSpace::n(color_space)
-            .with_context(|| format!("Broken stream: invalid color space: {:?}", color_space))?;
+        let color_space = r.read_bits::<u32>(3)?;
+        hdr.color_space = ColorSpace::try_from(color_space)?;
 
         if !matches!(hdr.color_space, ColorSpace::CsSrgb) {
-            let color_range = r.read_u32(1)?;
+            let color_range = r.read_bits::<u32>(1)?;
 
-            hdr.color_range = ColorRange::n(color_range).with_context(|| {
-                format!("Broken stream: invalid color range: {:?}", color_range)
-            })?;
+            hdr.color_range = ColorRange::try_from(color_range)?;
 
             if matches!(hdr.profile, Profile::Profile1 | Profile::Profile3) {
-                hdr.subsampling_x = r.read_bool()?;
-                hdr.subsampling_y = r.read_bool()?;
+                hdr.subsampling_x = r.read_bit()?;
+                hdr.subsampling_y = r.read_bit()?;
 
                 // Skip the reserved bit
-                let _ = r.read_bool()?;
+                let _ = r.read_bit()?;
             } else {
                 hdr.subsampling_x = true;
                 hdr.subsampling_y = true;
@@ -687,7 +776,7 @@ impl Parser {
                 hdr.subsampling_y = false;
 
                 // Skip the reserved bit
-                let _ = r.read_bool()?;
+                let _ = r.read_bit()?;
             }
         }
 
@@ -707,18 +796,18 @@ impl Parser {
         self.sb64_rows = (self.mi_rows + 7) >> 3;
     }
 
-    fn parse_frame_size(&mut self, r: &mut BitReader, hdr: &mut Header) -> bitreader::Result<()> {
-        hdr.width = r.read_u32(16)? + 1;
-        hdr.height = r.read_u32(16)? + 1;
+    fn parse_frame_size(&mut self, r: &mut BitReader, hdr: &mut Header) -> Result<(), String> {
+        hdr.width = r.read_bits::<u32>(16)? + 1;
+        hdr.height = r.read_bits::<u32>(16)? + 1;
         self.compute_image_size(hdr.width, hdr.height);
         Ok(())
     }
 
-    fn parse_render_size(r: &mut BitReader, hdr: &mut Header) -> bitreader::Result<()> {
-        hdr.render_and_frame_size_different = r.read_bool()?;
+    fn parse_render_size(r: &mut BitReader, hdr: &mut Header) -> Result<(), String> {
+        hdr.render_and_frame_size_different = r.read_bit()?;
         if hdr.render_and_frame_size_different {
-            hdr.render_width = r.read_u32(16)? + 1;
-            hdr.render_height = r.read_u32(16)? + 1;
+            hdr.render_width = r.read_bits::<u32>(16)? + 1;
+            hdr.render_height = r.read_bits::<u32>(16)? + 1;
         } else {
             hdr.render_width = hdr.width;
             hdr.render_height = hdr.height;
@@ -731,11 +820,11 @@ impl Parser {
         &mut self,
         r: &mut BitReader,
         hdr: &mut Header,
-    ) -> bitreader::Result<()> {
+    ) -> Result<(), String> {
         let mut found_ref = false;
 
         for i in 0..REFS_PER_FRAME {
-            found_ref = r.read_bool()?;
+            found_ref = r.read_bit()?;
 
             if found_ref {
                 let idx = hdr.ref_frame_idx[i] as usize;
@@ -754,7 +843,7 @@ impl Parser {
         Self::parse_render_size(r, hdr)
     }
 
-    fn read_interpolation_filter(r: &mut BitReader) -> bitreader::Result<InterpolationFilter> {
+    fn read_interpolation_filter(r: &mut BitReader) -> Result<InterpolationFilter, String> {
         const LITERAL_TO_TYPE: [InterpolationFilter; 4] = [
             InterpolationFilter::EightTapSmooth,
             InterpolationFilter::EightTap,
@@ -762,12 +851,12 @@ impl Parser {
             InterpolationFilter::Bilinear,
         ];
 
-        let is_filter_switchable = r.read_bool()?;
+        let is_filter_switchable = r.read_bit()?;
 
         Ok(if is_filter_switchable {
             InterpolationFilter::Switchable
         } else {
-            let raw_interpolation_filter = r.read_u32(2)?;
+            let raw_interpolation_filter = r.read_bits::<u32>(2)?;
             LITERAL_TO_TYPE[raw_interpolation_filter as usize]
         })
     }
@@ -790,23 +879,23 @@ impl Parser {
     fn parse_loop_filter_params(
         r: &mut BitReader,
         lf: &mut LoopFilterParams,
-    ) -> bitreader::Result<()> {
-        lf.level = r.read_u8(6)?;
-        lf.sharpness = r.read_u8(3)?;
-        lf.delta_enabled = r.read_bool()?;
+    ) -> Result<(), String> {
+        lf.level = r.read_bits::<u8>(6)?;
+        lf.sharpness = r.read_bits::<u8>(3)?;
+        lf.delta_enabled = r.read_bit()?;
 
         if lf.delta_enabled {
-            lf.delta_update = r.read_bool()?;
+            lf.delta_update = r.read_bit()?;
             if lf.delta_update {
                 for i in 0..MAX_REF_LF_DELTAS {
-                    lf.update_ref_delta[i] = r.read_bool()?;
+                    lf.update_ref_delta[i] = r.read_bit()?;
                     if lf.update_ref_delta[i] {
                         lf.ref_deltas[i] = Self::read_signed_8(r, 6)?;
                     }
                 }
 
                 for i in 0..MAX_MODE_LF_DELTAS {
-                    lf.update_mode_delta[i] = r.read_bool()?;
+                    lf.update_mode_delta[i] = r.read_bit()?;
                     if lf.update_mode_delta[i] {
                         lf.mode_deltas[i] = Self::read_signed_8(r, 6)?;
                     }
@@ -817,8 +906,8 @@ impl Parser {
         Ok(())
     }
 
-    fn read_delta_q(r: &mut BitReader, value: &mut i8) -> bitreader::Result<()> {
-        let delta_coded = r.read_bool()?;
+    fn read_delta_q(r: &mut BitReader, value: &mut i8) -> Result<(), String> {
+        let delta_coded = r.read_bit()?;
 
         if delta_coded {
             *value = Self::read_signed_8(r, 4)?;
@@ -829,10 +918,10 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_quantization_params(r: &mut BitReader, hdr: &mut Header) -> bitreader::Result<()> {
+    fn parse_quantization_params(r: &mut BitReader, hdr: &mut Header) -> Result<(), String> {
         let quant = &mut hdr.quant;
 
-        quant.base_q_idx = r.read_u8(8)?;
+        quant.base_q_idx = r.read_bits::<u8>(8)?;
 
         Self::read_delta_q(r, &mut quant.delta_q_y_dc)?;
         Self::read_delta_q(r, &mut quant.delta_q_uv_dc)?;
@@ -846,10 +935,14 @@ impl Parser {
         Ok(())
     }
 
-    fn read_prob(r: &mut BitReader) -> bitreader::Result<u8> {
-        let prob_coded = r.read_bool()?;
+    fn read_prob(r: &mut BitReader) -> Result<u8, String> {
+        let prob_coded = r.read_bit()?;
 
-        let prob = if prob_coded { r.read_u8(8)? } else { 255 };
+        let prob = if prob_coded {
+            r.read_bits::<u8>(8)?
+        } else {
+            255
+        };
 
         Ok(prob)
     }
@@ -857,27 +950,27 @@ impl Parser {
     fn parse_segmentation_params(
         r: &mut BitReader,
         seg: &mut SegmentationParams,
-    ) -> bitreader::Result<()> {
+    ) -> Result<(), String> {
         const SEGMENTATION_FEATURE_BITS: [u8; SEG_LVL_MAX] = [8, 6, 2, 0];
         const SEGMENTATION_FEATURE_SIGNED: [bool; SEG_LVL_MAX] = [true, true, false, false];
 
         seg.update_map = false;
         seg.update_data = false;
 
-        seg.enabled = r.read_bool()?;
+        seg.enabled = r.read_bit()?;
 
         if !seg.enabled {
             return Ok(());
         }
 
-        seg.update_map = r.read_bool()?;
+        seg.update_map = r.read_bit()?;
 
         if seg.update_map {
             for i in 0..SEG_TREE_PROBS {
                 seg.tree_probs[i] = Self::read_prob(r)?;
             }
 
-            seg.temporal_update = r.read_bool()?;
+            seg.temporal_update = r.read_bit()?;
 
             for i in 0..PREDICTION_PROBS {
                 seg.pred_probs[i] = if seg.temporal_update {
@@ -888,19 +981,19 @@ impl Parser {
             }
         }
 
-        seg.update_data = r.read_bool()?;
+        seg.update_data = r.read_bit()?;
 
         if seg.update_data {
-            seg.abs_or_delta_update = r.read_bool()?;
+            seg.abs_or_delta_update = r.read_bit()?;
             for i in 0..MAX_SEGMENTS {
                 for j in 0..SEG_LVL_MAX {
-                    seg.feature_enabled[i][j] = r.read_bool()?;
+                    seg.feature_enabled[i][j] = r.read_bit()?;
                     if seg.feature_enabled[i][j] {
                         let bits_to_read = SEGMENTATION_FEATURE_BITS[j];
-                        let mut feature_value = r.read_i16(bits_to_read)?;
+                        let mut feature_value = r.read_bits_signed::<i16>(bits_to_read as usize)?;
 
                         if SEGMENTATION_FEATURE_SIGNED[j] {
-                            let feature_sign = r.read_bool()?;
+                            let feature_sign = r.read_bit()?;
 
                             if feature_sign {
                                 feature_value = -feature_value;
@@ -936,13 +1029,13 @@ impl Parser {
         max_log2 - 1
     }
 
-    fn parse_tile_info(&self, r: &mut BitReader, hdr: &mut Header) -> bitreader::Result<()> {
+    fn parse_tile_info(&self, r: &mut BitReader, hdr: &mut Header) -> Result<(), String> {
         let max_log2_tile_cols = Self::calc_max_log2_tile_cols(self.sb64_cols);
 
         hdr.tile_cols_log2 = Self::calc_min_log2_tile_cols(self.sb64_cols);
 
         while hdr.tile_cols_log2 < max_log2_tile_cols {
-            let increment_tile_cols_log2 = r.read_bool()?;
+            let increment_tile_cols_log2 = r.read_bit()?;
 
             if increment_tile_cols_log2 {
                 hdr.tile_cols_log2 += 1;
@@ -951,10 +1044,10 @@ impl Parser {
             }
         }
 
-        hdr.tile_rows_log2 = r.read_u8(1)?;
+        hdr.tile_rows_log2 = r.read_bits::<u8>(1)?;
 
         if hdr.tile_rows_log2 > 0 {
-            let increment_tile_rows_log2 = r.read_bool()?;
+            let increment_tile_rows_log2 = r.read_bit()?;
             hdr.tile_rows_log2 += increment_tile_rows_log2 as u8;
         }
 
@@ -965,26 +1058,25 @@ impl Parser {
         &mut self,
         resource: impl AsRef<[u8]>,
         offset: usize,
-    ) -> anyhow::Result<Header> {
+    ) -> Result<Header, String> {
         let data = &resource.as_ref()[offset..];
-        let mut r = BitReader::new(data);
+        let mut r = BitReader::new(data, false);
         let mut hdr = Header::default();
 
         Self::parse_frame_marker(&mut r)?;
         hdr.profile = Self::parse_profile(&mut r)?;
 
-        hdr.show_existing_frame = r.read_bool()?;
+        hdr.show_existing_frame = r.read_bit()?;
 
         if hdr.show_existing_frame {
-            hdr.frame_to_show_map_idx = r.read_u8(3)?;
+            hdr.frame_to_show_map_idx = r.read_bits::<u8>(3)?;
             return Ok(hdr);
         }
 
-        hdr.frame_type =
-            FrameType::n(r.read_u8(1)?).ok_or(anyhow!("Broken data: invalid frame type"))?;
+        hdr.frame_type = FrameType::try_from(r.read_bits::<u8>(1)?)?;
 
-        hdr.show_frame = r.read_bool()?;
-        hdr.error_resilient_mode = r.read_bool()?;
+        hdr.show_frame = r.read_bit()?;
+        hdr.error_resilient_mode = r.read_bit()?;
 
         let frame_is_intra;
 
@@ -997,13 +1089,13 @@ impl Parser {
             frame_is_intra = true;
         } else {
             if !hdr.show_frame {
-                hdr.intra_only = r.read_bool()?;
+                hdr.intra_only = r.read_bit()?;
             }
 
             frame_is_intra = hdr.intra_only;
 
             if !hdr.error_resilient_mode {
-                hdr.reset_frame_context = r.read_u8(2)?;
+                hdr.reset_frame_context = r.read_bits::<u8>(2)?;
             } else {
                 hdr.reset_frame_context = 0;
             }
@@ -1025,7 +1117,7 @@ impl Parser {
                     self.bit_depth = hdr.bit_depth;
                 }
 
-                hdr.refresh_frame_flags = r.read_u8(8)?;
+                hdr.refresh_frame_flags = r.read_bits::<u8>(8)?;
                 self.parse_frame_size(&mut r, &mut hdr)?;
                 Self::parse_render_size(&mut r, &mut hdr)?;
             } else {
@@ -1036,29 +1128,29 @@ impl Parser {
                 hdr.subsampling_y = self.subsampling_y;
                 hdr.bit_depth = self.bit_depth;
 
-                hdr.refresh_frame_flags = r.read_u8(8)?;
+                hdr.refresh_frame_flags = r.read_bits::<u8>(8)?;
 
                 for i in 0..REFS_PER_FRAME {
-                    hdr.ref_frame_idx[i] = r.read_u8(3)?;
+                    hdr.ref_frame_idx[i] = r.read_bits::<u8>(3)?;
                     hdr.ref_frame_sign_bias[ReferenceFrameType::Last as usize + i] =
-                        r.read_u8(1)?;
+                        r.read_bits::<u8>(1)?;
                 }
 
                 self.parse_frame_size_with_refs(&mut r, &mut hdr)?;
-                hdr.allow_high_precision_mv = r.read_bool()?;
+                hdr.allow_high_precision_mv = r.read_bit()?;
                 hdr.interpolation_filter = Self::read_interpolation_filter(&mut r)?;
             }
         }
 
         if !hdr.error_resilient_mode {
-            hdr.refresh_frame_context = r.read_bool()?;
-            hdr.frame_parallel_decoding_mode = r.read_bool()?;
+            hdr.refresh_frame_context = r.read_bit()?;
+            hdr.frame_parallel_decoding_mode = r.read_bit()?;
         } else {
             hdr.refresh_frame_context = false;
             hdr.frame_parallel_decoding_mode = true;
         }
 
-        hdr.frame_context_idx = r.read_u8(2)?;
+        hdr.frame_context_idx = r.read_bits::<u8>(2)?;
 
         if frame_is_intra || hdr.error_resilient_mode {
             self.setup_past_independence(&mut hdr);
@@ -1069,7 +1161,7 @@ impl Parser {
         Self::parse_segmentation_params(&mut r, &mut self.seg)?;
         self.parse_tile_info(&mut r, &mut hdr)?;
 
-        hdr.header_size_in_bytes = r.read_u16(16)?;
+        hdr.header_size_in_bytes = r.read_bits::<u16>(16)?;
 
         hdr.lf = self.lf.clone();
         hdr.seg = self.seg.clone();
@@ -1093,7 +1185,7 @@ impl Parser {
         bitstream: &'a [u8],
         offset: usize,
         size: usize,
-    ) -> anyhow::Result<Frame<'a>> {
+    ) -> Result<Frame<'a>, String> {
         let header = self.parse_frame_header(bitstream, offset)?;
 
         Ok(Frame {
@@ -1106,7 +1198,7 @@ impl Parser {
 
     /// Parses VP9 frames from the data in `resource`. This can result in more than one frame if the
     /// data passed in contains a VP9 superframe.
-    pub fn parse_chunk<'a>(&mut self, resource: &'a [u8]) -> anyhow::Result<Vec<Frame<'a>>> {
+    pub fn parse_chunk<'a>(&mut self, resource: &'a [u8]) -> Result<Vec<Frame<'a>>, String> {
         let superframe_hdr = Parser::parse_superframe_hdr(resource)?;
         let mut offset = 0;
 
@@ -1125,6 +1217,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
+    use crate::bitstream_utils::IvfIterator;
     use crate::codec::vp9::parser::BitDepth;
     use crate::codec::vp9::parser::ColorSpace;
     use crate::codec::vp9::parser::FrameType;
@@ -1133,7 +1226,6 @@ mod tests {
     use crate::codec::vp9::parser::Profile;
     use crate::codec::vp9::parser::MAX_SEGMENTS;
     use crate::codec::vp9::parser::SEG_LVL_MAX;
-    use crate::utils::IvfIterator;
 
     #[test]
     fn test_parse_superframe() {

@@ -46,7 +46,8 @@ use crate::decoder::BlockingMode;
 impl VaStreamInfo for &Rc<Sps> {
     fn va_profile(&self) -> anyhow::Result<i32> {
         let profile_idc = self.profile_idc;
-        let profile = Profile::n(profile_idc)
+        let profile = Profile::try_from(profile_idc)
+            .map_err(|err| anyhow!(err))
             .with_context(|| format!("Invalid profile_idc {:?}", profile_idc))?;
 
         match profile {
@@ -227,7 +228,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
     let mut va_refs = vec![];
 
     for handle in &refs {
-        let surface_id = va_surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.reference);
         let ref_pic = handle.pic.borrow();
         let pic = fill_va_h264_pic(&ref_pic, surface_id, true);
         va_refs.push(pic);
@@ -245,7 +246,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         .collect();
 
     for handle in &refs {
-        let surface_id = va_surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.reference);
         let ref_pic = handle.pic.borrow();
         let pic = fill_va_h264_pic(&ref_pic, surface_id, true);
         va_refs.push(pic);
@@ -325,7 +326,7 @@ fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
     let mut va_pics = vec![];
 
     for handle in ref_list_x {
-        let surface_id = va_surface_id(&handle.handle);
+        let surface_id = va_surface_id(&handle.reference);
         let ref_pic = handle.pic.borrow();
         let merge = matches!(ref_pic.field, Field::Frame);
         let va_pic = fill_va_h264_pic(&ref_pic, surface_id, merge);
@@ -586,6 +587,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H264, VaapiBackend<M
 mod tests {
     use libva::Display;
 
+    use crate::bitstream_utils::NalIterator;
     use crate::codec::h264::parser::Nalu;
     use crate::decoder::stateless::h264::H264;
     use crate::decoder::stateless::tests::test_decode_stream;
@@ -594,7 +596,6 @@ mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::NalIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.

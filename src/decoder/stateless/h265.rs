@@ -218,6 +218,176 @@ pub struct RefPicSet<T> {
     ref_pic_set_lt_foll: [Option<DpbEntry<T>>; MAX_DPB_SIZE],
 }
 
+impl<T> RefPicSet<T>
+where
+    T: Clone,
+{
+    // See 8.3.4.
+    // Builds the reference picture list for `hdr` for P and B slices.
+    fn build_ref_pic_lists(
+        &self,
+        hdr: &SliceHeader,
+        pps: &Pps,
+        cur_pic: &PictureData,
+    ) -> anyhow::Result<ReferencePicLists<T>> {
+        let mut ref_pic_lists = ReferencePicLists::default();
+
+        // I slices do not use inter prediction.
+        if !hdr.type_.is_p() && !hdr.type_.is_b() {
+            return Ok(ref_pic_lists);
+        }
+
+        if self.num_poc_st_curr_before == 0
+            && self.num_poc_st_curr_after == 0
+            && self.num_poc_lt_curr == 0
+            && pps.scc_extension_flag
+            && !pps.scc_extension.curr_pic_ref_enabled_flag
+        {
+            // Let's try and keep going, if it is a broken stream then maybe it
+            // will sort itself out as we go. In any case, we must not loop
+            // infinitely here.
+            log::error!("Bug or broken stream: out of pictures and can't build ref pic lists.");
+            return Ok(ref_pic_lists);
+        }
+
+        let rplm = &hdr.ref_pic_list_modification;
+
+        let num_rps_curr_temp_list0 = std::cmp::max(
+            u32::from(hdr.num_ref_idx_l0_active_minus1) + 1,
+            hdr.num_pic_total_curr,
+        );
+
+        // This could be simplified using a Vec, but lets not change the
+        // algorithm from the spec too much.
+        let mut ref_pic_list_temp0: [Option<RefPicListEntry<T>>; MAX_DPB_SIZE] = Default::default();
+
+        // Equation 8-8
+        let mut r_idx = 0;
+        assert!(num_rps_curr_temp_list0 as usize <= MAX_DPB_SIZE);
+        while r_idx < num_rps_curr_temp_list0 {
+            let mut i = 0;
+            while i < self.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_st_curr_before[i]
+                    .clone()
+                    .map(RefPicListEntry::DpbEntry);
+
+                i += 1;
+                r_idx += 1;
+            }
+
+            let mut i = 0;
+            while i < self.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_st_curr_after[i]
+                    .clone()
+                    .map(RefPicListEntry::DpbEntry);
+
+                i += 1;
+                r_idx += 1;
+            }
+
+            let mut i = 0;
+            while i < self.num_poc_lt_curr && r_idx < num_rps_curr_temp_list0 {
+                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_lt_curr[i]
+                    .clone()
+                    .map(RefPicListEntry::DpbEntry);
+
+                i += 1;
+                r_idx += 1;
+            }
+
+            if pps.scc_extension.curr_pic_ref_enabled_flag {
+                ref_pic_list_temp0[r_idx as usize] =
+                    Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
+
+                r_idx += 1;
+            }
+        }
+
+        // Equation 8-9
+        for r_idx in 0..=usize::from(hdr.num_ref_idx_l0_active_minus1) {
+            let entry = if rplm.ref_pic_list_modification_flag_l0 {
+                let idx = rplm.list_entry_l0[r_idx];
+                ref_pic_list_temp0[idx as usize].clone()
+            } else {
+                ref_pic_list_temp0[r_idx].clone()
+            };
+
+            ref_pic_lists.ref_pic_list0[r_idx] = entry;
+        }
+
+        if pps.scc_extension.curr_pic_ref_enabled_flag
+            && !rplm.ref_pic_list_modification_flag_l0
+            && num_rps_curr_temp_list0 > (u32::from(hdr.num_ref_idx_l0_active_minus1) + 1)
+        {
+            ref_pic_lists.ref_pic_list0[r_idx as usize] =
+                Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
+        }
+
+        if hdr.type_.is_b() {
+            let mut ref_pic_list_temp1: [Option<RefPicListEntry<T>>; MAX_DPB_SIZE] =
+                Default::default();
+
+            let num_rps_curr_temp_list1 = std::cmp::max(
+                u32::from(hdr.num_ref_idx_l1_active_minus1) + 1,
+                hdr.num_pic_total_curr,
+            );
+
+            // Equation 8-10
+            let mut r_idx = 0;
+            assert!(num_rps_curr_temp_list1 as usize <= MAX_DPB_SIZE);
+            while r_idx < num_rps_curr_temp_list1 {
+                let mut i = 0;
+                while i < self.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_st_curr_after[i]
+                        .clone()
+                        .map(RefPicListEntry::DpbEntry);
+                    i += 1;
+                    r_idx += 1;
+                }
+
+                let mut i = 0;
+                while i < self.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_st_curr_before[i]
+                        .clone()
+                        .map(RefPicListEntry::DpbEntry);
+                    i += 1;
+                    r_idx += 1;
+                }
+
+                let mut i = 0;
+                while i < self.num_poc_lt_curr && r_idx < num_rps_curr_temp_list1 {
+                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_lt_curr[i]
+                        .clone()
+                        .map(RefPicListEntry::DpbEntry);
+                    i += 1;
+                    r_idx += 1;
+                }
+
+                if pps.scc_extension.curr_pic_ref_enabled_flag {
+                    ref_pic_list_temp1[r_idx as usize] =
+                        Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
+
+                    r_idx += 1;
+                }
+            }
+
+            // Equation 8-11
+            for r_idx in 0..=usize::from(hdr.num_ref_idx_l1_active_minus1) {
+                let entry = if rplm.ref_pic_list_modification_flag_l1 {
+                    let idx = rplm.list_entry_l1[r_idx];
+                    ref_pic_list_temp1[idx as usize].clone()
+                } else {
+                    ref_pic_list_temp1[r_idx].clone()
+                };
+
+                ref_pic_lists.ref_pic_list1[r_idx] = entry;
+            }
+        }
+
+        Ok(ref_pic_lists)
+    }
+}
+
 impl<T: Clone> Default for RefPicSet<T> {
     fn default() -> Self {
         Self {
@@ -397,7 +567,12 @@ where
     }
 
     // See 8.3.2.
-    fn decode_rps(&mut self, slice: &Slice, cur_pic: &PictureData) -> anyhow::Result<()> {
+    fn decode_rps(
+        &mut self,
+        slice: &Slice,
+        sps: &Sps,
+        cur_pic: &PictureData,
+    ) -> anyhow::Result<()> {
         let hdr = &slice.header;
 
         if cur_pic.nalu_type.is_irap() && cur_pic.no_rasl_output_flag {
@@ -417,12 +592,6 @@ where
             self.codec.rps.num_poc_lt_curr = 0;
             self.codec.rps.num_poc_lt_foll = 0;
         } else {
-            let sps = self
-                .codec
-                .parser
-                .get_sps(self.codec.cur_sps_id)
-                .context("Invalid SPS")?;
-
             let curr_st_rps = Self::st_ref_pic_set(hdr, sps);
             let mut j = 0;
             let mut k = 0;
@@ -639,179 +808,6 @@ where
         Ok(())
     }
 
-    // See 8.3.4.
-    // Builds the reference picture list for `hdr` for P and B slices.
-    fn build_ref_pic_lists(
-        &self,
-        hdr: &SliceHeader,
-        cur_pic: &PictureData,
-    ) -> anyhow::Result<ReferencePicLists<B::Handle>> {
-        let mut ref_pic_lists = ReferencePicLists::default();
-
-        // I slices do not use inter prediction.
-        if !hdr.type_.is_p() && !hdr.type_.is_b() {
-            return Ok(ref_pic_lists);
-        }
-
-        let pps = self
-            .codec
-            .parser
-            .get_pps(hdr.pic_parameter_set_id)
-            .context("Invalid PPS in build_ref_pic_lists")?;
-
-        if self.codec.rps.num_poc_st_curr_before == 0
-            && self.codec.rps.num_poc_st_curr_after == 0
-            && self.codec.rps.num_poc_lt_curr == 0
-            && pps.scc_extension_flag
-            && !pps.scc_extension.curr_pic_ref_enabled_flag
-        {
-            // Let's try and keep going, if it is a broken stream then maybe it
-            // will sort itself out as we go. In any case, we must not loop
-            // infinitely here.
-            log::error!("Bug or broken stream: out of pictures and can't build ref pic lists.");
-            return Ok(ref_pic_lists);
-        }
-
-        let rplm = &hdr.ref_pic_list_modification;
-
-        let num_rps_curr_temp_list0 = std::cmp::max(
-            u32::from(hdr.num_ref_idx_l0_active_minus1) + 1,
-            hdr.num_pic_total_curr,
-        );
-
-        // This could be simplified using a Vec, but lets not change the
-        // algorithm from the spec too much.
-        let mut ref_pic_list_temp0: [Option<RefPicListEntry<B::Handle>>; MAX_DPB_SIZE] =
-            Default::default();
-
-        // Equation 8-8
-        let mut r_idx = 0;
-        assert!(num_rps_curr_temp_list0 as usize <= MAX_DPB_SIZE);
-        while r_idx < num_rps_curr_temp_list0 {
-            let mut i = 0;
-            while i < self.codec.rps.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.codec.rps.ref_pic_set_st_curr_before[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
-
-                i += 1;
-                r_idx += 1;
-            }
-
-            let mut i = 0;
-            while i < self.codec.rps.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.codec.rps.ref_pic_set_st_curr_after[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
-
-                i += 1;
-                r_idx += 1;
-            }
-
-            let mut i = 0;
-            while i < self.codec.rps.num_poc_lt_curr && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.codec.rps.ref_pic_set_lt_curr[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
-
-                i += 1;
-                r_idx += 1;
-            }
-
-            if pps.scc_extension.curr_pic_ref_enabled_flag {
-                ref_pic_list_temp0[r_idx as usize] =
-                    Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
-
-                r_idx += 1;
-            }
-        }
-
-        // Equation 8-9
-        for r_idx in 0..=usize::from(hdr.num_ref_idx_l0_active_minus1) {
-            let entry = if rplm.ref_pic_list_modification_flag_l0 {
-                let idx = rplm.list_entry_l0[r_idx];
-                ref_pic_list_temp0[idx as usize].clone()
-            } else {
-                ref_pic_list_temp0[r_idx].clone()
-            };
-
-            ref_pic_lists.ref_pic_list0[r_idx] = entry;
-        }
-
-        if pps.scc_extension.curr_pic_ref_enabled_flag
-            && !rplm.ref_pic_list_modification_flag_l0
-            && num_rps_curr_temp_list0 > (u32::from(hdr.num_ref_idx_l0_active_minus1) + 1)
-        {
-            ref_pic_lists.ref_pic_list0[r_idx as usize] =
-                Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
-        }
-
-        if hdr.type_.is_b() {
-            let mut ref_pic_list_temp1: [Option<RefPicListEntry<B::Handle>>; MAX_DPB_SIZE] =
-                Default::default();
-
-            let num_rps_curr_temp_list1 = std::cmp::max(
-                u32::from(hdr.num_ref_idx_l1_active_minus1) + 1,
-                hdr.num_pic_total_curr,
-            );
-
-            // Equation 8-10
-            let mut r_idx = 0;
-            assert!(num_rps_curr_temp_list1 as usize <= MAX_DPB_SIZE);
-            while r_idx < num_rps_curr_temp_list1 {
-                let mut i = 0;
-                while i < self.codec.rps.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.codec.rps.ref_pic_set_st_curr_after
-                        [i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
-                    i += 1;
-                    r_idx += 1;
-                }
-
-                let mut i = 0;
-                while i < self.codec.rps.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.codec.rps.ref_pic_set_st_curr_before
-                        [i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
-                    i += 1;
-                    r_idx += 1;
-                }
-
-                let mut i = 0;
-                while i < self.codec.rps.num_poc_lt_curr && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.codec.rps.ref_pic_set_lt_curr[i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
-                    i += 1;
-                    r_idx += 1;
-                }
-
-                if pps.scc_extension.curr_pic_ref_enabled_flag {
-                    ref_pic_list_temp1[r_idx as usize] =
-                        Some(RefPicListEntry::CurrentPicture(cur_pic.clone()));
-
-                    r_idx += 1;
-                }
-            }
-
-            // Equation 8-11
-            for r_idx in 0..=usize::from(hdr.num_ref_idx_l1_active_minus1) {
-                let entry = if rplm.ref_pic_list_modification_flag_l1 {
-                    let idx = rplm.list_entry_l1[r_idx];
-                    ref_pic_list_temp1[idx as usize].clone()
-                } else {
-                    ref_pic_list_temp1[r_idx].clone()
-                };
-
-                ref_pic_lists.ref_pic_list1[r_idx] = entry;
-            }
-        }
-
-        Ok(ref_pic_lists)
-    }
-
     /// Drain the decoder, processing all pending frames.
     fn drain(&mut self) -> anyhow::Result<()> {
         log::debug!("Draining the decoder");
@@ -887,7 +883,10 @@ where
 
     // See C.5.2.2
     fn update_dpb_before_decoding(&mut self, cur_pic: &PictureData) -> anyhow::Result<()> {
-        if cur_pic.is_irap && cur_pic.no_rasl_output_flag && !self.codec.first_picture_after_eos {
+        if cur_pic.nalu_type.is_irap()
+            && cur_pic.no_rasl_output_flag
+            && !self.codec.first_picture_after_eos
+        {
             if cur_pic.no_output_of_prior_pics_flag {
                 self.codec.dpb.clear();
             } else {
@@ -935,10 +934,6 @@ where
 
         let pic = PictureData::new_from_slice(
             slice,
-            self.codec
-                .parser
-                .get_pps(slice.header.pic_parameter_set_id)
-                .context("Invalid PPS")?,
             self.codec.first_picture_in_bitstream,
             self.codec.first_picture_after_eos,
             self.codec.prev_tid_0_pic.as_ref(),
@@ -948,7 +943,7 @@ where
         self.codec.first_picture_after_eos = false;
         self.codec.first_picture_in_bitstream = false;
 
-        if pic.is_irap {
+        if pic.nalu_type.is_irap() {
             self.codec.irap_no_rasl_output_flag = pic.no_rasl_output_flag;
         } else if pic.nalu_type.is_rasl() && self.codec.irap_no_rasl_output_flag {
             // NOTE – All RASL pictures are leading pictures of an associated
@@ -968,24 +963,21 @@ where
 
         log::debug!("Decode picture POC {}", pic.pic_order_cnt_val);
 
-        self.decode_rps(slice, &pic)?;
-        self.update_dpb_before_decoding(&pic)?;
-
         let pps = self
             .codec
             .parser
             .get_pps(slice.header.pic_parameter_set_id)
-            .context("invalid PPS ID")?;
-        let sps = self
-            .codec
-            .parser
-            .get_sps(pps.seq_parameter_set_id)
-            .context("invalid SPS ID")?;
+            .context("invalid PPS ID")?
+            .clone();
+
+        self.decode_rps(slice, &pps.sps, &pic)?;
+        self.update_dpb_before_decoding(&pic)?;
+
         self.backend.begin_picture(
             &mut backend_pic,
             &pic,
-            sps,
-            pps,
+            pps.sps.as_ref(),
+            &pps,
             &self.codec.dpb,
             &self.codec.rps,
             slice,
@@ -1015,32 +1007,24 @@ where
         // is not the one currently in use.
         self.update_current_set_ids(slice.header.pic_parameter_set_id)?;
 
-        let sps = self
-            .codec
-            .parser
-            .get_sps(self.codec.cur_sps_id)
-            .context("Invalid SPS")?;
-
-        // Make sure that no negotiation is possible mid-picture. How could it?
-        // We'd lose the context with the previous slices on it.
-        assert!(!Self::negotiation_possible(
-            sps,
-            &self.codec.dpb,
-            &self.codec.negotiation_info,
-        ));
-
-        pic.ref_pic_lists = self.build_ref_pic_lists(&slice.header, &pic.pic)?;
-
         let pps = self
             .codec
             .parser
             .get_pps(slice.header.pic_parameter_set_id)
             .context("invalid PPS ID")?;
-        let sps = self
+        let sps = pps.sps.as_ref();
+
+        pic.ref_pic_lists = self
             .codec
-            .parser
-            .get_sps(pps.seq_parameter_set_id)
-            .context("invalid SPS ID")?;
+            .rps
+            .build_ref_pic_lists(&slice.header, pps, &pic.pic)?;
+
+        // Make sure that no negotiation is possible mid-picture. How could it?
+        // We'd lose the context with the previous slices on it.
+        if Self::negotiation_possible(sps, &self.codec.dpb, &self.codec.negotiation_info) {
+            anyhow::bail!("invalid stream: mid-frame format negotiation requested");
+        }
+
         self.backend.decode_slice(
             &mut pic.backend_pic,
             slice,
@@ -1074,7 +1058,8 @@ where
         // decide whether to bump.
         self.codec
             .dpb
-            .store_picture(Rc::new(RefCell::new(pic)), handle)?;
+            .store_picture(Rc::new(RefCell::new(pic)), handle)
+            .map_err(|err| anyhow!(err))?;
         let bumped = self.bump_as_needed(BumpingType::AfterDecoding)?;
 
         log::debug!(
@@ -1136,10 +1121,17 @@ where
 
         match nalu.header.type_ {
             NaluType::VpsNut => {
-                self.codec.parser.parse_vps(&nalu)?;
+                self.codec
+                    .parser
+                    .parse_vps(&nalu)
+                    .map_err(|err| DecodeError::ParseFrameError(err))?;
             }
             NaluType::SpsNut => {
-                let sps = self.codec.parser.parse_sps(&nalu)?;
+                let sps = self
+                    .codec
+                    .parser
+                    .parse_sps(&nalu)
+                    .map_err(|err| DecodeError::ParseFrameError(err))?;
                 self.codec.max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
 
                 let pending_pps = std::mem::take(&mut self.codec.pending_pps);
@@ -1175,13 +1167,19 @@ where
             | NaluType::RaslN
             | NaluType::RaslR
             | NaluType::CraNut => {
-                let mut slice = self.codec.parser.parse_slice_header(nalu)?;
+                let mut slice = self
+                    .codec
+                    .parser
+                    .parse_slice_header(nalu)
+                    .map_err(|err| DecodeError::ParseFrameError(err))?;
 
                 let first_slice_segment_in_pic_flag = slice.header.first_slice_segment_in_pic_flag;
 
                 if slice.header.dependent_slice_segment_flag {
                     let previous_independent_header = self.codec.last_independent_slice_header.as_ref().ok_or(anyhow!("Cannot process an dependent slice without first processing and independent one"))?.clone();
-                    slice.replace_header(previous_independent_header)?;
+                    slice
+                        .replace_header(previous_independent_header)
+                        .map_err(|err| DecodeError::ParseFrameError(err))?;
                 } else {
                     self.codec.last_independent_slice_header = Some(slice.header.clone());
                 }
@@ -1241,10 +1239,15 @@ where
 
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let mut cursor = Cursor::new(bitstream);
-        let nalu = Nalu::next(&mut cursor)?;
+        let nalu = Nalu::next(&mut cursor).map_err(|err| DecodeError::ParseFrameError(err))?;
 
         if nalu.header.type_ == NaluType::SpsNut {
-            let sps = self.codec.parser.parse_sps(&nalu)?.clone();
+            let sps = self
+                .codec
+                .parser
+                .parse_sps(&nalu)
+                .map_err(|err| DecodeError::ParseFrameError(err))?
+                .clone();
             if matches!(self.decoding_state, DecodingState::AwaitingStreamInfo) {
                 // If more SPS come along we will renegotiate in begin_picture().
                 self.renegotiate_if_needed(RenegotiationType::NewSps(&sps))?;
@@ -1319,6 +1322,7 @@ where
 #[cfg(test)]
 pub mod tests {
 
+    use crate::bitstream_utils::NalIterator;
     use crate::codec::h265::parser::Nalu;
     use crate::decoder::stateless::h265::H265;
     use crate::decoder::stateless::tests::test_decode_stream;
@@ -1327,7 +1331,6 @@ pub mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::NalIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.

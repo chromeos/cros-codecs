@@ -626,6 +626,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<Av1, VaapiBackend<M>
 mod tests {
     use libva::Display;
 
+    use crate::bitstream_utils::IvfIterator;
     use crate::decoder::stateless::av1::Av1;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
@@ -633,7 +634,6 @@ mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.

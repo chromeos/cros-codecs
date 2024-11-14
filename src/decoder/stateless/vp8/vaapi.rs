@@ -314,6 +314,7 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
+    use crate::bitstream_utils::IvfIterator;
     use crate::codec::vp8::parser::Parser;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
@@ -321,7 +322,6 @@ mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::IvfIterator;
     use crate::DecodedFormat;
     use crate::Resolution;
 

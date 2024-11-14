@@ -18,7 +18,9 @@ pub mod vp8;
 pub mod vp9;
 
 use std::os::fd::AsFd;
+use std::os::fd::AsRawFd;
 use std::os::fd::BorrowedFd;
+use std::time::Duration;
 
 use nix::errno::Errno;
 use nix::sys::epoll::Epoll;
@@ -28,7 +30,6 @@ use nix::sys::epoll::EpollFlags;
 use nix::sys::eventfd::EventFd;
 use thiserror::Error;
 
-use crate::codec::vp8::parser::ParseFrameError;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
@@ -95,7 +96,7 @@ pub enum DecodeError {
     #[error("cannot accept more input until pending events are processed")]
     CheckEvents,
     #[error("error while parsing frame: {0}")]
-    ParseFrameError(#[from] ParseFrameError),
+    ParseFrameError(String),
     #[error(transparent)]
     DecoderError(#[from] anyhow::Error),
     #[error(transparent)]
@@ -115,6 +116,13 @@ impl From<NewPictureError> for DecodeError {
             }
         }
     }
+}
+
+/// Error returned by the [`StatelessVideoDecoder::wait_for_next_event`] method.
+#[derive(Debug, Error)]
+pub enum WaitNextEventError {
+    #[error("timed out while waiting for next decoder event")]
+    TimedOut,
 }
 
 mod private {
@@ -317,6 +325,25 @@ pub trait StatelessVideoDecoder {
 
     /// Returns the next event, if there is any pending.
     fn next_event(&mut self) -> Option<DecoderEvent<Self::Handle>>;
+
+    /// Blocks until [`StatelessVideoDecoder::next_event`] is expected to return `Some` or
+    /// `timeout` has elapsed.
+    ///
+    /// Wait for the next event and return it, or return `None` if `timeout` has been reached while
+    /// waiting.
+    fn wait_for_next_event(&mut self, timeout: Duration) -> Result<(), WaitNextEventError> {
+        // Wait until the next event is available.
+        let mut fd = nix::libc::pollfd {
+            fd: self.poll_fd().as_raw_fd(),
+            events: nix::libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: `fd` is a valid reference to a properly-filled `pollfd`.
+        match unsafe { nix::libc::poll(&mut fd, 1, timeout.as_millis() as i32) } {
+            0 => Err(WaitNextEventError::TimedOut),
+            _ => Ok(()),
+        }
+    }
 
     /// Returns a file descriptor that signals `POLLIN` whenever an event is pending on this
     /// decoder.

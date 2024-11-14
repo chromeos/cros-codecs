@@ -4,10 +4,10 @@
 
 use std::cell::Ref;
 use std::cell::RefMut;
+use std::fmt;
 use std::rc::Rc;
 
 use log::debug;
-use thiserror::Error;
 
 use crate::codec::h264::parser::MaxLongTermFrameIdx;
 use crate::codec::h264::parser::RefPicMarkingInner;
@@ -38,16 +38,16 @@ pub struct ReferencePicLists {
     pub ref_pic_list_b1: Vec<usize>,
 }
 
-// Shortcut to refer to a DPB entry.
-//
-// The first member of the tuple is the `PictureData` for the frame.
-//
-// The second member is the backend handle of the frame. It can be `None` if the inserted picture
-// is non-existing (i.e. `nonexisting` is true on the `PictureData`).
+/// A single entry in the DPB.
 #[derive(Clone)]
 pub struct DpbEntry<T> {
+    /// `PictureData` of the frame in this entry.
     pub pic: RcPictureData,
-    pub handle: Option<T>,
+    /// Reference to the decoded frame, ensuring that it doesn't get reused while in the DPB.
+    pub reference: Option<T>,
+    /// Decoded frame promise. It will be set when the frame enters the DPB, and taken during the
+    /// bump process.
+    pub decoded_frame: Option<T>,
     /// Whether the picture is still waiting to be bumped and displayed.
     needed_for_output: bool,
 }
@@ -94,23 +94,46 @@ pub struct Dpb<T> {
     interlaced: bool,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum StorePictureError {
-    #[error("DPB is full")]
     DpbIsFull,
 }
 
-#[derive(Debug, Error)]
+impl fmt::Display for StorePictureError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "DPB is full")
+    }
+}
+
+impl std::error::Error for StorePictureError {}
+
+#[derive(Debug)]
 pub enum MmcoError {
-    #[error("could not find a ShortTerm picture to mark in the DPB")]
     NoShortTermPic,
-    #[error("a ShortTerm picture was expected to be marked for MMCO=3")]
     ExpectedMarked,
-    #[error("picture cannot be marked as nonexisting for MMCO=3")]
     ExpectedExisting,
-    #[error("unknown MMCO: {0}")]
     UnknownMmco(u8),
 }
+
+impl fmt::Display for MmcoError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MmcoError::NoShortTermPic => {
+                write!(f, "could not find ShortTerm picture to mark in the DPB")
+            }
+            MmcoError::ExpectedMarked => write!(
+                f,
+                "a ShortTerm picture was expected to be marked for MMCO=3"
+            ),
+            MmcoError::ExpectedExisting => {
+                write!(f, "picture cannot be marked as nonexisting for MMCO=3")
+            }
+            MmcoError::UnknownMmco(x) => write!(f, "unknown MMCO: {}", x),
+        }
+    }
+}
+
+impl std::error::Error for MmcoError {}
 
 impl<T: Clone> Dpb<T> {
     /// Returns an iterator over the underlying H264 pictures stored in the
@@ -255,8 +278,8 @@ impl<T: Clone> Dpb<T> {
         Some(&self.entries[position])
     }
 
-    /// Store a picture and its backend handle in the DPB.
-    fn store_picture(
+    /// Store `picture` and its backend handle in the DPB.
+    pub fn store_picture(
         &mut self,
         picture: RcPictureData,
         handle: Option<T>,
@@ -287,43 +310,10 @@ impl<T: Clone> Dpb<T> {
 
         self.entries.push(DpbEntry {
             pic: picture,
-            handle,
+            reference: handle.clone(),
+            decoded_frame: handle,
             needed_for_output,
         });
-
-        Ok(())
-    }
-
-    /// Add `pic` and its associated `handle` to the DPB.
-    pub fn add_picture(
-        &mut self,
-        pic: RcPictureData,
-        handle: Option<T>,
-        last_field: &mut Option<(RcPictureData, T)>,
-    ) -> Result<(), StorePictureError> {
-        if !self.interlaced() {
-            assert!(last_field.is_none());
-
-            self.store_picture(pic, handle)?;
-        } else {
-            // If we have a cached field for this picture, we must combine
-            // them before insertion.
-            if pic
-                .borrow()
-                .other_field()
-                .zip(last_field.as_ref().map(|f| &f.0))
-                .map_or_else(
-                    || false,
-                    |(other_field, last_field)| Rc::ptr_eq(&other_field, last_field),
-                )
-            {
-                if let Some((last_field, last_field_handle)) = last_field.take() {
-                    self.store_picture(last_field, Some(last_field_handle))?;
-                }
-            }
-
-            self.store_picture(pic, handle)?;
-        }
 
         Ok(())
     }
@@ -406,7 +396,7 @@ impl<T: Clone> Dpb<T> {
     /// Note that this picture will still be referenced by its pair, if any.
     fn bump(&mut self) -> Option<Option<T>> {
         let dpb_entry = self.find_lowest_poc_for_bumping_mut()?;
-        let handle = dpb_entry.handle.clone();
+        let handle = dpb_entry.decoded_frame.take();
         let pic = dpb_entry.pic.borrow();
 
         debug!("Bumping picture {:#?} from the dpb", pic);

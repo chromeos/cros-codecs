@@ -1,9 +1,8 @@
 // Copyright 2024 The ChromiumOS Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+use std::fmt;
 use std::io::Write;
-
-use thiserror::Error;
 
 use crate::codec::h264::nalu_writer::NaluWriter;
 use crate::codec::h264::nalu_writer::NaluWriterError;
@@ -24,12 +23,25 @@ impl private::NaluStruct for Sps {}
 
 impl private::NaluStruct for Pps {}
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum SynthesizerError {
-    #[error("tried to synthesize unsupported settings")]
     Unsupported,
-    #[error(transparent)]
-    NaluWriter(#[from] NaluWriterError),
+    NaluWriter(NaluWriterError),
+}
+
+impl fmt::Display for SynthesizerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SynthesizerError::Unsupported => write!(f, "tried to synthesize unsupported settings"),
+            SynthesizerError::NaluWriter(x) => write!(f, "{}", x.to_string()),
+        }
+    }
+}
+
+impl From<NaluWriterError> for SynthesizerError {
+    fn from(err: NaluWriterError) -> Self {
+        SynthesizerError::NaluWriter(err)
+    }
 }
 
 pub type SynthesizerResult<T> = Result<T, SynthesizerError>;

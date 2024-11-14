@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use std::fmt;
 use std::io::Write;
 use std::num::TryFromIntError;
-
-use thiserror::Error;
 
 use crate::codec::av1::helpers::clip3;
 use crate::codec::av1::parser::BitDepth;
@@ -54,18 +53,45 @@ impl private::ObuStruct for TemporalDelimiterObu {}
 
 impl private::ObuStruct for FrameHeaderObu {}
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum SynthesizerError {
-    #[error("tried to synthesize unsupported settings")]
     Unsupported,
-    #[error("invalid syntax element value {0}")]
     InvalidSyntaxElementValue(&'static str),
-    #[error(transparent)]
-    ConversionError(#[from] TryFromIntError),
-    #[error(transparent)]
-    ObuWriter(#[from] ObuWriterError),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
+    ConversionError(TryFromIntError),
+    ObuWriter(ObuWriterError),
+    Io(std::io::Error),
+}
+
+impl fmt::Display for SynthesizerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SynthesizerError::Unsupported => write!(f, "tried to synthesize unsupported settings"),
+            SynthesizerError::InvalidSyntaxElementValue(x) => {
+                write!(f, "invalid syntax element for value {}", x)
+            }
+            SynthesizerError::ConversionError(x) => write!(f, "{}", x.to_string()),
+            SynthesizerError::ObuWriter(x) => write!(f, "{}", x.to_string()),
+            SynthesizerError::Io(x) => write!(f, "{}", x.to_string()),
+        }
+    }
+}
+
+impl From<TryFromIntError> for SynthesizerError {
+    fn from(err: TryFromIntError) -> Self {
+        SynthesizerError::ConversionError(err)
+    }
+}
+
+impl From<ObuWriterError> for SynthesizerError {
+    fn from(err: ObuWriterError) -> Self {
+        SynthesizerError::ObuWriter(err)
+    }
+}
+
+impl From<std::io::Error> for SynthesizerError {
+    fn from(err: std::io::Error) -> Self {
+        SynthesizerError::Io(err)
+    }
 }
 
 pub type SynthesizerResult<T> = Result<T, SynthesizerError>;

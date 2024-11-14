@@ -7,8 +7,6 @@ use std::cell::RefCell;
 use std::cell::RefMut;
 use std::rc::Rc;
 
-use anyhow::anyhow;
-
 use crate::codec::h265::parser::Sps;
 use crate::codec::h265::picture::PictureData;
 use crate::codec::h265::picture::Reference;
@@ -228,9 +226,9 @@ impl<T: Clone> Dpb<T> {
         &mut self,
         picture: Rc<RefCell<PictureData>>,
         handle: T,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         if self.entries.len() >= self.max_num_pics {
-            return Err(anyhow!("Can't add a picture to the DPB: DPB is full."));
+            return Err("Can't add a picture to the DPB: DPB is full.".into());
         }
 
         let mut pic = picture.borrow_mut();
