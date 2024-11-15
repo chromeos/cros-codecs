@@ -153,19 +153,19 @@ pub fn round2(x: u32, n: u32) -> u32 {
 }
 
 /// Implements Round2Signed. See 4.7: mathematical functions.
-pub fn round2signed(x: i32, n: u32) -> anyhow::Result<i32> {
+pub fn round2signed(x: i32, n: u32) -> Result<i32, String> {
     if x >= 0 {
-        i32::try_from(round2(x as u32, n)).map_err(|e| anyhow::anyhow!(e))
+        i32::try_from(round2(x as u32, n)).map_err(|e| e.to_string())
     } else {
         let x = x as i64;
-        let val = i32::try_from(round2(-x as u32, n)).map_err(|e| anyhow::anyhow!(e))?;
+        let val = i32::try_from(round2(-x as u32, n)).map_err(|e| e.to_string())?;
         Ok(-val)
     }
 }
 
 /// Implements 7.11.3.7. Resolve divisor process
-pub fn resolve_divisor(d: i32) -> anyhow::Result<(u32, i32)> {
-    let abs_d = u32::try_from(d.abs())?;
+pub fn resolve_divisor(d: i32) -> Result<(u32, i32), String> {
+    let abs_d = u32::try_from(d.abs()).unwrap(); // abs cannot return a negative
     let n = floor_log2(abs_d);
     let e = abs_d - (1 << n);
 

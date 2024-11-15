@@ -302,7 +302,10 @@ where
             }
         }
 
-        self.codec.parser.ref_frame_update(&header)?;
+        self.codec
+            .parser
+            .ref_frame_update(&header)
+            .map_err(|err| anyhow!(err))?;
         self.codec.frame_count += 1;
         Ok(())
     }
@@ -322,7 +325,12 @@ where
     /// method will only consume a single OBU. The caller must be careful to check the return value
     /// and resubmit the remainder if the whole bitstream has not been consumed.
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
-        let obu = match self.codec.parser.read_obu(bitstream)? {
+        let obu = match self
+            .codec
+            .parser
+            .read_obu(bitstream)
+            .map_err(|err| DecodeError::ParseFrameError(err))?
+        {
             ObuAction::Process(obu) => obu,
             // This OBU should be dropped.
             ObuAction::Drop(length) => return Ok(length as usize),
@@ -351,7 +359,9 @@ where
 
                     let is_key_frame = match obu.header.obu_type {
                         ObuType::Frame | ObuType::FrameHeader => {
-                            let fh = parser.parse_frame_header_obu(&obu)?;
+                            let fh = parser
+                                .parse_frame_header_obu(&obu)
+                                .map_err(|err| DecodeError::ParseFrameError(err))?;
                             fh.frame_type == FrameType::KeyFrame
                         }
                         _ => false,
@@ -369,7 +379,12 @@ where
 
         /* We are in `Decoding` state if we reached here */
 
-        match self.codec.parser.parse_obu(obu)? {
+        match self
+            .codec
+            .parser
+            .parse_obu(obu)
+            .map_err(|err| DecodeError::ParseFrameError(err))?
+        {
             ParsedObu::SequenceHeader(sequence) => {
                 let sequence_differs = match &self.codec.sequence {
                     Some(old_sequence) => **old_sequence != *sequence,
@@ -484,6 +499,7 @@ where
 
 #[cfg(test)]
 pub mod tests {
+    use crate::bitstream_utils::IvfIterator;
     use crate::decoder::stateless::av1::Av1;
     use crate::decoder::stateless::tests::test_decode_stream;
     use crate::decoder::stateless::tests::TestStream;
@@ -491,7 +507,6 @@ pub mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the dummy decoder, in both blocking and non-blocking modes.

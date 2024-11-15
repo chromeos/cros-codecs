@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use thiserror::Error;
+use std::fmt;
 
 pub mod av1;
 pub mod h264;
@@ -108,20 +108,53 @@ impl From<CodedBitstreamBuffer> for Vec<u8> {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum EncodeError {
-    #[error("unsupported")]
     Unsupported,
-    #[error("invalid internal state. This is likely a bug.")]
     InvalidInternalState,
-    #[error(transparent)]
-    StatelessBackendError(#[from] StatelessBackendError),
-    #[error(transparent)]
-    StatefulBackendError(#[from] StatefulBackendError),
-    #[error(transparent)]
-    H264SynthesizerError(#[from] H264SynthesizerError),
-    #[error(transparent)]
-    AV1SynthesizerError(#[from] AV1SynthesizerError),
+    StatelessBackendError(StatelessBackendError),
+    StatefulBackendError(StatefulBackendError),
+    H264SynthesizerError(H264SynthesizerError),
+    AV1SynthesizerError(AV1SynthesizerError),
+}
+
+impl fmt::Display for EncodeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EncodeError::Unsupported => write!(f, "unsupported"),
+            EncodeError::InvalidInternalState => {
+                write!(f, "invalid internal state. This is likely a bug.")
+            }
+            EncodeError::StatelessBackendError(x) => write!(f, "{}", x.to_string()),
+            EncodeError::StatefulBackendError(x) => write!(f, "{}", x.to_string()),
+            EncodeError::H264SynthesizerError(x) => write!(f, "{}", x.to_string()),
+            EncodeError::AV1SynthesizerError(x) => write!(f, "{}", x.to_string()),
+        }
+    }
+}
+
+impl From<StatelessBackendError> for EncodeError {
+    fn from(err: StatelessBackendError) -> Self {
+        EncodeError::StatelessBackendError(err)
+    }
+}
+
+impl From<StatefulBackendError> for EncodeError {
+    fn from(err: StatefulBackendError) -> Self {
+        EncodeError::StatefulBackendError(err)
+    }
+}
+
+impl From<H264SynthesizerError> for EncodeError {
+    fn from(err: H264SynthesizerError) -> Self {
+        EncodeError::H264SynthesizerError(err)
+    }
+}
+
+impl From<AV1SynthesizerError> for EncodeError {
+    fn from(err: AV1SynthesizerError) -> Self {
+        EncodeError::AV1SynthesizerError(err)
+    }
 }
 
 pub type EncodeResult<T> = Result<T, EncodeError>;

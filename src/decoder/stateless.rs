@@ -30,7 +30,6 @@ use nix::sys::epoll::EpollFlags;
 use nix::sys::eventfd::EventFd;
 use thiserror::Error;
 
-use crate::codec::vp8::parser::ParseFrameError;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
@@ -97,7 +96,7 @@ pub enum DecodeError {
     #[error("cannot accept more input until pending events are processed")]
     CheckEvents,
     #[error("error while parsing frame: {0}")]
-    ParseFrameError(#[from] ParseFrameError),
+    ParseFrameError(String),
     #[error(transparent)]
     DecoderError(#[from] anyhow::Error),
     #[error(transparent)]

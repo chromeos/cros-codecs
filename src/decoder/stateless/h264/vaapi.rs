@@ -46,7 +46,8 @@ use crate::decoder::BlockingMode;
 impl VaStreamInfo for &Rc<Sps> {
     fn va_profile(&self) -> anyhow::Result<i32> {
         let profile_idc = self.profile_idc;
-        let profile = Profile::n(profile_idc)
+        let profile = Profile::try_from(profile_idc)
+            .map_err(|err| anyhow!(err))
             .with_context(|| format!("Invalid profile_idc {:?}", profile_idc))?;
 
         match profile {
@@ -586,6 +587,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H264, VaapiBackend<M
 mod tests {
     use libva::Display;
 
+    use crate::bitstream_utils::NalIterator;
     use crate::codec::h264::parser::Nalu;
     use crate::decoder::stateless::h264::H264;
     use crate::decoder::stateless::tests::test_decode_stream;
@@ -594,7 +596,6 @@ mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::NalIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.

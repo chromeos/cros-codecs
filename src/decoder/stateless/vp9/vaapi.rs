@@ -318,6 +318,7 @@ mod tests {
     use libva::PictureParameter;
     use libva::SliceParameter;
 
+    use crate::bitstream_utils::IvfIterator;
     use crate::codec::vp9::parser::Parser;
     use crate::codec::vp9::parser::MAX_SEGMENTS;
     use crate::codec::vp9::parser::NUM_REF_FRAMES;
@@ -327,7 +328,6 @@ mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::IvfIterator;
     use crate::DecodedFormat;
 
     use super::*;

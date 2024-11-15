@@ -311,6 +311,8 @@ pub(super) mod tests {
     use crate::backend::vaapi::encoder::VaapiBackend;
     use crate::backend::vaapi::surface_pool::PooledVaSurface;
     use crate::backend::vaapi::surface_pool::VaSurfacePool;
+    use crate::bitstream_utils::IvfFileHeader;
+    use crate::bitstream_utils::IvfFrameHeader;
     use crate::codec::vp9::parser::Header;
     use crate::decoder::FramePool;
     use crate::encoder::simple_encode_loop;
@@ -321,8 +323,6 @@ pub(super) mod tests {
     use crate::encoder::stateless::StatelessEncoderBackendImport;
     use crate::encoder::FrameMetadata;
     use crate::encoder::Tunings;
-    use crate::utils::IvfFileHeader;
-    use crate::utils::IvfFrameHeader;
     use crate::FrameLayout;
     use crate::PlaneLayout;
     use crate::Resolution;

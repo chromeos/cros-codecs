@@ -4,10 +4,10 @@
 
 use std::cell::Ref;
 use std::cell::RefMut;
+use std::fmt;
 use std::rc::Rc;
 
 use log::debug;
-use thiserror::Error;
 
 use crate::codec::h264::parser::MaxLongTermFrameIdx;
 use crate::codec::h264::parser::RefPicMarkingInner;
@@ -94,23 +94,46 @@ pub struct Dpb<T> {
     interlaced: bool,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum StorePictureError {
-    #[error("DPB is full")]
     DpbIsFull,
 }
 
-#[derive(Debug, Error)]
+impl fmt::Display for StorePictureError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "DPB is full")
+    }
+}
+
+impl std::error::Error for StorePictureError {}
+
+#[derive(Debug)]
 pub enum MmcoError {
-    #[error("could not find a ShortTerm picture to mark in the DPB")]
     NoShortTermPic,
-    #[error("a ShortTerm picture was expected to be marked for MMCO=3")]
     ExpectedMarked,
-    #[error("picture cannot be marked as nonexisting for MMCO=3")]
     ExpectedExisting,
-    #[error("unknown MMCO: {0}")]
     UnknownMmco(u8),
 }
+
+impl fmt::Display for MmcoError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MmcoError::NoShortTermPic => {
+                write!(f, "could not find ShortTerm picture to mark in the DPB")
+            }
+            MmcoError::ExpectedMarked => write!(
+                f,
+                "a ShortTerm picture was expected to be marked for MMCO=3"
+            ),
+            MmcoError::ExpectedExisting => {
+                write!(f, "picture cannot be marked as nonexisting for MMCO=3")
+            }
+            MmcoError::UnknownMmco(x) => write!(f, "unknown MMCO: {}", x),
+        }
+    }
+}
+
+impl std::error::Error for MmcoError {}
 
 impl<T: Clone> Dpb<T> {
     /// Returns an iterator over the underlying H264 pictures stored in the

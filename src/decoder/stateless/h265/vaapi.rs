@@ -57,8 +57,7 @@ enum ScalingListType {
 impl VaStreamInfo for &Sps {
     fn va_profile(&self) -> anyhow::Result<i32> {
         let profile_idc = self.profile_tier_level.general_profile_idc;
-        let profile = Profile::n(profile_idc)
-            .with_context(|| format!("Invalid profile_idc {:?}", profile_idc))?;
+        let profile = Profile::try_from(profile_idc).map_err(|err| anyhow!(err))?;
 
         let bit_depth = std::cmp::max(
             self.bit_depth_luma_minus8 + 8,
@@ -867,6 +866,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H265, VaapiBackend<M
 mod tests {
     use libva::Display;
 
+    use crate::bitstream_utils::NalIterator;
     use crate::codec::h265::parser::Nalu;
     use crate::decoder::stateless::h265::H265;
     use crate::decoder::stateless::tests::test_decode_stream;
@@ -875,7 +875,6 @@ mod tests {
     use crate::decoder::BlockingMode;
     use crate::utils::simple_playback_loop;
     use crate::utils::simple_playback_loop_owned_frames;
-    use crate::utils::NalIterator;
     use crate::DecodedFormat;
 
     /// Run `test` using the vaapi decoder, in both blocking and non-blocking modes.
