@@ -17,7 +17,11 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+mod md5;
+
 use argh::FromArgs;
+use cros_codecs::bitstream_utils::IvfIterator;
+use cros_codecs::bitstream_utils::NalIterator;
 use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
 use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
 use cros_codecs::decoder::stateless::av1::Av1;
@@ -36,8 +40,6 @@ use cros_codecs::utils::simple_playback_loop;
 use cros_codecs::utils::simple_playback_loop_owned_frames;
 use cros_codecs::utils::simple_playback_loop_userptr_frames;
 use cros_codecs::utils::DmabufFrame;
-use cros_codecs::utils::IvfIterator;
-use cros_codecs::utils::NalIterator;
 use cros_codecs::utils::UserPtrFrame;
 use cros_codecs::DecodedFormat;
 use cros_codecs::Fourcc;
@@ -46,6 +48,8 @@ use cros_codecs::PlaneLayout;
 use cros_codecs::Resolution;
 use matroska_demuxer::Frame;
 use matroska_demuxer::MatroskaFile;
+use md5::md5_digest;
+use md5::MD5Context;
 
 // Our buffer descriptor type.
 //
@@ -249,6 +253,10 @@ struct Args {
     /// frame)
     #[argh(option)]
     compute_md5: Option<Md5Computation>,
+
+    /// path to JSON file containing golden MD5 sums of each frame.
+    #[argh(option)]
+    golden: Option<PathBuf>,
 }
 
 /// Detects the container type (IVF or MKV) and returns the corresponding frame iterator.
@@ -303,6 +311,30 @@ fn main() {
     } else {
         BlockingMode::NonBlocking
     };
+
+    let golden_md5s: Vec<String> = match args.golden {
+        None => vec![],
+        Some(ref path) => {
+            let mut golden_file_content = String::new();
+            File::open(&path)
+                .expect("error opening golden file")
+                .read_to_string(&mut golden_file_content)
+                .expect("error reading golden file");
+            let parsed_json: serde_json::Value =
+                serde_json::from_str(&golden_file_content).expect("error parsing golden file");
+            match &parsed_json["md5_checksums"] {
+                serde_json::Value::Array(checksums) => checksums
+                    .iter()
+                    .map(|x| match x {
+                        serde_json::Value::String(checksum) => String::from(checksum),
+                        _ => panic!("error parsing golden file"),
+                    })
+                    .collect(),
+                _ => panic!("error parsing golden file"),
+            }
+        }
+    };
+    let mut golden_iter = golden_md5s.iter();
 
     let gbm = match args.frame_memory {
         FrameMemoryType::Managed | FrameMemoryType::User => None,
@@ -393,11 +425,15 @@ fn main() {
         }
     };
 
-    let mut md5_context = md5::Context::new();
+    let mut md5_context = MD5Context::new();
     let mut output_filename_idx = 0;
+    let need_per_frame_md5 = match args.compute_md5 {
+        Some(Md5Computation::Frame) => true,
+        _ => args.golden.is_some(),
+    };
 
     let mut on_new_frame = |handle: DynDecodedHandle<BufferDescriptor>| {
-        if args.output.is_some() || args.compute_md5.is_some() {
+        if args.output.is_some() || args.compute_md5.is_some() || args.golden.is_some() {
             handle.sync().unwrap();
             let picture = handle.dyn_picture();
             let mut handle = picture.dyn_mappable_handle().unwrap();
@@ -424,10 +460,20 @@ fn main() {
                     .expect("failed to write to output file");
             }
 
+            let frame_md5: String = if need_per_frame_md5 {
+                md5_digest(&frame_data)
+            } else {
+                "".to_string()
+            };
+
             match args.compute_md5 {
                 None => (),
-                Some(Md5Computation::Frame) => println!("{:x}", md5::compute(&frame_data)),
+                Some(Md5Computation::Frame) => println!("{}", frame_md5),
                 Some(Md5Computation::Stream) => md5_context.consume(&frame_data),
+            }
+
+            if args.golden.is_some() {
+                assert_eq!(&frame_md5, golden_iter.next().unwrap());
             }
         }
     };
@@ -466,6 +512,6 @@ fn main() {
     .expect("error during playback loop");
 
     if let Some(Md5Computation::Stream) = args.compute_md5 {
-        println!("{:x}", md5_context.compute());
+        println!("{}", md5_context.flush());
     }
 }

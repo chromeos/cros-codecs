@@ -5,14 +5,13 @@
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::io::Cursor;
-
-use anyhow::anyhow;
-use bytes::Buf;
+use std::io::Seek;
+use std::io::SeekFrom;
 
 #[allow(clippy::len_without_is_empty)]
 pub trait Header: Sized {
     /// Parse the NALU header, returning it.
-    fn parse<T: AsRef<[u8]>>(cursor: &Cursor<T>) -> anyhow::Result<Self>;
+    fn parse<T: AsRef<[u8]>>(cursor: &mut Cursor<T>) -> Result<Self, String>;
     /// Whether this header type indicates EOS.
     fn is_end(&self) -> bool;
     /// The length of the header.
@@ -35,14 +34,14 @@ where
     U: Debug + Header,
 {
     /// Find the next Annex B encoded NAL unit.
-    pub fn next(cursor: &mut Cursor<&'a [u8]>) -> anyhow::Result<Nalu<'a, U>> {
+    pub fn next(cursor: &mut Cursor<&'a [u8]>) -> Result<Nalu<'a, U>, String> {
         let bitstream = cursor.clone().into_inner();
-        let pos = usize::try_from(cursor.position())?;
+        let pos = usize::try_from(cursor.position()).map_err(|err| err.to_string())?;
 
         // Find the start code for this NALU
         let current_nalu_offset = match Nalu::<'a, U>::find_start_code(cursor, pos) {
             Some(offset) => offset,
-            None => return Err(anyhow!("No NAL found")),
+            None => return Err("No NAL found".into()),
         };
 
         let mut start_code_offset = pos + current_nalu_offset;
@@ -57,14 +56,23 @@ where
         let nalu_offset = pos + current_nalu_offset + 3;
 
         // Set the bitstream position to the start of the current NALU
-        cursor.set_position(u64::try_from(nalu_offset)?);
+        cursor.set_position(u64::try_from(nalu_offset).map_err(|err| err.to_string())?);
 
         let hdr = U::parse(cursor)?;
 
         // Find the start of the subsequent NALU.
         let mut next_nalu_offset = match Nalu::<'a, U>::find_start_code(cursor, nalu_offset) {
             Some(offset) => offset,
-            None => cursor.chunk().len(), // Whatever data is left must be part of the current NALU
+            None => {
+                let cur_pos = cursor.position();
+                let end_pos = cursor
+                    .seek(SeekFrom::End(0))
+                    .map_err(|err| err.to_string())?;
+                let _ = cursor
+                    .seek(SeekFrom::Start(cur_pos))
+                    .map_err(|err| err.to_string())?;
+                (end_pos - cur_pos) as usize
+            } // Whatever data is left must be part of the current NALU
         };
 
         while next_nalu_offset > 0 && cursor.get_ref()[nalu_offset + next_nalu_offset - 1] == 00 {

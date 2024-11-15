@@ -596,6 +596,8 @@ mod tests {
     use crate::backend::vaapi::encoder::tests::TestFrameGenerator;
     use crate::backend::vaapi::surface_pool::PooledVaSurface;
     use crate::backend::vaapi::surface_pool::VaSurfacePool;
+    use crate::bitstream_utils::IvfFileHeader;
+    use crate::bitstream_utils::IvfFrameHeader;
     use crate::codec::av1::parser::BitDepth;
     use crate::codec::av1::parser::CdefParams;
     use crate::codec::av1::parser::ColorConfig;
@@ -621,8 +623,6 @@ mod tests {
     use crate::encoder::FrameMetadata;
     use crate::encoder::RateControl;
     use crate::encoder::Tunings;
-    use crate::utils::IvfFileHeader;
-    use crate::utils::IvfFrameHeader;
     use crate::FrameLayout;
     use crate::PlaneLayout;
     use crate::Resolution;

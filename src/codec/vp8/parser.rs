@@ -3,13 +3,11 @@
 // found in the LICENSE file.
 
 use std::convert::TryFrom;
-use std::io::Cursor;
+use std::fmt;
 
-use byteorder::ReadBytesExt;
-use byteorder::LE;
 use log::debug;
-use thiserror::Error;
 
+use crate::bitstream_utils::BitReader;
 use crate::codec::vp8::bool_decoder::BoolDecoder;
 use crate::codec::vp8::bool_decoder::BoolDecoderError;
 use crate::codec::vp8::bool_decoder::BoolDecoderResult;
@@ -195,20 +193,38 @@ pub struct Header {
     pub header_size: u32,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum ParseUncompressedChunkError {
-    #[error("invalid start code {0}")]
     InvalidStartCode(u32),
-    #[error("I/O error: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(String),
 }
 
-#[derive(Debug, Error)]
+impl fmt::Display for ParseUncompressedChunkError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ParseUncompressedChunkError::InvalidStartCode(x) => {
+                write!(f, "invalid start code {}", x)
+            }
+            ParseUncompressedChunkError::IoError(x) => write!(f, "I/O error: {}", x),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum ComputePartitionSizesError {
-    #[error("unexpected end of header")]
     EndOfHeader,
-    #[error("partition size not fitting in a u32")]
     PartitionTooLarge,
+}
+
+impl fmt::Display for ComputePartitionSizesError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ComputePartitionSizesError::EndOfHeader => write!(f, "unexpected end of header"),
+            ComputePartitionSizesError::PartitionTooLarge => {
+                write!(f, "partition size not fitting in a u32")
+            }
+        }
+    }
 }
 
 impl Header {
@@ -244,9 +260,11 @@ impl Header {
     ) -> Result<Self, ParseUncompressedChunkError> {
         debug!("Parsing VP8 uncompressed data chunk.");
 
-        let mut reader = Cursor::new(bitstream);
+        let mut reader = BitReader::new(bitstream, false);
 
-        let frame_tag = reader.read_u24::<LE>()?;
+        let frame_tag = reader
+            .read_le::<u32>(3)
+            .map_err(|err| ParseUncompressedChunkError::IoError(err))?;
 
         let mut header = Header {
             key_frame: (frame_tag & 0x1) == 0,
@@ -257,24 +275,35 @@ impl Header {
         };
 
         if header.key_frame {
-            let start_code = reader.read_u24::<LE>()?;
+            let start_code = reader
+                .read_le::<u32>(3)
+                .map_err(|err| ParseUncompressedChunkError::IoError(err))?;
 
             if start_code != 0x2a019d {
                 return Err(ParseUncompressedChunkError::InvalidStartCode(start_code));
             }
 
-            let size_code = reader.read_u16::<LE>()?;
+            let size_code = reader
+                .read_le::<u16>(2)
+                .map_err(|err| ParseUncompressedChunkError::IoError(err))?;
             header.horiz_scale_code = (size_code >> 14) as u8;
             header.width = size_code & 0x3fff;
 
-            let size_code = reader.read_u16::<LE>()?;
+            let size_code = reader
+                .read_le::<u16>(2)
+                .map_err(|err| ParseUncompressedChunkError::IoError(err))?;
             header.vert_scale_code = (size_code >> 14) as u8;
             header.height = size_code & 0x3fff;
         }
 
-        header.data_chunk_size = reader.position() as u8;
-
-        Ok(header)
+        if reader.position() % 8 != 0 {
+            Err(ParseUncompressedChunkError::IoError(
+                "Misaligned VP8 header".into(),
+            ))
+        } else {
+            header.data_chunk_size = (reader.position() / 8) as u8;
+            Ok(header)
+        }
     }
 
     fn compute_partition_sizes(&mut self, data: &[u8]) -> Result<(), ComputePartitionSizesError> {
@@ -339,18 +368,57 @@ pub struct Parser {
     mode_probs: ModeProbs,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum ParseFrameError {
-    #[error("error while parsing uncompressed chunk of frame: {0}")]
-    ParseUncompressedChunk(#[from] ParseUncompressedChunkError),
-    #[error("partition end {0} is bigger than bitstream length {1}")]
+    ParseUncompressedChunk(ParseUncompressedChunkError),
     InvalidPartitionSize(usize, usize),
-    #[error("error while parsing frame header: {0}")]
-    ParseFrameHeader(#[from] BoolDecoderError),
-    #[error("error while computing frames partitions sizes: {0}")]
-    ComputePartitionSizes(#[from] ComputePartitionSizesError),
-    #[error("bitstream is shorter ({0} bytes) than computed length of frame {1}")]
+    ParseFrameHeader(BoolDecoderError),
+    ComputePartitionSizes(ComputePartitionSizesError),
     BitstreamTooShort(usize, usize),
+}
+
+impl fmt::Display for ParseFrameError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ParseFrameError::ParseUncompressedChunk(x) => {
+                write!(f, "error while parsing uncompressed chunk of frame: {}", x)
+            }
+            ParseFrameError::InvalidPartitionSize(x, y) => write!(
+                f,
+                "partition end {} is bigger than bitstream length {}",
+                x, y
+            ),
+            ParseFrameError::ParseFrameHeader(x) => {
+                write!(f, "error while parsing frame header: {}", x)
+            }
+            ParseFrameError::ComputePartitionSizes(x) => {
+                write!(f, "error while computing frames partitions sizes: {}", x)
+            }
+            ParseFrameError::BitstreamTooShort(x, y) => write!(
+                f,
+                "bitstream is shorter ({} bytes) than computed length of frame {}",
+                x, y
+            ),
+        }
+    }
+}
+
+impl From<ParseUncompressedChunkError> for ParseFrameError {
+    fn from(err: ParseUncompressedChunkError) -> Self {
+        ParseFrameError::ParseUncompressedChunk(err)
+    }
+}
+
+impl From<BoolDecoderError> for ParseFrameError {
+    fn from(err: BoolDecoderError) -> Self {
+        ParseFrameError::ParseFrameHeader(err)
+    }
+}
+
+impl From<ComputePartitionSizesError> for ParseFrameError {
+    fn from(err: ComputePartitionSizesError) -> Self {
+        ParseFrameError::ComputePartitionSizes(err)
+    }
 }
 
 impl Parser {
@@ -372,10 +440,7 @@ impl Parser {
         }
     }
 
-    fn update_segmentation<T: AsRef<[u8]>>(
-        bd: &mut BoolDecoder<T>,
-        seg: &mut Segmentation,
-    ) -> BoolDecoderResult<()> {
+    fn update_segmentation(bd: &mut BoolDecoder, seg: &mut Segmentation) -> BoolDecoderResult<()> {
         seg.update_mb_segmentation_map = false;
         seg.update_segment_feature_data = false;
 
@@ -429,8 +494,8 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_mb_lf_adjustments<T: AsRef<[u8]>>(
-        bd: &mut BoolDecoder<T>,
+    fn parse_mb_lf_adjustments(
+        bd: &mut BoolDecoder,
         adj: &mut MbLfAdjustments,
     ) -> BoolDecoderResult<()> {
         adj.mode_ref_lf_delta_update = false;
@@ -462,10 +527,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_quant_indices<T: AsRef<[u8]>>(
-        bd: &mut BoolDecoder<T>,
-        q: &mut QuantIndices,
-    ) -> BoolDecoderResult<()> {
+    fn parse_quant_indices(bd: &mut BoolDecoder, q: &mut QuantIndices) -> BoolDecoderResult<()> {
         q.y_ac_qi = bd.read_uint(7)?;
 
         let y_dc_delta_present = bd.read_bool()?;
@@ -507,8 +569,8 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_token_prob_update<T: AsRef<[u8]>>(
-        bd: &mut BoolDecoder<T>,
+    fn parse_token_prob_update(
+        bd: &mut BoolDecoder,
         coeff_probs: &mut [[[[u8; 11]; 3]; 8]; 4],
     ) -> BoolDecoderResult<()> {
         for (i, vi) in coeff_probs.iter_mut().enumerate() {
@@ -527,8 +589,8 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_mv_prob_update<T: AsRef<[u8]>>(
-        bd: &mut BoolDecoder<T>,
+    fn parse_mv_prob_update(
+        bd: &mut BoolDecoder,
         mv_probs: &mut [[u8; 19]; 2],
     ) -> BoolDecoderResult<()> {
         for (i, vi) in mv_probs.iter_mut().enumerate() {

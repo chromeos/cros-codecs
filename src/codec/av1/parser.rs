@@ -5,10 +5,6 @@
 use std::borrow::Cow;
 use std::rc::Rc;
 
-use anyhow::anyhow;
-use anyhow::Context;
-use enumn::N;
-
 use crate::codec::av1::helpers;
 use crate::codec::av1::reader::Reader;
 
@@ -68,7 +64,7 @@ pub enum ObuAction<'a> {
     Drop(u32),
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ObuType {
     #[default]
     Reserved = 0,
@@ -89,12 +85,51 @@ pub enum ObuType {
     Padding = 15,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for ObuType {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ObuType::Reserved),
+            1 => Ok(ObuType::SequenceHeader),
+            2 => Ok(ObuType::TemporalDelimiter),
+            3 => Ok(ObuType::FrameHeader),
+            4 => Ok(ObuType::TileGroup),
+            5 => Ok(ObuType::Metadata),
+            6 => Ok(ObuType::Frame),
+            7 => Ok(ObuType::RedundantFrameHeader),
+            8 => Ok(ObuType::TileList),
+            9 => Ok(ObuType::Reserved2),
+            10 => Ok(ObuType::Reserved3),
+            11 => Ok(ObuType::Reserved4),
+            12 => Ok(ObuType::Reserved5),
+            13 => Ok(ObuType::Reserved6),
+            14 => Ok(ObuType::Reserved7),
+            15 => Ok(ObuType::Padding),
+            _ => Err(format!("Invalid ObuType {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Profile {
     #[default]
     Profile0 = 0,
     Profile1 = 1,
     Profile2 = 2,
+}
+
+impl TryFrom<u32> for Profile {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Profile::Profile0),
+            1 => Ok(Profile::Profile1),
+            2 => Ok(Profile::Profile2),
+            _ => Err(format!("Invalid Profile {}", value)),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -300,7 +335,7 @@ pub struct DecoderModelInfo {
 
 /// Defined by the “Color primaries” section of ISO/IEC 23091-4/ITU-T H.273
 /// See 6.4.2
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ColorPrimaries {
     Bt709 = 1,
     #[default]
@@ -317,7 +352,29 @@ pub enum ColorPrimaries {
     Ebu3213 = 22,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for ColorPrimaries {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(ColorPrimaries::Bt709),
+            2 => Ok(ColorPrimaries::Unspecified),
+            4 => Ok(ColorPrimaries::Bt470M),
+            5 => Ok(ColorPrimaries::Bt470bg),
+            6 => Ok(ColorPrimaries::Bt601),
+            7 => Ok(ColorPrimaries::Smpte240),
+            8 => Ok(ColorPrimaries::GenericFilm),
+            9 => Ok(ColorPrimaries::Bt2020),
+            10 => Ok(ColorPrimaries::Xyz),
+            11 => Ok(ColorPrimaries::Smpte431),
+            12 => Ok(ColorPrimaries::Smpte432),
+            22 => Ok(ColorPrimaries::Ebu3213),
+            _ => Err(format!("Invalid ColorPrimaries {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TransferCharacteristics {
     Reserved0 = 0,
     Bt709 = 1,
@@ -341,15 +398,57 @@ pub enum TransferCharacteristics {
     Hlg = 18,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub enum BitDepth {
-    #[default]
-    Depth8,
-    Depth10,
-    Depth12,
+impl TryFrom<u32> for TransferCharacteristics {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(TransferCharacteristics::Reserved0),
+            1 => Ok(TransferCharacteristics::Bt709),
+            2 => Ok(TransferCharacteristics::Unspecified),
+            3 => Ok(TransferCharacteristics::Reserved3),
+            4 => Ok(TransferCharacteristics::Bt470m),
+            5 => Ok(TransferCharacteristics::Bt470bg),
+            6 => Ok(TransferCharacteristics::Bt601),
+            7 => Ok(TransferCharacteristics::Smpte240),
+            8 => Ok(TransferCharacteristics::Linear),
+            9 => Ok(TransferCharacteristics::Log100),
+            10 => Ok(TransferCharacteristics::Log100Sqrt10),
+            11 => Ok(TransferCharacteristics::Iec61966),
+            12 => Ok(TransferCharacteristics::Bt1361),
+            13 => Ok(TransferCharacteristics::Srgb),
+            14 => Ok(TransferCharacteristics::Bt202010Bit),
+            15 => Ok(TransferCharacteristics::Bt202012Bit),
+            16 => Ok(TransferCharacteristics::Smpte2084),
+            17 => Ok(TransferCharacteristics::Smpte428),
+            18 => Ok(TransferCharacteristics::Hlg),
+            _ => Err(format!("Invalid TransferCharacteristics {}", value)),
+        }
+    }
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BitDepth {
+    #[default]
+    Depth8 = 0,
+    Depth10 = 1,
+    Depth12 = 2,
+}
+
+impl TryFrom<u32> for BitDepth {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(BitDepth::Depth8),
+            1 => Ok(BitDepth::Depth10),
+            2 => Ok(BitDepth::Depth12),
+            _ => Err(format!("Invalid BitDepth {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MatrixCoefficients {
     Identity = 0,
     Bt709 = 1,
@@ -369,13 +468,52 @@ pub enum MatrixCoefficients {
     Ictcp = 14,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for MatrixCoefficients {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(MatrixCoefficients::Identity),
+            1 => Ok(MatrixCoefficients::Bt709),
+            2 => Ok(MatrixCoefficients::Unspecified),
+            3 => Ok(MatrixCoefficients::Reserved3),
+            4 => Ok(MatrixCoefficients::Fcc),
+            5 => Ok(MatrixCoefficients::Bt470bg),
+            6 => Ok(MatrixCoefficients::Bt601),
+            7 => Ok(MatrixCoefficients::Smpte240),
+            8 => Ok(MatrixCoefficients::Ycgco),
+            9 => Ok(MatrixCoefficients::Bt2020Ncl),
+            10 => Ok(MatrixCoefficients::Bt2020Cl),
+            11 => Ok(MatrixCoefficients::Smpte2085),
+            12 => Ok(MatrixCoefficients::ChromaDerivedNcl),
+            13 => Ok(MatrixCoefficients::ChromaDerivedCl),
+            14 => Ok(MatrixCoefficients::Ictcp),
+            _ => Err(format!("Invalid MatrixCoefficients {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ChromaSamplePosition {
     #[default]
     Unknown = 0,
     Vertical = 1,
     Colocated = 2,
     Reserved = 3,
+}
+
+impl TryFrom<u32> for ChromaSamplePosition {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ChromaSamplePosition::Unknown),
+            1 => Ok(ChromaSamplePosition::Vertical),
+            2 => Ok(ChromaSamplePosition::Colocated),
+            3 => Ok(ChromaSamplePosition::Reserved),
+            _ => Err(format!("Invalid ChromaSamplePosition {}", value)),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -562,7 +700,7 @@ pub struct TemporalDelimiterObu {
     pub obu_header: ObuHeader,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InterpolationFilter {
     #[default]
     EightTap = 0,
@@ -572,7 +710,22 @@ pub enum InterpolationFilter {
     Switchable = 4,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for InterpolationFilter {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(InterpolationFilter::EightTap),
+            1 => Ok(InterpolationFilter::EightTapSmooth),
+            2 => Ok(InterpolationFilter::EightTapSharp),
+            3 => Ok(InterpolationFilter::Bilinear),
+            4 => Ok(InterpolationFilter::Switchable),
+            _ => Err(format!("Invalid InterpolationFilter {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TxModes {
     #[default]
     Only4x4 = 0,
@@ -580,7 +733,20 @@ pub enum TxModes {
     Select = 2,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for TxModes {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(TxModes::Only4x4),
+            1 => Ok(TxModes::Largest),
+            2 => Ok(TxModes::Select),
+            _ => Err(format!("Invalid TxModes {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FrameRestorationType {
     #[default]
     None = 0,
@@ -589,7 +755,21 @@ pub enum FrameRestorationType {
     Switchable = 3,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for FrameRestorationType {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(FrameRestorationType::None),
+            1 => Ok(FrameRestorationType::Wiener),
+            2 => Ok(FrameRestorationType::Sgrproj),
+            3 => Ok(FrameRestorationType::Switchable),
+            _ => Err(format!("Invalid FrameRestorationType {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ReferenceFrameType {
     #[default]
     Intra = 0,
@@ -602,7 +782,25 @@ pub enum ReferenceFrameType {
     AltRef = 7,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for ReferenceFrameType {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ReferenceFrameType::Intra),
+            1 => Ok(ReferenceFrameType::Last),
+            2 => Ok(ReferenceFrameType::Last2),
+            3 => Ok(ReferenceFrameType::Last3),
+            4 => Ok(ReferenceFrameType::Golden),
+            5 => Ok(ReferenceFrameType::BwdRef),
+            6 => Ok(ReferenceFrameType::AltRef2),
+            7 => Ok(ReferenceFrameType::AltRef),
+            _ => Err(format!("Invalid ReferenceFrameType {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WarpModelType {
     #[default]
     Identity = 0,
@@ -611,7 +809,21 @@ pub enum WarpModelType {
     Affine = 3,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for WarpModelType {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(WarpModelType::Identity),
+            1 => Ok(WarpModelType::Translation),
+            2 => Ok(WarpModelType::RotZoom),
+            3 => Ok(WarpModelType::Affine),
+            _ => Err(format!("Invalid WarpModelType {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FrameType {
     #[default]
     KeyFrame = 0,
@@ -620,12 +832,39 @@ pub enum FrameType {
     SwitchFrame = 3,
 }
 
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl TryFrom<u32> for FrameType {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(FrameType::KeyFrame),
+            1 => Ok(FrameType::InterFrame),
+            2 => Ok(FrameType::IntraOnlyFrame),
+            3 => Ok(FrameType::SwitchFrame),
+            _ => Err(format!("Invalid FrameType {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TxMode {
     #[default]
     Only4x4 = 0,
     Largest = 1,
     Select = 2,
+}
+
+impl TryFrom<u32> for TxMode {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(TxMode::Only4x4),
+            1 => Ok(TxMode::Largest),
+            2 => Ok(TxMode::Select),
+            _ => Err(format!("Invalid TxMode {}", value)),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1207,7 +1446,7 @@ pub struct Parser {
 impl Parser {
     /// Probes the input data for the Annex B format. Anything other than
     /// Ok(true) refers to data in "low-overhead" format instead, as we are trying to parse
-    fn annexb_probe(data: &[u8]) -> anyhow::Result<bool> {
+    fn annexb_probe(data: &[u8]) -> Result<bool, String> {
         let mut r = Reader::new(data);
         let mut seen_sequence = false;
         let mut seen_frame = false;
@@ -1237,14 +1476,14 @@ impl Parser {
         }
 
         // Try identifying a sequence and a frame.
-        r.skip(u64::from(obu_length) * 8)?;
+        r.0.skip_bits(obu_length as usize * 8)?;
         let mut num_bytes_read = 0;
 
         loop {
             let obu_length = r.read_leb128()?;
             let mut obu_reader = r.clone();
 
-            r.skip(u64::from(obu_length) * 8)?;
+            r.0.skip_bits(obu_length as usize * 8)?;
             num_bytes_read += obu_length;
 
             if !seen_sequence {
@@ -1282,15 +1521,16 @@ impl Parser {
         fh: &mut FrameHeaderObu,
         r: &mut Reader,
         seq: &SequenceHeaderObu,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         if seq.enable_superres {
-            fh.use_superres = r.read_bit()?;
+            fh.use_superres = r.0.read_bit()?;
         } else {
             fh.use_superres = false;
         }
 
         if fh.use_superres {
-            fh.superres_denom = r.read_bits(SUPERRES_DENOM_BITS as u8)? + SUPERRES_DENOM_MIN as u32;
+            fh.superres_denom =
+                r.0.read_bits::<u32>(SUPERRES_DENOM_BITS)? + SUPERRES_DENOM_MIN as u32;
         } else {
             fh.superres_denom = SUPERRES_NUM as u32;
         }
@@ -1307,7 +1547,7 @@ impl Parser {
         &self,
         fh: &mut FrameHeaderObu,
         ref_order_hint: &[u32; NUM_REF_FRAMES],
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let seq = self.sequence()?;
         let mut ref_frame_idx = [-1i32; REFS_PER_FRAME];
 
@@ -1333,12 +1573,12 @@ impl Parser {
 
         let mut latest_order_hint = shifted_order_hints[fh.last_frame_idx as usize];
         if latest_order_hint >= cur_frame_hint {
-            return Err(anyhow!("It is a requirement of bitstream conformance that last_order_hint < cur_frame_hint"));
+            return Err("It is a requirement of bitstream conformance that last_order_hint < cur_frame_hint".into());
         }
 
         let mut earliest_order_hint = shifted_order_hints[fh.gold_frame_idx as usize];
         if earliest_order_hint >= cur_frame_hint {
-            return Err(anyhow!("It is a requirement of bitstream conformance that gold_order_hint < cur_frame_hint"));
+            return Err("It is a requirement of bitstream conformance that gold_order_hint < cur_frame_hint".into());
         }
 
         let ref_ = helpers::find_latest_backward(
@@ -1427,14 +1667,14 @@ impl Parser {
     }
 
     // 5.9.5.
-    fn parse_frame_size(&mut self, fh: &mut FrameHeaderObu, r: &mut Reader) -> anyhow::Result<()> {
+    fn parse_frame_size(&mut self, fh: &mut FrameHeaderObu, r: &mut Reader) -> Result<(), String> {
         let seq = self.sequence()?;
         if fh.frame_size_override_flag {
             let n = seq.frame_width_bits_minus_1 + 1;
-            fh.frame_width = r.read_bits(n)? + 1;
+            fh.frame_width = r.0.read_bits::<u32>(n as usize)? + 1;
 
             let n = seq.frame_height_bits_minus_1 + 1;
-            fh.frame_height = r.read_bits(n)? + 1;
+            fh.frame_height = r.0.read_bits::<u32>(n as usize)? + 1;
         } else {
             fh.frame_width = seq.max_frame_width_minus_1 as u32 + 1;
             fh.frame_height = seq.max_frame_height_minus_1 as u32 + 1;
@@ -1446,11 +1686,11 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_render_size(fh: &mut FrameHeaderObu, r: &mut Reader) -> anyhow::Result<()> {
-        fh.render_and_frame_size_different = r.read_bit()?;
+    fn parse_render_size(fh: &mut FrameHeaderObu, r: &mut Reader) -> Result<(), String> {
+        fh.render_and_frame_size_different = r.0.read_bit()?;
         if fh.render_and_frame_size_different {
-            fh.render_width = r.read_bits(16)? + 1;
-            fh.render_height = r.read_bits(16)? + 1;
+            fh.render_width = r.0.read_bits::<u32>(16)? + 1;
+            fh.render_height = r.0.read_bits::<u32>(16)? + 1;
         } else {
             fh.render_width = fh.upscaled_width;
             fh.render_height = fh.frame_height;
@@ -1462,12 +1702,12 @@ impl Parser {
         &mut self,
         fh: &mut FrameHeaderObu,
         r: &mut Reader,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let mut found_ref = false;
         let seq = self.sequence()?;
 
         for i in 0..REFS_PER_FRAME {
-            found_ref = r.read_bit()?;
+            found_ref = r.0.read_bit()?;
 
             if found_ref {
                 let rf = &self.ref_info[i];
@@ -1492,7 +1732,7 @@ impl Parser {
     }
 
     /// Skip the padding bits, ensuring that they actually make sense.
-    fn skip_and_check_trailing_bits(r: &mut Reader, obu: &Obu) -> anyhow::Result<()> {
+    fn skip_and_check_trailing_bits(r: &mut Reader, obu: &Obu) -> Result<(), String> {
         // We can't have that in parse_obu as per the spec, because the reader
         // is not initialized on our design at that point, so move the check to
         // inside this function.
@@ -1504,29 +1744,29 @@ impl Parser {
         {
             return Ok(());
         }
-        let num_trailing = obu.as_ref().len() as u64 * 8 - r.position();
+        let num_trailing = obu.as_ref().len() as u64 * 8 - r.0.position();
         r.read_trailing_bits(num_trailing)?;
         Ok(())
     }
 
-    fn parse_obu_header(r: &mut Reader) -> anyhow::Result<ObuHeader> {
-        let _obu_forbidden_bit = r.read_bit()?;
+    fn parse_obu_header(r: &mut Reader) -> Result<ObuHeader, String> {
+        let _obu_forbidden_bit = r.0.read_bit()?;
 
         let mut header = ObuHeader {
-            obu_type: ObuType::n(r.read_bits(4)?).ok_or(anyhow!("Invalid OBU type"))?,
-            extension_flag: r.read_bit()?,
-            has_size_field: r.read_bit()?,
+            obu_type: ObuType::try_from(r.0.read_bits::<u32>(4)?)?,
+            extension_flag: r.0.read_bit()?,
+            has_size_field: r.0.read_bit()?,
             temporal_id: Default::default(),
             spatial_id: Default::default(),
         };
 
-        let obu_reserved_1bit = r.read_bit()?;
+        let obu_reserved_1bit = r.0.read_bit()?;
         assert!(!obu_reserved_1bit); // Must be set to zero as per spec.
 
         if header.extension_flag {
-            header.temporal_id = r.read_bits(3)?;
-            header.spatial_id = r.read_bits(2)?;
-            let _ = r.read_bits(3)?;
+            header.temporal_id = r.0.read_bits::<u32>(3)?;
+            header.spatial_id = r.0.read_bits::<u32>(2)?;
+            let _ = r.0.read_bits::<u32>(3)?;
         }
 
         Ok(header)
@@ -1536,9 +1776,9 @@ impl Parser {
     /// format.
     ///
     /// `None` may eventually be returned if the OBU is to be dropped.
-    pub fn read_obu<'a>(&mut self, data: &'a [u8]) -> anyhow::Result<ObuAction<'a>> {
+    pub fn read_obu<'a>(&mut self, data: &'a [u8]) -> Result<ObuAction<'a>, String> {
         if data.is_empty() {
-            return Err(anyhow!("Empty data"));
+            return Err("Empty data".into());
         }
 
         let mut reader = Reader::new(data);
@@ -1556,7 +1796,8 @@ impl Parser {
             self.should_probe_for_annexb = false;
         }
 
-        let obu_length = if let StreamFormat::AnnexB(annexb_state) = &mut self.stream_format {
+        let obu_length: usize = if let StreamFormat::AnnexB(annexb_state) = &mut self.stream_format
+        {
             // Read the length to skip to the start of the open_bitstream_unit()
             // syntax element.
             let obu_length = reader.current_annexb_obu_length(annexb_state)?;
@@ -1577,15 +1818,15 @@ impl Parser {
             assert!(header.has_size_field);
         }
 
-        let obu_size = if header.has_size_field {
+        let obu_size: usize = if header.has_size_field {
             reader.read_leb128()? as usize
         } else {
             /* trap any bugs when computing the final length */
             obu_length
                 .checked_sub(1)
-                .unwrap()
+                .ok_or::<String>("obu_length must be greater than 0".into())?
                 .checked_sub(usize::from(header.extension_flag))
-                .unwrap()
+                .ok_or::<String>("obu_length too short".into())?
         };
 
         let consumed = reader.consumed(start_pos);
@@ -1598,8 +1839,8 @@ impl Parser {
             annexb_state.frame_unit_consumed += u32::try_from(obu_size).unwrap();
         }
 
-        assert!(reader.position() % 8 == 0);
-        let start_offset: usize = (reader.position() / 8).try_into().unwrap();
+        assert!(reader.0.position() % 8 == 0);
+        let start_offset: usize = (reader.0.position() / 8).try_into().unwrap();
 
         log::debug!(
             "Identified OBU type {:?}, data size: {}, obu_size: {}",
@@ -1628,12 +1869,12 @@ impl Parser {
         }))
     }
 
-    fn parse_color_config(s: &mut SequenceHeaderObu, r: &mut Reader) -> anyhow::Result<()> {
+    fn parse_color_config(s: &mut SequenceHeaderObu, r: &mut Reader) -> Result<(), String> {
         let cc = &mut s.color_config;
 
-        cc.high_bitdepth = r.read_bit()?;
+        cc.high_bitdepth = r.0.read_bit()?;
         if s.seq_profile as u32 == 2 && cc.high_bitdepth {
-            cc.twelve_bit = r.read_bit()?;
+            cc.twelve_bit = r.0.read_bit()?;
             if cc.twelve_bit {
                 s.bit_depth = BitDepth::Depth12;
             } else {
@@ -1650,7 +1891,7 @@ impl Parser {
         if s.seq_profile as u32 == 1 {
             cc.mono_chrome = false;
         } else {
-            cc.mono_chrome = r.read_bit()?;
+            cc.mono_chrome = r.0.read_bit()?;
         }
 
         if cc.mono_chrome {
@@ -1659,14 +1900,12 @@ impl Parser {
             s.num_planes = 3;
         }
 
-        cc.color_description_present_flag = r.read_bit()?;
+        cc.color_description_present_flag = r.0.read_bit()?;
         if cc.color_description_present_flag {
-            cc.color_primaries =
-                ColorPrimaries::n(r.read_bits(8)?).ok_or(anyhow!("Invalid color_primaries"))?;
-            cc.transfer_characteristics = TransferCharacteristics::n(r.read_bits(8)?)
-                .ok_or(anyhow!("Invalid transfer_characteristics"))?;
-            cc.matrix_coefficients = MatrixCoefficients::n(r.read_bits(8)?)
-                .ok_or(anyhow!("Invalid matrix_coefficients"))?;
+            cc.color_primaries = ColorPrimaries::try_from(r.0.read_bits::<u32>(8)?)?;
+            cc.transfer_characteristics =
+                TransferCharacteristics::try_from(r.0.read_bits::<u32>(8)?)?;
+            cc.matrix_coefficients = MatrixCoefficients::try_from(r.0.read_bits::<u32>(8)?)?;
         } else {
             cc.color_primaries = ColorPrimaries::Unspecified;
             cc.transfer_characteristics = TransferCharacteristics::Unspecified;
@@ -1674,7 +1913,7 @@ impl Parser {
         }
 
         if cc.mono_chrome {
-            cc.color_range = r.read_bit()?;
+            cc.color_range = r.0.read_bit()?;
             cc.subsampling_x = true;
             cc.subsampling_y = true;
             cc.chroma_sample_position = ChromaSamplePosition::Unknown;
@@ -1688,7 +1927,7 @@ impl Parser {
             cc.subsampling_x = false;
             cc.subsampling_y = false;
         } else {
-            cc.color_range = r.read_bit()?;
+            cc.color_range = r.0.read_bit()?;
             if s.seq_profile as u32 == 0 {
                 cc.subsampling_x = true;
                 cc.subsampling_y = true;
@@ -1696,9 +1935,9 @@ impl Parser {
                 cc.subsampling_x = false;
                 cc.subsampling_y = false;
             } else if matches!(s.bit_depth, BitDepth::Depth12) {
-                cc.subsampling_x = r.read_bit()?;
+                cc.subsampling_x = r.0.read_bit()?;
                 if cc.subsampling_x {
-                    cc.subsampling_y = r.read_bit()?;
+                    cc.subsampling_y = r.0.read_bit()?;
                 } else {
                     cc.subsampling_y = false;
                 }
@@ -1708,12 +1947,12 @@ impl Parser {
             }
 
             if cc.subsampling_x && cc.subsampling_y {
-                cc.chroma_sample_position = ChromaSamplePosition::n(r.read_bits(2)?)
-                    .ok_or(anyhow!("Invalid chroma_sample_position"))?;
+                cc.chroma_sample_position =
+                    ChromaSamplePosition::try_from(r.0.read_bits::<u32>(2)?)?;
             }
         }
 
-        cc.separate_uv_delta_q = r.read_bit()?;
+        cc.separate_uv_delta_q = r.0.read_bit()?;
 
         Ok(())
     }
@@ -1722,26 +1961,26 @@ impl Parser {
         opi: &mut OperatingPoint,
         r: &mut Reader,
         buffer_delay_length_minus_1: u8,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let n = buffer_delay_length_minus_1 + 1;
-        opi.decoder_buffer_delay = r.read_bits(n)?;
-        opi.encoder_buffer_delay = r.read_bits(n)?;
-        opi.low_delay_mode_flag = r.read_bit()?;
+        opi.decoder_buffer_delay = r.0.read_bits::<u32>(n as usize)?;
+        opi.encoder_buffer_delay = r.0.read_bits::<u32>(n as usize)?;
+        opi.low_delay_mode_flag = r.0.read_bit()?;
         Ok(())
     }
 
-    fn parse_decoder_model_info(dmi: &mut DecoderModelInfo, r: &mut Reader) -> anyhow::Result<()> {
-        dmi.buffer_delay_length_minus_1 = r.read_bits(5)? as u8;
-        dmi.num_units_in_decoding_tick = r.read_bits(32)?;
-        dmi.buffer_removal_time_length_minus_1 = r.read_bits(5)? as u8;
-        dmi.frame_presentation_time_length_minus_1 = r.read_bits(5)?;
+    fn parse_decoder_model_info(dmi: &mut DecoderModelInfo, r: &mut Reader) -> Result<(), String> {
+        dmi.buffer_delay_length_minus_1 = r.0.read_bits::<u32>(5)? as u8;
+        dmi.num_units_in_decoding_tick = r.0.read_bits::<u32>(32)?;
+        dmi.buffer_removal_time_length_minus_1 = r.0.read_bits::<u32>(5)? as u8;
+        dmi.frame_presentation_time_length_minus_1 = r.0.read_bits::<u32>(5)?;
         Ok(())
     }
 
-    fn parse_timing_info(ti: &mut TimingInfo, r: &mut Reader) -> anyhow::Result<()> {
-        ti.num_units_in_display_tick = r.read_bits(32)?;
-        ti.time_scale = r.read_bits(32)?;
-        ti.equal_picture_interval = r.read_bit()?;
+    fn parse_timing_info(ti: &mut TimingInfo, r: &mut Reader) -> Result<(), String> {
+        ti.num_units_in_display_tick = r.0.read_bits::<u32>(32)?;
+        ti.time_scale = r.0.read_bits::<u32>(32)?;
+        ti.equal_picture_interval = r.0.read_bit()?;
         if ti.equal_picture_interval {
             ti.num_ticks_per_picture_minus_1 = r.read_uvlc()?;
         }
@@ -1750,9 +1989,9 @@ impl Parser {
 
     /// Selects an operating point. Only call this after the Sequence OBU for
     /// which the operating point should apply has been parsed.
-    pub fn choose_operating_point(&mut self, operating_point: u32) -> anyhow::Result<()> {
+    pub fn choose_operating_point(&mut self, operating_point: u32) -> Result<(), String> {
         if operating_point > self.sequence()?.operating_points_cnt_minus_1 {
-            return Err(anyhow!(
+            return Err(format!(
                 "Invalid operating point {} (max {})",
                 operating_point,
                 self.sequence()?.operating_points_cnt_minus_1
@@ -1763,23 +2002,23 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_temporal_delimiter_obu(&mut self) -> anyhow::Result<()> {
+    fn parse_temporal_delimiter_obu(&mut self) -> Result<(), String> {
         self.seen_frame_header = false;
         Ok(())
     }
 
-    fn parse_sequence_header_obu(&mut self, obu: &Obu) -> anyhow::Result<Rc<SequenceHeaderObu>> {
+    fn parse_sequence_header_obu(&mut self, obu: &Obu) -> Result<Rc<SequenceHeaderObu>, String> {
         let mut s = SequenceHeaderObu {
             obu_header: obu.header.clone(),
             ..Default::default()
         };
 
         let mut r = Reader::new(obu.as_ref());
-        let profile = r.read_bits(3)?;
+        let profile = r.0.read_bits::<u32>(3)?;
 
-        s.seq_profile = Profile::n(profile).ok_or(anyhow!("Invalid profile {}", profile))?;
-        s.still_picture = r.read_bit()?;
-        s.reduced_still_picture_header = r.read_bit()?;
+        s.seq_profile = Profile::try_from(profile)?;
+        s.still_picture = r.0.read_bit()?;
+        s.reduced_still_picture_header = r.0.read_bit()?;
 
         if s.reduced_still_picture_header {
             /* Default::default() already ensures a lot of this, but lets go verbatim */
@@ -1788,15 +2027,15 @@ impl Parser {
             s.initial_display_delay_present_flag = false;
             s.operating_points_cnt_minus_1 = 0;
             s.operating_points[0].idc = 0;
-            s.operating_points[0].seq_level_idx = r.read_bits(5)? as u8;
+            s.operating_points[0].seq_level_idx = r.0.read_bits::<u32>(5)? as u8;
             s.operating_points[0].seq_tier = 0;
             s.operating_points[0].decoder_model_present_for_this_op = false;
             s.operating_points[0].initial_display_delay_present_for_this_op = false;
         } else {
-            s.timing_info_present_flag = r.read_bit()?;
+            s.timing_info_present_flag = r.0.read_bit()?;
             if s.timing_info_present_flag {
                 Self::parse_timing_info(&mut s.timing_info, &mut r)?;
-                s.decoder_model_info_present_flag = r.read_bit()?;
+                s.decoder_model_info_present_flag = r.0.read_bit()?;
                 if s.decoder_model_info_present_flag {
                     Self::parse_decoder_model_info(&mut s.decoder_model_info, &mut r)?;
                 }
@@ -1804,25 +2043,25 @@ impl Parser {
                 s.decoder_model_info_present_flag = false;
             }
 
-            s.initial_display_delay_present_flag = r.read_bit()?;
-            s.operating_points_cnt_minus_1 = r.read_bits(5)?;
+            s.initial_display_delay_present_flag = r.0.read_bit()?;
+            s.operating_points_cnt_minus_1 = r.0.read_bits::<u32>(5)?;
             if s.operating_points_cnt_minus_1 > MAX_NUM_OPERATING_POINTS as u32 {
-                return Err(anyhow!(
+                return Err(format!(
                     "Invalid operating_points_cnt_minus_1 {}",
                     s.operating_points_cnt_minus_1
                 ));
             }
 
             for i in 0..=s.operating_points_cnt_minus_1 as usize {
-                s.operating_points[i].idc = r.read_bits(12)? as u16;
-                s.operating_points[i].seq_level_idx = r.read_bits(5)? as u8;
+                s.operating_points[i].idc = r.0.read_bits::<u32>(12)? as u16;
+                s.operating_points[i].seq_level_idx = r.0.read_bits::<u32>(5)? as u8;
                 if s.operating_points[i].seq_level_idx > 7 {
-                    s.operating_points[i].seq_tier = r.read_bit()? as u8;
+                    s.operating_points[i].seq_tier = r.0.read_bit()? as u8;
                 } else {
                     s.operating_points[i].seq_tier = 0;
                 }
                 if s.decoder_model_info_present_flag {
-                    s.operating_points[i].decoder_model_present_for_this_op = r.read_bit()?;
+                    s.operating_points[i].decoder_model_present_for_this_op = r.0.read_bit()?;
                     if s.operating_points[i].decoder_model_present_for_this_op {
                         let buffer_delay_length_minus_1 =
                             s.decoder_model_info.buffer_delay_length_minus_1;
@@ -1838,38 +2077,41 @@ impl Parser {
 
                 if s.initial_display_delay_present_flag {
                     s.operating_points[i].initial_display_delay_present_for_this_op =
-                        r.read_bit()?;
+                        r.0.read_bit()?;
                     if s.operating_points[i].initial_display_delay_present_for_this_op {
-                        s.operating_points[i].initial_display_delay_minus_1 = r.read_bits(4)?;
+                        s.operating_points[i].initial_display_delay_minus_1 =
+                            r.0.read_bits::<u32>(4)?;
                     }
                 }
             }
         }
 
-        s.frame_width_bits_minus_1 = r.read_bits(4)? as u8;
-        s.frame_height_bits_minus_1 = r.read_bits(4)? as u8;
+        s.frame_width_bits_minus_1 = r.0.read_bits::<u32>(4)? as u8;
+        s.frame_height_bits_minus_1 = r.0.read_bits::<u32>(4)? as u8;
         // frame_width_bits_minus_1 has been read from 4 bits, meaning we can read 16 bits at most.
-        s.max_frame_width_minus_1 = r.read_bits(s.frame_width_bits_minus_1 + 1)? as u16;
+        s.max_frame_width_minus_1 =
+            r.0.read_bits::<u32>(s.frame_width_bits_minus_1 as usize + 1)? as u16;
         // frame_height_bits_minus_1 has been read from 4 bits, meaning we can read 16 bits at most.
-        s.max_frame_height_minus_1 = r.read_bits(s.frame_height_bits_minus_1 + 1)? as u16;
+        s.max_frame_height_minus_1 =
+            r.0.read_bits::<u32>(s.frame_height_bits_minus_1 as usize + 1)? as u16;
         if s.reduced_still_picture_header {
             s.frame_id_numbers_present_flag = false;
         } else {
-            s.frame_id_numbers_present_flag = r.read_bit()?;
+            s.frame_id_numbers_present_flag = r.0.read_bit()?;
         }
         if s.frame_id_numbers_present_flag {
-            s.delta_frame_id_length_minus_2 = r.read_bits(4)?;
-            s.additional_frame_id_length_minus_1 = r.read_bits(3)?;
+            s.delta_frame_id_length_minus_2 = r.0.read_bits::<u32>(4)?;
+            s.additional_frame_id_length_minus_1 = r.0.read_bits::<u32>(3)?;
             let frame_id_length =
                 s.additional_frame_id_length_minus_1 + s.delta_frame_id_length_minus_2 + 3;
             if frame_id_length > 16 {
-                return Err(anyhow!("Invalid frame_id_length {}", frame_id_length));
+                return Err(format!("Invalid frame_id_length {}", frame_id_length));
             }
         }
 
-        s.use_128x128_superblock = r.read_bit()?;
-        s.enable_filter_intra = r.read_bit()?;
-        s.enable_intra_edge_filter = r.read_bit()?;
+        s.use_128x128_superblock = r.0.read_bit()?;
+        s.enable_filter_intra = r.0.read_bit()?;
+        s.enable_intra_edge_filter = r.0.read_bit()?;
         if s.reduced_still_picture_header {
             s.enable_interintra_compound = false;
             s.enable_masked_compound = false;
@@ -1883,37 +2125,37 @@ impl Parser {
             s.order_hint_bits = 0;
             s.order_hint_bits_minus_1 = -1;
         } else {
-            s.enable_interintra_compound = r.read_bit()?;
-            s.enable_masked_compound = r.read_bit()?;
-            s.enable_warped_motion = r.read_bit()?;
-            s.enable_dual_filter = r.read_bit()?;
-            s.enable_order_hint = r.read_bit()?;
+            s.enable_interintra_compound = r.0.read_bit()?;
+            s.enable_masked_compound = r.0.read_bit()?;
+            s.enable_warped_motion = r.0.read_bit()?;
+            s.enable_dual_filter = r.0.read_bit()?;
+            s.enable_order_hint = r.0.read_bit()?;
             if s.enable_order_hint {
-                s.enable_jnt_comp = r.read_bit()?;
-                s.enable_ref_frame_mvs = r.read_bit()?;
+                s.enable_jnt_comp = r.0.read_bit()?;
+                s.enable_ref_frame_mvs = r.0.read_bit()?;
             } else {
                 s.enable_jnt_comp = false;
                 s.enable_ref_frame_mvs = false;
             }
-            s.seq_choose_screen_content_tools = r.read_bit()?;
+            s.seq_choose_screen_content_tools = r.0.read_bit()?;
             if s.seq_choose_screen_content_tools {
                 s.seq_force_screen_content_tools = SELECT_SCREEN_CONTENT_TOOLS as _;
             } else {
-                s.seq_force_screen_content_tools = r.read_bit()? as _;
+                s.seq_force_screen_content_tools = r.0.read_bit()? as _;
             }
             if s.seq_force_screen_content_tools > 0 {
-                s.seq_choose_integer_mv = r.read_bit()?;
+                s.seq_choose_integer_mv = r.0.read_bit()?;
                 if s.seq_choose_integer_mv {
                     s.seq_force_integer_mv = SELECT_INTEGER_MV as _;
                 } else {
-                    s.seq_force_integer_mv = r.read_bit()? as _;
+                    s.seq_force_integer_mv = r.0.read_bit()? as _;
                 }
             } else {
                 s.seq_force_integer_mv = SELECT_INTEGER_MV as _;
             }
 
             if s.enable_order_hint {
-                s.order_hint_bits_minus_1 = r.read_bits(3)?.try_into().unwrap();
+                s.order_hint_bits_minus_1 = r.0.read_bits::<u32>(3)?.try_into().unwrap();
                 s.order_hint_bits = s.order_hint_bits_minus_1 + 1;
             } else {
                 s.order_hint_bits_minus_1 = -1;
@@ -1921,13 +2163,13 @@ impl Parser {
             }
         }
 
-        s.enable_superres = r.read_bit()?;
-        s.enable_cdef = r.read_bit()?;
-        s.enable_restoration = r.read_bit()?;
+        s.enable_superres = r.0.read_bit()?;
+        s.enable_cdef = r.0.read_bit()?;
+        s.enable_restoration = r.0.read_bit()?;
 
         Self::parse_color_config(&mut s, &mut r)?;
 
-        s.film_grain_params_present = r.read_bit()?;
+        s.film_grain_params_present = r.0.read_bit()?;
 
         Self::skip_and_check_trailing_bits(&mut r, obu)?;
         let rc = Rc::new(s);
@@ -1944,7 +2186,7 @@ impl Parser {
     /// header, so we must save them now, as they will not be parsed from the
     /// bitstream. We also save some internal parser state which will be useful
     /// later.
-    fn load_reference_frame(&self, fh: &mut FrameHeaderObu) -> anyhow::Result<()> {
+    fn load_reference_frame(&self, fh: &mut FrameHeaderObu) -> Result<(), String> {
         let rf = &self.ref_info[fh.frame_to_show_map_idx as usize];
 
         // Section 6.8.1: It is a requirement of bitstream conformance that a
@@ -1991,7 +2233,7 @@ impl Parser {
         fh.loop_filter_params.loop_filter_mode_deltas = Default::default();
     }
 
-    fn parse_tile_info(&mut self, r: &mut Reader, ti: &mut TileInfo) -> anyhow::Result<()> {
+    fn parse_tile_info(&mut self, r: &mut Reader, ti: &mut TileInfo) -> Result<(), String> {
         let seq = self.sequence()?;
 
         let sb_cols = if seq.use_128x128_superblock {
@@ -2025,12 +2267,12 @@ impl Parser {
             helpers::tile_log2(max_tile_area_sb, sb_rows * sb_cols),
         );
 
-        ti.uniform_tile_spacing_flag = r.read_bit()?;
+        ti.uniform_tile_spacing_flag = r.0.read_bit()?;
 
         if ti.uniform_tile_spacing_flag {
             self.tile_cols_log2 = min_log2_tile_cols;
             while self.tile_cols_log2 < max_log2_tile_cols {
-                let increment_tile_cols_log_2 = r.read_bit()?;
+                let increment_tile_cols_log_2 = r.0.read_bit()?;
                 if increment_tile_cols_log_2 {
                     self.tile_cols_log2 += 1;
                 } else {
@@ -2053,7 +2295,7 @@ impl Parser {
             self.tile_cols = i as _;
 
             if self.tile_cols > MAX_TILE_COLS as u32 {
-                return Err(anyhow!("Invalid tile_cols {}", self.tile_cols));
+                return Err(format!("Invalid tile_cols {}", self.tile_cols));
             }
 
             /* compute this anyways */
@@ -2070,7 +2312,7 @@ impl Parser {
             self.tile_rows_log2 = min_log2_tile_rows;
 
             while self.tile_rows_log2 < max_log2_tile_rows {
-                let increment_tile_rows_log_2 = r.read_bit()?;
+                let increment_tile_rows_log_2 = r.0.read_bit()?;
 
                 if increment_tile_rows_log_2 {
                     self.tile_rows_log2 += 1;
@@ -2094,7 +2336,7 @@ impl Parser {
             self.tile_rows = i as _;
 
             if self.tile_rows > MAX_TILE_ROWS as u32 {
-                return Err(anyhow!("Invalid tile_rows {}", self.tile_cols));
+                return Err(format!("Invalid tile_rows {}", self.tile_cols));
             }
 
             /* compute this anyways */
@@ -2152,18 +2394,18 @@ impl Parser {
         }
 
         if self.tile_cols_log2 > 0 || self.tile_rows_log2 > 0 {
-            let num_bits = (self.tile_rows_log2 + self.tile_cols_log2)
+            let num_bits: usize = (self.tile_rows_log2 + self.tile_cols_log2)
                 .try_into()
                 .unwrap();
-            ti.context_update_tile_id = r.read_bits(num_bits)?;
+            ti.context_update_tile_id = r.0.read_bits::<u32>(num_bits)?;
 
             if ti.context_update_tile_id >= self.tile_rows * self.tile_cols {
-                return Err(anyhow!(
+                return Err(format!(
                     "Invalid context_update_tile_id {}",
                     ti.context_update_tile_id
                 ));
             }
-            self.tile_size_bytes = r.read_bits(2)? + 1;
+            self.tile_size_bytes = r.0.read_bits::<u32>(2)? + 1;
         } else {
             ti.context_update_tile_id = 0;
         }
@@ -2184,12 +2426,12 @@ impl Parser {
         q: &mut QuantizationParams,
         num_planes: u32,
         separate_uv_delta_q: bool,
-    ) -> anyhow::Result<()> {
-        q.base_q_idx = r.read_bits(8)?;
+    ) -> Result<(), String> {
+        q.base_q_idx = r.0.read_bits::<u32>(8)?;
         q.delta_q_y_dc = r.read_delta_q()?;
         if num_planes > 1 {
             if separate_uv_delta_q {
-                q.diff_uv_delta = r.read_bit()?;
+                q.diff_uv_delta = r.0.read_bit()?;
             } else {
                 q.diff_uv_delta = false;
             }
@@ -2210,27 +2452,27 @@ impl Parser {
             q.delta_q_v_ac = 0;
         }
 
-        q.using_qmatrix = r.read_bit()?;
+        q.using_qmatrix = r.0.read_bit()?;
         if q.using_qmatrix {
-            q.qm_y = r.read_bits(4)?;
-            q.qm_u = r.read_bits(4)?;
+            q.qm_y = r.0.read_bits::<u32>(4)?;
+            q.qm_u = r.0.read_bits::<u32>(4)?;
             if !separate_uv_delta_q {
                 q.qm_v = q.qm_u;
             } else {
-                q.qm_v = r.read_bits(4)?;
+                q.qm_v = r.0.read_bits::<u32>(4)?;
             }
         }
         Ok(())
     }
 
-    fn parse_delta_q_params(r: &mut Reader, q: &mut QuantizationParams) -> anyhow::Result<()> {
+    fn parse_delta_q_params(r: &mut Reader, q: &mut QuantizationParams) -> Result<(), String> {
         q.delta_q_res = 0;
         q.delta_q_present = false;
         if q.base_q_idx > 0 {
-            q.delta_q_present = r.read_bit()?;
+            q.delta_q_present = r.0.read_bit()?;
         }
         if q.delta_q_present {
-            q.delta_q_res = r.read_bits(2)?;
+            q.delta_q_res = r.0.read_bits::<u32>(2)?;
         }
 
         Ok(())
@@ -2241,17 +2483,17 @@ impl Parser {
         lf: &mut LoopFilterParams,
         delta_q_present: bool,
         allow_intrabc: bool,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         lf.delta_lf_present = false;
         lf.delta_lf_res = 0;
         lf.delta_lf_multi = false;
         if delta_q_present {
             if !allow_intrabc {
-                lf.delta_lf_present = r.read_bit()?;
+                lf.delta_lf_present = r.0.read_bit()?;
             }
             if lf.delta_lf_present {
-                lf.delta_lf_res = r.read_bits(2)? as u8;
-                lf.delta_lf_multi = r.read_bit()?;
+                lf.delta_lf_res = r.0.read_bits::<u32>(2)? as u8;
+                lf.delta_lf_multi = r.0.read_bit()?;
             }
         }
         Ok(())
@@ -2261,25 +2503,25 @@ impl Parser {
         &self,
         r: &mut Reader,
         fh: &mut FrameHeaderObu,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let s = &mut fh.segmentation_params;
-        s.segmentation_enabled = r.read_bit()?;
+        s.segmentation_enabled = r.0.read_bit()?;
         if s.segmentation_enabled {
             if fh.primary_ref_frame == PRIMARY_REF_NONE {
                 s.segmentation_update_map = true;
                 s.segmentation_temporal_update = false;
                 s.segmentation_update_data = true;
             } else {
-                s.segmentation_update_map = r.read_bit()?;
+                s.segmentation_update_map = r.0.read_bit()?;
                 if s.segmentation_update_map {
-                    s.segmentation_temporal_update = r.read_bit()?;
+                    s.segmentation_temporal_update = r.0.read_bit()?;
                 }
-                s.segmentation_update_data = r.read_bit()?;
+                s.segmentation_update_data = r.0.read_bit()?;
             }
             if s.segmentation_update_data {
                 for i in 0..MAX_SEGMENTS {
                     for j in 0..SEG_LVL_MAX {
-                        let feature_enabled = r.read_bit()?;
+                        let feature_enabled = r.0.read_bit()?;
                         s.feature_enabled[i][j] = feature_enabled;
                         if feature_enabled {
                             let bits_to_read = FEATURE_BITS[j];
@@ -2287,15 +2529,17 @@ impl Parser {
                             let signed = FEATURE_SIGNED[j];
 
                             if signed {
-                                let feature_value = r.read_su(1 + bits_to_read)?;
+                                let feature_value = r.read_su(1 + bits_to_read as usize)?;
                                 let clipped_value = helpers::clip3(-limit, limit, feature_value);
                                 s.feature_data[i][j] = clipped_value as _;
                             } else {
-                                let feature_value = r.read_bits(bits_to_read)?;
+                                let feature_value = r.0.read_bits::<u32>(bits_to_read as usize)?;
                                 let clipped_value = helpers::clip3(
                                     0,
                                     limit,
-                                    feature_value.try_into().context("Invalid feature_value")?,
+                                    feature_value
+                                        .try_into()
+                                        .map_err(|_| "Invalid feature_value")?,
                                 );
                                 s.feature_data[i][j] = clipped_value as _;
                             }
@@ -2308,7 +2552,7 @@ impl Parser {
                     &self.ref_info[fh.ref_frame_idx[fh.primary_ref_frame as usize] as usize];
 
                 if !prev_frame.ref_valid {
-                    return Err(anyhow!("Reference is invalid"));
+                    return Err("Reference is invalid".into());
                 }
 
                 s.feature_enabled = prev_frame.segmentation_params.feature_enabled;
@@ -2343,7 +2587,7 @@ impl Parser {
         r: &mut Reader,
         fh: &mut FrameHeaderObu,
         num_planes: u32,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let lf = &mut fh.loop_filter_params;
         if fh.coded_lossless || fh.allow_intrabc {
             lf.loop_filter_level[0] = 0;
@@ -2355,27 +2599,27 @@ impl Parser {
             return Ok(());
         }
 
-        lf.loop_filter_level[0] = r.read_bits(6)? as u8;
-        lf.loop_filter_level[1] = r.read_bits(6)? as u8;
+        lf.loop_filter_level[0] = r.0.read_bits::<u32>(6)? as u8;
+        lf.loop_filter_level[1] = r.0.read_bits::<u32>(6)? as u8;
         if num_planes > 1 && (lf.loop_filter_level[0] > 0 || lf.loop_filter_level[1] > 0) {
-            lf.loop_filter_level[2] = r.read_bits(6)? as u8;
-            lf.loop_filter_level[3] = r.read_bits(6)? as u8;
+            lf.loop_filter_level[2] = r.0.read_bits::<u32>(6)? as u8;
+            lf.loop_filter_level[3] = r.0.read_bits::<u32>(6)? as u8;
         }
 
-        lf.loop_filter_sharpness = r.read_bits(3)? as u8;
-        lf.loop_filter_delta_enabled = r.read_bit()?;
+        lf.loop_filter_sharpness = r.0.read_bits::<u32>(3)? as u8;
+        lf.loop_filter_delta_enabled = r.0.read_bit()?;
         if lf.loop_filter_delta_enabled {
-            lf.loop_filter_delta_update = r.read_bit()?;
+            lf.loop_filter_delta_update = r.0.read_bit()?;
             if lf.loop_filter_delta_update {
                 for i in 0..TOTAL_REFS_PER_FRAME {
-                    let update_ref_delta = r.read_bit()?;
+                    let update_ref_delta = r.0.read_bit()?;
                     if update_ref_delta {
                         lf.loop_filter_ref_deltas[i] = r.read_su(7)? as i8;
                     }
                 }
 
                 for i in 0..2 {
-                    let update_mode_delta = r.read_bit()?;
+                    let update_mode_delta = r.0.read_bit()?;
                     if update_mode_delta {
                         lf.loop_filter_mode_deltas[i] = r.read_su(7)? as i8;
                     }
@@ -2391,7 +2635,7 @@ impl Parser {
         fh: &mut FrameHeaderObu,
         enable_cdef: bool,
         num_planes: u32,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let cdef = &mut fh.cdef_params;
 
         if fh.coded_lossless || fh.allow_intrabc || !enable_cdef {
@@ -2404,17 +2648,17 @@ impl Parser {
             return Ok(());
         }
 
-        cdef.cdef_damping = r.read_bits(2)? + 3;
-        cdef.cdef_bits = r.read_bits(2)?;
+        cdef.cdef_damping = r.0.read_bits::<u32>(2)? + 3;
+        cdef.cdef_bits = r.0.read_bits::<u32>(2)?;
         for i in 0..(1 << cdef.cdef_bits) as usize {
-            cdef.cdef_y_pri_strength[i] = r.read_bits(4)?;
-            cdef.cdef_y_sec_strength[i] = r.read_bits(2)?;
+            cdef.cdef_y_pri_strength[i] = r.0.read_bits::<u32>(4)?;
+            cdef.cdef_y_sec_strength[i] = r.0.read_bits::<u32>(2)?;
             if cdef.cdef_y_sec_strength[i] == 3 {
                 cdef.cdef_y_sec_strength[i] += 1;
             }
             if num_planes > 1 {
-                cdef.cdef_uv_pri_strength[i] = r.read_bits(4)?;
-                cdef.cdef_uv_sec_strength[i] = r.read_bits(2)?;
+                cdef.cdef_uv_pri_strength[i] = r.0.read_bits::<u32>(4)?;
+                cdef.cdef_uv_sec_strength[i] = r.0.read_bits::<u32>(2)?;
                 if cdef.cdef_uv_sec_strength[i] == 3 {
                     cdef.cdef_uv_sec_strength[i] += 1;
                 }
@@ -2432,7 +2676,7 @@ impl Parser {
         use_128x128_superblock: bool,
         subsampling_x: bool,
         subsampling_y: bool,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let lr = &mut fh.loop_restoration_params;
 
         if fh.all_lossless || fh.allow_intrabc || !enable_restoration {
@@ -2454,7 +2698,7 @@ impl Parser {
         ];
 
         for i in 0..num_planes as usize {
-            let lr_type = r.read_bits(2)?;
+            let lr_type = r.0.read_bits::<u32>(2)?;
             lr.frame_restoration_type[i] = REMAP_LR_TYPE[lr_type as usize];
             if lr.frame_restoration_type[i] != FrameRestorationType::None {
                 lr.uses_lr = true;
@@ -2466,17 +2710,17 @@ impl Parser {
 
         if lr.uses_lr {
             if use_128x128_superblock {
-                lr.lr_unit_shift = r.read_bits(1)? as u8 + 1;
+                lr.lr_unit_shift = r.0.read_bits::<u32>(1)? as u8 + 1;
             } else {
-                lr.lr_unit_shift = r.read_bits(1)? as u8;
+                lr.lr_unit_shift = r.0.read_bits::<u32>(1)? as u8;
                 if lr.lr_unit_shift > 0 {
-                    lr.lr_unit_shift += r.read_bits(1)? as u8;
+                    lr.lr_unit_shift += r.0.read_bits::<u32>(1)? as u8;
                 }
             }
 
             lr.loop_restoration_size[0] = RESTORATION_TILESIZE_MAX >> (2 - lr.lr_unit_shift);
             if subsampling_x && subsampling_y && lr.uses_chroma_lr {
-                lr.lr_uv_shift = r.read_bits(1)? as u8;
+                lr.lr_uv_shift = r.0.read_bits::<u32>(1)? as u8;
             } else {
                 lr.lr_uv_shift = 0;
             }
@@ -2488,11 +2732,11 @@ impl Parser {
         Ok(())
     }
 
-    fn read_tx_mode(r: &mut Reader, fh: &mut FrameHeaderObu) -> anyhow::Result<()> {
+    fn read_tx_mode(r: &mut Reader, fh: &mut FrameHeaderObu) -> Result<(), String> {
         if fh.coded_lossless {
             fh.tx_mode = TxMode::Only4x4;
         } else {
-            let tx_mode_select = r.read_bit()?;
+            let tx_mode_select = r.0.read_bit()?;
 
             if tx_mode_select {
                 fh.tx_mode = TxMode::Select;
@@ -2510,7 +2754,7 @@ impl Parser {
         fh: &mut FrameHeaderObu,
         enable_order_hint: bool,
         order_hint_bits: i32,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let skip_mode_allowed;
 
         if fh.frame_is_intra || !fh.reference_select || !enable_order_hint {
@@ -2603,7 +2847,7 @@ impl Parser {
         }
 
         if skip_mode_allowed {
-            fh.skip_mode_present = r.read_bit()?;
+            fh.skip_mode_present = r.0.read_bit()?;
         } else {
             fh.skip_mode_present = false;
         }
@@ -2611,11 +2855,11 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_frame_reference_mode(r: &mut Reader, fh: &mut FrameHeaderObu) -> anyhow::Result<()> {
+    fn parse_frame_reference_mode(r: &mut Reader, fh: &mut FrameHeaderObu) -> Result<(), String> {
         if fh.frame_is_intra {
             fh.reference_select = false;
         } else {
-            fh.reference_select = r.read_bit()?;
+            fh.reference_select = r.0.read_bit()?;
         }
         Ok(())
     }
@@ -2638,7 +2882,7 @@ impl Parser {
         }
     }
 
-    fn setup_shear(warp_params: &[i32; 6]) -> anyhow::Result<bool> {
+    fn setup_shear(warp_params: &[i32; 6]) -> Result<bool, String> {
         let mut default = true;
         for (i, param) in warp_params.iter().enumerate() {
             let default_value = if i % 3 == 2 {
@@ -2704,7 +2948,7 @@ impl Parser {
         allow_high_precision_mv: bool,
         prev_gm_params: &[[i32; 6]; NUM_REF_FRAMES],
         gm_params: &mut [[i32; 6]; NUM_REF_FRAMES],
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let mut abs_bits = GM_ABS_ALPHA_BITS;
         let mut prec_bits = GM_ALPHA_PREC_BITS;
         if idx < 2 {
@@ -2737,7 +2981,7 @@ impl Parser {
         &mut self,
         r: &mut Reader,
         fh: &mut FrameHeaderObu,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let gm = &mut fh.global_motion_params;
         let mut type_;
         let mut prev_gm_params: [[i32; 6]; NUM_REF_FRAMES] = Default::default();
@@ -2785,13 +3029,13 @@ impl Parser {
         }
 
         for ref_frame in ReferenceFrameType::Last as usize..=ReferenceFrameType::AltRef as usize {
-            gm.is_global[ref_frame] = r.read_bit()?;
+            gm.is_global[ref_frame] = r.0.read_bit()?;
             if gm.is_global[ref_frame] {
-                gm.is_rot_zoom[ref_frame] = r.read_bit()?;
+                gm.is_rot_zoom[ref_frame] = r.0.read_bit()?;
                 if gm.is_rot_zoom[ref_frame] {
                     type_ = WarpModelType::RotZoom;
                 } else {
-                    gm.is_translation[ref_frame] = r.read_bit()?;
+                    gm.is_translation[ref_frame] = r.0.read_bit()?;
                     if gm.is_translation[ref_frame] {
                         type_ = WarpModelType::Translation;
                     } else {
@@ -2886,7 +3130,7 @@ impl Parser {
         mono_chrome: bool,
         subsampling_x: bool,
         subsampling_y: bool,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let fg = &mut fh.film_grain_params;
 
         if !film_grain_params_present || (!fh.show_frame && !fh.showable_frame) {
@@ -2894,21 +3138,21 @@ impl Parser {
             return Ok(());
         }
 
-        fg.apply_grain = r.read_bit()?;
+        fg.apply_grain = r.0.read_bit()?;
         if !fg.apply_grain {
             *fg = Default::default();
             return Ok(());
         }
 
-        fg.grain_seed = r.read_bits(16)? as u16;
+        fg.grain_seed = r.0.read_bits::<u32>(16)? as u16;
         if fh.frame_type == FrameType::InterFrame {
-            fg.update_grain = r.read_bit()?;
+            fg.update_grain = r.0.read_bit()?;
         } else {
             fg.update_grain = true;
         }
 
         if !fg.update_grain {
-            fg.film_grain_params_ref_idx = r.read_bits(3)? as u8;
+            fg.film_grain_params_ref_idx = r.0.read_bits::<u32>(3)? as u8;
             let temp_grain_seed = fg.grain_seed;
 
             if !fh
@@ -2916,7 +3160,7 @@ impl Parser {
                 .iter()
                 .any(|&ref_frame_idx| ref_frame_idx == fg.film_grain_params_ref_idx)
             {
-                return Err(anyhow!("Invalid film_grain_params_ref_idx"));
+                return Err("Invalid film_grain_params_ref_idx".into());
             }
 
             // load_grain_params()
@@ -2929,21 +3173,21 @@ impl Parser {
             return Ok(());
         }
 
-        fg.num_y_points = r.read_bits(4)? as u8;
+        fg.num_y_points = r.0.read_bits::<u32>(4)? as u8;
         fg.point_y_value
             .iter_mut()
             .zip(fg.point_y_scaling.iter_mut())
             .take(fg.num_y_points as usize)
             .try_for_each(|(point_y_value, point_y_scaling)| {
-                *point_y_value = r.read_bits(8)? as u8;
-                *point_y_scaling = r.read_bits(8)? as u8;
-                Ok::<_, anyhow::Error>(())
+                *point_y_value = r.0.read_bits::<u32>(8)? as u8;
+                *point_y_scaling = r.0.read_bits::<u32>(8)? as u8;
+                Ok::<_, String>(())
             })?;
 
         if mono_chrome {
             fg.chroma_scaling_from_luma = false;
         } else {
-            fg.chroma_scaling_from_luma = r.read_bit()?;
+            fg.chroma_scaling_from_luma = r.0.read_bit()?;
         }
 
         if mono_chrome
@@ -2953,44 +3197,42 @@ impl Parser {
             fg.num_cb_points = 0;
             fg.num_cr_points = 0;
         } else {
-            fg.num_cb_points = r.read_bits(4)? as u8;
+            fg.num_cb_points = r.0.read_bits::<u32>(4)? as u8;
             if fg.num_cb_points > 10 {
-                return Err(anyhow!("Invalid num_cb_points {}", fg.num_cb_points));
+                return Err(format!("Invalid num_cb_points {}", fg.num_cb_points));
             }
 
             for i in 0..fg.num_cb_points as usize {
-                fg.point_cb_value[i] = r.read_bits(8)? as u8;
+                fg.point_cb_value[i] = r.0.read_bits::<u32>(8)? as u8;
                 if i > 0 && fg.point_cb_value[i - 1] >= fg.point_cb_value[i] {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid point_cb_value[{}] {}",
-                        i,
-                        fg.point_cb_value[i]
+                        i, fg.point_cb_value[i]
                     ));
                 }
-                fg.point_cb_scaling[i] = r.read_bits(8)? as u8;
+                fg.point_cb_scaling[i] = r.0.read_bits::<u32>(8)? as u8;
             }
 
-            fg.num_cr_points = r.read_bits(4)? as u8;
+            fg.num_cr_points = r.0.read_bits::<u32>(4)? as u8;
             for i in 0..fg.num_cr_points as usize {
-                fg.point_cr_value[i] = r.read_bits(8)? as u8;
+                fg.point_cr_value[i] = r.0.read_bits::<u32>(8)? as u8;
                 if i > 0 && fg.point_cr_value[i - 1] >= fg.point_cr_value[i] {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid point_cr_value[{}] {}",
-                        i,
-                        fg.point_cr_value[i]
+                        i, fg.point_cr_value[i]
                     ));
                 }
-                fg.point_cr_scaling[i] = r.read_bits(8)? as u8;
+                fg.point_cr_scaling[i] = r.0.read_bits::<u32>(8)? as u8;
             }
         }
 
-        fg.grain_scaling_minus_8 = r.read_bits(2)? as u8;
-        fg.ar_coeff_lag = r.read_bits(2)?;
+        fg.grain_scaling_minus_8 = r.0.read_bits::<u32>(2)? as u8;
+        fg.ar_coeff_lag = r.0.read_bits::<u32>(2)?;
 
         let num_pos_luma = 2 * fg.ar_coeff_lag * (fg.ar_coeff_lag + 1);
         let num_pos_chroma = if fg.num_y_points > 0 {
             for i in 0..num_pos_luma as usize {
-                fg.ar_coeffs_y_plus_128[i] = r.read_bits(8)? as u8;
+                fg.ar_coeffs_y_plus_128[i] = r.0.read_bits::<u32>(8)? as u8;
             }
             num_pos_luma + 1
         } else {
@@ -2999,46 +3241,46 @@ impl Parser {
 
         if fg.chroma_scaling_from_luma || fg.num_cb_points > 0 {
             for i in 0..num_pos_chroma as usize {
-                fg.ar_coeffs_cb_plus_128[i] = r.read_bits(8)? as u8;
+                fg.ar_coeffs_cb_plus_128[i] = r.0.read_bits::<u32>(8)? as u8;
             }
         }
 
         if fg.chroma_scaling_from_luma || fg.num_cr_points > 0 {
             for i in 0..num_pos_chroma as usize {
-                fg.ar_coeffs_cr_plus_128[i] = r.read_bits(8)? as u8;
+                fg.ar_coeffs_cr_plus_128[i] = r.0.read_bits::<u32>(8)? as u8;
             }
         }
 
-        fg.ar_coeff_shift_minus_6 = r.read_bits(2)? as u8;
-        fg.grain_scale_shift = r.read_bits(2)? as u8;
+        fg.ar_coeff_shift_minus_6 = r.0.read_bits::<u32>(2)? as u8;
+        fg.grain_scale_shift = r.0.read_bits::<u32>(2)? as u8;
 
         if fg.num_cb_points > 0 {
-            fg.cb_mult = r.read_bits(8)? as u8;
-            fg.cb_luma_mult = r.read_bits(8)? as u8;
-            fg.cb_offset = r.read_bits(9)? as u16;
+            fg.cb_mult = r.0.read_bits::<u32>(8)? as u8;
+            fg.cb_luma_mult = r.0.read_bits::<u32>(8)? as u8;
+            fg.cb_offset = r.0.read_bits::<u32>(9)? as u16;
         }
 
         if fg.num_cr_points > 0 {
-            fg.cr_mult = r.read_bits(8)? as u8;
-            fg.cr_luma_mult = r.read_bits(8)? as u8;
-            fg.cr_offset = r.read_bits(9)? as u16;
+            fg.cr_mult = r.0.read_bits::<u32>(8)? as u8;
+            fg.cr_luma_mult = r.0.read_bits::<u32>(8)? as u8;
+            fg.cr_offset = r.0.read_bits::<u32>(9)? as u16;
         }
 
-        fg.overlap_flag = r.read_bit()?;
-        fg.clip_to_restricted_range = r.read_bit()?;
+        fg.overlap_flag = r.0.read_bit()?;
+        fg.clip_to_restricted_range = r.0.read_bit()?;
 
         Ok(())
     }
 
-    fn sequence(&self) -> anyhow::Result<&SequenceHeaderObu> {
+    fn sequence(&self) -> Result<&SequenceHeaderObu, String> {
         let Some(seq) = self.sequence_header.as_ref() else {
-            return Err(anyhow!("No sequence header parsed yet"));
+            return Err("No sequence header parsed yet".into());
         };
 
         Ok(seq)
     }
 
-    fn parse_uncompressed_frame_header(&mut self, obu: &Obu) -> anyhow::Result<FrameHeaderObu> {
+    fn parse_uncompressed_frame_header(&mut self, obu: &Obu) -> Result<FrameHeaderObu, String> {
         let mut r = Reader::new(obu.as_ref());
 
         let mut fh = FrameHeaderObu {
@@ -3102,17 +3344,16 @@ impl Parser {
             fh.show_frame = true;
             fh.showable_frame = false;
         } else {
-            fh.show_existing_frame = r.read_bit()?;
+            fh.show_existing_frame = r.0.read_bit()?;
             if matches!(obu.header.obu_type, ObuType::Frame) && fh.show_existing_frame {
-                return Err(anyhow!("If obu_type is equal to OBU_FRAME, it is a requirement of bitstream conformance that show_existing_frame is equal to 0."));
+                return Err("If obu_type is equal to OBU_FRAME, it is a requirement of bitstream conformance that show_existing_frame is equal to 0.".into());
             }
             if fh.show_existing_frame {
-                fh.frame_to_show_map_idx = r.read_bits(3)? as u8;
+                fh.frame_to_show_map_idx = r.0.read_bits::<u32>(3)? as u8;
 
                 if decoder_model_info_present_flag && !equal_picture_interval {
-                    fh.frame_presentation_time = r.read_bits(
-                        u8::try_from(frame_presentation_time_length_minus_1).unwrap() + 1,
-                    )?;
+                    fh.frame_presentation_time =
+                        r.0.read_bits::<u32>(frame_presentation_time_length_minus_1 as usize + 1)?;
                 }
 
                 let ref_frame = &self.ref_info[fh.frame_to_show_map_idx as usize];
@@ -3120,16 +3361,16 @@ impl Parser {
                 fh.refresh_frame_flags = 0;
                 if frame_id_numbers_present_flag {
                     if id_len == 0 {
-                        return Err(anyhow!("Invalid id_len {}", id_len));
+                        return Err(format!("Invalid id_len {}", id_len));
                     }
-                    fh.display_frame_id = r.read_bits(id_len.try_into().unwrap())?;
+                    fh.display_frame_id = r.0.read_bits::<u32>(id_len.try_into().unwrap())?;
                     if ref_frame.display_frame_id != fh.display_frame_id || !ref_frame.ref_valid {
-                        return Err(anyhow!("Invalid display_frame_id"));
+                        return Err("Invalid display_frame_id".into());
                     }
                 }
 
                 if !ref_frame.showable_frame {
-                    return Err(anyhow!("Invalid bitstream: can't show this past frame"));
+                    return Err("Invalid bitstream: can't show this past frame".into());
                 }
 
                 // In decode_frame_wrapup():
@@ -3169,27 +3410,27 @@ impl Parser {
                     r.byte_alignment()?;
                 }
 
-                fh.header_bytes = usize::try_from(r.position() / 8).unwrap();
+                fh.header_bytes = usize::try_from(r.0.position() / 8).unwrap();
                 return Ok(fh);
             }
 
-            fh.frame_type = FrameType::n(r.read_bits(2)?).ok_or(anyhow!("Invalid frame type"))?;
+            fh.frame_type = FrameType::try_from(r.0.read_bits::<u32>(2)?)?;
             fh.frame_is_intra = matches!(
                 fh.frame_type,
                 FrameType::IntraOnlyFrame | FrameType::KeyFrame
             );
 
-            fh.show_frame = r.read_bit()?;
+            fh.show_frame = r.0.read_bit()?;
 
             if fh.show_frame && decoder_model_info_present_flag && equal_picture_interval {
                 fh.frame_presentation_time =
-                    r.read_bits(u8::try_from(frame_presentation_time_length_minus_1).unwrap() + 1)?;
+                    r.0.read_bits::<u32>(frame_presentation_time_length_minus_1 as usize + 1)?;
             }
 
             if fh.show_frame {
                 fh.showable_frame = !matches!(fh.frame_type, FrameType::KeyFrame);
             } else {
-                fh.showable_frame = r.read_bit()?;
+                fh.showable_frame = r.0.read_bit()?;
             }
 
             if fh.frame_type == FrameType::SwitchFrame
@@ -3197,7 +3438,7 @@ impl Parser {
             {
                 fh.error_resilient_mode = true;
             } else {
-                fh.error_resilient_mode = r.read_bit()?;
+                fh.error_resilient_mode = r.0.read_bit()?;
             }
         }
 
@@ -3211,16 +3452,16 @@ impl Parser {
             }
         }
 
-        fh.disable_cdf_update = r.read_bit()?;
+        fh.disable_cdf_update = r.0.read_bit()?;
         if seq_force_screen_content_tools == SELECT_SCREEN_CONTENT_TOOLS as u32 {
-            fh.allow_screen_content_tools = r.read_bit()? as u32;
+            fh.allow_screen_content_tools = r.0.read_bit()? as u32;
         } else {
             fh.allow_screen_content_tools = seq_force_screen_content_tools;
         }
 
         if fh.allow_screen_content_tools > 0 {
             if seq_force_integer_mv == SELECT_INTEGER_MV as u32 {
-                fh.force_integer_mv = r.read_bit()? as u32;
+                fh.force_integer_mv = r.0.read_bit()? as u32;
             } else {
                 fh.force_integer_mv = seq_force_integer_mv;
             }
@@ -3234,7 +3475,7 @@ impl Parser {
 
         if frame_id_numbers_present_flag {
             self.prev_frame_id = self.current_frame_id;
-            self.current_frame_id = r.read_bits(id_len.try_into().unwrap())?;
+            self.current_frame_id = r.0.read_bits::<u32>(id_len.try_into().unwrap())?;
             fh.current_frame_id = self.current_frame_id;
 
             /* conformance checking, as per aom */
@@ -3249,7 +3490,7 @@ impl Parser {
                     self.current_frame_id - self.prev_frame_id
                 } else {
                     if frame_id_length > 16 {
-                        return Err(anyhow!("Invalid frame_id_length {}", frame_id_length));
+                        return Err(format!("Invalid frame_id_length {}", frame_id_length));
                     }
                     (1 << frame_id_length) + self.current_frame_id - self.prev_frame_id
                 };
@@ -3257,10 +3498,9 @@ impl Parser {
                 if self.prev_frame_id == self.current_frame_id
                     || diff_frame_id >= (1 << (frame_id_length - 1))
                 {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid frame_id: prev_frame_id = {}, current_frame_id = {}",
-                        self.prev_frame_id,
-                        self.current_frame_id
+                        self.prev_frame_id, self.current_frame_id
                     ));
                 }
             }
@@ -3296,20 +3536,20 @@ impl Parser {
         } else if reduced_still_picture_header {
             fh.frame_size_override_flag = false;
         } else {
-            fh.frame_size_override_flag = r.read_bit()?;
+            fh.frame_size_override_flag = r.0.read_bit()?;
         }
 
-        fh.order_hint = r.read_bits(order_hint_bits.try_into().unwrap())?;
+        fh.order_hint = r.0.read_bits::<u32>(order_hint_bits.try_into().unwrap())?;
 
         if fh.frame_is_intra || fh.error_resilient_mode {
             fh.primary_ref_frame = PRIMARY_REF_NONE;
         } else {
-            fh.primary_ref_frame = r.read_bits(3)?;
+            fh.primary_ref_frame = r.0.read_bits::<u32>(3)?;
         }
 
         let operating_points = &self.sequence()?.operating_points;
         if decoder_model_info_present_flag {
-            fh.buffer_removal_time_present_flag = r.read_bit()?;
+            fh.buffer_removal_time_present_flag = r.0.read_bit()?;
             if fh.buffer_removal_time_present_flag {
                 #[allow(clippy::needless_range_loop)]
                 for op_num in 0..=operating_points_cnt_minus_1 as usize {
@@ -3321,7 +3561,7 @@ impl Parser {
 
                         if op_pt_idc == 0 || (in_temporal_layer && in_spatial_layer) {
                             let n = buffer_removal_time_length_minus_1 + 1;
-                            fh.buffer_removal_time[op_num] = r.read_bits(n)?;
+                            fh.buffer_removal_time[op_num] = r.0.read_bits::<u32>(n as usize)?;
                         }
                     }
                 }
@@ -3336,7 +3576,7 @@ impl Parser {
         {
             fh.refresh_frame_flags = ALL_FRAMES;
         } else {
-            fh.refresh_frame_flags = r.read_bits(8)?;
+            fh.refresh_frame_flags = r.0.read_bits::<u32>(8)?;
         }
 
         /* equivalent boolean expression */
@@ -3345,7 +3585,7 @@ impl Parser {
             && enable_order_hint
         {
             for i in 0..NUM_REF_FRAMES {
-                fh.ref_order_hint[i] = r.read_bits(order_hint_bits.try_into().unwrap())?;
+                fh.ref_order_hint[i] = r.0.read_bits::<u32>(order_hint_bits.try_into().unwrap())?;
                 if fh.ref_order_hint[i] != self.ref_info[i].ref_order_hint {
                     self.ref_info[i].ref_valid = false;
                 }
@@ -3356,16 +3596,16 @@ impl Parser {
             self.parse_frame_size(&mut fh, &mut r)?;
             Self::parse_render_size(&mut fh, &mut r)?;
             if fh.allow_screen_content_tools > 0 && fh.upscaled_width == fh.frame_width {
-                fh.allow_intrabc = r.read_bit()?;
+                fh.allow_intrabc = r.0.read_bit()?;
             }
         } else {
             if !enable_order_hint {
                 fh.frame_refs_short_signaling = false;
             } else {
-                fh.frame_refs_short_signaling = r.read_bit()?;
+                fh.frame_refs_short_signaling = r.0.read_bit()?;
                 if fh.frame_refs_short_signaling {
-                    fh.last_frame_idx = r.read_bits(3)? as u8;
-                    fh.gold_frame_idx = r.read_bits(3)? as u8;
+                    fh.last_frame_idx = r.0.read_bits::<u32>(3)? as u8;
+                    fh.gold_frame_idx = r.0.read_bits::<u32>(3)? as u8;
                     let ref_order_hints = self
                         .ref_info
                         .iter()
@@ -3381,16 +3621,16 @@ impl Parser {
             #[allow(clippy::needless_range_loop)]
             for i in 0..REFS_PER_FRAME {
                 if !fh.frame_refs_short_signaling {
-                    fh.ref_frame_idx[i] = r.read_bits(3)?.try_into().unwrap();
+                    fh.ref_frame_idx[i] = r.0.read_bits::<u32>(3)?.try_into().unwrap();
                 }
 
                 if frame_id_numbers_present_flag {
                     /* DeltaFrameId */
                     let delta_frame_id =
-                        r.read_bits(u8::try_from(delta_frame_id_length_minus_2).unwrap() + 2)? + 1;
+                        r.0.read_bits::<u32>(delta_frame_id_length_minus_2 as usize + 2)? + 1;
 
                     if id_len == 0 {
-                        return Err(anyhow!("Invalid id_len {}", id_len));
+                        return Err(format!("Invalid id_len {}", id_len));
                     }
 
                     let shifted_id_len = 1 << id_len;
@@ -3401,10 +3641,9 @@ impl Parser {
                     let actual_frame_id = self.ref_info[fh.ref_frame_idx[i] as usize].ref_frame_id;
 
                     if expected_frame_id[i] != actual_frame_id {
-                        return Err(anyhow!(
+                        return Err(format!(
                             "Invalid frame id, expected {} got {}",
-                            expected_frame_id[i],
-                            actual_frame_id
+                            expected_frame_id[i], actual_frame_id
                         ));
                     }
                 }
@@ -3420,24 +3659,23 @@ impl Parser {
             if fh.force_integer_mv > 0 {
                 fh.allow_high_precision_mv = false;
             } else {
-                fh.allow_high_precision_mv = r.read_bit()?;
+                fh.allow_high_precision_mv = r.0.read_bit()?;
             }
 
             /* read_interpolation_filter */
-            fh.is_filter_switchable = r.read_bit()?;
+            fh.is_filter_switchable = r.0.read_bit()?;
             if fh.is_filter_switchable {
                 fh.interpolation_filter = InterpolationFilter::Switchable;
             } else {
-                fh.interpolation_filter = InterpolationFilter::n(r.read_bits(2)?)
-                    .ok_or(anyhow!("Invalid interpolation filter"))?;
+                fh.interpolation_filter = InterpolationFilter::try_from(r.0.read_bits::<u32>(2)?)?;
             }
 
-            fh.is_motion_mode_switchable = r.read_bit()?;
+            fh.is_motion_mode_switchable = r.0.read_bit()?;
 
             if fh.error_resilient_mode || !self.sequence()?.enable_ref_frame_mvs {
                 fh.use_ref_frame_mvs = false;
             } else {
-                fh.use_ref_frame_mvs = r.read_bit()?;
+                fh.use_ref_frame_mvs = r.0.read_bit()?;
             }
 
             for i in 0..REFS_PER_FRAME {
@@ -3461,7 +3699,7 @@ impl Parser {
         if reduced_still_picture_header || fh.disable_cdf_update {
             fh.disable_frame_end_update_cdf = true;
         } else {
-            fh.disable_frame_end_update_cdf = r.read_bit()?;
+            fh.disable_frame_end_update_cdf = r.0.read_bit()?;
         }
 
         if fh.primary_ref_frame == PRIMARY_REF_NONE {
@@ -3472,7 +3710,7 @@ impl Parser {
                 &self.ref_info[fh.ref_frame_idx[fh.primary_ref_frame as usize] as usize];
 
             if !prev_frame.ref_valid {
-                return Err(anyhow!("Reference is invalid"));
+                return Err("Reference is invalid".into());
             }
 
             /* load_loop_filter_params: load ref_deltas and mode_deltas */
@@ -3552,10 +3790,10 @@ impl Parser {
         if fh.frame_is_intra || fh.error_resilient_mode || !enable_warped_motion {
             fh.allow_warped_motion = false;
         } else {
-            fh.allow_warped_motion = r.read_bit()?;
+            fh.allow_warped_motion = r.0.read_bit()?;
         }
 
-        fh.reduced_tx_set = r.read_bit()?;
+        fh.reduced_tx_set = r.0.read_bit()?;
         self.parse_global_motion_params(&mut r, &mut fh)?;
         self.parse_film_grain_parameters(
             &mut r,
@@ -3573,11 +3811,11 @@ impl Parser {
             r.byte_alignment()?;
         }
 
-        fh.header_bytes = usize::try_from(r.position() / 8).unwrap();
+        fh.header_bytes = usize::try_from(r.0.position() / 8).unwrap();
         Ok(fh)
     }
 
-    fn parse_tile_group_obu<'a>(&mut self, obu: Obu<'a>) -> anyhow::Result<TileGroupObu<'a>> {
+    fn parse_tile_group_obu<'a>(&mut self, obu: Obu<'a>) -> Result<TileGroupObu<'a>, String> {
         let mut tg = TileGroupObu {
             obu,
             ..Default::default()
@@ -3585,31 +3823,31 @@ impl Parser {
 
         let mut r = Reader::new(tg.obu.as_ref());
 
-        if r.remaining_bits() % 8 != 0 {
-            return Err(anyhow!("Bitstream is not byte aligned"));
+        if r.0.num_bits_left() % 8 != 0 {
+            return Err("Bitstream is not byte aligned".into());
         }
 
-        let mut sz: u64 = r.remaining_bits() / 8;
+        let mut sz: u64 = r.0.num_bits_left() as u64 / 8;
 
         let num_tiles = self.tile_rows * self.tile_cols;
-        let start_bit_pos = r.position();
+        let start_bit_pos = r.0.position();
 
         if num_tiles > 1 {
-            tg.tile_start_and_end_present_flag = r.read_bit()?;
+            tg.tile_start_and_end_present_flag = r.0.read_bit()?;
         }
 
         if num_tiles == 1 || !tg.tile_start_and_end_present_flag {
             tg.tg_start = 0;
             tg.tg_end = num_tiles - 1;
         } else {
-            let tile_bits = u8::try_from(self.tile_cols_log2 + self.tile_rows_log2).unwrap();
-            tg.tg_start = r.read_bits(tile_bits)?;
-            tg.tg_end = r.read_bits(tile_bits)?;
+            let tile_bits = (self.tile_cols_log2 + self.tile_rows_log2) as usize;
+            tg.tg_start = r.0.read_bits::<u32>(tile_bits)?;
+            tg.tg_end = r.0.read_bits::<u32>(tile_bits)?;
         }
 
         r.byte_alignment()?;
 
-        let end_bit_pos = r.position();
+        let end_bit_pos = r.0.position();
         let header_bytes = (end_bit_pos - start_bit_pos) / 8;
         sz -= header_bytes;
 
@@ -3623,12 +3861,13 @@ impl Parser {
             if last_tile {
                 tile_size = u32::try_from(sz).unwrap();
             } else {
-                tile_size = r.read_le(self.tile_size_bytes.try_into().unwrap())? + 1;
+                tile_size =
+                    r.0.read_le::<u32>(self.tile_size_bytes.try_into().unwrap())? + 1;
                 sz -= u64::from(tile_size + self.tile_size_bytes);
             }
 
             let tile = Tile {
-                tile_offset: u32::try_from(r.position()).unwrap() / 8,
+                tile_offset: u32::try_from(r.0.position()).unwrap() / 8,
                 tile_size,
                 tile_row,
                 tile_col,
@@ -3644,7 +3883,7 @@ impl Parser {
 
             // Skip the actual tile data
             if tile_num < tg.tg_end {
-                r.skip(u64::from(tile_size * 8))?;
+                r.0.skip_bits(tile_size as usize * 8)?;
             }
 
             tile_num += 1;
@@ -3662,7 +3901,14 @@ impl Parser {
         Ok(tg)
     }
 
-    fn parse_frame_obu<'a>(&mut self, obu: Obu<'a>) -> anyhow::Result<FrameObu<'a>> {
+    fn parse_frame_obu<'a>(&mut self, obu: Obu<'a>) -> Result<FrameObu<'a>, String> {
+        if !matches!(obu.header.obu_type, ObuType::Frame) {
+            return Err(format!(
+                "Expected a FrameOBU, got {:?}",
+                obu.header.obu_type
+            ));
+        }
+
         let frame_header_obu = self.parse_frame_header_obu(&obu)?;
         let obu = Obu {
             header: obu.header,
@@ -3680,9 +3926,9 @@ impl Parser {
         })
     }
 
-    pub fn parse_frame_header_obu(&mut self, obu: &Obu) -> anyhow::Result<FrameHeaderObu> {
+    pub fn parse_frame_header_obu(&mut self, obu: &Obu) -> Result<FrameHeaderObu, String> {
         if !matches!(obu.header.obu_type, ObuType::FrameHeader | ObuType::Frame) {
-            return Err(anyhow!(
+            return Err(format!(
                 "Expected a FrameHeaderOBU, got {:?}",
                 obu.header.obu_type
             ));
@@ -3693,7 +3939,7 @@ impl Parser {
                 .last_frame_header
                 .clone()
                 .take()
-                .ok_or(anyhow!("Broken stream: no previous frame header to copy"))?)
+                .ok_or::<String>("Broken stream: no previous frame header to copy".into())?)
         } else {
             self.seen_frame_header = true;
             let header = self.parse_uncompressed_frame_header(obu)?;
@@ -3712,7 +3958,7 @@ impl Parser {
 
     /// Implements 7.20. This function should be called right after decoding a
     /// frame.
-    pub fn ref_frame_update(&mut self, fh: &FrameHeaderObu) -> anyhow::Result<()> {
+    pub fn ref_frame_update(&mut self, fh: &FrameHeaderObu) -> Result<(), String> {
         // This was found as a bug otherwise by Nicolas Dufresne in GStreamer's
         // av1parse.
         if fh.show_existing_frame && !matches!(fh.frame_type, FrameType::KeyFrame) {
@@ -3720,9 +3966,7 @@ impl Parser {
         }
 
         if matches!(fh.frame_type, FrameType::IntraOnlyFrame) && fh.refresh_frame_flags == 0xff {
-            return Err(anyhow!(
-                "Intra-only frames cannot refresh all of the DPB as per the spec."
-            ));
+            return Err("Intra-only frames cannot refresh all of the DPB as per the spec.".into());
         }
 
         let &SequenceHeaderObu {
@@ -3780,7 +4024,7 @@ impl Parser {
     }
 
     /// Fully parse an OBU.
-    pub fn parse_obu<'a>(&mut self, obu: Obu<'a>) -> anyhow::Result<ParsedObu<'a>> {
+    pub fn parse_obu<'a>(&mut self, obu: Obu<'a>) -> Result<ParsedObu<'a>, String> {
         match obu.header.obu_type {
             ObuType::Reserved => Ok(ParsedObu::Reserved),
             ObuType::SequenceHeader => self
@@ -3869,8 +4113,8 @@ impl Clone for Parser {
 
 #[cfg(test)]
 mod tests {
+    use crate::bitstream_utils::IvfIterator;
     use crate::codec::av1::parser::{ObuAction, Parser, StreamFormat};
-    use crate::utils::IvfIterator;
 
     use super::ObuType;
 

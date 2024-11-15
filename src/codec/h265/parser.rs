@@ -7,17 +7,14 @@
 //! Parses VPSs, SPSs, PPSs and Slices from NALUs.
 
 use std::collections::BTreeMap;
+use std::io::Read;
+use std::io::Seek;
+use std::io::SeekFrom;
 use std::rc::Rc;
 
-use anyhow::anyhow;
-use anyhow::Context;
-use bitreader::BitReader;
-use bytes::Buf;
-use enumn::N;
-
+use crate::bitstream_utils::BitReader;
 use crate::codec::h264::nalu;
 use crate::codec::h264::nalu::Header;
-use crate::codec::h264::nalu_reader::NaluReader;
 use crate::codec::h264::parser::Point;
 use crate::codec::h264::parser::Rect;
 
@@ -63,7 +60,7 @@ const DEFAULT_SCALING_LIST_2: [u8; 64] = [
 ];
 
 /// Table 7-1 – NAL unit type codes and NAL unit type classes
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NaluType {
     #[default]
     TrailN = 0,
@@ -114,6 +111,64 @@ pub enum NaluType {
     RsvNvcl45 = 45,
     RsvNvcl46 = 46,
     RsvNvcl47 = 47,
+}
+
+impl TryFrom<u32> for NaluType {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(NaluType::TrailN),
+            1 => Ok(NaluType::TrailR),
+            2 => Ok(NaluType::TsaN),
+            3 => Ok(NaluType::TsaR),
+            4 => Ok(NaluType::StsaN),
+            5 => Ok(NaluType::StsaR),
+            6 => Ok(NaluType::RadlN),
+            7 => Ok(NaluType::RadlR),
+            8 => Ok(NaluType::RaslN),
+            9 => Ok(NaluType::RaslR),
+            10 => Ok(NaluType::RsvVclN10),
+            11 => Ok(NaluType::RsvVclR11),
+            12 => Ok(NaluType::RsvVclN12),
+            13 => Ok(NaluType::RsvVclR13),
+            14 => Ok(NaluType::RsvVclN14),
+            15 => Ok(NaluType::RsvVclR15),
+            16 => Ok(NaluType::BlaWLp),
+            17 => Ok(NaluType::BlaWRadl),
+            18 => Ok(NaluType::BlaNLp),
+            19 => Ok(NaluType::IdrWRadl),
+            20 => Ok(NaluType::IdrNLp),
+            21 => Ok(NaluType::CraNut),
+            22 => Ok(NaluType::RsvIrapVcl22),
+            23 => Ok(NaluType::RsvIrapVcl23),
+            24 => Ok(NaluType::RsvVcl24),
+            25 => Ok(NaluType::RsvVcl25),
+            26 => Ok(NaluType::RsvVcl26),
+            27 => Ok(NaluType::RsvVcl27),
+            28 => Ok(NaluType::RsvVcl28),
+            29 => Ok(NaluType::RsvVcl29),
+            30 => Ok(NaluType::RsvVcl30),
+            31 => Ok(NaluType::RsvVcl31),
+            32 => Ok(NaluType::VpsNut),
+            33 => Ok(NaluType::SpsNut),
+            34 => Ok(NaluType::PpsNut),
+            35 => Ok(NaluType::AudNut),
+            36 => Ok(NaluType::EosNut),
+            37 => Ok(NaluType::EobNut),
+            38 => Ok(NaluType::FdNut),
+            39 => Ok(NaluType::PrefixSeiNut),
+            40 => Ok(NaluType::SuffixSeiNut),
+            41 => Ok(NaluType::RsvNvcl41),
+            42 => Ok(NaluType::RsvNvcl42),
+            43 => Ok(NaluType::RsvNvcl43),
+            44 => Ok(NaluType::RsvNvcl44),
+            45 => Ok(NaluType::RsvNvcl45),
+            46 => Ok(NaluType::RsvNvcl46),
+            47 => Ok(NaluType::RsvNvcl47),
+            _ => Err(format!("Invalid NaluType {}", value)),
+        }
+    }
 }
 
 impl NaluType {
@@ -189,17 +244,21 @@ impl NaluHeader {
 }
 
 impl Header for NaluHeader {
-    fn parse<T: AsRef<[u8]>>(cursor: &std::io::Cursor<T>) -> anyhow::Result<Self> {
-        let data = &cursor.chunk()[0..2];
-        let mut r = BitReader::new(data);
+    fn parse<T: AsRef<[u8]>>(cursor: &mut std::io::Cursor<T>) -> Result<Self, String> {
+        let mut data = [0u8; 2];
+        cursor
+            .read_exact(&mut data)
+            .map_err(|_| String::from("Broken Data"))?;
+        let mut r = BitReader::new(&data, false);
+        let _ = cursor.seek(SeekFrom::Current(-1 * data.len() as i64));
 
         // Skip forbidden_zero_bit
-        r.skip(1)?;
+        r.skip_bits(1)?;
 
         Ok(Self {
-            type_: NaluType::n(r.read_u32(6)?).ok_or(anyhow!("Invalid NALU type"))?,
-            nuh_layer_id: r.read_u8(6)?,
-            nuh_temporal_id_plus1: r.read_u8(3)?,
+            type_: NaluType::try_from(r.read_bits::<u32>(6)?)?,
+            nuh_layer_id: r.read_bits::<u8>(6)?,
+            nuh_temporal_id_plus1: r.read_bits::<u8>(3)?,
         })
     }
 
@@ -218,7 +277,7 @@ pub type Nalu<'a> = nalu::Nalu<'a, NaluHeader>;
 /// H265 levels as defined by table A.8.
 /// `general_level_idc` and `sub_layer_level_idc[ OpTid ]` shall be set equal to a
 /// value of 30 times the level number specified in Table A.8
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
     #[default]
     L1 = 30,
@@ -236,8 +295,31 @@ pub enum Level {
     L6_2 = 186,
 }
 
+impl TryFrom<u8> for Level {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            30 => Ok(Level::L1),
+            60 => Ok(Level::L2),
+            63 => Ok(Level::L2_1),
+            90 => Ok(Level::L3),
+            93 => Ok(Level::L3_1),
+            120 => Ok(Level::L4),
+            123 => Ok(Level::L4_1),
+            150 => Ok(Level::L5),
+            153 => Ok(Level::L5_1),
+            156 => Ok(Level::L5_2),
+            180 => Ok(Level::L6),
+            183 => Ok(Level::L6_1),
+            186 => Ok(Level::L6_2),
+            _ => Err(format!("Invalid Level {}", value)),
+        }
+    }
+}
+
 /// H265 profiles. See A.3.
-#[derive(N, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Profile {
     #[default]
     Main = 1,
@@ -251,6 +333,27 @@ pub enum Profile {
     ScreenContentCoding = 9,
     ScalableRangeExtensions = 10,
     HighThroughputScreenContentCoding = 11,
+}
+
+impl TryFrom<u8> for Profile {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Profile::Main),
+            2 => Ok(Profile::Main10),
+            3 => Ok(Profile::MainStill),
+            4 => Ok(Profile::RangeExtensions),
+            5 => Ok(Profile::HighThroughput),
+            6 => Ok(Profile::MultiviewMain),
+            7 => Ok(Profile::ScalableMain),
+            8 => Ok(Profile::ThreeDMain),
+            9 => Ok(Profile::ScreenContentCoding),
+            10 => Ok(Profile::ScalableRangeExtensions),
+            11 => Ok(Profile::HighThroughputScreenContentCoding),
+            _ => Err(format!("Invalid Profile {}", value)),
+        }
+    }
 }
 
 /// A H.265 Video Parameter Set.
@@ -1391,12 +1494,25 @@ impl Default for ShortTermRefPicSet {
     }
 }
 
-#[derive(N, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// See table 7-7 in the specification.
 pub enum SliceType {
     B = 0,
     P = 1,
     I = 2,
+}
+
+impl TryFrom<u32> for SliceType {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(SliceType::B),
+            1 => Ok(SliceType::P),
+            2 => Ok(SliceType::I),
+            _ => Err(format!("Invalid SliceType {}", value)),
+        }
+    }
 }
 
 impl SliceType {
@@ -1685,11 +1801,9 @@ pub struct Slice<'a> {
 impl<'a> Slice<'a> {
     /// Sets the header for dependent slices by copying from an independent
     /// slice.
-    pub fn replace_header(&mut self, header: SliceHeader) -> anyhow::Result<()> {
+    pub fn replace_header(&mut self, header: SliceHeader) -> Result<(), String> {
         if !self.header.dependent_slice_segment_flag {
-            Err(anyhow!(
-                "Replacing the slice header is only possible for dependent slices"
-            ))
+            Err("Replacing the slice header is only possible for dependent slices".into())
         } else {
             let first_slice_segment_in_pic_flag = self.header.first_slice_segment_in_pic_flag;
             let no_output_of_prior_pics_flag = self.header.no_output_of_prior_pics_flag;
@@ -2099,9 +2213,9 @@ pub struct Parser {
 
 impl Parser {
     /// Parse a VPS NALU.
-    pub fn parse_vps(&mut self, nalu: &Nalu) -> anyhow::Result<&Vps> {
+    pub fn parse_vps(&mut self, nalu: &Nalu) -> Result<&Vps, String> {
         if !matches!(nalu.header.type_, NaluType::VpsNut) {
-            return Err(anyhow!(
+            return Err(format!(
                 "Invalid NALU type, expected {:?}, got {:?}",
                 NaluType::VpsNut,
                 nalu.header.type_
@@ -2112,7 +2226,7 @@ impl Parser {
         let header = &nalu.header;
         let hdr_len = header.len();
         // Skip the header
-        let mut r = NaluReader::new(&data[hdr_len..]);
+        let mut r = BitReader::new(&data[hdr_len..], true);
 
         let mut vps = Vps {
             video_parameter_set_id: r.read_bits(4)?,
@@ -2144,18 +2258,16 @@ impl Parser {
 
             if i > 0 {
                 if vps.max_dec_pic_buffering_minus1[i] < vps.max_dec_pic_buffering_minus1[i - 1] {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid max_dec_pic_buffering_minus1[{}]: {}",
-                        i,
-                        vps.max_dec_pic_buffering_minus1[i]
+                        i, vps.max_dec_pic_buffering_minus1[i]
                     ));
                 }
 
                 if vps.max_num_reorder_pics[i] < vps.max_num_reorder_pics[i - 1] {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid max_num_reorder_pics[{}]: {}",
-                        i,
-                        vps.max_num_reorder_pics[i]
+                        i, vps.max_num_reorder_pics[i]
                     ));
                 }
             }
@@ -2181,7 +2293,7 @@ impl Parser {
 
         vps.max_layer_id = r.read_bits(6)?;
         if vps.max_layer_id > 62 {
-            return Err(anyhow!("Invalid max_layer_id {}", vps.max_layer_id));
+            return Err(format!("Invalid max_layer_id {}", vps.max_layer_id));
         }
 
         vps.num_layer_sets_minus1 = r.read_ue_max(1023)?;
@@ -2230,9 +2342,7 @@ impl Parser {
         vps.extension_flag = r.read_bit()?;
 
         if self.active_vpses.keys().len() >= MAX_VPS_COUNT {
-            return Err(anyhow!(
-                "Broken data: Number of active VPSs > MAX_VPS_COUNT"
-            ));
+            return Err("Broken data: Number of active VPSs > MAX_VPS_COUNT".into());
         }
 
         let key = vps.video_parameter_set_id;
@@ -2243,10 +2353,10 @@ impl Parser {
 
     fn parse_profile_tier_level(
         ptl: &mut ProfileTierLevel,
-        r: &mut NaluReader,
+        r: &mut BitReader,
         profile_present_flag: bool,
         sps_max_sub_layers_minus_1: u8,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         if profile_present_flag {
             ptl.general_profile_space = r.read_bits(2)?;
             ptl.general_tier_flag = r.read_bit()?;
@@ -2339,8 +2449,7 @@ impl Parser {
         }
 
         let level: u8 = r.read_bits(8)?;
-        ptl.general_level_idc =
-            Level::n(level).with_context(|| format!("Unsupported level {}", level))?;
+        ptl.general_level_idc = Level::try_from(level)?;
 
         for i in 0..sps_max_sub_layers_minus_1 as usize {
             ptl.sub_layer_profile_present_flag[i] = r.read_bit()?;
@@ -2439,8 +2548,7 @@ impl Parser {
 
                 if ptl.sub_layer_level_present_flag[i] {
                     let level: u8 = r.read_bits(8)?;
-                    ptl.sub_layer_level_idc[i] =
-                        Level::n(level).with_context(|| format!("Unsupported level {}", level))?;
+                    ptl.sub_layer_level_idc[i] = Level::try_from(level)?;
                 }
             }
         }
@@ -2486,7 +2594,7 @@ impl Parser {
         }
     }
 
-    fn parse_scaling_list_data(sl: &mut ScalingLists, r: &mut NaluReader) -> anyhow::Result<()> {
+    fn parse_scaling_list_data(sl: &mut ScalingLists, r: &mut BitReader) -> Result<(), String> {
         // 7.4.5
         for size_id in 0..4 {
             let mut matrix_id = 0;
@@ -2514,14 +2622,14 @@ impl Parser {
                                 1 => sl.scaling_list_8x8[ref_matrix_id as usize],
                                 2 => sl.scaling_list_16x16[ref_matrix_id as usize],
                                 3 => sl.scaling_list_32x32[ref_matrix_id as usize],
-                                _ => return Err(anyhow!("Invalid size_id {}", size_id)),
+                                _ => return Err(format!("Invalid size_id {}", size_id)),
                             };
 
                             let dst = match size_id {
                                 1 => &mut sl.scaling_list_8x8[matrix_id as usize],
                                 2 => &mut sl.scaling_list_16x16[matrix_id as usize],
                                 3 => &mut sl.scaling_list_32x32[matrix_id as usize],
-                                _ => return Err(anyhow!("Invalid size_id {}", size_id)),
+                                _ => return Err(format!("Invalid size_id {}", size_id)),
                             };
 
                             *dst = src;
@@ -2563,7 +2671,7 @@ impl Parser {
                             1 => sl.scaling_list_8x8[matrix_id as usize][i] = next_coef as _,
                             2 => sl.scaling_list_16x16[matrix_id as usize][i] = next_coef as _,
                             3 => sl.scaling_list_32x32[matrix_id as usize][i] = next_coef as _,
-                            _ => return Err(anyhow!("Invalid size_id {}", size_id)),
+                            _ => return Err(format!("Invalid size_id {}", size_id)),
                         }
                     }
                 }
@@ -2577,9 +2685,9 @@ impl Parser {
     fn parse_short_term_ref_pic_set(
         sps: &Sps,
         st: &mut ShortTermRefPicSet,
-        r: &mut NaluReader,
+        r: &mut BitReader,
         st_rps_idx: u8,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         if st_rps_idx != 0 {
             st.inter_ref_pic_set_prediction_flag = r.read_bit()?;
         }
@@ -2602,7 +2710,7 @@ impl Parser {
             let ref_st = sps
                 .short_term_ref_pic_set
                 .get(usize::from(ref_rps_idx))
-                .ok_or(anyhow!("Invalid ref_rps_idx"))?;
+                .ok_or::<String>("Invalid ref_rps_idx".into())?;
 
             let mut used_by_curr_pic_flag = [false; 64];
 
@@ -2739,8 +2847,8 @@ impl Parser {
         h: &mut SublayerHrdParameters,
         cpb_cnt: u32,
         sub_pic_hrd_params_present_flag: bool,
-        r: &mut NaluReader,
-    ) -> anyhow::Result<()> {
+        r: &mut BitReader,
+    ) -> Result<(), String> {
         for i in 0..cpb_cnt as usize {
             h.bit_rate_value_minus1[i] = r.read_ue_max((2u64.pow(32) - 2) as u32)?;
             h.cpb_size_value_minus1[i] = r.read_ue_max((2u64.pow(32) - 2) as u32)?;
@@ -2759,8 +2867,8 @@ impl Parser {
         common_inf_present_flag: bool,
         max_num_sublayers_minus1: u8,
         hrd: &mut HrdParams,
-        r: &mut NaluReader,
-    ) -> anyhow::Result<()> {
+        r: &mut BitReader,
+    ) -> Result<(), String> {
         if common_inf_present_flag {
             hrd.nal_hrd_parameters_present_flag = r.read_bit()?;
             hrd.vcl_hrd_parameters_present_flag = r.read_bit()?;
@@ -2820,7 +2928,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_vui_parameters(sps: &mut Sps, r: &mut NaluReader) -> anyhow::Result<()> {
+    fn parse_vui_parameters(sps: &mut Sps, r: &mut BitReader) -> Result<(), String> {
         let vui = &mut sps.vui_parameters;
 
         vui.aspect_ratio_info_present_flag = r.read_bit()?;
@@ -2915,7 +3023,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_sps_scc_extension(sps: &mut Sps, r: &mut NaluReader) -> anyhow::Result<()> {
+    fn parse_sps_scc_extension(sps: &mut Sps, r: &mut BitReader) -> Result<(), String> {
         let scc = &mut sps.scc_extension;
 
         scc.curr_pic_ref_enabled_flag = r.read_bit()?;
@@ -2951,7 +3059,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_sps_range_extension(sps: &mut Sps, r: &mut NaluReader) -> anyhow::Result<()> {
+    fn parse_sps_range_extension(sps: &mut Sps, r: &mut BitReader) -> Result<(), String> {
         let ext = &mut sps.range_extension;
 
         ext.transform_skip_rotation_enabled_flag = r.read_bit()?;
@@ -2968,9 +3076,9 @@ impl Parser {
     }
 
     /// Parse a SPS NALU.
-    pub fn parse_sps(&mut self, nalu: &Nalu) -> anyhow::Result<&Sps> {
+    pub fn parse_sps(&mut self, nalu: &Nalu) -> Result<&Sps, String> {
         if !matches!(nalu.header.type_, NaluType::SpsNut) {
-            return Err(anyhow!(
+            return Err(format!(
                 "Invalid NALU type, expected {:?}, got {:?}",
                 NaluType::SpsNut,
                 nalu.header.type_
@@ -2981,7 +3089,7 @@ impl Parser {
         let header = &nalu.header;
         let hdr_len = header.len();
         // Skip the header
-        let mut r = NaluReader::new(&data[hdr_len..]);
+        let mut r = BitReader::new(&data[hdr_len..], true);
 
         let video_parameter_set_id = r.read_bits(4)?;
 
@@ -3076,7 +3184,7 @@ impl Parser {
             u32::from(sps.pic_width_in_luma_samples) * u32::from(sps.pic_height_in_luma_samples);
 
         if sps.max_tb_log2_size_y > std::cmp::min(sps.ctb_log2_size_y, 5) {
-            return Err(anyhow!(
+            return Err(format!(
                 "Invalid value for MaxTbLog2SizeY: {}",
                 sps.max_tb_log2_size_y
             ));
@@ -3142,12 +3250,12 @@ impl Parser {
 
             let multilayer_extension_flag = r.read_bit()?;
             if multilayer_extension_flag {
-                return Err(anyhow!("Multilayer extension not supported."));
+                return Err("Multilayer extension not supported.".into());
             }
 
             let three_d_extension_flag = r.read_bit()?;
             if three_d_extension_flag {
-                return Err(anyhow!("3D extension not supported."));
+                return Err("3D extension not supported.".into());
             }
 
             sps.scc_extension_flag = r.read_bit()?;
@@ -3181,9 +3289,7 @@ impl Parser {
         );
 
         if self.active_spses.keys().len() >= MAX_SPS_COUNT {
-            return Err(anyhow!(
-                "Broken data: Number of active SPSs > MAX_SPS_COUNT"
-            ));
+            return Err("Broken data: Number of active SPSs > MAX_SPS_COUNT".into());
         }
 
         let key = sps.seq_parameter_set_id;
@@ -3192,7 +3298,7 @@ impl Parser {
         Ok(self.active_spses.entry(key).or_insert(sps))
     }
 
-    fn parse_pps_scc_extension(pps: &mut Pps, sps: &Sps, r: &mut NaluReader) -> anyhow::Result<()> {
+    fn parse_pps_scc_extension(pps: &mut Pps, sps: &Sps, r: &mut BitReader) -> Result<(), String> {
         let scc = &mut pps.scc_extension;
         scc.curr_pic_ref_enabled_flag = r.read_bit()?;
         scc.residual_adaptive_colour_transform_enabled_flag = r.read_bit()?;
@@ -3241,8 +3347,8 @@ impl Parser {
     fn parse_pps_range_extension(
         pps: &mut Pps,
         sps: &Sps,
-        r: &mut NaluReader,
-    ) -> anyhow::Result<()> {
+        r: &mut BitReader,
+    ) -> Result<(), String> {
         let rext = &mut pps.range_extension;
 
         if pps.transform_skip_enabled_flag {
@@ -3271,9 +3377,9 @@ impl Parser {
     }
 
     /// Parse a PPS NALU.
-    pub fn parse_pps(&mut self, nalu: &Nalu) -> anyhow::Result<&Pps> {
+    pub fn parse_pps(&mut self, nalu: &Nalu) -> Result<&Pps, String> {
         if !matches!(nalu.header.type_, NaluType::PpsNut) {
-            return Err(anyhow!(
+            return Err(format!(
                 "Invalid NALU type, expected {:?}, got {:?}",
                 NaluType::PpsNut,
                 nalu.header.type_
@@ -3284,13 +3390,13 @@ impl Parser {
         let header = &nalu.header;
         let hdr_len = header.len();
         // Skip the header
-        let mut r = NaluReader::new(&data[hdr_len..]);
+        let mut r = BitReader::new(&data[hdr_len..], true);
 
         let pic_parameter_set_id = r.read_ue_max(MAX_PPS_COUNT as u32 - 1)?;
         let seq_parameter_set_id = r.read_ue_max(MAX_SPS_COUNT as u32 - 1)?;
 
-        let sps = self.get_sps(seq_parameter_set_id).context(format!(
-            "Broken stream: stream references SPS {} that has not been successfully parsed",
+        let sps = self.get_sps(seq_parameter_set_id).ok_or::<String>(format!(
+            "Could not get SPS for seq_parameter_set_id {}",
             seq_parameter_set_id
         ))?;
 
@@ -3467,12 +3573,12 @@ impl Parser {
 
             let multilayer_extension_flag = r.read_bit()?;
             if multilayer_extension_flag {
-                return Err(anyhow!("Multilayer extension is not supported"));
+                return Err("Multilayer extension is not supported".into());
             }
 
             let three_d_extension_flag = r.read_bit()?;
             if three_d_extension_flag {
-                return Err(anyhow!("3D extension is not supported"));
+                return Err("3D extension is not supported".into());
             }
 
             pps.scc_extension_flag = r.read_bit()?;
@@ -3490,13 +3596,10 @@ impl Parser {
         );
 
         if self.active_ppses.keys().len() >= MAX_PPS_COUNT {
-            return Err(anyhow!(
-                "Broken Data: number of active PPSs > MAX_PPS_COUNT"
-            ));
+            return Err("Broken Data: number of active PPSs > MAX_PPS_COUNT".into());
         }
 
         let key = pps.pic_parameter_set_id;
-
         let pps = Rc::new(pps);
         self.active_ppses.remove(&key);
         Ok(self.active_ppses.entry(key).or_insert(pps))
@@ -3504,9 +3607,9 @@ impl Parser {
 
     fn parse_pred_weight_table(
         hdr: &mut SliceHeader,
-        r: &mut NaluReader,
+        r: &mut BitReader,
         sps: &Sps,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let pwt = &mut hdr.pred_weight_table;
 
         pwt.luma_log2_weight_denom = r.read_ue_max(7)?;
@@ -3514,7 +3617,10 @@ impl Parser {
             pwt.delta_chroma_log2_weight_denom = r.read_se()?;
             pwt.chroma_log2_weight_denom = (pwt.luma_log2_weight_denom as i32
                 + pwt.delta_chroma_log2_weight_denom as i32)
-                .try_into()?;
+                .try_into()
+                .map_err(|_| {
+                    String::from("Integer overflow on chroma_log2_weight_denom calculation")
+                })?;
         }
 
         for i in 0..=usize::from(hdr.num_ref_idx_l0_active_minus1) {
@@ -3578,8 +3684,8 @@ impl Parser {
 
     fn parse_ref_pic_lists_modification(
         hdr: &mut SliceHeader,
-        r: &mut NaluReader,
-    ) -> anyhow::Result<()> {
+        r: &mut BitReader,
+    ) -> Result<(), String> {
         let rplm = &mut hdr.ref_pic_list_modification;
 
         rplm.ref_pic_list_modification_flag_l0 = r.read_bit()?;
@@ -3590,7 +3696,7 @@ impl Parser {
                 let entry = r.read_bits(num_bits)?;
 
                 if entry > hdr.num_pic_total_curr - 1 {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid list_entry_l0 {}, expected at max NumPicTotalCurr - 1: {}",
                         entry,
                         hdr.num_pic_total_curr - 1
@@ -3610,7 +3716,7 @@ impl Parser {
                     let entry = r.read_bits(num_bits)?;
 
                     if entry > hdr.num_pic_total_curr - 1 {
-                        return Err(anyhow!(
+                        return Err(format!(
                             "Invalid list_entry_l1 {}, expected at max NumPicTotalCurr - 1: {}",
                             entry,
                             hdr.num_pic_total_curr - 1
@@ -3637,7 +3743,7 @@ impl Parser {
     }
 
     /// Parses a slice header from a slice NALU.
-    pub fn parse_slice_header<'a>(&mut self, nalu: Nalu<'a>) -> anyhow::Result<Slice<'a>> {
+    pub fn parse_slice_header<'a>(&mut self, nalu: Nalu<'a>) -> Result<Slice<'a>, String> {
         if !matches!(
             nalu.header.type_,
             NaluType::TrailN
@@ -3657,7 +3763,7 @@ impl Parser {
                 | NaluType::IdrNLp
                 | NaluType::CraNut,
         ) {
-            return Err(anyhow!(
+            return Err(format!(
                 "Invalid NALU type: {:?} is not a slice NALU",
                 nalu.header.type_
             ));
@@ -3667,7 +3773,7 @@ impl Parser {
         let nalu_header = &nalu.header;
         let hdr_len = nalu_header.len();
         // Skip the header
-        let mut r = NaluReader::new(&data[hdr_len..]);
+        let mut r = BitReader::new(&data[hdr_len..], true);
 
         let mut hdr = SliceHeader {
             first_slice_segment_in_pic_flag: r.read_bit()?,
@@ -3680,12 +3786,12 @@ impl Parser {
 
         hdr.pic_parameter_set_id = r.read_ue_max(63)?;
 
-        let pps = self.get_pps(hdr.pic_parameter_set_id).with_context(|| {
-            format!(
-                "Broken stream: slice references PPS {} that has not been successfully parsed.",
-                hdr.pic_parameter_set_id,
-            )
-        })?;
+        let pps = self
+            .get_pps(hdr.pic_parameter_set_id)
+            .ok_or::<String>(format!(
+                "Could not get PPS for pic_parameter_set_id {}",
+                hdr.pic_parameter_set_id
+            ))?;
 
         let sps = &pps.sps;
 
@@ -3700,7 +3806,7 @@ impl Parser {
             hdr.segment_address = r.read_bits(num_bits)?;
 
             if hdr.segment_address > sps.pic_size_in_ctbs_y - 1 {
-                return Err(anyhow!(
+                return Err(format!(
                     "Invalid slice_segment_address {}",
                     hdr.segment_address
                 ));
@@ -3711,7 +3817,7 @@ impl Parser {
             r.skip_bits(usize::from(pps.num_extra_slice_header_bits))?;
 
             let slice_type: u32 = r.read_ue()?;
-            hdr.type_ = SliceType::n(slice_type).ok_or(anyhow!("Invalid slice type"))?;
+            hdr.type_ = SliceType::try_from(slice_type)?;
 
             if pps.output_flag_present_flag {
                 hdr.pic_output_flag = r.read_bit()?;
@@ -3728,7 +3834,7 @@ impl Parser {
                 if u32::from(hdr.pic_order_cnt_lsb)
                     > 2u32.pow(u32::from(sps.log2_max_pic_order_cnt_lsb_minus4 + 4))
                 {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid pic_order_cnt_lsb {}",
                         hdr.pic_order_cnt_lsb
                     ));
@@ -3757,7 +3863,7 @@ impl Parser {
                     hdr.short_term_ref_pic_set_idx = r.read_bits(num_bits)?;
 
                     if hdr.short_term_ref_pic_set_idx > sps.num_short_term_ref_pic_sets - 1 {
-                        return Err(anyhow!(
+                        return Err(format!(
                             "Invalid short_term_ref_pic_set_idx {}",
                             hdr.short_term_ref_pic_set_idx
                         ));
@@ -3797,10 +3903,9 @@ impl Parser {
                                 hdr.lt_idx_sps[i] = r.read_bits(num_bits)?;
 
                                 if hdr.lt_idx_sps[i] > sps.num_long_term_ref_pics_sps - 1 {
-                                    return Err(anyhow!(
+                                    return Err(format!(
                                         "Invalid lt_idx_sps[{}] {}",
-                                        i,
-                                        hdr.lt_idx_sps[i]
+                                        i, hdr.lt_idx_sps[i]
                                     ));
                                 }
                             }
@@ -3862,7 +3967,7 @@ impl Parser {
                 let rps = if hdr.short_term_ref_pic_set_sps_flag {
                     sps.short_term_ref_pic_set
                         .get(usize::from(hdr.curr_rps_idx))
-                        .ok_or(anyhow!("Invalid RPS"))?
+                        .ok_or::<String>("Invalid RPS".into())?
                 } else {
                     &hdr.short_term_ref_pic_set
                 };
@@ -3918,7 +4023,7 @@ impl Parser {
                         } else if hdr.type_.is_b() && !hdr.collocated_from_l0_flag {
                             hdr.num_ref_idx_l1_active_minus1
                         } else {
-                            return Err(anyhow!("Invalid value for collocated_ref_idx"));
+                            return Err("Invalid value for collocated_ref_idx".into());
                         };
 
                         {
@@ -3944,7 +4049,7 @@ impl Parser {
 
             let slice_qp_y = (26 + pps.init_qp_minus26 + hdr.qp_delta) as i32;
             if slice_qp_y < -(pps.qp_bd_offset_y as i32) || slice_qp_y > 51 {
-                return Err(anyhow!("Invalid slice_qp_delta: {}", hdr.qp_delta));
+                return Err(format!("Invalid slice_qp_delta: {}", hdr.qp_delta));
             }
 
             if pps.slice_chroma_qp_offsets_present_flag {
@@ -3952,7 +4057,7 @@ impl Parser {
 
                 let qp_offset = pps.cb_qp_offset + hdr.cb_qp_offset;
                 if !(-12..=12).contains(&qp_offset) {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid value for slice_cb_qp_offset: {}",
                         hdr.cb_qp_offset
                     ));
@@ -3962,7 +4067,7 @@ impl Parser {
 
                 let qp_offset = pps.cr_qp_offset + hdr.cr_qp_offset;
                 if !(-12..=12).contains(&qp_offset) {
-                    return Err(anyhow!(
+                    return Err(format!(
                         "Invalid value for slice_cr_qp_offset: {}",
                         hdr.cr_qp_offset
                     ));
@@ -4086,7 +4191,7 @@ mod tests {
     const STREAM_TEST_25_FPS_SLICE_1: &[u8] =
         include_bytes!("test_data/test-25fps-h265-slice-data-1.bin");
 
-    fn dispatch_parse_call(parser: &mut Parser, nalu: Nalu<NaluHeader>) -> anyhow::Result<()> {
+    fn dispatch_parse_call(parser: &mut Parser, nalu: Nalu<NaluHeader>) -> Result<(), String> {
         match nalu.header.type_ {
             NaluType::TrailN
             | NaluType::TrailR
