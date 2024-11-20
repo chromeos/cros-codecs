@@ -350,13 +350,15 @@ fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
 }
 
 fn build_slice_param<M: SurfaceMemoryDescriptor>(
+    params: &mut libva::SliceParameterBufferH264,
+    offset: u32,
     hdr: &SliceHeader,
     slice_size: usize,
     ref_list_0: &[&DpbEntry<VADecodedHandle<M>>],
     ref_list_1: &[&DpbEntry<VADecodedHandle<M>>],
     sps: &Sps,
     pps: &Pps,
-) -> anyhow::Result<BufferType> {
+) -> anyhow::Result<()> {
     let ref_list_0 = fill_ref_pic_list(ref_list_0);
     let ref_list_1 = fill_ref_pic_list(ref_list_1);
     let pwt = &hdr.pred_weight_table;
@@ -425,9 +427,9 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
         }
     }
 
-    let slice_param = libva::SliceParameterBufferH264::new(
+    params.add_slice_parameter(
         slice_size as u32,
-        0,
+        offset,
         libva::constants::VA_SLICE_DATA_FLAG_ALL,
         hdr.header_bit_size as u16,
         hdr.first_mb_in_slice as u16,
@@ -458,15 +460,19 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
         chroma_offset_l1,
     );
 
-    Ok(BufferType::SliceParameter(SliceParameter::H264(
-        slice_param,
-    )))
+    Ok(())
+}
+
+pub struct VaapiH264Picture<Picture> {
+    picture: Picture,
+    slice_params: libva::SliceParameterBufferH264,
+    slice_data: Vec<u8>,
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H264>
     for VaapiBackend<M>
 {
-    type Picture = VaapiPicture<M>;
+    type Picture = VaapiH264Picture<VaapiPicture<M>>;
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<M> {
@@ -485,6 +491,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     ) -> StatelessBackendResult<()> {
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
+        let picture = &mut picture.picture;
 
         let surface_id = picture.surface().id();
 
@@ -513,33 +520,44 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         ref_pic_list0: &[&DpbEntry<Self::Handle>],
         ref_pic_list1: &[&DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {
-        let metadata = self.metadata_state.get_parsed()?;
-        let context = &metadata.context;
+        build_slice_param(
+            &mut picture.slice_params,
+            picture.slice_data.len() as u32,
+            &slice.header,
+            slice.nalu.size,
+            ref_pic_list0,
+            ref_pic_list1,
+            sps,
+            pps,
+        )?;
 
-        let slice_param = context
-            .create_buffer(build_slice_param(
-                &slice.header,
-                slice.nalu.size,
-                ref_pic_list0,
-                ref_pic_list1,
-                sps,
-                pps,
-            )?)
-            .context("while creating slice params buffer")?;
-
-        picture.add_buffer(slice_param);
-
-        let slice_data = context
-            .create_buffer(BufferType::SliceData(Vec::from(slice.nalu.as_ref())))
-            .context("while creating slice data buffer")?;
-
-        picture.add_buffer(slice_data);
+        picture.slice_data.extend(slice.nalu.as_ref());
 
         Ok(())
     }
 
-    fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle> {
-        self.process_picture::<H264>(picture)
+    fn submit_picture(
+        &mut self,
+        mut picture: Self::Picture,
+    ) -> StatelessBackendResult<Self::Handle> {
+        let metadata = self.metadata_state.get_parsed()?;
+        let context = &metadata.context;
+
+        let slice_param = context
+            .create_buffer(BufferType::SliceParameter(SliceParameter::H264(
+                picture.slice_params,
+            )))
+            .context("while creating slice params buffer")?;
+
+        picture.picture.add_buffer(slice_param);
+
+        let slice_data = context
+            .create_buffer(BufferType::SliceData(picture.slice_data))
+            .context("while creating slice data buffer")?;
+
+        picture.picture.add_buffer(slice_data);
+
+        self.process_picture::<H264>(picture.picture)
     }
 
     fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
@@ -550,11 +568,11 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
 
         let metadata = self.metadata_state.get_parsed()?;
 
-        Ok(VaPicture::new(
-            timestamp,
-            Rc::clone(&metadata.context),
-            surface,
-        ))
+        Ok(VaapiH264Picture {
+            picture: VaPicture::new(timestamp, Rc::clone(&metadata.context), surface),
+            slice_params: libva::SliceParameterBufferH264::new_array(),
+            slice_data: Vec::new(),
+        })
     }
 
     fn new_field_picture(
@@ -563,9 +581,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         first_field: &Self::Handle,
     ) -> NewPictureResult<Self::Picture> {
         // Decode to the same surface as the first field picture.
-        Ok(first_field
-            .borrow()
-            .new_picture_from_same_surface(timestamp))
+        Ok(VaapiH264Picture {
+            picture: first_field
+                .borrow()
+                .new_picture_from_same_surface(timestamp),
+            slice_params: libva::SliceParameterBufferH264::new_array(),
+            slice_data: Vec::new(),
+        })
     }
 }
 
