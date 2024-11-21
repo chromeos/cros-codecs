@@ -7,9 +7,9 @@ use std::borrow::Borrow;
 use std::rc::Rc;
 
 use anyhow::Context;
-use libva::constants::VA_INVALID_ID;
-use libva::constants::VA_PICTURE_H264_LONG_TERM_REFERENCE;
-use libva::constants::VA_PICTURE_H264_SHORT_TERM_REFERENCE;
+use libva::VA_INVALID_ID;
+use libva::VA_PICTURE_H264_LONG_TERM_REFERENCE;
+use libva::VA_PICTURE_H264_SHORT_TERM_REFERENCE;
 use libva::BufferType;
 use libva::Display;
 use libva::EncCodedBuffer;
@@ -79,9 +79,9 @@ where
     /// holder to fill staticly sized array.
     fn build_invalid_va_h264_pic_enc() -> libva::PictureH264 {
         libva::PictureH264::new(
-            libva::constants::VA_INVALID_ID,
+            libva::VA_INVALID_ID,
             0,
-            libva::constants::VA_PICTURE_H264_INVALID,
+            libva::VA_PICTURE_H264_INVALID,
             0,
             0,
         )
@@ -462,8 +462,8 @@ where
         };
 
         let bitrate_control = match config.initial_tunings.rate_control {
-            RateControl::ConstantBitrate(_) => libva::constants::VA_RC_CBR,
-            RateControl::ConstantQuality(_) => libva::constants::VA_RC_CQP,
+            RateControl::ConstantBitrate(_) => libva::VA_RC_CBR,
+            RateControl::ConstantQuality(_) => libva::VA_RC_CQP,
         };
 
         let backend = VaapiBackend::new(
@@ -481,7 +481,7 @@ where
 
 #[cfg(test)]
 pub(super) mod tests {
-    use libva::constants::VA_RT_FORMAT_YUV420;
+    use libva::VA_RT_FORMAT_YUV420;
     use libva::Display;
     use libva::UsageHint;
     use libva::VAEntrypoint::VAEntrypointEncSliceLP;
@@ -553,7 +553,7 @@ pub(super) mod tests {
                 width: WIDTH,
                 height: HEIGHT,
             },
-            libva::constants::VA_RC_CBR,
+            libva::VA_RC_CBR,
             low_power,
         )
         .unwrap();

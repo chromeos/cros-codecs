@@ -43,7 +43,7 @@ impl VaStreamInfo for &Header {
     }
 
     fn rt_format(&self) -> anyhow::Result<u32> {
-        Ok(libva::constants::VA_RT_FORMAT_YUV420)
+        Ok(libva::VA_RT_FORMAT_YUV420)
     }
 
     fn min_num_surfaces(&self) -> usize {
@@ -409,9 +409,9 @@ mod tests {
             &resolution,
             parser.segmentation(),
             parser.mb_lf_adjust(),
-            libva::constants::VA_INVALID_SURFACE,
-            libva::constants::VA_INVALID_SURFACE,
-            libva::constants::VA_INVALID_SURFACE,
+            libva::VA_INVALID_SURFACE,
+            libva::VA_INVALID_SURFACE,
+            libva::VA_INVALID_SURFACE,
         )
         .unwrap();
         let pic_param = match pic_param {
@@ -460,19 +460,19 @@ mod tests {
         assert_eq!(pic_param.inner().frame_height, 240);
         assert_eq!(
             pic_param.inner().last_ref_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
         assert_eq!(
             pic_param.inner().golden_ref_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
         assert_eq!(
             pic_param.inner().alt_ref_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
         assert_eq!(
             pic_param.inner().out_of_loop_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
 
         // Safe because this bitfield is initialized by the decoder.
@@ -593,7 +593,7 @@ mod tests {
         assert_eq!(pic_param.inner().alt_ref_frame, 0);
         assert_eq!(
             pic_param.inner().out_of_loop_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
 
         // Safe because this bitfield is initialized by the decoder.
@@ -707,7 +707,7 @@ mod tests {
         assert_eq!(pic_param.inner().alt_ref_frame, 0);
         assert_eq!(
             pic_param.inner().out_of_loop_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
 
         // Safe because this bitfield is initialized by the decoder.

@@ -97,7 +97,7 @@ fn upload_img<M: libva::SurfaceMemoryDescriptor>(
     let image_fmts = display.query_image_formats().unwrap();
     let image_fmt = image_fmts
         .into_iter()
-        .find(|f| f.fourcc == libva::constants::VA_FOURCC_NV12)
+        .find(|f| f.fourcc == libva::VA_FOURCC_NV12)
         .unwrap();
 
     let mut image =
@@ -268,7 +268,7 @@ fn main() {
 
     let mut pool = VaSurfacePool::new(
         Rc::clone(&display),
-        libva::constants::VA_RT_FORMAT_YUV420,
+        libva::VA_RT_FORMAT_YUV420,
         Some(libva::UsageHint::USAGE_HINT_ENCODER),
         Resolution {
             width: args.width,

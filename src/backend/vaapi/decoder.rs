@@ -55,7 +55,7 @@ pub(crate) fn va_surface_id<M: SurfaceMemoryDescriptor>(
     handle: &Option<DecodedHandle<M>>,
 ) -> libva::VASurfaceID {
     match handle {
-        None => libva::constants::VA_INVALID_SURFACE,
+        None => libva::VA_INVALID_SURFACE,
         Some(handle) => handle.borrow().surface().id(),
     }
 }
@@ -291,15 +291,15 @@ impl StreamMetadataState {
                 config,
                 stream_info: StreamInfo {
                     format: match rt_format {
-                        libva::constants::VA_RT_FORMAT_YUV420 => DecodedFormat::I420,
-                        libva::constants::VA_RT_FORMAT_YUV422 => DecodedFormat::I422,
-                        libva::constants::VA_RT_FORMAT_YUV444 => DecodedFormat::I444,
-                        libva::constants::VA_RT_FORMAT_YUV420_10 => DecodedFormat::I010,
-                        libva::constants::VA_RT_FORMAT_YUV420_12 => DecodedFormat::I012,
-                        libva::constants::VA_RT_FORMAT_YUV422_10 => DecodedFormat::I210,
-                        libva::constants::VA_RT_FORMAT_YUV422_12 => DecodedFormat::I212,
-                        libva::constants::VA_RT_FORMAT_YUV444_10 => DecodedFormat::I410,
-                        libva::constants::VA_RT_FORMAT_YUV444_12 => DecodedFormat::I412,
+                        libva::VA_RT_FORMAT_YUV420 => DecodedFormat::I420,
+                        libva::VA_RT_FORMAT_YUV422 => DecodedFormat::I422,
+                        libva::VA_RT_FORMAT_YUV444 => DecodedFormat::I444,
+                        libva::VA_RT_FORMAT_YUV420_10 => DecodedFormat::I010,
+                        libva::VA_RT_FORMAT_YUV420_12 => DecodedFormat::I012,
+                        libva::VA_RT_FORMAT_YUV422_10 => DecodedFormat::I210,
+                        libva::VA_RT_FORMAT_YUV422_12 => DecodedFormat::I212,
+                        libva::VA_RT_FORMAT_YUV444_10 => DecodedFormat::I410,
+                        libva::VA_RT_FORMAT_YUV444_12 => DecodedFormat::I412,
                         _ => panic!("unrecognized RT format {}", rt_format),
                     },
                     coded_resolution,
@@ -476,10 +476,10 @@ impl<'a> MappableHandle for Image<'a> {
         let offsets = image_inner.offsets.map(|x| x as usize);
 
         match image_inner.format.fourcc {
-            libva::constants::VA_FOURCC_NV12 => {
+            libva::VA_FOURCC_NV12 => {
                 nv12_copy(self.as_ref(), buffer, width, height, pitches, offsets);
             }
-            libva::constants::VA_FOURCC_I420 => {
+            libva::VA_FOURCC_I420 => {
                 i4xx_copy(
                     self.as_ref(),
                     buffer,
@@ -490,7 +490,7 @@ impl<'a> MappableHandle for Image<'a> {
                     (true, true),
                 );
             }
-            libva::constants::VA_FOURCC_422H => {
+            libva::VA_FOURCC_422H => {
                 i4xx_copy(
                     self.as_ref(),
                     buffer,
@@ -501,7 +501,7 @@ impl<'a> MappableHandle for Image<'a> {
                     (true, false),
                 );
             }
-            libva::constants::VA_FOURCC_444P => {
+            libva::VA_FOURCC_444P => {
                 i4xx_copy(
                     self.as_ref(),
                     buffer,
@@ -512,22 +512,22 @@ impl<'a> MappableHandle for Image<'a> {
                     (false, false),
                 );
             }
-            libva::constants::VA_FOURCC_P010 => {
+            libva::VA_FOURCC_P010 => {
                 p01x_to_i01x(self.as_ref(), buffer, 10, width, height, pitches, offsets);
             }
-            libva::constants::VA_FOURCC_P012 => {
+            libva::VA_FOURCC_P012 => {
                 p01x_to_i01x(self.as_ref(), buffer, 12, width, height, pitches, offsets);
             }
-            libva::constants::VA_FOURCC_Y210 => {
+            libva::VA_FOURCC_Y210 => {
                 y21x_to_i21x(self.as_ref(), buffer, 10, width, height, pitches, offsets);
             }
-            libva::constants::VA_FOURCC_Y212 => {
+            libva::VA_FOURCC_Y212 => {
                 y21x_to_i21x(self.as_ref(), buffer, 12, width, height, pitches, offsets);
             }
-            libva::constants::VA_FOURCC_Y410 => {
+            libva::VA_FOURCC_Y410 => {
                 y410_to_i410(self.as_ref(), buffer, width, height, pitches, offsets);
             }
-            libva::constants::VA_FOURCC_Y412 => {
+            libva::VA_FOURCC_Y412 => {
                 y412_to_i412(self.as_ref(), buffer, width, height, pitches, offsets);
             }
             _ => {
@@ -579,7 +579,7 @@ where
         // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
         let surface_pools = vec![VaSurfacePool::new(
             Rc::clone(&display),
-            libva::constants::VA_RT_FORMAT_YUV420,
+            libva::VA_RT_FORMAT_YUV420,
             Some(libva::UsageHint::USAGE_HINT_DECODER),
             Resolution::from((16, 16)),
         )];
