@@ -100,6 +100,34 @@ impl From<Resolution> for (u32, u32) {
     }
 }
 
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Rect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl From<Rect> for Resolution {
+    fn from(value: Rect) -> Self {
+        Self {
+            width: value.width - value.x,
+            height: value.height - value.y,
+        }
+    }
+}
+
+impl From<Resolution> for Rect {
+    fn from(value: Resolution) -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: value.width,
+            height: value.height,
+        }
+    }
+}
+
 /// Wrapper around u32 when they are meant to be a fourcc.
 ///
 /// Provides conversion and display/debug implementations useful when dealing with fourcc codes.

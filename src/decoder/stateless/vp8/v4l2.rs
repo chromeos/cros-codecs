@@ -13,23 +13,19 @@ use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
 use crate::backend::v4l2::decoder::V4l2StreamInfo;
-
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
-
 use crate::decoder::stateless::vp8::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::vp8::Vp8;
-
 use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
-
 use crate::device::v4l2::stateless::controls::vp8::V4l2CtrlVp8FrameParams;
-
+use crate::Rect;
 use crate::Resolution;
 
 /// The number of frames to allocate for this codec. Same as GStreamer's vavp8dec.
@@ -44,8 +40,8 @@ impl V4l2StreamInfo for &Header {
         Resolution::from((self.width as u32, self.height as u32))
     }
 
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
-        ((0, 0), self.coded_size().into())
+    fn visible_rect(&self) -> Rect {
+        Rect::from(self.coded_size())
     }
 }
 

@@ -46,6 +46,7 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::Rect;
 use crate::Resolution;
 
 enum ScalingListType {
@@ -134,10 +135,15 @@ impl VaStreamInfo for &Sps {
         Resolution::from((self.width().into(), self.height().into()))
     }
 
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
+    fn visible_rect(&self) -> Rect {
         let rect = self.visible_rectangle();
 
-        ((rect.min.x, rect.min.y), (rect.max.x, rect.max.y))
+        Rect {
+            x: rect.min.x,
+            y: rect.min.y,
+            width: rect.max.x,
+            height: rect.max.y,
+        }
     }
 }
 

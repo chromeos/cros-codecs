@@ -183,12 +183,8 @@ where
         // The values provided here are directly from the codec (modulo format).
         // Hardware may handle this differently, i.e. buffer padding.
         self.stream_info.format = format;
-        let visible_rect = format_info.visible_rect();
 
-        let display_resolution = Resolution {
-            width: visible_rect.1 .0 - visible_rect.0 .0,
-            height: visible_rect.1 .1 - visible_rect.0 .1,
-        };
+        let display_resolution = Resolution::from(format_info.visible_rect());
 
         self.stream_info.min_num_frames = format_info.min_num_frames();
         self.stream_info.coded_resolution = format_info.coded_size();

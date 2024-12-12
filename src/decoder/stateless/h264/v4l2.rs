@@ -35,6 +35,7 @@ use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeMode;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeParams;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DpbEntry;
 //TODO use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264ScalingMatrix;
+use crate::Rect;
 use crate::Resolution;
 
 impl V4l2StreamInfo for &Rc<Sps> {
@@ -46,10 +47,15 @@ impl V4l2StreamInfo for &Rc<Sps> {
         Resolution::from((self.width(), self.height()))
     }
 
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
+    fn visible_rect(&self) -> Rect {
         let rect = self.visible_rectangle();
 
-        ((rect.min.x, rect.min.y), (rect.max.x, rect.max.y))
+        Rect {
+            x: rect.min.x,
+            y: rect.min.y,
+            width: rect.max.x,
+            height: rect.max.y,
+        }
     }
 }
 
