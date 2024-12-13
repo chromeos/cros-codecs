@@ -196,6 +196,9 @@ pub fn detile_plane(
     Ok(())
 }
 
+pub const MM21_TILE_WIDTH: usize = 16;
+pub const MM21_TILE_HEIGHT: usize = 32;
+
 pub fn mm21_to_nv12(
     src_y: &[u8],
     dst_y: &mut [u8],
@@ -204,16 +207,21 @@ pub fn mm21_to_nv12(
     width: usize,
     height: usize,
 ) -> Result<(), String> {
-    let y_tile_width = 16;
-    let y_tile_height = 32;
-    detile_plane(src_y, dst_y, width, height, y_tile_width, y_tile_height)?;
+    detile_plane(
+        src_y,
+        dst_y,
+        width,
+        height,
+        MM21_TILE_WIDTH,
+        MM21_TILE_HEIGHT,
+    )?;
     detile_plane(
         src_uv,
         dst_uv,
         width,
         height / 2,
-        y_tile_width,
-        y_tile_height / 2,
+        MM21_TILE_WIDTH,
+        MM21_TILE_HEIGHT / 2,
     )
 }
 

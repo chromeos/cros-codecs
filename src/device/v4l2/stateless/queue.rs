@@ -29,7 +29,9 @@ use v4l2r::PixelFormat;
 use v4l2r::PlaneLayout;
 
 use crate::decoder::stateless::DecodeError;
+use crate::image_processing::mm21_to_nv12;
 use crate::image_processing::nv12_copy;
+use crate::image_processing::MM21_TILE_HEIGHT;
 use crate::DecodedFormat;
 use crate::Rect;
 use crate::Resolution;
@@ -252,21 +254,49 @@ impl V4l2CaptureBuffer {
                     .get_plane_mapping(0)
                     .expect("Failed to mmap capture buffer");
                 let buffer_size = self.length();
-                let stride: usize = self.format.plane_fmt[0].bytesperline.try_into().unwrap();
-                let width: usize = Resolution::from(self.visible_rect)
-                    .width
-                    .try_into()
-                    .unwrap();
-                let height: usize = Resolution::from(self.visible_rect)
-                    .height
-                    .try_into()
-                    .unwrap();
+                let stride: usize = self.format.plane_fmt[0].bytesperline as usize;
+                let width: usize = Resolution::from(self.visible_rect).width as usize;
+                let height: usize = Resolution::from(self.visible_rect).height as usize;
                 let (src_y, src_uv) = plane.split_at(stride * height);
                 let (data_y, data_uv) =
                     data.split_at_mut(Resolution::from(self.visible_rect).get_area());
 
                 nv12_copy(
                     &src_y, stride, data_y, width, &src_uv, stride, data_uv, width, width, height,
+                );
+            }
+            DecodedFormat::MM21 => {
+                // check planes count
+                self.handle.data.num_planes();
+                let src_y = self
+                    .handle
+                    .get_plane_mapping(0)
+                    .expect("Failed to mmap capture buffer");
+                let src_uv = self
+                    .handle
+                    .get_plane_mapping(1)
+                    .expect("Failed to mmap capture buffer");
+                let width: usize = Resolution::from(self.visible_rect).width as usize;
+                let height: usize = Resolution::from(self.visible_rect).height as usize;
+                let height_tiled = height + (MM21_TILE_HEIGHT - 1) & !(32 - 1);
+                let src_stride = self.format.plane_fmt[0].bytesperline as usize;
+                let mut pivot_y = vec![0; src_stride * height_tiled];
+                let mut pivot_uv = vec![0; src_stride * height_tiled / 2];
+                mm21_to_nv12(
+                    &src_y,
+                    &mut pivot_y,
+                    &src_uv,
+                    &mut pivot_uv,
+                    src_stride,
+                    height_tiled,
+                )
+                .expect("Unable to convert mm21 to nv12");
+
+                let (data_y, data_uv) =
+                    data.split_at_mut(Resolution::from(self.visible_rect).get_area());
+                nv12_copy(
+                    &pivot_y, src_stride, data_y, width, &pivot_uv, src_stride, data_uv, width,
+                    width, height,
                 );
             }
             _ => panic!("handle me"),

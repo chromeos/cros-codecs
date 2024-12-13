@@ -215,6 +215,9 @@ pub enum DecodedFormat {
     I410,
     /// Y, U and V planes, 4:4:4 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
     I412,
+    /// One Y and one interleaved UV plane, 4:2:0 sampling, 8 bits per sample.
+    /// In a tiled format.
+    MM21,
 }
 
 impl FromStr for DecodedFormat {
@@ -232,9 +235,9 @@ impl FromStr for DecodedFormat {
             "i212" | "I212" => Ok(DecodedFormat::I212),
             "i410" | "I410" => Ok(DecodedFormat::I410),
             "i412" | "I412" => Ok(DecodedFormat::I412),
-            _ => {
-                Err("unrecognized output format. Valid values: i420, nv12, i422, i444, i010, i012, i210, i212, i410, i412")
-            }
+            "mm21" | "MM21" => Ok(DecodedFormat::MM21),
+            _ => Err("unrecognized output format. \
+                Valid values: i420, nv12, i422, i444, i010, i012, i210, i212, i410, i412, mm21"),
         }
     }
 }
@@ -336,6 +339,7 @@ pub fn decoded_frame_size(format: DecodedFormat, width: usize, height: usize) ->
             u_size + uv_size
         }
         DecodedFormat::I410 | DecodedFormat::I412 => (width * height * 2) * 3,
+        DecodedFormat::MM21 => panic!("Unable to convert to MM21"),
     }
 }
 
