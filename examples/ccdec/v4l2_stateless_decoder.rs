@@ -31,6 +31,8 @@ use crate::util::EncodedFormat;
 use crate::util::FrameMemoryType;
 use crate::util::Md5Computation;
 
+use cros_codecs::image_processing::nv12_to_i420;
+
 multiple_desc_type! {
     enum BufferDescriptor {
         Managed(()),
@@ -82,8 +84,7 @@ pub fn do_decode(mut input: File, args: Args) -> () {
     };
 
     let mut on_new_frame = |handle: DynDecodedHandle<()>| {
-        let timestamp = handle.timestamp(); //handle.handle.borrow().timestamp;
-        log::debug!("{:<20} {:?}\n", "on_new_frame", timestamp);
+        let timestamp = handle.timestamp();
 
         let picture = handle.dyn_picture();
         let mut handle = picture.dyn_mappable_handle().unwrap();
@@ -97,6 +98,28 @@ pub fn do_decode(mut input: File, args: Args) -> () {
             timestamp,
             buffer_size
         );
+
+        // TODO only create i420 frame when output is i420 or md5sum
+        let mut i420_frame_data = vec![0; buffer_size];
+        let y_plane_size = (buffer_size * 2) / 3;
+        let (src_y, src_uv) = frame_data.split_at_mut(y_plane_size);
+        let (dst_y, dst_uv) = i420_frame_data.split_at_mut(y_plane_size);
+        let (dst_u, dst_v) = dst_uv.split_at_mut(y_plane_size / 4);
+        nv12_to_i420(src_y, dst_y, src_uv, dst_u, dst_v);
+
+        let frame_md5: String = if need_per_frame_md5 {
+            md5_digest(&i420_frame_data)
+        } else {
+            "".to_string()
+        };
+
+        match args.compute_md5 {
+            None => (),
+            Some(Md5Computation::Frame) => println!("{}", frame_md5),
+            Some(Md5Computation::Stream) => md5_context.consume(&i420_frame_data),
+        }
+
+        frame_data = i420_frame_data;
 
         if args.multiple_output_files {
             let file_name = decide_output_file_name(
@@ -115,18 +138,6 @@ pub fn do_decode(mut input: File, args: Args) -> () {
             output
                 .write_all(&frame_data)
                 .expect("failed to write to output file");
-        }
-
-        let frame_md5: String = if need_per_frame_md5 {
-            md5_digest(&frame_data)
-        } else {
-            "".to_string()
-        };
-
-        match args.compute_md5 {
-            None => (),
-            Some(Md5Computation::Frame) => println!("{}", frame_md5),
-            Some(Md5Computation::Stream) => md5_context.consume(&frame_data),
         }
     };
 

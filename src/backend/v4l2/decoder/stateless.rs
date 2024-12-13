@@ -15,11 +15,10 @@ use crate::decoder::DynHandle;
 use crate::decoder::FramePool;
 use crate::decoder::MappableHandle;
 use crate::decoder::StreamInfo;
-use crate::DecodedFormat;
-use crate::Resolution;
-
 use crate::device::v4l2::stateless::device::V4l2Device;
 use crate::device::v4l2::stateless::request::V4l2Request;
+use crate::DecodedFormat;
+use crate::Resolution;
 
 pub struct V4l2Picture {
     request: V4l2Request,
@@ -144,7 +143,7 @@ impl FramePool for V4l2StatelessDecoderBackend {
     type Descriptor = ();
 
     fn coded_resolution(&self) -> Resolution {
-        todo!();
+        self.stream_info.coded_resolution
     }
 
     fn set_coded_resolution(&mut self, _resolution: Resolution) {

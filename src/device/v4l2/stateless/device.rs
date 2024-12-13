@@ -8,6 +8,7 @@ use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
 use crate::device::v4l2::stateless::queue::V4l2OutputBuffer;
 use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
 use crate::device::v4l2::stateless::request::V4l2Request;
+use crate::Rect;
 use crate::Resolution;
 
 use std::cell::RefCell;
@@ -114,15 +115,15 @@ impl V4l2Device {
     pub fn num_buffers(&self) -> usize {
         self.handle.borrow().output_queue.num_buffers()
     }
-    pub fn set_resolution(&mut self, resolution: Resolution) -> &mut Self {
+    pub fn set_resolution(&mut self, coded_size: Resolution, visible_rect: Rect) -> &mut Self {
         self.handle
             .borrow_mut()
             .output_queue
-            .set_resolution(resolution);
+            .set_coded_size(coded_size);
         self.handle
             .borrow_mut()
             .capture_queue
-            .set_resolution(resolution);
+            .set_visible_rect(visible_rect);
         self
     }
     pub fn alloc_request(&self, timestamp: u64) -> Result<V4l2Request, DecodeError> {

@@ -71,7 +71,12 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             (sps.pic_width_in_mbs_minus1 + 1) as u32 * mb_unit,
             (sps.pic_height_in_map_units_minus1 + 1) as u32 * map_unit,
         ));
-        self.device.set_resolution(resolution);
+
+        let visible_rect = Rect::from((
+            (sps.visible_rectangle().min.x, sps.visible_rectangle().min.y),
+            (sps.visible_rectangle().max.x, sps.visible_rectangle().max.y),
+        ));
+        self.device.set_resolution(resolution, visible_rect);
         Ok(())
     }
 
