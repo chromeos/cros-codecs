@@ -1,0 +1,10 @@
+{
+  "package": {
+    "cros-codecs": {
+      "host_supported": false
+    }
+  },
+  "product_available": true,
+  "vendor_available": true,
+  "run_cargo": false
+}

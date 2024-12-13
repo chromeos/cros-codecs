@@ -1,0 +1,16 @@
+name: "cros-codecs"
+description:
+    "A lightweight, simple, low-dependency, and hopefully safe crate for "
+    "hardware-accelerated video decoding and encoding on Linux."
+
+third_party {
+homepage: "https://github.com/chromeos/cros-codecs"
+  identifier {
+    type: "Git"
+    value: "https://github.com/chromeos/cros-codecs"
+    primary_source: false
+  }
+
+  last_upgrade_date { year: 2024 month: 12 day: 3 }
+  license_type: NOTICE
+}
