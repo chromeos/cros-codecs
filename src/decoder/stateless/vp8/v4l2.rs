@@ -50,7 +50,10 @@ impl StatelessDecoderBackendPicture<Vp8> for V4l2StatelessDecoderBackend {
 }
 
 impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
-    fn new_sequence(&mut self, _: &Header) -> StatelessBackendResult<()> {
+    fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
+        let coded_size = Resolution::from((header.width as u32, header.height as u32));
+        let resolution = Rect::from(coded_size);
+        self.device.set_resolution(coded_size, resolution);
         Ok(())
     }
 
@@ -66,20 +69,26 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
         &mut self,
         picture: Self::Picture,
         hdr: &Header,
-        _: &Option<Self::Handle>,
-        _: &Option<Self::Handle>,
-        _: &Option<Self::Handle>,
+        _last_ref: &Option<Self::Handle>,
+        _golden_ref: &Option<Self::Handle>,
+        _alt_ref: &Option<Self::Handle>,
         _: &[u8],
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
     ) -> StatelessBackendResult<Self::Handle> {
         let mut vp8_frame_params = V4l2CtrlVp8FrameParams::new();
 
+        // last_ref, golden_ref, alt_ref are all None on key frame
+        // and Some on other frames
         vp8_frame_params
             .set_loop_filter_params(hdr, mb_lf_adjust)
             .set_quantization_params(hdr)
             .set_segmentation_params(segmentation)
-            .set_entropy_params(hdr);
+            .set_entropy_params(hdr)
+            .set_bool_ctx(hdr)
+            .set_frame_params(hdr);
+
+        picture.borrow_mut().request().ioctl(&vp8_frame_params);
 
         let handle = Rc::new(RefCell::new(BackendHandle {
             picture: picture.clone(),
