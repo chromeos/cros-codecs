@@ -76,7 +76,8 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             (sps.visible_rectangle().min.x, sps.visible_rectangle().min.y),
             (sps.visible_rectangle().max.x, sps.visible_rectangle().max.y),
         ));
-        self.device.set_resolution(resolution, visible_rect);
+        self.device
+            .initialize_queues(resolution, visible_rect, sps.max_dpb_frames() as u32 + 4);
         Ok(())
     }
 

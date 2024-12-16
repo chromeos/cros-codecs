@@ -117,17 +117,23 @@ pub struct V4l2OutputQueue {
     num_buffers: u32,
 }
 
+// TODO because of the queueing model the OUTPUT buffer count must be equal to
+// or greater than the CAPTURE buffer count. The OUTPUT buffer count needs only
+// to be 2 buffers for ping pong submissions. There is no need to queue a deep
+// pipeline of buffers in the V4L2 driver because the hardware only works on one
+// frame at a time.
+const NUM_OUTPUT_BUFFERS: u32 = 20;
 impl V4l2OutputQueue {
-    pub fn new(device: Arc<Device>, num_buffers: u32) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_output_mplane_queue(device).expect("Failed to get output queue");
         log::debug!("Output queue:\n\tstate: None -> Init\n");
         let handle = Rc::new(RefCell::new(V4l2OutputQueueHandle::Init(handle)));
         Self {
             handle,
-            num_buffers,
+            num_buffers: NUM_OUTPUT_BUFFERS,
         }
     }
-    pub fn set_coded_size(&mut self, res: Resolution) -> &mut Self {
+    pub fn initialize_queue(&mut self, res: Resolution) -> &mut Self {
         self.handle.replace(match self.handle.take() {
             V4l2OutputQueueHandle::Init(mut handle) => {
                 let (width, height) = res.into();
@@ -173,13 +179,6 @@ impl V4l2OutputQueue {
             }
         });
         self
-    }
-    pub fn num_buffers(&self) -> usize {
-        let handle = &*self.handle.borrow();
-        match handle {
-            V4l2OutputQueueHandle::Streaming(handle) => handle.num_buffers(),
-            _ => 0,
-        }
     }
     pub fn num_free_buffers(&self) -> usize {
         let handle = &*self.handle.borrow();
@@ -325,19 +324,20 @@ pub struct V4l2CaptureQueue {
 }
 
 impl V4l2CaptureQueue {
-    pub fn new(device: Arc<Device>, num_buffers: u32) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_capture_mplane_queue(device).expect("Failed to get capture queue");
         log::debug!("Capture queue:\n\tstate: None -> Init\n");
         let handle = RefCell::new(V4l2CaptureQueueHandle::Init(handle));
         Self {
             handle,
-            num_buffers,
+            num_buffers: 0,
             visible_rect: Default::default(),
             format: Default::default(),
         }
     }
-    pub fn set_visible_rect(&mut self, visible_rect: Rect) -> &mut Self {
+    pub fn initialize_queue(&mut self, visible_rect: Rect, num_buffers: u32) -> &mut Self {
         self.visible_rect = visible_rect;
+        self.num_buffers = num_buffers;
         self.handle.replace(match self.handle.take() {
             V4l2CaptureQueueHandle::Init(handle) => {
                 self.format = handle.get_format().expect("Failed to get capture format");
@@ -395,6 +395,13 @@ impl V4l2CaptureQueue {
                 }
             }
             _ => panic!("ERROR"),
+        }
+    }
+    pub fn num_buffers(&self) -> usize {
+        let handle = &*self.handle.borrow();
+        match handle {
+            V4l2CaptureQueueHandle::Streaming(handle) => handle.num_buffers(),
+            _ => 0,
         }
     }
 }

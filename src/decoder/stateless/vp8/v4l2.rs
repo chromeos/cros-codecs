@@ -52,8 +52,8 @@ impl StatelessDecoderBackendPicture<Vp8> for V4l2StatelessDecoderBackend {
 impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         let coded_size = Resolution::from((header.width as u32, header.height as u32));
-        let resolution = Rect::from(coded_size);
-        self.device.set_resolution(coded_size, resolution);
+        self.device
+            .initialize_queues(coded_size, Rect::from(coded_size), NUM_FRAMES as u32);
         Ok(())
     }
 
