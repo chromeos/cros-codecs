@@ -1710,7 +1710,7 @@ impl Parser {
             found_ref = r.0.read_bit()?;
 
             if found_ref {
-                let rf = &self.ref_info[i];
+                let rf = &self.ref_info[fh.ref_frame_idx[i] as usize];
                 fh.upscaled_width = rf.ref_upscaled_width;
                 fh.frame_width = fh.upscaled_width;
                 fh.frame_height = rf.ref_frame_height;
