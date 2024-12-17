@@ -288,9 +288,9 @@ pub struct SegmentationParams {
     /// If unset, indicates that the corresponding feature is unused and has
     /// value equal to 0. if set, indicates that the feature value is coded in
     /// the bitstream.
-    feature_enabled: [[bool; SEG_LVL_MAX]; MAX_SEGMENTS],
+    pub feature_enabled: [[bool; SEG_LVL_MAX]; MAX_SEGMENTS],
     /// Specifies the magnitude of the feature data for a segment feature.
-    feature_data: [[i16; SEG_LVL_MAX]; MAX_SEGMENTS],
+    pub feature_data: [[i16; SEG_LVL_MAX]; MAX_SEGMENTS],
 }
 
 impl SegmentationParams {
