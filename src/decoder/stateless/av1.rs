@@ -4,7 +4,6 @@
 
 use std::os::fd::AsFd;
 use std::os::fd::BorrowedFd;
-use std::rc::Rc;
 
 use anyhow::anyhow;
 
@@ -15,7 +14,7 @@ use crate::codec::av1::parser::ObuAction;
 use crate::codec::av1::parser::ObuType;
 use crate::codec::av1::parser::ParsedObu;
 use crate::codec::av1::parser::Parser;
-use crate::codec::av1::parser::SequenceHeaderObu;
+use crate::codec::av1::parser::StreamInfo;
 use crate::codec::av1::parser::TileGroupObu;
 use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::DecodeError;
@@ -46,9 +45,9 @@ pub trait StatelessAV1DecoderBackend:
     /// `highest_spatial_layer` argument refers to the maximum layer selected by
     /// the client through `set_operating_point()` and the scalability
     /// information present in the stream, if any.
-    fn new_sequence(
+    fn change_stream_info(
         &mut self,
-        sequence: &Rc<SequenceHeaderObu>,
+        stream_info: &StreamInfo,
         highest_spatial_layer: Option<u32>,
     ) -> StatelessBackendResult<()>;
 
@@ -65,7 +64,7 @@ pub trait StatelessAV1DecoderBackend:
     fn begin_picture(
         &mut self,
         picture: &mut Self::Picture,
-        sequence: &SequenceHeaderObu,
+        stream_info: &StreamInfo,
         hdr: &FrameHeaderObu,
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
     ) -> StatelessBackendResult<()>;
@@ -114,7 +113,7 @@ pub struct AV1DecoderState<H: DecodedHandle, P> {
     reference_frames: [Option<H>; NUM_REF_FRAMES],
 
     /// Keeps track of the last values seen for negotiation purposes.
-    sequence: Option<Rc<SequenceHeaderObu>>,
+    stream_info: Option<StreamInfo>,
 
     /// The picture currently being decoded. We need to preserve it between
     /// calls to `decode` because multiple tiles will be processed in different
@@ -137,7 +136,7 @@ where
         Self {
             parser: Default::default(),
             reference_frames: Default::default(),
-            sequence: Default::default(),
+            stream_info: Default::default(),
             current_pic: Default::default(),
             frame_count: Default::default(),
             highest_spatial_layer: Default::default(),
@@ -155,7 +154,7 @@ where
 pub struct Av1;
 
 impl StatelessCodec for Av1 {
-    type FormatInfo = Rc<SequenceHeaderObu>;
+    type FormatInfo = StreamInfo;
     type DecoderState<H: DecodedHandle, P> = AV1DecoderState<H, P>;
 }
 
@@ -184,7 +183,7 @@ where
                 header: frame_header,
                 handle: ref_frame.clone(),
             });
-        } else if let Some(sequence) = &self.codec.sequence {
+        } else if let Some(stream_info) = &self.codec.stream_info {
             let mut backend_picture = self.backend.new_picture(
                 &frame_header,
                 timestamp,
@@ -193,7 +192,7 @@ where
 
             self.backend.begin_picture(
                 &mut backend_picture,
-                sequence,
+                stream_info,
                 &frame_header,
                 &self.codec.reference_frames,
             )?;
@@ -386,8 +385,8 @@ where
             .map_err(|err| DecodeError::ParseFrameError(err))?
         {
             ParsedObu::SequenceHeader(sequence) => {
-                let sequence_differs = match &self.codec.sequence {
-                    Some(old_sequence) => **old_sequence != *sequence,
+                let sequence_differs = match &self.codec.stream_info {
+                    Some(old_stream_info) => *old_stream_info.seq_header != *sequence,
                     None => true,
                 };
 
@@ -422,9 +421,22 @@ where
                     );
                     /* there is nothing to drain, much like vp8 and vp9 */
                     self.codec.highest_spatial_layer = self.codec.parser.highest_operating_point();
+
+                    let stream_info = match &self.codec.parser.last_frame_header {
+                        Some(fh) => StreamInfo {
+                            seq_header: sequence.clone(),
+                            render_width: fh.render_width,
+                            render_height: fh.render_height,
+                        },
+                        None => StreamInfo {
+                            seq_header: sequence.clone(),
+                            render_width: sequence.max_frame_width_minus_1 as u32 + 1,
+                            render_height: sequence.max_frame_height_minus_1 as u32 + 1,
+                        },
+                    };
                     self.backend
-                        .new_sequence(&sequence, self.codec.highest_spatial_layer)?;
-                    self.await_format_change(sequence);
+                        .change_stream_info(&stream_info, self.codec.highest_spatial_layer)?;
+                    self.await_format_change(stream_info);
                 }
             }
             ParsedObu::FrameHeader(frame_header) => {
@@ -440,6 +452,24 @@ where
                 self.decode_tile_group(tile_group)?;
             }
             ParsedObu::Frame(frame) => {
+                let stream_info =
+                    self.codec
+                        .stream_info
+                        .as_ref()
+                        .ok_or(DecodeError::DecoderError(anyhow!(
+                            "broken stream: a picture is being decoded without a sequence header"
+                        )))?;
+                if stream_info.render_width != frame.header.render_width
+                    || stream_info.render_height != frame.header.render_height
+                {
+                    let new_stream_info = StreamInfo {
+                        seq_header: stream_info.seq_header.clone(),
+                        render_width: frame.header.render_width,
+                        render_height: frame.header.render_height,
+                    };
+                    self.backend
+                        .change_stream_info(&new_stream_info, self.codec.highest_spatial_layer)?;
+                }
                 if self.codec.current_pic.is_some() {
                     /* submit this frame immediately, as we need to update the
                      * DPB and the reference info state *before* processing the
@@ -487,8 +517,8 @@ where
     }
 
     fn next_event(&mut self) -> Option<crate::decoder::DecoderEvent<B::Handle>> {
-        self.query_next_event(|decoder, sequence| {
-            decoder.codec.sequence = Some(Rc::clone(sequence));
+        self.query_next_event(|decoder, stream_info| {
+            decoder.codec.stream_info = Some(stream_info.clone());
         })
     }
 
