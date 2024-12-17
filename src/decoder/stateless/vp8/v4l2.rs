@@ -25,6 +25,7 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 use crate::device::v4l2::stateless::controls::vp8::V4l2CtrlVp8FrameParams;
+use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
 
@@ -52,8 +53,12 @@ impl StatelessDecoderBackendPicture<Vp8> for V4l2StatelessDecoderBackend {
 impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         let coded_size = Resolution::from((header.width as u32, header.height as u32));
-        self.device
-            .initialize_queues(coded_size, Rect::from(coded_size), NUM_FRAMES as u32);
+        self.device.initialize_queues(
+            Fourcc::from(b"VP8F"),
+            coded_size,
+            Rect::from(coded_size),
+            NUM_FRAMES as u32,
+        );
         Ok(())
     }
 

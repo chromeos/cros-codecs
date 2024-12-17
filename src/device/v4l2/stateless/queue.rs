@@ -33,6 +33,7 @@ use crate::image_processing::mm21_to_nv12;
 use crate::image_processing::nv12_copy;
 use crate::image_processing::MM21_TILE_HEIGHT;
 use crate::DecodedFormat;
+use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
 
@@ -100,7 +101,6 @@ impl V4l2OutputBuffer {
 }
 
 //TODO: handle memory backends other than mmap
-//TODO: handle video formats other than h264
 //TODO: handle queue start/stop at runtime
 //TODO: handle DRC at runtime
 #[derive(Default)]
@@ -133,7 +133,7 @@ impl V4l2OutputQueue {
             num_buffers: NUM_OUTPUT_BUFFERS,
         }
     }
-    pub fn initialize_queue(&mut self, res: Resolution) -> &mut Self {
+    pub fn initialize_queue(&mut self, format: Fourcc, res: Resolution) -> &mut Self {
         self.handle.replace(match self.handle.take() {
             V4l2OutputQueueHandle::Init(mut handle) => {
                 let (width, height) = res.into();
@@ -142,7 +142,7 @@ impl V4l2OutputQueue {
                     .change_format()
                     .expect("Failed to change output format")
                     .set_size(width as usize, height as usize)
-                    .set_pixelformat(PixelFormat::from_fourcc(b"S264"))
+                    .set_pixelformat(format)
                     // 1 MB per decoding unit should be enough for most streams.
                     .set_planes_layout(vec![PlaneLayout {
                         sizeimage: 1024 * 1024,

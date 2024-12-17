@@ -8,6 +8,7 @@ use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
 use crate::device::v4l2::stateless::queue::V4l2OutputBuffer;
 use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
 use crate::device::v4l2::stateless::request::V4l2Request;
+use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
 
@@ -114,6 +115,7 @@ impl V4l2Device {
     }
     pub fn initialize_queues(
         &mut self,
+        format: Fourcc,
         coded_size: Resolution,
         visible_rect: Rect,
         num_buffers: u32,
@@ -121,7 +123,7 @@ impl V4l2Device {
         self.handle
             .borrow_mut()
             .output_queue
-            .initialize_queue(coded_size);
+            .initialize_queue(format, coded_size);
         self.handle
             .borrow_mut()
             .capture_queue

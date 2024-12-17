@@ -35,6 +35,7 @@ use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeMode;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeParams;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DpbEntry;
 //TODO use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264ScalingMatrix;
+use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
 
@@ -76,8 +77,12 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             (sps.visible_rectangle().min.x, sps.visible_rectangle().min.y),
             (sps.visible_rectangle().max.x, sps.visible_rectangle().max.y),
         ));
-        self.device
-            .initialize_queues(resolution, visible_rect, sps.max_dpb_frames() as u32 + 4);
+        self.device.initialize_queues(
+            Fourcc::from(b"S264"),
+            resolution,
+            visible_rect,
+            sps.max_dpb_frames() as u32 + 4,
+        );
         Ok(())
     }
 
