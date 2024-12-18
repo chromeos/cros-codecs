@@ -25,15 +25,15 @@ pub mod surface_pool;
 
 fn va_rt_format_to_string(va_rt_format: u32) -> String {
     String::from(match va_rt_format {
-        libva::constants::VA_RT_FORMAT_YUV420 => "YUV420",
-        libva::constants::VA_RT_FORMAT_YUV422 => "YUV422",
-        libva::constants::VA_RT_FORMAT_YUV444 => "YUV444",
-        libva::constants::VA_RT_FORMAT_YUV420_10 => "YUV420_10",
-        libva::constants::VA_RT_FORMAT_YUV420_12 => "YUV420_12",
-        libva::constants::VA_RT_FORMAT_YUV422_10 => "YUV422_10",
-        libva::constants::VA_RT_FORMAT_YUV422_12 => "YUV422_12",
-        libva::constants::VA_RT_FORMAT_YUV444_10 => "YUV444_10",
-        libva::constants::VA_RT_FORMAT_YUV444_12 => "YUV444_12",
+        libva::VA_RT_FORMAT_YUV420 => "YUV420",
+        libva::VA_RT_FORMAT_YUV422 => "YUV422",
+        libva::VA_RT_FORMAT_YUV444 => "YUV444",
+        libva::VA_RT_FORMAT_YUV420_10 => "YUV420_10",
+        libva::VA_RT_FORMAT_YUV420_12 => "YUV420_12",
+        libva::VA_RT_FORMAT_YUV422_10 => "YUV422_10",
+        libva::VA_RT_FORMAT_YUV422_12 => "YUV422_12",
+        libva::VA_RT_FORMAT_YUV444_10 => "YUV444_10",
+        libva::VA_RT_FORMAT_YUV444_12 => "YUV444_12",
         other => return format!("unknown VA rt_format {}", other),
     })
 }
@@ -49,53 +49,53 @@ struct FormatMap {
 /// preferred order.
 const FORMAT_MAP: [FormatMap; 10] = [
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV420,
-        va_fourcc: libva::constants::VA_FOURCC_NV12,
+        rt_format: libva::VA_RT_FORMAT_YUV420,
+        va_fourcc: libva::VA_FOURCC_NV12,
         decoded_format: DecodedFormat::NV12,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV420,
-        va_fourcc: libva::constants::VA_FOURCC_I420,
+        rt_format: libva::VA_RT_FORMAT_YUV420,
+        va_fourcc: libva::VA_FOURCC_I420,
         decoded_format: DecodedFormat::I420,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV422,
-        va_fourcc: libva::constants::VA_FOURCC_422H,
+        rt_format: libva::VA_RT_FORMAT_YUV422,
+        va_fourcc: libva::VA_FOURCC_422H,
         decoded_format: DecodedFormat::I422,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV444,
-        va_fourcc: libva::constants::VA_FOURCC_444P,
+        rt_format: libva::VA_RT_FORMAT_YUV444,
+        va_fourcc: libva::VA_FOURCC_444P,
         decoded_format: DecodedFormat::I444,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV420_10,
-        va_fourcc: libva::constants::VA_FOURCC_P010,
+        rt_format: libva::VA_RT_FORMAT_YUV420_10,
+        va_fourcc: libva::VA_FOURCC_P010,
         decoded_format: DecodedFormat::I010,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV420_12,
-        va_fourcc: libva::constants::VA_FOURCC_P012,
+        rt_format: libva::VA_RT_FORMAT_YUV420_12,
+        va_fourcc: libva::VA_FOURCC_P012,
         decoded_format: DecodedFormat::I012,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV422_10,
-        va_fourcc: libva::constants::VA_FOURCC_Y210,
+        rt_format: libva::VA_RT_FORMAT_YUV422_10,
+        va_fourcc: libva::VA_FOURCC_Y210,
         decoded_format: DecodedFormat::I210,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV422_12,
-        va_fourcc: libva::constants::VA_FOURCC_Y212,
+        rt_format: libva::VA_RT_FORMAT_YUV422_12,
+        va_fourcc: libva::VA_FOURCC_Y212,
         decoded_format: DecodedFormat::I212,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV444_10,
-        va_fourcc: libva::constants::VA_FOURCC_Y410,
+        rt_format: libva::VA_RT_FORMAT_YUV444_10,
+        va_fourcc: libva::VA_FOURCC_Y410,
         decoded_format: DecodedFormat::I410,
     },
     FormatMap {
-        rt_format: libva::constants::VA_RT_FORMAT_YUV444_12,
-        va_fourcc: libva::constants::VA_FOURCC_Y412,
+        rt_format: libva::VA_RT_FORMAT_YUV444_12,
+        va_fourcc: libva::VA_FOURCC_Y412,
         decoded_format: DecodedFormat::I412,
     },
 ];
@@ -117,9 +117,7 @@ fn supported_formats_for_rt_format(
 
     // See whether this RT_FORMAT is supported by the given VAProfile and
     // VAEntrypoint pair.
-    if attrs[0].value == libva::constants::VA_ATTRIB_NOT_SUPPORTED
-        || attrs[0].value & rt_format == 0
-    {
+    if attrs[0].value == libva::VA_ATTRIB_NOT_SUPPORTED || attrs[0].value & rt_format == 0 {
         return Err(anyhow!(
             "rt_format {:?} not supported for profile {:?} and entrypoint {:?}",
             rt_format,
@@ -151,14 +149,14 @@ impl TryFrom<&libva::VAImageFormat> for DecodedFormat {
 
     fn try_from(value: &libva::VAImageFormat) -> Result<Self, Self::Error> {
         match value.fourcc {
-            libva::constants::VA_FOURCC_I420 => Ok(DecodedFormat::I420),
-            libva::constants::VA_FOURCC_NV12 => Ok(DecodedFormat::NV12),
-            libva::constants::VA_FOURCC_P010 => Ok(DecodedFormat::I010),
-            libva::constants::VA_FOURCC_P012 => Ok(DecodedFormat::I012),
-            libva::constants::VA_FOURCC_Y210 => Ok(DecodedFormat::I210),
-            libva::constants::VA_FOURCC_Y212 => Ok(DecodedFormat::I212),
-            libva::constants::VA_FOURCC_Y410 => Ok(DecodedFormat::I410),
-            libva::constants::VA_FOURCC_Y412 => Ok(DecodedFormat::I412),
+            libva::VA_FOURCC_I420 => Ok(DecodedFormat::I420),
+            libva::VA_FOURCC_NV12 => Ok(DecodedFormat::NV12),
+            libva::VA_FOURCC_P010 => Ok(DecodedFormat::I010),
+            libva::VA_FOURCC_P012 => Ok(DecodedFormat::I012),
+            libva::VA_FOURCC_Y210 => Ok(DecodedFormat::I210),
+            libva::VA_FOURCC_Y212 => Ok(DecodedFormat::I212),
+            libva::VA_FOURCC_Y410 => Ok(DecodedFormat::I410),
+            libva::VA_FOURCC_Y412 => Ok(DecodedFormat::I412),
             _ => Err(anyhow!("Unsupported format")),
         }
     }

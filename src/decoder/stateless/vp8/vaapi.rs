@@ -43,19 +43,19 @@ impl VaStreamInfo for &Header {
     }
 
     fn rt_format(&self) -> anyhow::Result<u32> {
-        Ok(libva::constants::VA_RT_FORMAT_YUV420)
+        Ok(libva::VA_RT_FORMAT_YUV420)
     }
 
     fn min_num_surfaces(&self) -> usize {
         NUM_SURFACES
     }
 
-    fn coded_size(&self) -> (u32, u32) {
-        (self.width as u32, self.height as u32)
+    fn coded_size(&self) -> Resolution {
+        Resolution::from((self.width as u32, self.height as u32))
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
-        ((0, 0), self.coded_size())
+        ((0, 0), self.coded_size().into())
     }
 }
 
@@ -409,9 +409,9 @@ mod tests {
             &resolution,
             parser.segmentation(),
             parser.mb_lf_adjust(),
-            libva::constants::VA_INVALID_SURFACE,
-            libva::constants::VA_INVALID_SURFACE,
-            libva::constants::VA_INVALID_SURFACE,
+            libva::VA_INVALID_SURFACE,
+            libva::VA_INVALID_SURFACE,
+            libva::VA_INVALID_SURFACE,
         )
         .unwrap();
         let pic_param = match pic_param {
@@ -458,21 +458,15 @@ mod tests {
 
         assert_eq!(pic_param.inner().frame_width, 320);
         assert_eq!(pic_param.inner().frame_height, 240);
-        assert_eq!(
-            pic_param.inner().last_ref_frame,
-            libva::constants::VA_INVALID_SURFACE
-        );
+        assert_eq!(pic_param.inner().last_ref_frame, libva::VA_INVALID_SURFACE);
         assert_eq!(
             pic_param.inner().golden_ref_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
-        assert_eq!(
-            pic_param.inner().alt_ref_frame,
-            libva::constants::VA_INVALID_SURFACE
-        );
+        assert_eq!(pic_param.inner().alt_ref_frame, libva::VA_INVALID_SURFACE);
         assert_eq!(
             pic_param.inner().out_of_loop_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
 
         // Safe because this bitfield is initialized by the decoder.
@@ -593,7 +587,7 @@ mod tests {
         assert_eq!(pic_param.inner().alt_ref_frame, 0);
         assert_eq!(
             pic_param.inner().out_of_loop_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
 
         // Safe because this bitfield is initialized by the decoder.
@@ -707,7 +701,7 @@ mod tests {
         assert_eq!(pic_param.inner().alt_ref_frame, 0);
         assert_eq!(
             pic_param.inner().out_of_loop_frame,
-            libva::constants::VA_INVALID_SURFACE
+            libva::VA_INVALID_SURFACE
         );
 
         // Safe because this bitfield is initialized by the decoder.

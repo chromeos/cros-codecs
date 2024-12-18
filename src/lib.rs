@@ -27,6 +27,8 @@ pub mod codec;
 pub mod backend;
 #[cfg(any(feature = "vaapi", feature = "v4l2"))]
 pub mod decoder;
+#[cfg(feature = "v4l2")]
+pub mod device;
 #[cfg(any(feature = "vaapi", feature = "v4l2"))]
 pub mod encoder;
 #[cfg(any(feature = "vaapi", feature = "v4l2"))]
@@ -76,6 +78,10 @@ impl Resolution {
         }
 
         self
+    }
+
+    pub fn get_area(&self) -> usize {
+        (self.width as usize) * (self.height as usize)
     }
 }
 
