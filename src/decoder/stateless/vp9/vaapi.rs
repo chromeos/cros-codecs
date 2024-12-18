@@ -34,7 +34,6 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
-use crate::Resolution;
 
 /// The number of surfaces to allocate for this codec.
 const NUM_SURFACES: usize = 12;
@@ -47,12 +46,12 @@ fn get_rt_format(
     subsampling_y: bool,
 ) -> anyhow::Result<u32> {
     match profile {
-        Profile::Profile0 => Ok(libva::VA_RT_FORMAT_YUV420),
+        Profile::Profile0 => Ok(libva::constants::VA_RT_FORMAT_YUV420),
         Profile::Profile1 => {
             if subsampling_x && !subsampling_y {
-                Ok(libva::VA_RT_FORMAT_YUV422)
+                Ok(libva::constants::VA_RT_FORMAT_YUV422)
             } else if !subsampling_x && !subsampling_y {
-                Ok(libva::VA_RT_FORMAT_YUV444)
+                Ok(libva::constants::VA_RT_FORMAT_YUV444)
             } else {
                 Err(anyhow!(
                     "Unsupported subsampling for profile 1: X: {:?} Y: {:?}",
@@ -66,8 +65,8 @@ fn get_rt_format(
                 "Unsupported bit depth for profile 2: {:?}",
                 bit_depth
             )),
-            BitDepth::Depth10 => Ok(libva::VA_RT_FORMAT_YUV420_10),
-            BitDepth::Depth12 => Ok(libva::VA_RT_FORMAT_YUV420_12),
+            BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV420_10),
+            BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV420_12),
         },
         Profile::Profile3 => {
             if subsampling_x && !subsampling_y {
@@ -78,8 +77,8 @@ fn get_rt_format(
                             subsampling_y,
                             bit_depth
                         )),
-                        BitDepth::Depth10 => Ok(libva::VA_RT_FORMAT_YUV422_10),
-                        BitDepth::Depth12 => Ok(libva::VA_RT_FORMAT_YUV422_12),
+                        BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV422_10),
+                        BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV422_12),
                     }
             } else if !subsampling_x && !subsampling_y {
                 match bit_depth {
@@ -89,8 +88,8 @@ fn get_rt_format(
                             subsampling_y,
                             bit_depth
                         )),
-                        BitDepth::Depth10 => Ok(libva::VA_RT_FORMAT_YUV444_10),
-                        BitDepth::Depth12 => Ok(libva::VA_RT_FORMAT_YUV444_12),
+                        BitDepth::Depth10 => Ok(libva::constants::VA_RT_FORMAT_YUV444_10),
+                        BitDepth::Depth12 => Ok(libva::constants::VA_RT_FORMAT_YUV444_12),
                     }
             } else {
                 Err(anyhow!(
@@ -127,12 +126,12 @@ impl VaStreamInfo for &Header {
         NUM_SURFACES
     }
 
-    fn coded_size(&self) -> Resolution {
-        Resolution::from((self.width, self.height))
+    fn coded_size(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
-        ((0, 0), self.coded_size().into())
+        ((0, 0), self.coded_size())
     }
 }
 
@@ -233,7 +232,7 @@ fn build_slice_param(
         libva::SliceParameter::VP9(libva::SliceParameterBufferVP9::new(
             slice_size as u32,
             0,
-            libva::VA_SLICE_DATA_FLAG_ALL,
+            libva::constants::VA_SLICE_DATA_FLAG_ALL,
             seg_params,
         )),
     ))
@@ -505,8 +504,11 @@ mod tests {
 
         assert_eq!(frame.as_ref().len(), 10674);
 
-        let pic_param =
-            build_pic_param(&frame.header, [libva::VA_INVALID_SURFACE; NUM_REF_FRAMES]).unwrap();
+        let pic_param = build_pic_param(
+            &frame.header,
+            [libva::constants::VA_INVALID_SURFACE; NUM_REF_FRAMES],
+        )
+        .unwrap();
         let pic_param = match pic_param {
             BufferType::PictureParameter(PictureParameter::VP9(pic_param)) => pic_param,
             _ => panic!(),
@@ -523,7 +525,7 @@ mod tests {
         assert_eq!(pic_param.inner().frame_height, 240);
         assert_eq!(
             pic_param.inner().reference_frames,
-            [libva::VA_INVALID_SURFACE; NUM_REF_FRAMES]
+            [libva::constants::VA_INVALID_SURFACE; NUM_REF_FRAMES]
         );
 
         // Safe because this bitfield is initialized by the decoder.
@@ -550,7 +552,7 @@ mod tests {
         assert_eq!(slice_param.inner().slice_data_offset, 0);
         assert_eq!(
             slice_param.inner().slice_data_flag,
-            libva::VA_SLICE_DATA_FLAG_ALL
+            libva::constants::VA_SLICE_DATA_FLAG_ALL
         );
 
         for seg_param in &slice_param.inner().seg_param {
@@ -611,7 +613,7 @@ mod tests {
         assert_eq!(slice_param.inner().slice_data_offset, 0);
         assert_eq!(
             slice_param.inner().slice_data_flag,
-            libva::VA_SLICE_DATA_FLAG_ALL
+            libva::constants::VA_SLICE_DATA_FLAG_ALL
         );
 
         for seg_param in &slice_param.inner().seg_param {
@@ -673,7 +675,7 @@ mod tests {
         assert_eq!(slice_param.inner().slice_data_offset, 0);
         assert_eq!(
             slice_param.inner().slice_data_flag,
-            libva::VA_SLICE_DATA_FLAG_ALL
+            libva::constants::VA_SLICE_DATA_FLAG_ALL
         );
 
         for seg_param in &slice_param.inner().seg_param {

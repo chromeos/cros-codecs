@@ -109,15 +109,15 @@ impl VaStreamInfo for &Sps {
         let chroma_format_idc = self.chroma_format_idc;
 
         match (bit_depth, chroma_format_idc) {
-            (8, 0) | (8, 1) => Ok(libva::VA_RT_FORMAT_YUV420),
-            (8, 2) => Ok(libva::VA_RT_FORMAT_YUV422),
-            (8, 3) => Ok(libva::VA_RT_FORMAT_YUV444),
-            (9, 0) | (9, 1) | (10, 0) | (10, 1) => Ok(libva::VA_RT_FORMAT_YUV420_10),
-            (9, 2) | (10, 2) => Ok(libva::VA_RT_FORMAT_YUV422_10),
-            (9, 3) | (10, 3) => Ok(libva::VA_RT_FORMAT_YUV444_10),
-            (11, 0) | (11, 1) | (12, 0) | (12, 1) => Ok(libva::VA_RT_FORMAT_YUV420_12),
-            (11, 2) | (12, 2) => Ok(libva::VA_RT_FORMAT_YUV422_12),
-            (11, 3) | (12, 3) => Ok(libva::VA_RT_FORMAT_YUV444_12),
+            (8, 0) | (8, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420),
+            (8, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422),
+            (8, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444),
+            (9, 0) | (9, 1) | (10, 0) | (10, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420_10),
+            (9, 2) | (10, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422_10),
+            (9, 3) | (10, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444_10),
+            (11, 0) | (11, 1) | (12, 0) | (12, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420_12),
+            (11, 2) | (12, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422_12),
+            (11, 3) | (12, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444_12),
             _ => Err(anyhow!(
                 "unsupported bit depth/chroma format pair {}, {}",
                 bit_depth,
@@ -130,8 +130,8 @@ impl VaStreamInfo for &Sps {
         self.max_dpb_size() + 4
     }
 
-    fn coded_size(&self) -> Resolution {
-        Resolution::from((self.width().into(), self.height().into()))
+    fn coded_size(&self) -> (u32, u32) {
+        (self.width().into(), self.height().into())
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
@@ -154,7 +154,7 @@ fn build_slice_ref_pic_list<M: SurfaceMemoryDescriptor>(
 
         if let Some(ref_pic_list_entry) = ref_pic_list_entry {
             for (va_ref_idx, va_ref) in va_references.iter().enumerate() {
-                if va_ref.picture_id() == libva::VA_INVALID_ID {
+                if va_ref.picture_id() == libva::constants::VA_INVALID_ID {
                     break;
                 }
 
@@ -183,21 +183,21 @@ fn va_rps_flag<M: SurfaceMemoryDescriptor>(
         .flatten()
         .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
     {
-        libva::VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE
+        libva::constants::VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE
     } else if rps
         .ref_pic_set_st_curr_after
         .iter()
         .flatten()
         .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
     {
-        libva::VA_PICTURE_HEVC_RPS_ST_CURR_AFTER
+        libva::constants::VA_PICTURE_HEVC_RPS_ST_CURR_AFTER
     } else if rps
         .ref_pic_set_lt_curr
         .iter()
         .flatten()
         .any(|dpb_entry| *dpb_entry.0.borrow() == *hevc_pic)
     {
-        libva::VA_PICTURE_HEVC_RPS_LT_CURR
+        libva::constants::VA_PICTURE_HEVC_RPS_LT_CURR
     } else {
         0
     }
@@ -206,7 +206,11 @@ fn va_rps_flag<M: SurfaceMemoryDescriptor>(
 /// Builds an invalid VaPictureHEVC. These pictures are used to fill empty
 /// array slots there is no data to fill them with.
 fn build_invalid_va_hevc_pic() -> libva::PictureHEVC {
-    libva::PictureHEVC::new(libva::VA_INVALID_ID, 0, libva::VA_PICTURE_HEVC_INVALID)
+    libva::PictureHEVC::new(
+        libva::constants::VA_INVALID_ID,
+        0,
+        libva::constants::VA_PICTURE_HEVC_INVALID,
+    )
 }
 
 fn fill_va_hevc_pic<M: SurfaceMemoryDescriptor>(
@@ -217,7 +221,7 @@ fn fill_va_hevc_pic<M: SurfaceMemoryDescriptor>(
     let mut flags = 0;
 
     if matches!(hevc_pic.reference(), Reference::LongTerm) {
-        flags |= libva::VA_PICTURE_HEVC_LONG_TERM_REFERENCE;
+        flags |= libva::constants::VA_PICTURE_HEVC_LONG_TERM_REFERENCE;
     }
 
     flags |= va_rps_flag(hevc_pic, rps);
@@ -771,7 +775,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         let slice_param = SliceParameterBufferHEVC::new(
             slice.nalu.size as u32,
             0,
-            libva::VA_SLICE_DATA_FLAG_ALL,
+            libva::constants::VA_SLICE_DATA_FLAG_ALL,
             (hdr.header_bit_size / 8) as _,
             hdr.segment_address,
             [ref_pic_list0, ref_pic_list1],

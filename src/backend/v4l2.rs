@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-//! V4L2 backend
+//! V4L2 backend for stateful encoders.
 
-pub mod decoder;
-#[cfg(feature = "v4l2")]
 pub mod encoder;
 
 impl From<v4l2r::PixelFormat> for crate::Fourcc {

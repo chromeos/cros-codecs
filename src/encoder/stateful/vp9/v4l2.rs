@@ -130,12 +130,12 @@ mod tests {
     use v4l2r::device::Device;
     use v4l2r::device::DeviceConfig;
 
-    use crate::backend::v4l2::encoder::find_device_with_capture;
+    use crate::backend::v4l2::encoder::tests::find_device_with_capture;
     use crate::backend::v4l2::encoder::tests::perform_v4l2_encoder_dmabuf_test;
     use crate::backend::v4l2::encoder::tests::perform_v4l2_encoder_mmap_test;
+    use crate::backend::v4l2::encoder::tests::v4l2_format_to_frame_layout;
     use crate::backend::v4l2::encoder::tests::BoPoolAllocator;
     use crate::backend::v4l2::encoder::tests::GbmDevice;
-    use crate::backend::v4l2::encoder::v4l2_format_to_frame_layout;
     use crate::backend::v4l2::encoder::MmapingCapture;
     use crate::encoder::simple_encode_loop;
     use crate::encoder::tests::userptr_test_frame_generator;
