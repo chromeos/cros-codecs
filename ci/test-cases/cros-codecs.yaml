@@ -1,0 +1,7 @@
+metadata:
+  name: cros-codecs-fluster
+  description: "Test cros-codecs"
+
+run:
+  steps:
+    - python3 ci/test-cases/run_tests.py --config-file ci/config.yaml --arch ${ARCH} --ccdec-build-id ${CCDEC_BUILD_ID} --token ${GITHUB_TOKEN} --repo ${GITHUB_REPO}
