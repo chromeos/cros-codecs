@@ -42,6 +42,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::Resolution;
 
 impl VaStreamInfo for &Rc<Sps> {
     fn va_profile(&self) -> anyhow::Result<i32> {
@@ -81,15 +82,15 @@ impl VaStreamInfo for &Rc<Sps> {
         let chroma_format_idc = self.chroma_format_idc;
 
         match (bit_depth_luma, chroma_format_idc) {
-            (8, 0) | (8, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420),
-            (8, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422),
-            (8, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444),
-            (10, 0) | (10, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420_10),
-            (10, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422_10),
-            (10, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444_10),
-            (12, 0) | (12, 1) => Ok(libva::constants::VA_RT_FORMAT_YUV420_12),
-            (12, 2) => Ok(libva::constants::VA_RT_FORMAT_YUV422_12),
-            (12, 3) => Ok(libva::constants::VA_RT_FORMAT_YUV444_12),
+            (8, 0) | (8, 1) => Ok(libva::VA_RT_FORMAT_YUV420),
+            (8, 2) => Ok(libva::VA_RT_FORMAT_YUV422),
+            (8, 3) => Ok(libva::VA_RT_FORMAT_YUV444),
+            (10, 0) | (10, 1) => Ok(libva::VA_RT_FORMAT_YUV420_10),
+            (10, 2) => Ok(libva::VA_RT_FORMAT_YUV422_10),
+            (10, 3) => Ok(libva::VA_RT_FORMAT_YUV444_10),
+            (12, 0) | (12, 1) => Ok(libva::VA_RT_FORMAT_YUV420_12),
+            (12, 2) => Ok(libva::VA_RT_FORMAT_YUV422_12),
+            (12, 3) => Ok(libva::VA_RT_FORMAT_YUV444_12),
             _ => Err(anyhow!(
                 "unsupported bit depth/chroma format pair {}, {}",
                 bit_depth_luma,
@@ -102,8 +103,8 @@ impl VaStreamInfo for &Rc<Sps> {
         self.max_dpb_frames() + 4
     }
 
-    fn coded_size(&self) -> (u32, u32) {
-        (self.width(), self.height())
+    fn coded_size(&self) -> Resolution {
+        Resolution::from((self.width(), self.height()))
     }
 
     fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
@@ -121,11 +122,11 @@ fn fill_va_h264_pic(
 ) -> libva::PictureH264 {
     let mut flags = 0;
     let frame_idx = if matches!(h264_pic.reference(), Reference::LongTerm) {
-        flags |= libva::constants::VA_PICTURE_H264_LONG_TERM_REFERENCE;
+        flags |= libva::VA_PICTURE_H264_LONG_TERM_REFERENCE;
         h264_pic.long_term_frame_idx
     } else {
         if matches!(h264_pic.reference(), Reference::ShortTerm { .. }) {
-            flags |= libva::constants::VA_PICTURE_H264_SHORT_TERM_REFERENCE;
+            flags |= libva::VA_PICTURE_H264_SHORT_TERM_REFERENCE;
         }
 
         h264_pic.frame_num
@@ -145,7 +146,7 @@ fn fill_va_h264_pic(
                     bottom_field_order_cnt = other_field.borrow().bottom_field_order_cnt
                 }
                 (_, _) => {
-                    flags |= libva::constants::VA_PICTURE_H264_TOP_FIELD;
+                    flags |= libva::VA_PICTURE_H264_TOP_FIELD;
                     bottom_field_order_cnt = 0;
                 }
             }
@@ -158,7 +159,7 @@ fn fill_va_h264_pic(
                     top_field_order_cnt = other_field.borrow().top_field_order_cnt
                 }
                 (_, _) => {
-                    flags |= libva::constants::VA_PICTURE_H264_BOTTOM_FIELD;
+                    flags |= libva::VA_PICTURE_H264_BOTTOM_FIELD;
                     top_field_order_cnt = 0;
                 }
             }
@@ -180,9 +181,9 @@ fn fill_va_h264_pic(
 /// array slots there is no data to fill them with.
 fn build_invalid_va_h264_pic() -> libva::PictureH264 {
     libva::PictureH264::new(
-        libva::constants::VA_INVALID_ID,
+        libva::VA_INVALID_ID,
         0,
-        libva::constants::VA_PICTURE_H264_INVALID,
+        libva::VA_PICTURE_H264_INVALID,
         0,
         0,
     )
@@ -428,7 +429,7 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
     let slice_param = libva::SliceParameterBufferH264::new(
         slice_size as u32,
         0,
-        libva::constants::VA_SLICE_DATA_FLAG_ALL,
+        libva::VA_SLICE_DATA_FLAG_ALL,
         hdr.header_bit_size as u16,
         hdr.first_mb_in_slice as u16,
         hdr.slice_type as u8,
