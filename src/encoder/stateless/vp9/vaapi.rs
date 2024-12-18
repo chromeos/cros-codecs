@@ -7,6 +7,7 @@ use std::borrow::Borrow;
 use std::rc::Rc;
 
 use anyhow::Context;
+use libva::constants::VA_INVALID_SURFACE;
 use libva::BufferType;
 use libva::Display;
 use libva::EncPictureParameter;
@@ -20,7 +21,6 @@ use libva::VAProfile::VAProfileVP9Profile0;
 use libva::VAProfile::VAProfileVP9Profile2;
 use libva::VP9EncPicFlags;
 use libva::VP9EncRefFlags;
-use libva::VA_INVALID_SURFACE;
 
 use crate::backend::vaapi::encoder::tunings_to_libva_rc;
 use crate::backend::vaapi::encoder::CodedOutputPromise;
@@ -240,14 +240,9 @@ where
             request.input,
         );
 
-        let framerate_param = BufferType::EncMiscParameter(libva::EncMiscParameter::FrameRate(
-            libva::EncMiscParameterFrameRate::new(request.tunings.framerate, 0),
-        ));
-
         picture.add_buffer(self.context().create_buffer(seq_param)?);
         picture.add_buffer(self.context().create_buffer(pic_param)?);
         picture.add_buffer(self.context().create_buffer(rc_param)?);
-        picture.add_buffer(self.context().create_buffer(framerate_param)?);
 
         // Start processing the picture encoding
         let picture = picture.begin().context("picture begin")?;
@@ -279,8 +274,8 @@ where
         blocking_mode: BlockingMode,
     ) -> EncodeResult<Self> {
         let bitrate_control = match config.initial_tunings.rate_control {
-            RateControl::ConstantBitrate(_) => libva::VA_RC_CBR,
-            RateControl::ConstantQuality(_) => libva::VA_RC_CQP,
+            RateControl::ConstantBitrate(_) => libva::constants::VA_RC_CBR,
+            RateControl::ConstantQuality(_) => libva::constants::VA_RC_CQP,
         };
 
         let va_profile = match config.bit_depth {
@@ -304,11 +299,11 @@ where
 pub(super) mod tests {
     use std::rc::Rc;
 
+    use libva::constants::VA_RT_FORMAT_YUV420;
+    use libva::constants::VA_RT_FORMAT_YUV420_10;
     use libva::Display;
     use libva::UsageHint;
     use libva::VAEntrypoint::VAEntrypointEncSliceLP;
-    use libva::VA_RT_FORMAT_YUV420;
-    use libva::VA_RT_FORMAT_YUV420_10;
 
     use super::*;
     use crate::backend::vaapi::encoder::tests::upload_test_frame_nv12;
@@ -376,7 +371,7 @@ pub(super) mod tests {
                 width: WIDTH,
                 height: HEIGHT,
             },
-            libva::VA_RC_CBR,
+            libva::constants::VA_RC_CBR,
             low_power,
         )
         .unwrap();

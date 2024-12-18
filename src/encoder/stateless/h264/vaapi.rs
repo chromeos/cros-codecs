@@ -7,6 +7,9 @@ use std::borrow::Borrow;
 use std::rc::Rc;
 
 use anyhow::Context;
+use libva::constants::VA_INVALID_ID;
+use libva::constants::VA_PICTURE_H264_LONG_TERM_REFERENCE;
+use libva::constants::VA_PICTURE_H264_SHORT_TERM_REFERENCE;
 use libva::BufferType;
 use libva::Display;
 use libva::EncCodedBuffer;
@@ -25,9 +28,6 @@ use libva::PictureH264;
 use libva::Surface;
 use libva::SurfaceMemoryDescriptor;
 use libva::VAProfile;
-use libva::VA_INVALID_ID;
-use libva::VA_PICTURE_H264_LONG_TERM_REFERENCE;
-use libva::VA_PICTURE_H264_SHORT_TERM_REFERENCE;
 
 use crate::backend::vaapi::encoder::tunings_to_libva_rc;
 use crate::backend::vaapi::encoder::CodedOutputPromise;
@@ -79,9 +79,9 @@ where
     /// holder to fill staticly sized array.
     fn build_invalid_va_h264_pic_enc() -> libva::PictureH264 {
         libva::PictureH264::new(
-            libva::VA_INVALID_ID,
+            libva::constants::VA_INVALID_ID,
             0,
-            libva::VA_PICTURE_H264_INVALID,
+            libva::constants::VA_PICTURE_H264_INVALID,
             0,
             0,
         )
@@ -414,15 +414,10 @@ where
             tunings_to_libva_rc::<{ MIN_QP as u32 }, { MAX_QP as u32 }>(&request.tunings)?;
         let rc_param = BufferType::EncMiscParameter(libva::EncMiscParameter::RateControl(rc_param));
 
-        let framerate_param = BufferType::EncMiscParameter(libva::EncMiscParameter::FrameRate(
-            libva::EncMiscParameterFrameRate::new(request.tunings.framerate, 0),
-        ));
-
         picture.add_buffer(self.context().create_buffer(seq_param)?);
         picture.add_buffer(self.context().create_buffer(pic_param)?);
         picture.add_buffer(self.context().create_buffer(slice_param)?);
         picture.add_buffer(self.context().create_buffer(rc_param)?);
-        picture.add_buffer(self.context().create_buffer(framerate_param)?);
 
         // Start processing the picture encoding
         let picture = picture.begin().context("picture begin")?;
@@ -467,8 +462,8 @@ where
         };
 
         let bitrate_control = match config.initial_tunings.rate_control {
-            RateControl::ConstantBitrate(_) => libva::VA_RC_CBR,
-            RateControl::ConstantQuality(_) => libva::VA_RC_CQP,
+            RateControl::ConstantBitrate(_) => libva::constants::VA_RC_CBR,
+            RateControl::ConstantQuality(_) => libva::constants::VA_RC_CQP,
         };
 
         let backend = VaapiBackend::new(
@@ -486,11 +481,11 @@ where
 
 #[cfg(test)]
 pub(super) mod tests {
+    use libva::constants::VA_RT_FORMAT_YUV420;
     use libva::Display;
     use libva::UsageHint;
     use libva::VAEntrypoint::VAEntrypointEncSliceLP;
     use libva::VAProfile::VAProfileH264Main;
-    use libva::VA_RT_FORMAT_YUV420;
 
     use super::*;
     use crate::backend::vaapi::encoder::tests::upload_test_frame_nv12;
@@ -558,7 +553,7 @@ pub(super) mod tests {
                 width: WIDTH,
                 height: HEIGHT,
             },
-            libva::VA_RC_CBR,
+            libva::constants::VA_RC_CBR,
             low_power,
         )
         .unwrap();

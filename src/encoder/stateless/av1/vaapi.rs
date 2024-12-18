@@ -5,6 +5,7 @@
 use std::num::TryFromIntError;
 use std::rc::Rc;
 
+use libva::constants::VA_INVALID_ID;
 use libva::AV1EncLoopFilterFlags;
 use libva::AV1EncLoopRestorationFlags;
 use libva::AV1EncModeControlFlags;
@@ -25,7 +26,6 @@ use libva::SurfaceMemoryDescriptor;
 use libva::VAProfile::VAProfileAV1Profile0;
 use libva::VAProfile::VAProfileAV1Profile1;
 use libva::VaError;
-use libva::VA_INVALID_ID;
 
 use crate::backend::vaapi::encoder::CodedOutputPromise;
 use crate::backend::vaapi::encoder::Reconstructed;
@@ -230,11 +230,8 @@ where
         // Current we always expect the reconstructed frame.
         const DISABLE_FRAME_RECON: bool = false;
 
-        // Palette mode is not used. This also implies force_integer_mv and
-        // allow_screen_content_tools should be false.
+        // Palette mode is not used.
         const PALETTE_MODE_ENABLE: bool = false;
-        const FORCE_INTEGER_MV: bool = false;
-        const ALLOW_SCREEN_CONTENT_TOOLS: bool = false;
 
         // Use 16x16 block size for now.
         // TODO: Use maximum available
@@ -395,8 +392,6 @@ where
                 DISABLE_FRAME_RECON,
                 request.frame.allow_intrabc,
                 PALETTE_MODE_ENABLE,
-                ALLOW_SCREEN_CONTENT_TOOLS,
-                FORCE_INTEGER_MV,
             ),
             SEG_ID_BLOCK_SIZE,
             NUM_TILE_GROUPS_MINUS1,
@@ -579,7 +574,7 @@ where
             va_profile,
             fourcc,
             coded_size,
-            libva::VA_RC_CQP,
+            libva::constants::VA_RC_CQP,
             low_power,
         )?;
 
@@ -589,12 +584,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use libva::constants::VA_RT_FORMAT_YUV420;
+    use libva::constants::VA_RT_FORMAT_YUV420_10;
     use libva::Display;
     use libva::UsageHint;
     use libva::VAEntrypoint::VAEntrypointEncSliceLP;
     use libva::VAProfile::VAProfileAV1Profile0;
-    use libva::VA_RT_FORMAT_YUV420;
-    use libva::VA_RT_FORMAT_YUV420_10;
 
     use super::*;
     use crate::backend::vaapi::encoder::tests::upload_test_frame_nv12;
@@ -678,7 +673,7 @@ mod tests {
                 width: WIDTH,
                 height: HEIGHT,
             },
-            libva::VA_RC_CQP,
+            libva::constants::VA_RC_CQP,
             low_power,
         )
         .unwrap();

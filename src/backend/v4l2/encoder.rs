@@ -1,12 +1,10 @@
 // Copyright 2024 The ChromiumOS Authors
 // Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::os::fd::AsRawFd;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use nix::sys::stat::fstat;
@@ -25,19 +23,18 @@ use v4l2r::device::poller::Poller;
 use v4l2r::device::queue::direction::Capture;
 use v4l2r::device::queue::direction::Output;
 use v4l2r::device::queue::dqbuf::DqBuffer;
+use v4l2r::device::queue::qbuf::get_free::GetFreeBufferError;
+use v4l2r::device::queue::qbuf::get_free::GetFreeCaptureBuffer;
+use v4l2r::device::queue::qbuf::get_free::GetFreeOutputBuffer;
+use v4l2r::device::queue::qbuf::OutputQueueable;
+use v4l2r::device::queue::qbuf::OutputQueueableProvider;
 use v4l2r::device::queue::qbuf::QBuffer;
 use v4l2r::device::queue::BuffersAllocated;
 use v4l2r::device::queue::CreateQueueError;
-use v4l2r::device::queue::GetFreeBufferError;
-use v4l2r::device::queue::GetFreeCaptureBuffer;
-use v4l2r::device::queue::GetFreeOutputBuffer;
-use v4l2r::device::queue::OutputQueueable;
-use v4l2r::device::queue::OutputQueueableProvider;
 use v4l2r::device::queue::Queue;
 use v4l2r::device::queue::RequestBuffersError;
 use v4l2r::device::AllocatedQueue;
 use v4l2r::device::Device;
-use v4l2r::device::DeviceConfig;
 use v4l2r::device::Stream;
 use v4l2r::device::TryDequeue;
 use v4l2r::ioctl;
@@ -72,7 +69,6 @@ use crate::encoder::Tunings;
 use crate::utils::DmabufFrame;
 use crate::utils::UserPtrFrame;
 use crate::Fourcc;
-use crate::FrameLayout;
 use crate::Resolution;
 
 #[derive(Debug, Error)]
@@ -324,12 +320,7 @@ pub trait CaptureBuffers {
     /// otherwise if the buffer may not be queue returns false.
     fn queue(
         &mut self,
-        buffer: QBuffer<
-            Capture,
-            Vec<Self::PlaneHandle>,
-            Vec<Self::PlaneHandle>,
-            &Queue<Capture, BuffersAllocated<Vec<Self::PlaneHandle>>>,
-        >,
+        buffer: QBuffer<'_, Capture, Vec<Self::PlaneHandle>, Vec<Self::PlaneHandle>>,
     ) -> anyhow::Result<bool>;
 
     /// Maps the the buffer and returns its contents in form of [`Vec<u8>`]
@@ -344,12 +335,7 @@ impl CaptureBuffers for MmapingCapture {
 
     fn queue(
         &mut self,
-        buffer: QBuffer<
-            Capture,
-            Vec<Self::PlaneHandle>,
-            Vec<Self::PlaneHandle>,
-            &Queue<Capture, BuffersAllocated<Vec<Self::PlaneHandle>>>,
-        >,
+        buffer: QBuffer<'_, Capture, Vec<Self::PlaneHandle>, Vec<Self::PlaneHandle>>,
     ) -> anyhow::Result<bool> {
         buffer.queue()?;
         Ok(true)
@@ -643,8 +629,8 @@ where
         let output_pixfmt: PixelFormat = fourcc.0.into();
 
         let output_format = Format {
-            width: coded_size.width,
-            height: coded_size.height,
+            width: visible_size.width,
+            height: visible_size.height,
             pixelformat: output_pixfmt,
             // Let the driver pick
             plane_fmt: vec![],
@@ -662,13 +648,11 @@ where
 
         Self::apply_ctrl(&device, "header mode", VideoHeaderMode::JoinedWith1stFrame)?;
 
-        if visible_size.width > output_format.width || visible_size.height > output_format.height {
+        if visible_size.width > coded_size.width || visible_size.height > coded_size.height {
             return Err(InitializationError::Unsupported(
                 UnsupportedError::FrameUpscaling,
             ));
-        } else if visible_size.width != output_format.width
-            || visible_size.height != output_format.height
-        {
+        } else if visible_size != coded_size {
             log::info!("The frame visible size is not aligned to coded size, applying selection");
             if let Err(err) = Self::apply_selection(&device, visible_size) {
                 log::error!("Failed to set selection: {err:?}");
@@ -974,60 +958,6 @@ where
     }
 }
 
-pub fn find_device_with_capture(pixfmt: v4l2r::PixelFormat) -> Option<PathBuf> {
-    const MAX_DEVICE_NO: usize = 128;
-    for dev_no in 0..MAX_DEVICE_NO {
-        let device_path = PathBuf::from(format!("/dev/video{dev_no}"));
-        let Ok(device) = Device::open(&device_path, DeviceConfig::new()) else {
-            continue;
-        };
-
-        let device = Arc::new(device);
-
-        let Ok(queue) = Queue::get_capture_mplane_queue(device) else {
-            continue;
-        };
-
-        for fmt in queue.format_iter() {
-            if fmt.pixelformat == pixfmt {
-                return Some(device_path);
-            }
-        }
-    }
-
-    None
-}
-
-pub fn v4l2_format_to_frame_layout(format: &v4l2r::Format) -> FrameLayout {
-    let mut layout = FrameLayout {
-        format: (Fourcc::from(format.pixelformat.to_u32()), 0),
-        size: Resolution {
-            width: format.width,
-            height: format.height,
-        },
-        planes: format
-            .plane_fmt
-            .iter()
-            .map(|plane| crate::PlaneLayout {
-                buffer_index: 0,
-                offset: 0,
-                stride: plane.bytesperline as usize,
-            })
-            .collect(),
-    };
-
-    // Patch FrameLayout
-    match &format.pixelformat.to_fourcc() {
-        b"NM12" if layout.planes.len() == 2 => {
-            layout.planes[1].buffer_index = 1;
-        }
-        b"NV12" if layout.planes.len() == 1 => {}
-        _ => panic!("Unknown format"),
-    };
-
-    layout
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use std::os::fd::AsFd;
@@ -1049,6 +979,31 @@ pub(crate) mod tests {
     use crate::encoder::tests::fill_test_frame_nm12;
     use crate::encoder::tests::fill_test_frame_nv12;
     use crate::encoder::tests::get_test_frame_t;
+    use crate::FrameLayout;
+
+    pub fn find_device_with_capture(pixfmt: v4l2r::PixelFormat) -> Option<PathBuf> {
+        const MAX_DEVICE_NO: usize = 128;
+        for dev_no in 0..MAX_DEVICE_NO {
+            let device_path = PathBuf::from(format!("/dev/video{dev_no}"));
+            let Ok(device) = Device::open(&device_path, DeviceConfig::new()) else {
+                continue;
+            };
+
+            let device = Arc::new(device);
+
+            let Ok(queue) = Queue::get_capture_mplane_queue(device) else {
+                continue;
+            };
+
+            for fmt in queue.format_iter() {
+                if fmt.pixelformat == pixfmt {
+                    return Some(device_path);
+                }
+            }
+        }
+
+        None
+    }
 
     /// A simple wrapper for a GBM device node.
     pub struct GbmDevice(std::fs::File);
@@ -1180,6 +1135,36 @@ pub(crate) mod tests {
 
             Ok(content)
         }
+    }
+
+    pub fn v4l2_format_to_frame_layout(format: &v4l2r::Format) -> FrameLayout {
+        let mut layout = FrameLayout {
+            format: (Fourcc::from(format.pixelformat.to_u32()), 0),
+            size: Resolution {
+                width: format.width,
+                height: format.height,
+            },
+            planes: format
+                .plane_fmt
+                .iter()
+                .map(|plane| crate::PlaneLayout {
+                    buffer_index: 0,
+                    offset: 0,
+                    stride: plane.bytesperline as usize,
+                })
+                .collect(),
+        };
+
+        // Patch FrameLayout
+        match &format.pixelformat.to_fourcc() {
+            b"NM12" if layout.planes.len() == 2 => {
+                layout.planes[1].buffer_index = 1;
+            }
+            b"NV12" if layout.planes.len() == 1 => {}
+            _ => panic!("Unknown format"),
+        };
+
+        layout
     }
 
     pub struct TestMmapFrame {

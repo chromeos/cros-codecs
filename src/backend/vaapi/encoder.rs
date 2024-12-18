@@ -414,8 +414,8 @@ where
 pub(crate) mod tests {
     use std::borrow::Borrow;
 
-    use libva::VA_FOURCC_NV12;
-    use libva::VA_FOURCC_P010;
+    use libva::constants::VA_FOURCC_NV12;
+    use libva::constants::VA_FOURCC_P010;
 
     use super::*;
     use crate::encoder::tests::fill_test_frame_nv12;

@@ -4,8 +4,6 @@
 
 #[cfg(any(test, fuzzing))]
 mod dummy;
-#[cfg(feature = "v4l2")]
-mod v4l2;
 #[cfg(feature = "vaapi")]
 mod vaapi;
 
