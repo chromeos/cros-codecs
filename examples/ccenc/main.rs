@@ -4,19 +4,18 @@
 
 use std::fs::File;
 
-mod md5;
 mod util;
 use util::Args;
 
 #[cfg(feature = "vaapi")]
-mod vaapi_decoder;
+mod vaapi_encoder;
 #[cfg(feature = "vaapi")]
-use vaapi_decoder::do_decode;
+use vaapi_encoder::do_encode;
 
 #[cfg(feature = "v4l2")]
-mod v4l2_stateless_decoder;
+mod v4l2_stateful_encoder;
 #[cfg(feature = "v4l2")]
-use v4l2_stateless_decoder::do_decode;
+use v4l2_stateful_encoder::do_encode;
 
 fn main() {
     env_logger::init();
@@ -25,5 +24,5 @@ fn main() {
 
     let input = File::open(&args.input).expect("error opening input file");
 
-    do_decode(input, args);
+    do_encode(input, args);
 }

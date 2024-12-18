@@ -10,7 +10,7 @@
 
 #[cfg(any(test, fuzzing))]
 pub(crate) mod dummy;
-#[cfg(feature = "v4l2")]
+#[cfg(any(feature = "v4l2"))]
 pub mod v4l2;
 #[cfg(feature = "vaapi")]
 pub mod vaapi;
