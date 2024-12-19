@@ -14,14 +14,19 @@ use v4l2r::device::queue::direction::Output;
 use v4l2r::device::queue::dqbuf::DqBuffer;
 use v4l2r::device::queue::qbuf::QBuffer;
 use v4l2r::device::queue::BuffersAllocated;
+use v4l2r::device::queue::CreateQueueError;
 use v4l2r::device::queue::GetFreeCaptureBuffer;
 use v4l2r::device::queue::GetFreeOutputBuffer;
 use v4l2r::device::queue::Queue;
 use v4l2r::device::queue::QueueInit;
+use v4l2r::device::queue::RequestBuffersError;
 use v4l2r::device::AllocatedQueue;
 use v4l2r::device::Device;
 use v4l2r::device::Stream;
 use v4l2r::device::TryDequeue;
+use v4l2r::ioctl::GFmtError;
+use v4l2r::ioctl::SFmtError;
+use v4l2r::ioctl::StreamOnError;
 use v4l2r::memory::MemoryType;
 use v4l2r::memory::MmapHandle;
 use v4l2r::nix::sys::time::TimeVal;
@@ -49,6 +54,46 @@ enum V4l2QueueHandle<T: v4l2r::device::queue::direction::Direction> {
     Streaming(Rc<Queue<T, BuffersAllocated<Vec<MmapHandle>>>>),
     #[default]
     Unknown,
+}
+
+#[derive(Debug)]
+pub enum QueueError {
+    Creation,
+    FormatGet,
+    FormatSet,
+    RequestBuffers,
+    StreamOn,
+    UnsupportedPixelFormat(Fourcc),
+}
+
+impl From<CreateQueueError> for QueueError {
+    fn from(_err: CreateQueueError) -> Self {
+        QueueError::Creation
+    }
+}
+
+impl From<GFmtError> for QueueError {
+    fn from(_err: GFmtError) -> Self {
+        QueueError::FormatGet
+    }
+}
+
+impl From<SFmtError> for QueueError {
+    fn from(_err: SFmtError) -> Self {
+        QueueError::FormatSet
+    }
+}
+
+impl From<RequestBuffersError> for QueueError {
+    fn from(_err: RequestBuffersError) -> Self {
+        QueueError::RequestBuffers
+    }
+}
+
+impl From<StreamOnError> for QueueError {
+    fn from(_err: StreamOnError) -> Self {
+        QueueError::StreamOn
+    }
 }
 
 //TODO: handle memory backends other than mmap
@@ -117,7 +162,19 @@ impl V4l2OutputBuffer {
 #[derive(Clone)]
 pub struct V4l2OutputQueue {
     handle: Rc<RefCell<V4l2QueueHandle<direction::Output>>>,
-    num_buffers: u32,
+}
+
+fn buffer_size_for_area(width: u32, height: u32) -> u32 {
+    let area = width * height;
+    let mut buffer_size: u32 = 1024 * 1024;
+
+    if area > 720 * 480 {
+        buffer_size *= 2;
+    }
+    if area > 1920 * 1080 {
+        buffer_size *= 2;
+    }
+    buffer_size
 }
 
 // TODO because of the queueing model the OUTPUT buffer count must be equal to
@@ -131,58 +188,48 @@ impl V4l2OutputQueue {
         let handle = Queue::get_output_mplane_queue(device).expect("Failed to get output queue");
         log::debug!("Output queue:\n\tstate: None -> Init\n");
         let handle = Rc::new(RefCell::new(V4l2QueueHandle::Init(handle)));
-        Self {
-            handle,
-            num_buffers: NUM_OUTPUT_BUFFERS,
-        }
+        Self { handle }
     }
-    pub fn initialize_queue(&mut self, format: Fourcc, res: Resolution) -> &mut Self {
+
+    pub fn initialize(
+        &mut self,
+        fourcc: Fourcc,
+        resolution: Resolution,
+    ) -> Result<&mut Self, QueueError> {
         self.handle.replace(match self.handle.take() {
             V4l2QueueHandle::Init(mut handle) => {
-                let (width, height) = res.into();
-
+                let (width, height) = resolution.into();
                 handle
-                    .change_format()
-                    .expect("Failed to change output format")
+                    .change_format()?
                     .set_size(width as usize, height as usize)
-                    .set_pixelformat(format)
-                    // 1 MB per decoding unit should be enough for most streams.
+                    .set_pixelformat(fourcc)
                     .set_planes_layout(vec![PlaneLayout {
-                        sizeimage: 1024 * 1024,
+                        sizeimage: buffer_size_for_area(width, height),
                         ..Default::default()
                     }])
-                    .apply::<v4l2_format>()
-                    .expect("Failed to apply output format");
+                    .apply::<v4l2_format>()?;
 
-                let format: Format = handle.get_format().expect("Failed to get output format");
-                log::debug!("Output format:\n\t{:?}\n", format);
+                let format: Format = handle.get_format()?;
+                if format.pixelformat != fourcc.into() {
+                    return Err(QueueError::UnsupportedPixelFormat(fourcc));
+                }
 
-                let handle = handle
-                    .request_buffers_generic::<Vec<MmapHandle>>(MemoryType::Mmap, self.num_buffers)
-                    .expect("Failed to request output buffers");
-                log::debug!(
-                    "Output queue:\n\t
-                    num_buffers: {}\n\t
-                    num_queued_buffers: {}\n\t
-                    num_free_buffers: {}\n",
-                    handle.num_buffers(),
-                    handle.num_queued_buffers(),
-                    handle.num_free_buffers()
-                );
+                let handle = handle.request_buffers_generic::<Vec<MmapHandle>>(
+                    MemoryType::Mmap,
+                    NUM_OUTPUT_BUFFERS,
+                )?;
 
-                // TODO: handle start/stop at runtime
-                handle.stream_on().expect("Failed to start output queue");
+                handle.stream_on()?;
 
-                log::debug!("Output queue:\n\tstate: Init -> Streaming\n");
                 V4l2QueueHandle::Streaming(handle.into())
             }
             _ => {
-                /* TODO: handle DRC */
-                todo!()
+                todo!("DRC is not supported")
             }
         });
-        self
+        Ok(self)
     }
+
     pub fn num_free_buffers(&self) -> usize {
         let handle = &*self.handle.borrow();
         match handle {
