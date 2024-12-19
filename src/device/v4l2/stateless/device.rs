@@ -128,7 +128,8 @@ impl V4l2Device {
         self.handle
             .borrow_mut()
             .capture_queue
-            .initialize_queue(visible_rect, num_buffers);
+            .initialize(visible_rect, num_buffers)
+            .expect("Unable to initialize capture queue");
         self
     }
     pub fn alloc_request(&self, timestamp: u64) -> Result<V4l2Request, DecodeError> {

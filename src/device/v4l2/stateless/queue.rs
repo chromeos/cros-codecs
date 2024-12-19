@@ -372,39 +372,34 @@ impl V4l2CaptureQueue {
             format: Default::default(),
         }
     }
-    pub fn initialize_queue(&mut self, visible_rect: Rect, num_buffers: u32) -> &mut Self {
+
+    pub fn initialize(
+        &mut self,
+        visible_rect: Rect,
+        num_buffers: u32,
+    ) -> Result<&mut Self, QueueError> {
         self.visible_rect = visible_rect;
         self.num_buffers = num_buffers;
         self.handle.replace(match self.handle.take() {
             V4l2QueueHandle::Init(handle) => {
-                self.format = handle.get_format().expect("Failed to get capture format");
-                log::debug!("Capture format:\n\t{:?}\n", self.format);
-                let handle = handle
-                    .request_buffers_generic::<Vec<MmapHandle>>(MemoryType::Mmap, self.num_buffers)
-                    .expect("Failed to request capture buffers");
-                log::debug!(
-                    "Capture queue:\n\t
-                    num_buffers: {}\n\t
-                    num_queued_buffers: {}\n\t
-                    num_free_buffers: {}\n",
-                    handle.num_buffers(),
-                    handle.num_queued_buffers(),
-                    handle.num_free_buffers()
-                );
+                // TODO: check if decoded format is supported.
+                self.format = handle.get_format()?;
+                // TODO: handle 10 bit format negotiation.
+                let handle = handle.request_buffers_generic::<Vec<MmapHandle>>(
+                    MemoryType::Mmap,
+                    self.num_buffers,
+                )?;
 
-                // TODO: handle start/stop at runtime
-                handle.stream_on().expect("Failed to start capture queue");
+                handle.stream_on()?;
 
-                log::debug!("Capture queue:\n\tstate: Init -> Streaming\n");
                 V4l2QueueHandle::Streaming(handle.into())
             }
-            _ => {
-                /* TODO: handle DRC */
-                todo!()
-            }
+            _ => todo!("DRC is not supported"),
         });
-        self
+
+        Ok(self)
     }
+
     pub fn dequeue_buffer(&self) -> Option<V4l2CaptureBuffer> {
         let handle = &*self.handle.borrow();
         match handle {
