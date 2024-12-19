@@ -58,7 +58,7 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
             coded_size,
             Rect::from(coded_size),
             NUM_FRAMES as u32,
-        );
+        )?;
         Ok(())
     }
 

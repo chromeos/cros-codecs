@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use thiserror::Error;
 
 use v4l2r::bindings::v4l2_format;
 use v4l2r::device::queue::direction;
@@ -56,13 +57,19 @@ enum V4l2QueueHandle<T: v4l2r::device::queue::direction::Direction> {
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum QueueError {
+    #[error("unable to create queue.")]
     Creation,
+    #[error("failed to get format for queue.")]
     FormatGet,
+    #[error("failed to set format for queue.")]
     FormatSet,
+    #[error("failed requesting buffers.")]
     RequestBuffers,
+    #[error("unable to stream on.")]
     StreamOn,
+    #[error("driver does not support {0}.")]
     UnsupportedPixelFormat(Fourcc),
 }
 

@@ -55,7 +55,7 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
             header.coded_size(),
             header.visible_rect(),
             header.min_num_frames() as u32,
-        );
+        )?;
         Ok(())
     }
 
