@@ -28,6 +28,7 @@ use cros_codecs::DecodedFormat;
 use crate::md5::md5_digest;
 use crate::md5::MD5Context;
 use crate::util::decide_output_file_name;
+use crate::util::golden_md5s;
 use crate::util::Args;
 use crate::util::EncodedFormat;
 use crate::util::FrameMemoryType;
@@ -62,6 +63,8 @@ pub fn do_decode(mut input: File, args: Args) -> () {
     } else {
         BlockingMode::NonBlocking
     };
+
+    let mut golden_iter = golden_md5s(&args.golden).into_iter();
 
     let (mut decoder, frame_iter) = match args.input_format {
         EncodedFormat::H264 => {
@@ -135,6 +138,9 @@ pub fn do_decode(mut input: File, args: Args) -> () {
             Some(Md5Computation::Stream) => md5_context.consume(&i420_frame_data),
         }
 
+        if args.golden.is_some() {
+            assert_eq!(&frame_md5, &golden_iter.next().unwrap());
+        }
         frame_data = i420_frame_data;
 
         if args.multiple_output_files {
