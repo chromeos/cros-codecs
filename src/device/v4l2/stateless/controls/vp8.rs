@@ -124,7 +124,13 @@ impl V4l2CtrlVp8FrameParams {
         self
     }
 
-    pub fn set_frame_params(&mut self, hdr: &Header) -> &mut Self {
+    pub fn set_frame_params(
+        &mut self,
+        hdr: &Header,
+        last_frame_ts: u64,
+        golden_frame_ts: u64,
+        alt_frame_ts: u64,
+    ) -> &mut Self {
         self.handle.width = hdr.width;
         self.handle.height = hdr.height;
         self.handle.horizontal_scale = hdr.horiz_scale_code;
@@ -144,9 +150,9 @@ impl V4l2CtrlVp8FrameParams {
             self.handle.dct_part_sizes[i] = hdr.partition_size[i];
         }
 
-        self.handle.last_frame_ts = 0;
-        self.handle.golden_frame_ts = 0;
-        self.handle.alt_frame_ts = 0;
+        self.handle.last_frame_ts = last_frame_ts * 1000;
+        self.handle.golden_frame_ts = golden_frame_ts * 1000;
+        self.handle.alt_frame_ts = alt_frame_ts * 1000;
 
         let mut flags: u32 = 0;
         if hdr.key_frame {

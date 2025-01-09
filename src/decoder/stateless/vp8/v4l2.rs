@@ -5,9 +5,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use v4l2r::bindings::v4l2_ctrl_vp8_frame;
-use v4l2r::controls::SafeExtControl;
-
 use crate::backend::v4l2::decoder::stateless::BackendHandle;
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
@@ -24,6 +21,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::decoder::DecodedHandle;
 use crate::device::v4l2::stateless::controls::vp8::V4l2CtrlVp8FrameParams;
 use crate::Fourcc;
 use crate::Rect;
@@ -74,9 +72,9 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
         &mut self,
         picture: Self::Picture,
         hdr: &Header,
-        _last_ref: &Option<Self::Handle>,
-        _golden_ref: &Option<Self::Handle>,
-        _alt_ref: &Option<Self::Handle>,
+        last_ref: &Option<Self::Handle>,
+        golden_ref: &Option<Self::Handle>,
+        alt_ref: &Option<Self::Handle>,
         bitstream: &[u8],
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
@@ -84,6 +82,38 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
         let mut vp8_frame_params = V4l2CtrlVp8FrameParams::new();
 
         picture.borrow_mut().request().write(bitstream);
+
+        let mut ref_pictures = Vec::<Rc<RefCell<V4l2Picture>>>::new();
+
+        let mut last_frame_ts: u64 = 0;
+        let mut golden_frame_ts: u64 = 0;
+        let mut alt_frame_ts: u64 = 0;
+
+        match &last_ref {
+            Some(handle) => {
+                ref_pictures.push(handle.handle.borrow().picture.clone());
+                last_frame_ts = handle.timestamp();
+            }
+            None => (),
+        };
+
+        match &golden_ref {
+            Some(handle) => {
+                ref_pictures.push(handle.handle.borrow().picture.clone());
+                golden_frame_ts = handle.timestamp();
+            }
+            None => (),
+        };
+
+        match &alt_ref {
+            Some(handle) => {
+                ref_pictures.push(handle.handle.borrow().picture.clone());
+                alt_frame_ts = handle.timestamp();
+            }
+            None => (),
+        };
+
+        picture.borrow_mut().set_ref_pictures(ref_pictures);
 
         // last_ref, golden_ref, alt_ref are all None on key frame
         // and Some on other frames
@@ -93,7 +123,7 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
             .set_segmentation_params(segmentation)
             .set_entropy_params(hdr)
             .set_bool_ctx(hdr)
-            .set_frame_params(hdr);
+            .set_frame_params(hdr, last_frame_ts, golden_frame_ts, alt_frame_ts);
 
         picture.borrow_mut().request().ioctl(&vp8_frame_params);
 
