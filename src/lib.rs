@@ -244,6 +244,26 @@ impl FromStr for DecodedFormat {
     }
 }
 
+impl From<Fourcc> for DecodedFormat {
+    fn from(fourcc: Fourcc) -> DecodedFormat {
+        match fourcc.to_string().as_str() {
+            "I420" => DecodedFormat::I420,
+            "NV12" => DecodedFormat::NV12,
+            _ => todo!("Fourcc {} not yet supported", fourcc),
+        }
+    }
+}
+
+impl From<DecodedFormat> for Fourcc {
+    fn from(format: DecodedFormat) -> Fourcc {
+        match format {
+            DecodedFormat::I420 => Fourcc::from(b"I420"),
+            DecodedFormat::NV12 => Fourcc::from(b"NV12"),
+            _ => todo!(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum EncodedFormat {
     H264,
@@ -264,6 +284,31 @@ impl FromStr for EncodedFormat {
             "vp9" | "VP9" => Ok(EncodedFormat::VP9),
             "av1" | "AV1" => Ok(EncodedFormat::AV1),
             _ => Err("unrecognized input format. Valid values: h264, h265, vp8, vp9, av1"),
+        }
+    }
+}
+
+impl From<Fourcc> for EncodedFormat {
+    fn from(fourcc: Fourcc) -> EncodedFormat {
+        match fourcc.to_string().as_str() {
+            "H264" => EncodedFormat::H264,
+            "HEVC" => EncodedFormat::H265,
+            "VP80" => EncodedFormat::VP8,
+            "VP90" => EncodedFormat::VP9,
+            "AV1F" => EncodedFormat::AV1,
+            _ => todo!("Fourcc {} not yet supported", fourcc),
+        }
+    }
+}
+
+impl From<EncodedFormat> for Fourcc {
+    fn from(format: EncodedFormat) -> Fourcc {
+        match format {
+            EncodedFormat::H264 => Fourcc::from(b"H264"),
+            EncodedFormat::H265 => Fourcc::from(b"HEVC"),
+            EncodedFormat::VP8 => Fourcc::from(b"VP80"),
+            EncodedFormat::VP9 => Fourcc::from(b"VP90"),
+            EncodedFormat::AV1 => Fourcc::from(b"AV1F"),
         }
     }
 }
