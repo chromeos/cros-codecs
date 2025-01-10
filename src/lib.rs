@@ -45,6 +45,26 @@ pub use libva;
 #[cfg(feature = "v4l2")]
 pub use v4l2r;
 
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum FrameMemoryType {
+    Managed,
+    Prime,
+    User,
+}
+
+impl FromStr for FrameMemoryType {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "managed" => Ok(FrameMemoryType::Managed),
+            "prime" => Ok(FrameMemoryType::Prime),
+            "user" => Ok(FrameMemoryType::User),
+            _ => Err("unrecognized memory type. Valid values: managed, prime, user"),
+        }
+    }
+}
+
 /// Rounding modes for `Resolution`
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ResolutionRoundMode {
