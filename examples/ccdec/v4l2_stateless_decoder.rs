@@ -24,13 +24,13 @@ use cros_codecs::utils::simple_playback_loop_owned_frames;
 use cros_codecs::utils::DmabufFrame;
 use cros_codecs::utils::UserPtrFrame;
 use cros_codecs::DecodedFormat;
+use cros_codecs::EncodedFormat;
 
 use crate::md5::md5_digest;
 use crate::md5::MD5Context;
 use crate::util::decide_output_file_name;
 use crate::util::golden_md5s;
 use crate::util::Args;
-use crate::util::EncodedFormat;
 use crate::util::FrameMemoryType;
 use crate::util::Md5Computation;
 
