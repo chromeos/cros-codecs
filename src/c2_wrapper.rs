@@ -14,6 +14,8 @@ use std::vec::Vec;
 use crate::Fourcc;
 use crate::FrameLayout;
 
+pub mod c2_decoder;
+
 pub struct C2VideoFrame<'a> {
     // TODO: This will require us to memcpy frame data. This makes it easy to prototype, but is
     // inefficient. We will want to change this to DMA buffer FDs that we import directly.
