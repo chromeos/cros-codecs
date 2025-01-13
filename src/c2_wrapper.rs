@@ -205,6 +205,15 @@ where
         }
     }
 
+    // This isn't part of C2, but it's convenient to check if our worker thread
+    // is still running.
+    pub fn is_alive(&self) -> bool {
+        match &self.worker_thread {
+            Some(worker_thread) => worker_thread.is_finished(),
+            None => false,
+        }
+    }
+
     // Start the decoder/encoder.
     // State will be C2Running after this call.
     pub fn start(&mut self) -> C2Status {

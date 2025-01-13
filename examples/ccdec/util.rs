@@ -15,7 +15,7 @@ use cros_codecs::DecodedFormat;
 use cros_codecs::EncodedFormat;
 use cros_codecs::FrameMemoryType;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Md5Computation {
     Stream,
     Frame,

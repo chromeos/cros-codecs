@@ -10,37 +10,29 @@ use std::fs::File;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
-use std::os::fd::AsFd;
-use std::os::fd::BorrowedFd;
-use std::path::Path;
-use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
 use cros_codecs::bitstream_utils::IvfIterator;
 use cros_codecs::bitstream_utils::NalIterator;
+use cros_codecs::c2_wrapper::c2_decoder::C2DecoderWorker;
+use cros_codecs::c2_wrapper::c2_vaapi_decoder::C2VaapiDecoder;
+use cros_codecs::c2_wrapper::c2_vaapi_decoder::C2VaapiDecoderOptions;
+use cros_codecs::c2_wrapper::C2DecodeJob;
+use cros_codecs::c2_wrapper::C2DecodeWorkObject;
+use cros_codecs::c2_wrapper::C2Status;
+use cros_codecs::c2_wrapper::C2VideoFrame;
+use cros_codecs::c2_wrapper::C2Wrapper;
 use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
 use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
-use cros_codecs::decoder::stateless::av1::Av1;
-use cros_codecs::decoder::stateless::h264::H264;
-use cros_codecs::decoder::stateless::h265::H265;
-use cros_codecs::decoder::stateless::vp8::Vp8;
-use cros_codecs::decoder::stateless::vp9::Vp9;
-use cros_codecs::decoder::stateless::StatelessDecoder;
-use cros_codecs::decoder::stateless::StatelessVideoDecoder;
-use cros_codecs::decoder::BlockingMode;
-use cros_codecs::decoder::DecodedHandle;
-use cros_codecs::decoder::DynDecodedHandle;
-use cros_codecs::decoder::StreamInfo;
-use cros_codecs::multiple_desc_type;
-use cros_codecs::utils::simple_playback_loop;
-use cros_codecs::utils::simple_playback_loop_owned_frames;
-use cros_codecs::utils::simple_playback_loop_userptr_frames;
-use cros_codecs::utils::DmabufFrame;
-use cros_codecs::utils::UserPtrFrame;
 use cros_codecs::DecodedFormat;
 use cros_codecs::EncodedFormat;
 use cros_codecs::Fourcc;
 use cros_codecs::FrameLayout;
-use cros_codecs::FrameMemoryType;
 use cros_codecs::PlaneLayout;
 use cros_codecs::Resolution;
 use matroska_demuxer::Frame;
@@ -53,72 +45,6 @@ use crate::util::golden_md5s;
 use crate::util::Args;
 use crate::util::Md5Computation;
 
-// Our buffer descriptor type.
-//
-// We support buffers which memory is managed by the backend, or imported from user memory or a
-// PRIME buffer.
-multiple_desc_type! {
-    enum BufferDescriptor {
-        Managed(()),
-        Dmabuf(DmabufFrame),
-        User(UserPtrFrame),
-    }
-}
-
-/// Export a file descriptor from a GBM `BufferObject` and turn it into a `DmabufFrame` suitable
-/// for using as the target of a decoder.
-fn export_gbm_bo<T>(obj: &gbm::BufferObject<T>) -> anyhow::Result<DmabufFrame> {
-    let fd = obj.fd()?;
-    let modifier = obj.modifier()?;
-    let format = obj.format()?;
-    let planes = (0..obj.plane_count()? as i32)
-        .map(|i| PlaneLayout {
-            buffer_index: 0,
-            offset: obj.offset(i).unwrap() as usize,
-            stride: obj.stride_for_plane(i).unwrap() as usize,
-        })
-        .collect();
-    let size = Resolution::from((obj.width().unwrap(), obj.height().unwrap()));
-
-    Ok(DmabufFrame {
-        fds: vec![fd],
-        layout: FrameLayout {
-            format: (Fourcc::from(format as u32), modifier.into()),
-            size,
-            planes,
-        },
-    })
-}
-
-/// Buffer allocation callback for `simple_playback_loop` to allocate and export buffers from a GBM
-/// device.
-fn simple_playback_loop_prime_frames<D: AsFd>(
-    device: &gbm::Device<D>,
-    stream_info: &StreamInfo,
-    nb_frames: usize,
-) -> anyhow::Result<Vec<DmabufFrame>> {
-    let gbm_fourcc = match stream_info.format {
-        DecodedFormat::I420 | DecodedFormat::NV12 => gbm::Format::Nv12,
-        _ => anyhow::bail!(
-            "{:?} format is unsupported with GBM memory",
-            stream_info.format
-        ),
-    };
-
-    (0..nb_frames)
-        .map(|_| {
-            device
-                .create_buffer_object::<()>(
-                    stream_info.coded_resolution.width,
-                    stream_info.coded_resolution.height,
-                    gbm_fourcc,
-                    gbm::BufferObjectFlags::SCANOUT,
-                )
-                .map_err(|e| anyhow::anyhow!(e))
-                .and_then(|o| export_gbm_bo(&o))
-        })
-        .collect()
-}
 struct MkvFrameIterator<T: AsRef<[u8]>> {
     input: MatroskaFile<Cursor<T>>,
     video_track: u64,
@@ -162,7 +88,67 @@ fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Cow<[u8]>>
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TestDecodeWorkObject {
+    pub input: Vec<u8>,
+    pub output: Vec<u8>,
+}
+
+impl C2DecodeWorkObject for TestDecodeWorkObject {
+    fn input(&mut self) -> &[u8] {
+        self.input.as_slice()
+    }
+
+    fn output(
+        &mut self,
+        fourcc: Fourcc,
+        visible_width: usize,
+        visible_height: usize,
+    ) -> Result<C2VideoFrame, String> {
+        if fourcc.to_string() != "I420" {
+            return Err("Unsupported pixel format!".to_string());
+        }
+
+        let aligned_width = (visible_width + 1) & (!1);
+        let aligned_height = (visible_height + 1) & (!1);
+        self.output = vec![0; aligned_width * aligned_height * 3 / 2];
+        let (y, uv) = self
+            .output
+            .as_mut_slice()
+            .split_at_mut(aligned_width * aligned_height);
+        let y_layout = PlaneLayout {
+            buffer_index: 0,
+            offset: 0,
+            stride: aligned_width,
+        };
+        let (u, v) = uv.split_at_mut(aligned_width * aligned_height / 4);
+        let u_layout = PlaneLayout {
+            buffer_index: 1,
+            offset: 0,
+            stride: aligned_width / 2,
+        };
+        let v_layout = PlaneLayout {
+            buffer_index: 2,
+            offset: 0,
+            stride: aligned_width / 2,
+        };
+        Ok(C2VideoFrame {
+            planes: vec![y, u, v],
+            layout: FrameLayout {
+                format: (fourcc, 0),
+                size: Resolution::from((visible_width as u32, visible_height as u32)),
+                planes: vec![y_layout, u_layout, v_layout],
+            },
+        })
+    }
+}
+
 pub fn do_decode(mut input: File, args: Args) -> () {
+    assert!(
+        args.output_format == DecodedFormat::I420,
+        "Only I420 currently supported by VA-API ccdec"
+    );
+
     let input = {
         let mut buf = Vec::new();
         input
@@ -179,125 +165,34 @@ pub fn do_decode(mut input: File, args: Args) -> () {
         None
     };
 
-    let blocking_mode = if args.synchronous {
-        BlockingMode::Blocking
-    } else {
-        BlockingMode::NonBlocking
-    };
+    let golden_iter = Arc::new(Mutex::new(golden_md5s(&args.golden).into_iter()));
 
-    let mut golden_iter = golden_md5s(&args.golden).into_iter();
+    let frame_iter =
+        match args.input_format {
+            EncodedFormat::H264 => Box::new(NalIterator::<H264Nalu>::new(&input))
+                as Box<dyn Iterator<Item = Cow<[u8]>>>,
+            EncodedFormat::H265 => Box::new(NalIterator::<H265Nalu>::new(&input))
+                as Box<dyn Iterator<Item = Cow<[u8]>>>,
+            _ => create_vpx_frame_iterator(&input),
+        };
 
-    let gbm = match args.frame_memory {
-        FrameMemoryType::Managed | FrameMemoryType::User => None,
-        FrameMemoryType::Prime => {
-            /// A simple wrapper for a GBM device node.
-            pub struct GbmDevice(std::fs::File);
+    let mut _md5_context = Arc::new(Mutex::new(MD5Context::new()));
+    let md5_context = _md5_context.clone();
 
-            impl AsFd for GbmDevice {
-                fn as_fd(&self) -> BorrowedFd<'_> {
-                    self.0.as_fd()
-                }
-            }
-            impl drm::Device for GbmDevice {}
-
-            /// Simple helper methods for opening a `Card`.
-            impl GbmDevice {
-                pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-                    std::fs::OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .open(path)
-                        .map(GbmDevice)
-                }
-            }
-
-            let gbm_path = args
-                .gbm_device
-                .unwrap_or(PathBuf::from("/dev/dri/renderD128"));
-            let gbm = GbmDevice::open(gbm_path)
-                .and_then(gbm::Device::new)
-                .expect("failed to create GBM device");
-
-            Some(gbm)
-        }
-    };
-
-    let display = match args.libva_device {
-        Some(libva_device_path) => libva::Display::open_drm_display(libva_device_path.clone())
-            .expect(&format!(
-                "failed to open libva display {}",
-                libva_device_path.display()
-            )),
-        None => libva::Display::open().expect("failed to open libva display"),
-    };
-
-    // The created `decoder` is turned into a `DynStatelessVideoDecoder` trait object. This allows
-    // the same code to control the decoder no matter what codec or backend we are using.
-    let (mut decoder, frame_iter) = match args.input_format {
-        EncodedFormat::H264 => {
-            let frame_iter = Box::new(NalIterator::<H264Nalu>::new(&input))
-                as Box<dyn Iterator<Item = Cow<[u8]>>>;
-
-            let decoder = StatelessDecoder::<H264, _>::new_vaapi(display, blocking_mode)
-                .unwrap()
-                .into_trait_object();
-
-            (decoder, frame_iter)
-        }
-        EncodedFormat::VP8 => {
-            let frame_iter = create_vpx_frame_iterator(&input);
-
-            let decoder = StatelessDecoder::<Vp8, _>::new_vaapi(display, blocking_mode)
-                .unwrap()
-                .into_trait_object();
-
-            (decoder, frame_iter)
-        }
-        EncodedFormat::VP9 => {
-            let frame_iter = create_vpx_frame_iterator(&input);
-
-            let decoder = StatelessDecoder::<Vp9, _>::new_vaapi(display, blocking_mode)
-                .unwrap()
-                .into_trait_object();
-
-            (decoder, frame_iter)
-        }
-        EncodedFormat::H265 => {
-            let frame_iter = Box::new(NalIterator::<H265Nalu>::new(&input))
-                as Box<dyn Iterator<Item = Cow<[u8]>>>;
-
-            let decoder = StatelessDecoder::<H265, _>::new_vaapi(display, blocking_mode)
-                .unwrap()
-                .into_trait_object();
-
-            (decoder, frame_iter)
-        }
-        EncodedFormat::AV1 => {
-            let frame_iter = create_vpx_frame_iterator(&input);
-
-            let decoder = StatelessDecoder::<Av1, _>::new_vaapi(display, blocking_mode)
-                .unwrap()
-                .into_trait_object();
-
-            (decoder, frame_iter)
-        }
-    };
-
-    let mut md5_context = MD5Context::new();
     let mut output_filename_idx = 0;
     let need_per_frame_md5 = match args.compute_md5 {
         Some(Md5Computation::Frame) => true,
         _ => args.golden.is_some(),
     };
+    let stream_mode = Some(Md5Computation::Stream) == args.compute_md5;
 
-    let mut on_new_frame = |handle: DynDecodedHandle<BufferDescriptor>| {
+    let mut _num_decoded_frames = Arc::new(AtomicU64::new(0));
+    let num_decoded_frames = _num_decoded_frames.clone();
+    let on_new_frame = move |job: C2DecodeJob<TestDecodeWorkObject>| {
+        num_decoded_frames.fetch_add(1, Ordering::SeqCst);
+
         if args.output.is_some() || args.compute_md5.is_some() || args.golden.is_some() {
-            handle.sync().unwrap();
-            let picture = handle.dyn_picture();
-            let mut handle = picture.dyn_mappable_handle().unwrap();
-            let buffer_size = handle.image_size();
-            let mut frame_data = vec![0; buffer_size];
-            handle.read(&mut frame_data).unwrap();
+            let frame_data = job.work_object.output.as_slice();
 
             if args.multiple_output_files {
                 let file_name = decide_output_file_name(
@@ -327,49 +222,63 @@ pub fn do_decode(mut input: File, args: Args) -> () {
             match args.compute_md5 {
                 None => (),
                 Some(Md5Computation::Frame) => println!("{}", frame_md5),
-                Some(Md5Computation::Stream) => md5_context.consume(&frame_data),
+                Some(Md5Computation::Stream) => (*md5_context.lock().unwrap()).consume(&frame_data),
             }
 
             if args.golden.is_some() {
-                assert_eq!(&frame_md5, &golden_iter.next().unwrap());
+                assert_eq!(frame_md5, (*golden_iter.lock().unwrap()).next().unwrap());
             }
         }
     };
 
-    simple_playback_loop(
-        decoder.as_mut(),
-        frame_iter,
-        &mut on_new_frame,
-        &mut |stream_info, nb_frames| {
-            Ok(match args.frame_memory {
-                FrameMemoryType::Managed => {
-                    simple_playback_loop_owned_frames(stream_info, nb_frames)?
-                        .into_iter()
-                        .map(BufferDescriptor::Managed)
-                        .collect()
-                }
-                FrameMemoryType::Prime => simple_playback_loop_prime_frames(
-                    gbm.as_ref().unwrap(),
-                    stream_info,
-                    nb_frames,
-                )?
-                .into_iter()
-                .map(BufferDescriptor::Dmabuf)
-                .collect(),
-                FrameMemoryType::User => {
-                    simple_playback_loop_userptr_frames(stream_info, nb_frames)?
-                        .into_iter()
-                        .map(BufferDescriptor::User)
-                        .collect()
-                }
-            })
-        },
-        args.output_format,
-        blocking_mode,
-    )
-    .expect("error during playback loop");
+    let __num_decoded_frames = _num_decoded_frames.clone();
+    let error_cb = move |_status: C2Status| {
+        __num_decoded_frames.store(u64::MAX, Ordering::SeqCst);
+        panic!("Unrecoverable decoding error!");
+    };
 
-    if let Some(Md5Computation::Stream) = args.compute_md5 {
-        println!("{}", md5_context.flush());
+    let mut decoder: C2Wrapper<_, _, _, _, C2DecoderWorker<_, C2VaapiDecoder, _, _, _, _, _, _>> =
+        C2Wrapper::new(
+            Fourcc::from(args.input_format),
+            error_cb,
+            on_new_frame,
+            C2VaapiDecoderOptions {
+                libva_device_path: args.libva_device,
+                gbm_device_path: args.gbm_device,
+                frame_memory_type: args.frame_memory,
+            },
+        );
+    let _ = decoder.start();
+
+    let mut queued_frames = 0;
+    for input_frame in frame_iter {
+        queued_frames += 1;
+        decoder.queue(vec![C2DecodeJob {
+            work_object: TestDecodeWorkObject {
+                input: input_frame.as_ref().to_vec(),
+                output: Vec::new(),
+            },
+        }]);
+    }
+    // TODO: Add drain() call here
+
+    while decoder.is_alive() && _num_decoded_frames.load(Ordering::SeqCst) < queued_frames {
+        thread::sleep(Duration::from_millis(10));
+    }
+    decoder.stop();
+
+    assert!(
+        _num_decoded_frames.load(Ordering::SeqCst) != u64::MAX,
+        "Decoding loop crashed!"
+    );
+    assert!(
+        _num_decoded_frames.load(Ordering::SeqCst) != queued_frames,
+        "Wrong number of frames output! Queued: {}   Got: {}",
+        queued_frames,
+        _num_decoded_frames.load(Ordering::SeqCst)
+    );
+
+    if stream_mode {
+        println!("{}", (*_md5_context.lock().unwrap()).flush());
     }
 }
