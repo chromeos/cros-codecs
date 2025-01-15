@@ -15,6 +15,8 @@ use crate::Fourcc;
 use crate::FrameLayout;
 
 pub mod c2_decoder;
+#[cfg(feature = "v4l2")]
+pub mod c2_v4l2_decoder;
 #[cfg(feature = "vaapi")]
 pub mod c2_vaapi_decoder;
 
