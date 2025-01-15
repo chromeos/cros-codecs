@@ -211,7 +211,7 @@ where
     // is still running.
     pub fn is_alive(&self) -> bool {
         match &self.worker_thread {
-            Some(worker_thread) => worker_thread.is_finished(),
+            Some(worker_thread) => !worker_thread.is_finished(),
             None => false,
         }
     }

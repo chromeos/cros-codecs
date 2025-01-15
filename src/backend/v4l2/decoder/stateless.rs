@@ -78,12 +78,14 @@ impl<'a> DynHandle for std::cell::Ref<'a, BackendHandle> {
 
 pub struct V4l2StatelessDecoderHandle {
     pub handle: Rc<RefCell<BackendHandle>>,
+    pub stream_info: StreamInfo,
 }
 
 impl Clone for V4l2StatelessDecoderHandle {
     fn clone(&self) -> Self {
         Self {
             handle: Rc::clone(&self.handle),
+            stream_info: self.stream_info.clone(),
         }
     }
 }
@@ -92,11 +94,11 @@ impl DecodedHandle for V4l2StatelessDecoderHandle {
     type Descriptor = ();
 
     fn coded_resolution(&self) -> Resolution {
-        todo!();
+        self.stream_info.coded_resolution.clone()
     }
 
     fn display_resolution(&self) -> Resolution {
-        todo!();
+        self.stream_info.display_resolution.clone()
     }
 
     fn timestamp(&self) -> u64 {
@@ -122,7 +124,7 @@ impl DecodedHandle for V4l2StatelessDecoderHandle {
 
 pub struct V4l2StatelessDecoderBackend {
     pub device: V4l2Device,
-    stream_info: StreamInfo,
+    pub stream_info: StreamInfo,
 }
 
 impl V4l2StatelessDecoderBackend {

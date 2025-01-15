@@ -37,7 +37,7 @@ use v4l2r::PlaneLayout;
 
 use crate::decoder::stateless::DecodeError;
 use crate::image_processing::mm21_to_nv12;
-use crate::image_processing::nv12_copy;
+use crate::image_processing::nv12_to_i420;
 use crate::image_processing::MM21_TILE_HEIGHT;
 use crate::DecodedFormat;
 use crate::Fourcc;
@@ -311,16 +311,29 @@ impl V4l2CaptureBuffer {
                     .handle
                     .get_plane_mapping(0)
                     .expect("Failed to mmap capture buffer");
-                let buffer_size = self.length();
-                let stride: usize = self.format.plane_fmt[0].bytesperline as usize;
-                let width: usize = Resolution::from(self.visible_rect).width as usize;
-                let height: usize = Resolution::from(self.visible_rect).height as usize;
-                let (src_y, src_uv) = plane.split_at(stride * height);
+                let src_y_stride = self.format.plane_fmt[0].bytesperline as usize;
+                let src_uv_stride = self.format.plane_fmt[1].bytesperline as usize;
+                let width = Resolution::from(self.visible_rect).width as usize;
+                let height = Resolution::from(self.visible_rect).height as usize;
+                let (src_y, src_uv) = plane.split_at(src_y_stride * height);
                 let (data_y, data_uv) =
                     data.split_at_mut(Resolution::from(self.visible_rect).get_area());
+                let (data_u, data_v) =
+                    data_uv.split_at_mut((((width + 1) / 2) * ((height + 1) / 2)) as usize);
 
-                nv12_copy(
-                    &src_y, stride, data_y, width, &src_uv, stride, data_uv, width, width, height,
+                nv12_to_i420(
+                    &src_y,
+                    src_y_stride,
+                    data_y,
+                    width,
+                    &src_uv,
+                    src_uv_stride,
+                    data_u,
+                    (width + 1) / 2,
+                    data_v,
+                    (width + 1) / 2,
+                    width,
+                    height,
                 );
             }
             DecodedFormat::MM21 => {
@@ -334,27 +347,44 @@ impl V4l2CaptureBuffer {
                     .handle
                     .get_plane_mapping(1)
                     .expect("Failed to mmap capture buffer");
-                let width: usize = Resolution::from(self.visible_rect).width as usize;
-                let height: usize = Resolution::from(self.visible_rect).height as usize;
-                let height_tiled = height + (MM21_TILE_HEIGHT - 1) & !(32 - 1);
-                let src_stride = self.format.plane_fmt[0].bytesperline as usize;
-                let mut pivot_y = vec![0; src_stride * height_tiled];
-                let mut pivot_uv = vec![0; src_stride * height_tiled / 2];
+                let width = Resolution::from(self.visible_rect).width as usize;
+                let height = Resolution::from(self.visible_rect).height as usize;
+                // TODO: Replace with align_up function.
+                let height_tiled = height + (MM21_TILE_HEIGHT - 1) & !(MM21_TILE_HEIGHT - 1);
+                let y_stride = self.format.plane_fmt[0].bytesperline as usize;
+                let uv_stride = self.format.plane_fmt[1].bytesperline as usize;
+                let mut pivot_y = vec![0; y_stride * height_tiled];
+                let mut pivot_uv = vec![0; y_stride * height_tiled / 2];
                 mm21_to_nv12(
                     &src_y,
                     &mut pivot_y,
                     &src_uv,
                     &mut pivot_uv,
-                    src_stride,
+                    y_stride,
                     height_tiled,
                 )
                 .expect("Unable to convert mm21 to nv12");
 
                 let (data_y, data_uv) =
                     data.split_at_mut(Resolution::from(self.visible_rect).get_area());
-                nv12_copy(
-                    &pivot_y, src_stride, data_y, width, &pivot_uv, src_stride, data_uv, width,
-                    width, height,
+                // TODO: Replace with align_up function.
+                let (data_u, data_v) = data_uv.split_at_mut(
+                    (((self.visible_rect.width + 1) / 2) * ((self.visible_rect.height + 1) / 2))
+                        as usize,
+                );
+                nv12_to_i420(
+                    &pivot_y,
+                    y_stride,
+                    data_y,
+                    width,
+                    &pivot_uv,
+                    uv_stride,
+                    data_u,
+                    (width + 1) / 2,
+                    data_v,
+                    (width + 1) / 2,
+                    width,
+                    height,
                 );
             }
             _ => panic!("handle me"),
