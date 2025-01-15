@@ -57,7 +57,7 @@ fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Cow<[u8]>>
     Box::new(IvfIterator::new(input).map(Cow::Borrowed))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TestDecodeWorkObject {
     pub input: Vec<u8>,
     pub output: Vec<u8>,
@@ -161,11 +161,7 @@ fn main() {
     };
     let stream_mode = Some(Md5Computation::Stream) == args.compute_md5;
 
-    let mut _num_decoded_frames = Arc::new(AtomicU64::new(0));
-    let num_decoded_frames = _num_decoded_frames.clone();
     let on_new_frame = move |job: C2DecodeJob<TestDecodeWorkObject>| {
-        num_decoded_frames.fetch_add(1, Ordering::SeqCst);
-
         if args.output.is_some() || args.compute_md5.is_some() || args.golden.is_some() {
             let frame_data = job.work_object.output.as_slice();
 
@@ -206,9 +202,7 @@ fn main() {
         }
     };
 
-    let __num_decoded_frames = _num_decoded_frames.clone();
     let error_cb = move |_status: C2Status| {
-        __num_decoded_frames.store(u64::MAX, Ordering::SeqCst);
         panic!("Unrecoverable decoding error!");
     };
 
@@ -246,33 +240,21 @@ fn main() {
     );
     let _ = decoder.start();
 
-    let mut queued_frames = 0;
     for input_frame in frame_iter {
-        queued_frames += 1;
         decoder.queue(vec![C2DecodeJob {
             work_object: TestDecodeWorkObject {
                 input: input_frame.as_ref().to_vec(),
                 output: Vec::new(),
             },
+            drain: false,
         }]);
     }
-    // TODO: Add drain() call here
+    decoder.drain();
 
-    while decoder.is_alive() && _num_decoded_frames.load(Ordering::SeqCst) < queued_frames {
+    while decoder.is_alive() {
         thread::sleep(Duration::from_millis(10));
     }
     decoder.stop();
-
-    assert!(
-        _num_decoded_frames.load(Ordering::SeqCst) != u64::MAX,
-        "Decoding loop crashed!"
-    );
-    assert!(
-        _num_decoded_frames.load(Ordering::SeqCst) == queued_frames,
-        "Wrong number of frames output! Queued: {}   Got: {}",
-        queued_frames,
-        _num_decoded_frames.load(Ordering::SeqCst)
-    );
 
     if stream_mode {
         println!("{}", (*_md5_context.lock().unwrap()).flush());

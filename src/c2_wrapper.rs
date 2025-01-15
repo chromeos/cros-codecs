@@ -94,12 +94,19 @@ pub trait C2DecodeWorkObject {
     ) -> Result<C2VideoFrame, String>;
 }
 
-#[derive(Debug, Clone)]
-pub struct C2DecodeJob<T: C2DecodeWorkObject + Clone> {
+#[derive(Debug, Clone, Default)]
+pub struct C2DecodeJob<T: C2DecodeWorkObject + Clone + Default> {
     // Many of the callback functions in C2 take C2Work items as parameters, so we need to be able
     // to retrieve the original C++ object.
     pub work_object: T,
+
+    pub drain: bool,
     // TODO: Add output delay and color aspect support as needed.
+}
+
+pub trait Job {
+    fn set_drain(&mut self) -> ();
+    fn is_drain(&mut self) -> bool;
 }
 
 pub trait C2EncodeWorkObject {
@@ -109,8 +116,8 @@ pub trait C2EncodeWorkObject {
     fn output(&mut self) -> Result<&mut [u8], String>;
 }
 
-#[derive(Debug, Clone)]
-pub struct C2EncodeJob<T: C2EncodeWorkObject + Clone> {
+#[derive(Debug, Clone, Default)]
+pub struct C2EncodeJob<T: C2EncodeWorkObject + Clone + Default> {
     // Many of the callback functions in C2 take C2Work items as parameters, so
     // we need to be able to retrieve the original C++ object.
     pub work_object: T,
@@ -121,6 +128,8 @@ pub struct C2EncodeJob<T: C2EncodeWorkObject + Clone> {
     // Framerate is actually negotiated, so the encoder can change this value
     // based on the timestamps of the frames it receives.
     pub framerate: Arc<AtomicU32>,
+
+    pub drain: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -149,7 +158,7 @@ where
     U: Clone + Send + 'static,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(J) + Send + 'static,
-    J: Send + 'static,
+    J: Send + Job + 'static,
 {
     fn new(
         fourcc: Fourcc,
@@ -171,7 +180,7 @@ where
     U: Clone + Send + 'static,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(J) + Send + 'static,
-    J: Send + 'static,
+    J: Send + Default + Job + 'static,
     V: C2Worker<J, U, E, W>,
 {
     fourcc: Fourcc,
@@ -191,7 +200,7 @@ where
     U: Clone + Send + 'static,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(J) + Send + 'static,
-    J: Send + 'static,
+    J: Send + Default + Job + 'static,
     V: C2Worker<J, U, E, W>,
 {
     pub fn new(fourcc: Fourcc, error_cb: E, work_done_cb: W, options: U) -> Self {
@@ -319,7 +328,8 @@ where
     // additional work to begin processing. This is an unusual name for this
     // function, but it is the convention that C2 uses.
     // State must be C2Running or this function is invalid.
-    // State will remain C2Running.
+    // State will remain C2Running until the last frames drain, at which point
+    // the state will change to C2Stopped.
     // TODO: Support different drain modes.
     pub fn drain(&mut self) -> C2Status {
         if *self.state.lock().unwrap() != C2State::C2Running {
@@ -327,7 +337,9 @@ where
             return C2Status::C2BadState;
         }
 
-        // TODO: Figure out what, if anything, we should do here.
+        let mut drain_job: J = Default::default();
+        drain_job.set_drain();
+        self.work_queue.lock().unwrap().push_back(drain_job);
 
         C2Status::C2Ok
     }
@@ -340,10 +352,36 @@ where
     U: Clone + Send + 'static,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(J) + Send + 'static,
-    J: Send + 'static,
+    J: Send + Default + Job + 'static,
     V: C2Worker<J, U, E, W>,
 {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+impl<T> Job for C2DecodeJob<T>
+where
+    T: C2DecodeWorkObject + Clone + Default,
+{
+    fn set_drain(&mut self) {
+        self.drain = true;
+    }
+
+    fn is_drain(&mut self) -> bool {
+        return self.drain;
+    }
+}
+
+impl<T> Job for C2EncodeJob<T>
+where
+    T: C2EncodeWorkObject + Clone + Default,
+{
+    fn set_drain(&mut self) {
+        self.drain = true;
+    }
+
+    fn is_drain(&mut self) -> bool {
+        return self.drain;
     }
 }

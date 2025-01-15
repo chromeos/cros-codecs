@@ -15,6 +15,7 @@ use crate::c2_wrapper::C2DecodeWorkObject;
 use crate::c2_wrapper::C2State;
 use crate::c2_wrapper::C2Status;
 use crate::c2_wrapper::C2Worker;
+use crate::c2_wrapper::Job;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessVideoDecoder;
@@ -46,7 +47,7 @@ where
 
 pub struct C2DecoderWorker<T, B, D, H, FP, U, E, W>
 where
-    T: C2DecodeWorkObject + Clone + Send + 'static,
+    T: C2DecodeWorkObject + Clone + Default + Send + 'static,
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor> + ?Sized,
     D: StatelessVideoDecoder<Handle = H, FramePool = FP> + ?Sized,
@@ -73,7 +74,7 @@ where
 
 impl<T, B, D, H, FP, U, E, W> C2DecoderWorker<T, B, D, H, FP, U, E, W>
 where
-    T: C2DecodeWorkObject + Clone + Send + 'static,
+    T: C2DecodeWorkObject + Clone + Default + Send + 'static,
     B: C2DecoderBackend<D, H, FP, U>,
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor> + ?Sized,
@@ -201,7 +202,7 @@ where
 impl<T, B, D, H, FP, U, E, W> C2Worker<C2DecodeJob<T>, U, E, W>
     for C2DecoderWorker<T, B, D, H, FP, U, E, W>
 where
-    T: C2DecodeWorkObject + Clone + Send + 'static,
+    T: C2DecodeWorkObject + Clone + Default + Send + 'static,
     B: C2DecoderBackend<D, H, FP, U>,
     H: DecodedHandle,
     FP: FramePool<Descriptor = H::Descriptor> + ?Sized,
@@ -243,22 +244,34 @@ where
             std::mem::swap(&mut self.pending_job, &mut pending_job);
             self.pending_job = match pending_job {
                 Some(mut job) => {
-                    let bitstream = job.work_object.input();
-                    match self.decoder.decode(self.frame_num, bitstream) {
-                        Ok(_) => {
-                            did_nothing = false;
-                            self.frame_num += 1;
-                            self.in_flight_queue.push_back(job);
-                            None
-                        }
-                        Err(DecodeError::CheckEvents)
-                        | Err(DecodeError::NotEnoughOutputBuffers(_)) => Some(job),
-                        Err(e) => {
-                            did_nothing = false;
-                            log::debug!("Unhandled error message from decoder {e:?}");
+                    if job.is_drain() {
+                        did_nothing = false;
+                        if let Err(_) = self.decoder.flush() {
+                            log::debug!("Error handling drain request!");
                             *self.state.lock().unwrap() = C2State::C2Error;
                             (*self.error_cb.lock().unwrap())(C2Status::C2BadValue);
-                            None
+                        } else {
+                            *self.state.lock().unwrap() = C2State::C2Stopped;
+                        }
+                        None
+                    } else {
+                        let bitstream = job.work_object.input();
+                        match self.decoder.decode(self.frame_num, bitstream) {
+                            Ok(_) => {
+                                did_nothing = false;
+                                self.frame_num += 1;
+                                self.in_flight_queue.push_back(job);
+                                None
+                            }
+                            Err(DecodeError::CheckEvents)
+                            | Err(DecodeError::NotEnoughOutputBuffers(_)) => Some(job),
+                            Err(e) => {
+                                did_nothing = false;
+                                log::debug!("Unhandled error message from decoder {e:?}");
+                                *self.state.lock().unwrap() = C2State::C2Error;
+                                (*self.error_cb.lock().unwrap())(C2Status::C2BadValue);
+                                None
+                            }
                         }
                     }
                 }
