@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use std::cmp::min;
+
+use crate::video_frame::{VideoFrame, UV_PLANE, U_PLANE, V_PLANE, Y_PLANE};
+use crate::DecodedFormat;
+
 /// TODO(greenjustin): This entire file should be replaced with LibYUV.
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
@@ -345,6 +350,108 @@ pub fn i420_to_nv12_chroma(src_u: &[u8], src_v: &[u8], dst_uv: &mut [u8]) {
 pub fn i420_to_nv12(src_y: &[u8], dst_y: &mut [u8], src_u: &[u8], src_v: &[u8], dst_uv: &mut [u8]) {
     dst_y.copy_from_slice(src_y);
     i420_to_nv12_chroma(src_u, src_v, dst_uv);
+}
+
+// TODO: Add more conversions. All supported conversion functions need to take stride parameters.
+pub const SUPPORTED_CONVERSION: [(DecodedFormat, DecodedFormat); 4] = [
+    (DecodedFormat::NV12, DecodedFormat::NV12),
+    (DecodedFormat::I420, DecodedFormat::I420),
+    (DecodedFormat::I422, DecodedFormat::I422),
+    (DecodedFormat::I444, DecodedFormat::I444),
+];
+
+pub fn convert_video_frame(src: &impl VideoFrame, dst: &mut impl VideoFrame) -> Result<(), String> {
+    let width = min(dst.resolution().width, src.resolution().width) as usize;
+    let height = min(dst.resolution().height, src.resolution().height) as usize;
+
+    let conversion = (src.decoded_format()?, dst.decoded_format()?);
+    let src_pitches = src.get_plane_pitch();
+    let src_mapping = src.map().expect("Image processor src mapping failed!");
+    let src_planes = src_mapping.get();
+    let dst_pitches = dst.get_plane_pitch();
+    let dst_mapping = dst.map_mut().expect("Image processor dst mapping failed!");
+    let dst_planes = dst_mapping.get();
+    match conversion {
+        (DecodedFormat::NV12, DecodedFormat::NV12) => {
+            nv12_copy(
+                src_planes[Y_PLANE],
+                src_pitches[Y_PLANE],
+                *dst_planes[Y_PLANE].borrow_mut(),
+                dst_pitches[Y_PLANE],
+                src_planes[UV_PLANE],
+                src_pitches[UV_PLANE],
+                *dst_planes[UV_PLANE].borrow_mut(),
+                dst_pitches[UV_PLANE],
+                width,
+                height,
+            );
+            Ok(())
+        }
+        (DecodedFormat::I420, DecodedFormat::I420) => {
+            i4xx_copy(
+                src_planes[Y_PLANE],
+                src_pitches[Y_PLANE],
+                *dst_planes[Y_PLANE].borrow_mut(),
+                dst_pitches[Y_PLANE],
+                src_planes[U_PLANE],
+                src_pitches[U_PLANE],
+                *dst_planes[U_PLANE].borrow_mut(),
+                dst_pitches[U_PLANE],
+                src_planes[V_PLANE],
+                src_pitches[V_PLANE],
+                *dst_planes[V_PLANE].borrow_mut(),
+                dst_pitches[V_PLANE],
+                width,
+                height,
+                (true, true),
+            );
+            Ok(())
+        }
+        (DecodedFormat::I422, DecodedFormat::I422) => {
+            i4xx_copy(
+                src_planes[Y_PLANE],
+                src_pitches[Y_PLANE],
+                *dst_planes[Y_PLANE].borrow_mut(),
+                dst_pitches[Y_PLANE],
+                src_planes[U_PLANE],
+                src_pitches[U_PLANE],
+                *dst_planes[U_PLANE].borrow_mut(),
+                dst_pitches[U_PLANE],
+                src_planes[V_PLANE],
+                src_pitches[V_PLANE],
+                *dst_planes[V_PLANE].borrow_mut(),
+                dst_pitches[V_PLANE],
+                width,
+                height,
+                (true, false),
+            );
+            Ok(())
+        }
+        (DecodedFormat::I444, DecodedFormat::I444) => {
+            i4xx_copy(
+                src_planes[Y_PLANE],
+                src_pitches[Y_PLANE],
+                *dst_planes[Y_PLANE].borrow_mut(),
+                dst_pitches[Y_PLANE],
+                src_planes[U_PLANE],
+                src_pitches[U_PLANE],
+                *dst_planes[U_PLANE].borrow_mut(),
+                dst_pitches[U_PLANE],
+                src_planes[V_PLANE],
+                src_pitches[V_PLANE],
+                *dst_planes[V_PLANE].borrow_mut(),
+                dst_pitches[V_PLANE],
+                width,
+                height,
+                (false, false),
+            );
+            Ok(())
+        }
+        _ => Err(format!(
+            "Unsupported conversion {:?} -> {:?}",
+            conversion.0, conversion.1
+        )),
+    }
 }
 
 #[cfg(test)]
