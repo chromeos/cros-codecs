@@ -37,6 +37,8 @@ pub mod encoder;
 pub mod image_processing;
 #[cfg(feature = "backend")]
 pub mod utils;
+#[cfg(feature = "backend")]
+pub mod video_frame;
 
 use std::str::FromStr;
 
