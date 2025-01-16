@@ -35,6 +35,7 @@ use v4l2r::Format;
 use v4l2r::PlaneLayout;
 
 use crate::decoder::stateless::DecodeError;
+use crate::decoder::stateless::StatelessBackendError;
 use crate::image_processing::mm21_to_nv12;
 use crate::image_processing::nv12_to_i420;
 use crate::image_processing::MM21_TILE_HEIGHT;
@@ -72,6 +73,14 @@ pub enum QueueError {
     UnsupportedPixelFormat(Fourcc),
     #[error("operation can not be performed in this state.")]
     State,
+    #[error("no buffer to dequeue.")]
+    Dequeue,
+}
+
+impl From<QueueError> for DecodeError {
+    fn from(err: QueueError) -> Self {
+        DecodeError::BackendError(StatelessBackendError::Other(anyhow::anyhow!(err)))
+    }
 }
 
 impl From<CreateQueueError> for QueueError {
@@ -184,12 +193,7 @@ fn buffer_size_for_area(width: u32, height: u32) -> u32 {
     buffer_size
 }
 
-// TODO because of the queueing model the OUTPUT buffer count must be equal to
-// or greater than the CAPTURE buffer count. The OUTPUT buffer count needs only
-// to be 2 buffers for ping pong submissions. There is no need to queue a deep
-// pipeline of buffers in the V4L2 driver because the hardware only works on one
-// frame at a time.
-const NUM_OUTPUT_BUFFERS: u32 = 20;
+const NUM_OUTPUT_BUFFERS: u32 = 2;
 impl V4l2OutputQueue {
     pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_output_mplane_queue(device).expect("Failed to get output queue");
@@ -265,6 +269,16 @@ impl V4l2OutputQueue {
                 }
             },
             _ => return Err(QueueError::State),
+        }
+    }
+    pub fn dequeue_buffer(&self) -> Result<(), QueueError> {
+        let handle = &*self.handle.borrow();
+        match handle {
+            V4l2QueueHandle::Streaming(handle) => {
+                handle.try_dequeue().map_err(|_| QueueError::Dequeue)?;
+                Ok(())
+            }
+            _ => Err(QueueError::State),
         }
     }
 }
@@ -420,7 +434,9 @@ impl V4l2CaptureQueue {
         num_buffers: u32,
     ) -> Result<&mut Self, QueueError> {
         self.visible_rect = visible_rect;
-        self.num_buffers = num_buffers;
+        // TODO: 20 is chosen as a magic number necessary to keep the buffers
+        // flowing. Ideally it would be as close to the dpb as possible.
+        self.num_buffers = num_buffers + 20;
         self.handle.replace(match self.handle.take() {
             V4l2QueueHandle::Init(handle) => {
                 // TODO: check if decoded format is supported.
@@ -459,17 +475,15 @@ impl V4l2CaptureQueue {
             _ => Err(QueueError::State),
         }
     }
-    pub fn refill(&self) -> Result<(), QueueError> {
+    pub fn queue_buffer(&self) -> Result<(), QueueError> {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2QueueHandle::Streaming(handle) => {
-                while handle.num_free_buffers() != 0 {
-                    let buffer = handle
-                        .try_get_free_buffer()
-                        .expect("Failed to alloc capture buffer");
-                    log::debug!("capture >> index: {}\n", buffer.index());
-                    buffer.queue().expect("Failed to queue capture buffer");
-                }
+                let buffer = handle
+                    .try_get_free_buffer()
+                    .expect("Failed to alloc capture buffer");
+                log::debug!("capture >> index: {}\n", buffer.index());
+                buffer.queue().expect("Failed to queue capture buffer");
             }
             _ => return Err(QueueError::State),
         }
@@ -479,6 +493,13 @@ impl V4l2CaptureQueue {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2QueueHandle::Streaming(handle) => handle.num_buffers(),
+            _ => 0,
+        }
+    }
+    pub fn num_free_buffers(&self) -> usize {
+        let handle = &*self.handle.borrow();
+        match handle {
+            V4l2QueueHandle::Streaming(handle) => handle.num_free_buffers(),
             _ => 0,
         }
     }
