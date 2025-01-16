@@ -32,7 +32,6 @@ use v4l2r::memory::MemoryType;
 use v4l2r::memory::MmapHandle;
 use v4l2r::nix::sys::time::TimeVal;
 use v4l2r::Format;
-use v4l2r::PixelFormat;
 use v4l2r::PlaneLayout;
 
 use crate::decoder::stateless::DecodeError;
@@ -71,6 +70,8 @@ pub enum QueueError {
     StreamOn,
     #[error("driver does not support {0}.")]
     UnsupportedPixelFormat(Fourcc),
+    #[error("operation can not be performed in this state.")]
+    State,
 }
 
 impl From<CreateQueueError> for QueueError {
@@ -149,17 +150,19 @@ impl V4l2OutputBuffer {
         drop(mapping);
         self
     }
-    pub fn submit(self, timestamp: u64, request_fd: i32) {
+    pub fn submit(self, timestamp: u64, request_fd: i32) -> Result<(), QueueError> {
         let handle = &*self.queue.handle.borrow();
-        let queue = match handle {
-            V4l2QueueHandle::Streaming(queue) => queue,
-            _ => panic!("ERROR"),
-        };
-        self.handle
-            .set_timestamp(TimeVal::new(/* FIXME: sec */ 0, timestamp as i64))
-            .set_request(request_fd)
-            .queue(&[self.length])
-            .expect("Failed to queue output buffer");
+        match handle {
+            V4l2QueueHandle::Streaming(_) => {
+                self.handle
+                    .set_timestamp(TimeVal::new(/* FIXME: sec */ 0, timestamp as i64))
+                    .set_request(request_fd)
+                    .queue(&[self.length])
+                    .expect("Failed to queue output buffer");
+                Ok(())
+            }
+            _ => Err(QueueError::State),
+        }
     }
 }
 
@@ -253,16 +256,15 @@ impl V4l2OutputQueue {
             ))),
         }
     }
-    pub fn drain(&self) {
+    pub fn drain(&self) -> Result<(), QueueError> {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2QueueHandle::Streaming(handle) => loop {
-                match handle.try_dequeue() {
-                    Ok(buffer) => continue,
-                    _ => break,
+                if let Err(_) = handle.try_dequeue() {
+                    break Ok(());
                 }
             },
-            _ => panic!("ERROR"),
+            _ => return Err(QueueError::State),
         }
     }
 }
@@ -439,25 +441,25 @@ impl V4l2CaptureQueue {
         Ok(self)
     }
 
-    pub fn dequeue_buffer(&self) -> Option<V4l2CaptureBuffer> {
+    pub fn dequeue_buffer(&self) -> Result<Option<V4l2CaptureBuffer>, QueueError> {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2QueueHandle::Streaming(handle) => match handle.try_dequeue() {
                 Ok(buffer) => {
                     // TODO handle buffer dequeuing successfully, but having an error
                     // buffer.data.has_error();
-                    Some(V4l2CaptureBuffer::new(
+                    Ok(Some(V4l2CaptureBuffer::new(
                         buffer,
                         self.visible_rect,
                         self.format.clone(),
-                    ))
+                    )))
                 }
-                _ => None,
+                _ => Ok(None),
             },
-            _ => panic!("ERROR"),
+            _ => Err(QueueError::State),
         }
     }
-    pub fn refill(&self) {
+    pub fn refill(&self) -> Result<(), QueueError> {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2QueueHandle::Streaming(handle) => {
@@ -469,8 +471,9 @@ impl V4l2CaptureQueue {
                     buffer.queue().expect("Failed to queue capture buffer");
                 }
             }
-            _ => panic!("ERROR"),
+            _ => return Err(QueueError::State),
         }
+        Ok(())
     }
     pub fn num_buffers(&self) -> usize {
         let handle = &*self.handle.borrow();

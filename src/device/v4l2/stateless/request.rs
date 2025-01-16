@@ -53,7 +53,9 @@ impl InitRequestHandle {
         self
     }
     fn submit(self) -> PendingRequestHandle {
-        self.buffer.submit(self.timestamp, self.handle.as_raw_fd());
+        self.buffer
+            .submit(self.timestamp, self.handle.as_raw_fd())
+            .expect("error needs handling");
         self.handle.queue().expect("Failed to queue request handle");
         PendingRequestHandle {
             device: self.device.clone(),
