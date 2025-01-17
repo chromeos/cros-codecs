@@ -36,6 +36,20 @@ where
     ((x + alignment - T::from(1)) / alignment) * alignment
 }
 
+// This is the formula we use to approximate the maximum compressed buffer size for a video frame.
+pub fn buffer_size_for_area(width: u32, height: u32) -> u32 {
+    let area = width * height;
+    let mut buffer_size: u32 = 1024 * 1024;
+
+    if area > 720 * 480 {
+        buffer_size *= 2;
+    }
+    if area > 1920 * 1080 {
+        buffer_size *= 2;
+    }
+    buffer_size
+}
+
 /// Simple decoding loop that plays the stream once from start to finish.
 #[allow(clippy::type_complexity)]
 pub fn simple_playback_loop<D, R, I, H, FP>(

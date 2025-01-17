@@ -10,6 +10,9 @@ use crate::EncodedFormat;
 use crate::Fourcc;
 use crate::Resolution;
 
+#[cfg(feature = "backend")]
+pub mod gbm_video_frame;
+
 pub const Y_PLANE: usize = 0;
 pub const UV_PLANE: usize = 1;
 pub const U_PLANE: usize = 1;

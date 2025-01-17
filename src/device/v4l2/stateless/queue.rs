@@ -39,6 +39,7 @@ use crate::decoder::stateless::StatelessBackendError;
 use crate::image_processing::mm21_to_nv12;
 use crate::image_processing::nv12_to_i420;
 use crate::image_processing::MM21_TILE_HEIGHT;
+use crate::utils::buffer_size_for_area;
 use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
@@ -178,19 +179,6 @@ impl V4l2OutputBuffer {
 #[derive(Clone)]
 pub struct V4l2OutputQueue {
     handle: Rc<RefCell<V4l2QueueHandle<direction::Output>>>,
-}
-
-fn buffer_size_for_area(width: u32, height: u32) -> u32 {
-    let area = width * height;
-    let mut buffer_size: u32 = 1024 * 1024;
-
-    if area > 720 * 480 {
-        buffer_size *= 2;
-    }
-    if area > 1920 * 1080 {
-        buffer_size *= 2;
-    }
-    buffer_size
 }
 
 const NUM_OUTPUT_BUFFERS: u32 = 2;
