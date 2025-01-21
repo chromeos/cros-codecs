@@ -4,6 +4,7 @@
 
 use anyhow::anyhow;
 use std::cell::RefCell;
+use std::convert::Infallible;
 use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
@@ -17,6 +18,7 @@ use v4l2r::device::queue::qbuf::QBuffer;
 use v4l2r::device::queue::BuffersAllocated;
 use v4l2r::device::queue::CaptureQueueable;
 use v4l2r::device::queue::CreateQueueError;
+use v4l2r::device::queue::GetFreeBufferError;
 use v4l2r::device::queue::GetFreeCaptureBuffer;
 use v4l2r::device::queue::GetFreeOutputBuffer;
 use v4l2r::device::queue::Queue;
@@ -27,6 +29,8 @@ use v4l2r::device::Device;
 use v4l2r::device::Stream;
 use v4l2r::device::TryDequeue;
 use v4l2r::ioctl::GFmtError;
+use v4l2r::ioctl::IoctlConvertError;
+use v4l2r::ioctl::QBufIoctlError;
 use v4l2r::ioctl::SFmtError;
 use v4l2r::ioctl::StreamOnError;
 use v4l2r::memory::Memory;
@@ -91,12 +95,22 @@ pub enum QueueError {
     #[error("operation can not be performed in this state.")]
     State,
     #[error("no buffer to dequeue.")]
-    Dequeue,
+    BufferDequeue,
+    #[error("failed to queue buffer.")]
+    BufferQueue,
 }
 
 impl From<QueueError> for DecodeError {
     fn from(err: QueueError) -> Self {
         DecodeError::BackendError(StatelessBackendError::Other(anyhow::anyhow!(err)))
+    }
+}
+
+impl<H: v4l2r::memory::PlaneHandle> From<v4l2r::device::queue::qbuf::QueueError<Vec<H>>>
+    for QueueError
+{
+    fn from(_err: v4l2r::device::queue::qbuf::QueueError<Vec<H>>) -> Self {
+        QueueError::BufferQueue
     }
 }
 
@@ -127,6 +141,18 @@ impl From<RequestBuffersError> for QueueError {
 impl From<StreamOnError> for QueueError {
     fn from(_err: StreamOnError) -> Self {
         QueueError::StreamOn
+    }
+}
+
+impl From<GetFreeBufferError> for QueueError {
+    fn from(_err: GetFreeBufferError) -> Self {
+        QueueError::BufferDequeue
+    }
+}
+
+impl From<IoctlConvertError<QBufIoctlError, Infallible>> for QueueError {
+    fn from(_err: IoctlConvertError<QBufIoctlError, Infallible>) -> Self {
+        QueueError::BufferQueue
     }
 }
 
@@ -183,8 +209,7 @@ impl V4l2OutputBuffer {
                 self.handle
                     .set_timestamp(TimeVal::new(/* FIXME: sec */ 0, timestamp as i64))
                     .set_request(request_fd)
-                    .queue(&[self.length])
-                    .expect("Failed to queue output buffer");
+                    .queue(&[self.length])?;
                 Ok(())
             }
             _ => Err(QueueError::State),
@@ -279,7 +304,9 @@ impl V4l2OutputQueue {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2OutputQueueHandle::Streaming(handle) => {
-                handle.try_dequeue().map_err(|_| QueueError::Dequeue)?;
+                handle
+                    .try_dequeue()
+                    .map_err(|_| QueueError::BufferDequeue)?;
                 Ok(())
             }
             _ => Err(QueueError::State),
@@ -522,16 +549,12 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2CaptureQueueHandle::Streaming(handle) => {
-                let buffer = handle
-                    .try_get_free_buffer()
-                    .expect("Failed to alloc capture buffer");
+                let buffer = handle.try_get_free_buffer()?;
                 log::debug!("capture >> index: {}\n", buffer.index());
                 let native_handle = frame
                     .to_native_handle()
                     .expect("Failed to export VideoFrame to V4L2 handle");
-                buffer
-                    .queue_with_handles(native_handle)
-                    .expect("Failed to queue capture buffer");
+                buffer.queue_with_handles(native_handle)?;
             }
             _ => return Err(QueueError::State),
         }
