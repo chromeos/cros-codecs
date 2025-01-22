@@ -220,11 +220,11 @@ pub fn detile_plane(
         return Err("Width not aligned properly to tile width.".to_owned());
     }
 
-    if src.len() < (width * (height as usize)) {
+    if src.len() < (src_stride * (height as usize)) {
         return Err("Src buffer not big enough.".to_owned());
     }
 
-    if dst.len() < (width * (height as usize)) {
+    if dst.len() < (dst_stride * height) as usize {
         return Err("Dst buffer not big enough.".to_owned());
     }
 
@@ -280,7 +280,7 @@ pub fn mm21_to_nv12(
         return Err("Width must be greater than 0.".to_owned());
     }
 
-    let sign = if height < 0 { 1 } else { -1 };
+    let sign = if height < 0 { -1 } else { 1 };
 
     // Detile Plane Y
     detile_plane(
