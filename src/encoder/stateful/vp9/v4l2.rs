@@ -137,12 +137,12 @@ mod tests {
     use crate::backend::v4l2::encoder::tests::GbmDevice;
     use crate::backend::v4l2::encoder::v4l2_format_to_frame_layout;
     use crate::backend::v4l2::encoder::MmapingCapture;
+    use crate::bitstream_utils::IvfFileHeader;
+    use crate::bitstream_utils::IvfFrameHeader;
     use crate::encoder::simple_encode_loop;
     use crate::encoder::tests::userptr_test_frame_generator;
     use crate::encoder::RateControl;
     use crate::utils::DmabufFrame;
-    use crate::utils::IvfFileHeader;
-    use crate::utils::IvfFrameHeader;
     use crate::Resolution;
 
     #[ignore]
