@@ -153,20 +153,21 @@ pub enum C2Status {
 }
 
 // J should be either C2DecodeJob or C2EncodeJob.
-pub trait C2Worker<J, U, E, W>
+pub trait C2Worker<J, E, W>
 where
-    U: Clone + Send + 'static,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(J) + Send + 'static,
     J: Send + Job + 'static,
 {
+    type Options: Clone + Send + 'static;
+
     fn new(
         fourcc: Fourcc,
         error_cb: Arc<Mutex<E>>,
         work_done_cb: Arc<Mutex<W>>,
         work_queue: Arc<Mutex<VecDeque<J>>>,
         state: Arc<Mutex<C2State>>,
-        options: U,
+        options: Self::Options,
     ) -> Result<Self, String>
     where
         Self: Sized;
@@ -175,35 +176,38 @@ where
 }
 
 // Note that we do not guarantee thread safety in C2CrosCodecsWrapper.
-pub struct C2Wrapper<J, U, E, W, V>
+pub struct C2Wrapper<J, E, W, V>
 where
-    U: Clone + Send + 'static,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(J) + Send + 'static,
     J: Send + Default + Job + 'static,
-    V: C2Worker<J, U, E, W>,
+    V: C2Worker<J, E, W>,
 {
     fourcc: Fourcc,
     error_cb: Arc<Mutex<E>>,
     work_done_cb: Arc<Mutex<W>>,
     work_queue: Arc<Mutex<VecDeque<J>>>,
     state: Arc<Mutex<C2State>>,
-    options: U,
+    options: <V as C2Worker<J, E, W>>::Options,
     worker_thread: Option<JoinHandle<()>>,
     // The instance of V actually lives in the thread creation closure, not
     // this struct.
     _phantom: PhantomData<V>,
 }
 
-impl<J, U, E, W, V> C2Wrapper<J, U, E, W, V>
+impl<J, E, W, V> C2Wrapper<J, E, W, V>
 where
-    U: Clone + Send + 'static,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(J) + Send + 'static,
     J: Send + Default + Job + 'static,
-    V: C2Worker<J, U, E, W>,
+    V: C2Worker<J, E, W>,
 {
-    pub fn new(fourcc: Fourcc, error_cb: E, work_done_cb: W, options: U) -> Self {
+    pub fn new(
+        fourcc: Fourcc,
+        error_cb: E,
+        work_done_cb: W,
+        options: <V as C2Worker<J, E, W>>::Options,
+    ) -> Self {
         Self {
             fourcc: fourcc,
             error_cb: Arc::new(Mutex::new(error_cb)),
@@ -347,13 +351,12 @@ where
 
 // Instead of C2's release() function, we implement Drop and use RAII to
 // accomplish the same thing
-impl<J, U, E, W, V> Drop for C2Wrapper<J, U, E, W, V>
+impl<J, E, W, V> Drop for C2Wrapper<J, E, W, V>
 where
-    U: Clone + Send + 'static,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(J) + Send + 'static,
     J: Send + Default + Job + 'static,
-    V: C2Worker<J, U, E, W>,
+    V: C2Worker<J, E, W>,
 {
     fn drop(&mut self) {
         self.stop();

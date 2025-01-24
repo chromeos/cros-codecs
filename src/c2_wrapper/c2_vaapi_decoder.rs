@@ -104,17 +104,10 @@ pub struct C2VaapiDecoder {
     gbm: Option<gbm::Device<GbmDevice>>,
 }
 
-impl
-    C2DecoderBackend<
-        dyn StatelessVideoDecoder<
-            Handle = DynDecodedHandle<BufferDescriptor>,
-            FramePool = dyn FramePool<Descriptor = BufferDescriptor>,
-        >,
-        DynDecodedHandle<BufferDescriptor>,
-        dyn FramePool<Descriptor = BufferDescriptor>,
-        C2VaapiDecoderOptions,
-    > for C2VaapiDecoder
-{
+impl C2DecoderBackend for C2VaapiDecoder {
+    type DecodedHandle = BufferDescriptor;
+    type DecoderOptions = C2VaapiDecoderOptions;
+
     fn new(options: C2VaapiDecoderOptions) -> Result<Self, String> {
         let gbm = match options.frame_memory_type {
             FrameMemoryType::Prime => {
