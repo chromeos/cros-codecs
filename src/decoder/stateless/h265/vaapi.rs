@@ -32,7 +32,6 @@ use crate::codec::h265::parser::Slice;
 use crate::codec::h265::parser::Sps;
 use crate::codec::h265::picture::PictureData;
 use crate::codec::h265::picture::Reference;
-use crate::decoder::stateless::h265::clip3;
 use crate::decoder::stateless::h265::RefPicListEntry;
 use crate::decoder::stateless::h265::RefPicSet;
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
@@ -48,6 +47,63 @@ use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 use crate::Rect;
 use crate::Resolution;
+
+// Equation 5-8
+fn clip3(x: i32, y: i32, z: i32) -> i32 {
+    if z < x {
+        x
+    } else if z > y {
+        y
+    } else {
+        z
+    }
+}
+
+// See 6.5.3
+const fn up_right_diagonal<const N: usize, const ROWS: usize>() -> [usize; N] {
+    // Generics can't be used in const operations for now, so [0; ROWS * ROWS]
+    // is rejected by the compiler
+    assert!(ROWS * ROWS == N);
+
+    let mut i = 0;
+    let mut x = 0i32;
+    let mut y = 0i32;
+    let mut ret = [0; N];
+
+    loop {
+        while y >= 0 {
+            if x < (ROWS as i32) && y < (ROWS as i32) {
+                ret[i] = (x + ROWS as i32 * y) as usize;
+                i += 1;
+            }
+            y -= 1;
+            x += 1;
+        }
+
+        y = x;
+        x = 0;
+        if i >= N {
+            break;
+        }
+    }
+
+    ret
+}
+
+const UP_RIGHT_DIAGONAL_4X4: [usize; 16] = up_right_diagonal::<16, 4>();
+const UP_RIGHT_DIAGONAL_8X8: [usize; 64] = up_right_diagonal::<64, 8>();
+
+fn get_raster_from_up_right_diagonal_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
+    for i in 0..64 {
+        dst[UP_RIGHT_DIAGONAL_8X8[i]] = src[i];
+    }
+}
+
+fn get_raster_from_up_right_diagonal_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
+    for i in 0..16 {
+        dst[UP_RIGHT_DIAGONAL_4X4[i]] = src[i];
+    }
+}
 
 enum ScalingListType {
     Sps,
@@ -509,27 +565,24 @@ fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
     let mut scaling_list_32x32_r = [[0; 64]; 2];
 
     (0..6).for_each(|i| {
-        super::get_raster_from_up_right_diagonal_4x4(
+        get_raster_from_up_right_diagonal_4x4(
             scaling_lists.scaling_list_4x4[i],
             &mut scaling_list_4x4[i],
         );
 
-        super::get_raster_from_up_right_diagonal_8x8(
+        get_raster_from_up_right_diagonal_8x8(
             scaling_lists.scaling_list_8x8[i],
             &mut scaling_list_8x8[i],
         );
 
-        super::get_raster_from_up_right_diagonal_8x8(
+        get_raster_from_up_right_diagonal_8x8(
             scaling_lists.scaling_list_16x16[i],
             &mut scaling_list_16x16[i],
         );
     });
 
     (0..2).for_each(|i| {
-        super::get_raster_from_up_right_diagonal_8x8(
-            scaling_list_32x32[i],
-            &mut scaling_list_32x32_r[i],
-        );
+        get_raster_from_up_right_diagonal_8x8(scaling_list_32x32[i], &mut scaling_list_32x32_r[i]);
     });
 
     BufferType::IQMatrix(IQMatrix::HEVC(IQMatrixBufferHEVC::new(
