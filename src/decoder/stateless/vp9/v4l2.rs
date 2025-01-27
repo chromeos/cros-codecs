@@ -72,7 +72,7 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
         hdr: &Header,
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
         bitstream: &[u8],
-        segmentation: &[Segmentation; MAX_SEGMENTS],
+        _segmentation: &[Segmentation; MAX_SEGMENTS],
     ) -> StatelessBackendResult<Self::Handle> {
         let mut ctrl = Vp9V4l2Control::from(hdr);
 
