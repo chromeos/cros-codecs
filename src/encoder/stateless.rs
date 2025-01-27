@@ -117,6 +117,7 @@ impl<O> OutputQueue<O>
 where
     O: BackendPromise,
 {
+    #[allow(dead_code)]
     pub(crate) fn new(blocking: BlockingMode) -> Self {
         Self {
             blocking,
@@ -125,6 +126,7 @@ where
     }
 
     /// Add new pending job to the queue. Which will be returned to client if it is done.
+    #[allow(dead_code)]
     pub(crate) fn add_promise(&mut self, pending: O) {
         self.promises.push_back(pending);
     }
@@ -293,6 +295,7 @@ where
     Backend: StatelessVideoEncoderBackend<Codec>,
     Self: StatelessEncoderExecute<Codec, Handle, Backend>,
 {
+    #[allow(dead_code)]
     fn new(
         backend: Backend,
         mode: BlockingMode,

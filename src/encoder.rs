@@ -31,6 +31,7 @@ pub enum RateControl {
 }
 
 impl RateControl {
+    #[allow(dead_code)]
     pub(crate) fn is_same_variant(left: &Self, right: &Self) -> bool {
         std::mem::discriminant(left) == std::mem::discriminant(right)
     }
