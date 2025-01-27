@@ -24,7 +24,6 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
-use crate::decoder::DecodedHandle;
 use crate::device::v4l2::stateless::controls::vp9::Vp9V4l2Control;
 use crate::Fourcc;
 use crate::Rect;
