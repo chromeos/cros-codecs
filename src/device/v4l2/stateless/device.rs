@@ -93,7 +93,7 @@ impl<C: PlaneHandle> DeviceHandle<C> {
             }
         }
     }
-    fn dequeue_capture_buffer(
+    fn try_dequeue_capture_buffers(
         &mut self,
         frame_import_cb: &impl Fn(
             Fourcc,
@@ -102,18 +102,13 @@ impl<C: PlaneHandle> DeviceHandle<C> {
             Vec<C>,
         ) -> Box<dyn VideoFrame<NativeHandle = Vec<C>>>,
     ) {
-        let mut back_off_duration = Duration::from_millis(1);
         loop {
             match self.capture_queue.dequeue_buffer(frame_import_cb) {
                 Ok(Some(buffer)) => {
                     self.capture_buffers.insert(buffer.timestamp(), buffer);
-                    break;
-                }
-                _ => {
-                    sleep(back_off_duration);
-                    back_off_duration = back_off_duration + back_off_duration;
                     continue;
                 }
+                _ => break,
             }
         }
     }
@@ -128,11 +123,20 @@ impl<C: PlaneHandle> DeviceHandle<C> {
         ) -> Box<dyn VideoFrame<NativeHandle = Vec<C>>>,
     ) -> V4l2CaptureBuffer<C> {
         // TODO: handle synced buffers internally by capture queue
+        let mut back_off_duration = Duration::from_millis(1);
+        let time_out = Duration::from_millis(120);
         loop {
             match self.capture_buffers.remove(&timestamp) {
                 Some(buffer) => return buffer,
-                _ => self.dequeue_capture_buffer(frame_import_cb),
-            };
+                _ => {
+                    sleep(back_off_duration);
+                    back_off_duration = back_off_duration + back_off_duration;
+                    self.try_dequeue_capture_buffers(frame_import_cb);
+                    if back_off_duration > time_out {
+                        panic!("unable to dequeue frame");
+                    }
+                }
+            }
         }
     }
 }
@@ -194,7 +198,6 @@ impl V4l2Device {
             Err(error) => return Err(error),
         };
 
-        // dequeue capture/output
         let frame = Box::new(
             self.gbm_device
                 .clone()
@@ -215,6 +218,20 @@ impl V4l2Device {
                 .expect("Failed to allocate capture buffer!"),
         );
         self.handle.borrow().capture_queue.queue_buffer(frame)?;
+        self.handle
+            .borrow_mut()
+            .try_dequeue_capture_buffers(
+                &move |fourcc: Fourcc,
+                       resolution: Resolution,
+                       strides: Vec<usize>,
+                       native_handle: Vec<DmaBufHandle<File>>| {
+                    Box::new(
+                        <Arc<GbmDevice> as Clone>::clone(&self.gbm_device)
+                            .import_from_v4l2(fourcc, resolution, strides, native_handle)
+                            .expect("Failed to import V4L2 handles!"),
+                    )
+                },
+            );
 
         let request = Rc::new(RefCell::new(V4l2Request::new(
             self.clone(),
