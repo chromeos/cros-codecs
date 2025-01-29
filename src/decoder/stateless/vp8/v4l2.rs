@@ -81,7 +81,9 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
     ) -> StatelessBackendResult<Self::Handle> {
         let mut vp8_frame_params = V4l2CtrlVp8FrameParams::new();
 
-        picture.borrow_mut().request().write(bitstream);
+        let request = picture.borrow_mut().request();
+        let mut request = request.as_ref().borrow_mut();
+        request.write(bitstream);
 
         let mut ref_pictures = Vec::<Rc<RefCell<V4l2Picture>>>::new();
 
@@ -125,12 +127,12 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
             .set_bool_ctx(hdr)
             .set_frame_params(hdr, last_frame_ts, golden_frame_ts, alt_frame_ts);
 
-        picture.borrow_mut().request().ioctl(&vp8_frame_params);
+        request.ioctl(&vp8_frame_params);
 
         let handle = Rc::new(RefCell::new(BackendHandle {
             picture: picture.clone(),
         }));
-        picture.borrow_mut().request().submit();
+        request.submit();
         Ok(V4l2StatelessDecoderHandle {
             handle: handle,
             stream_info: self.stream_info.clone(),

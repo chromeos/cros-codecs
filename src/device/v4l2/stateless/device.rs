@@ -175,7 +175,7 @@ impl V4l2Device {
             .initialize(visible_rect, num_buffers)?;
         Ok(())
     }
-    pub fn alloc_request(&self, timestamp: u64) -> Result<V4l2Request, DecodeError> {
+    pub fn alloc_request(&self, timestamp: u64) -> Result<Rc<RefCell<V4l2Request>>, DecodeError> {
         if self.handle.borrow().capture_queue.num_free_buffers() == 0 {
             return Err(DecodeError::NotEnoughOutputBuffers(0));
         }
@@ -216,12 +216,13 @@ impl V4l2Device {
         );
         self.handle.borrow().capture_queue.queue_buffer(frame)?;
 
-        Ok(V4l2Request::new(
+        let request = Rc::new(RefCell::new(V4l2Request::new(
             self.clone(),
             timestamp,
             self.handle.borrow().alloc_request(),
             output_buffer,
-        ))
+        )));
+        Ok(request)
     }
     pub fn sync(&self, timestamp: u64) -> V4l2CaptureBuffer<DmaBufHandle<File>> {
         self.handle.borrow_mut().sync(

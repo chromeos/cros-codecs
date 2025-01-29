@@ -21,7 +21,7 @@ use crate::DecodedFormat;
 use crate::Resolution;
 
 pub struct V4l2Picture {
-    request: V4l2Request,
+    request: Rc<RefCell<V4l2Request>>,
     // To properly decode stream while output and capture queues
     // are processed independently it's required for v4l2 backend
     // to maintain DPB buffer recycling. The following vector
@@ -32,36 +32,36 @@ pub struct V4l2Picture {
 }
 
 impl V4l2Picture {
-    pub fn new(request: V4l2Request) -> Self {
+    pub fn new(request: Rc<RefCell<V4l2Request>>) -> Self {
         Self {
             request,
             ref_pictures: None,
         }
     }
     pub fn timestamp(&self) -> u64 {
-        self.request.timestamp()
+        self.request.as_ref().borrow().timestamp()
     }
     pub fn set_ref_pictures(&mut self, ref_pictures: Vec<Rc<RefCell<V4l2Picture>>>) -> &mut Self {
         self.ref_pictures = Some(ref_pictures);
         self
     }
     pub fn sync(&mut self) -> &mut Self {
-        self.request.sync();
+        self.request.as_ref().borrow_mut().sync();
         self.ref_pictures = None;
         self
     }
-    pub fn request(&mut self) -> &mut V4l2Request {
-        &mut self.request
+    pub fn request(&mut self) -> Rc<RefCell<V4l2Request>> {
+        self.request.clone()
     }
 }
 
 impl<'a> MappableHandle for std::cell::Ref<'a, V4l2Picture> {
     fn read(&mut self, data: &mut [u8]) -> anyhow::Result<()> {
-        self.request.result().read(data);
+        self.request.as_ref().borrow().result().read(data);
         Ok(())
     }
     fn image_size(&mut self) -> usize {
-        self.request.result().length()
+        self.request.as_ref().borrow().result().length()
     }
 }
 
