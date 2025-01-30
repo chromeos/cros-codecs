@@ -21,7 +21,7 @@ use std::os::fd::AsRawFd;
 use std::os::fd::RawFd;
 use std::path::Path;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
@@ -45,6 +45,7 @@ struct DeviceHandle<C: PlaneHandle> {
     output_queue: V4l2OutputQueue,
     capture_queue: V4l2CaptureQueue<C>,
     capture_buffers: HashMap<u64, V4l2CaptureBuffer<C>>,
+    requests: HashMap<u64, Weak<RefCell<V4l2Request>>>,
 }
 
 impl<C: PlaneHandle> DeviceHandle<C> {
@@ -72,6 +73,7 @@ impl<C: PlaneHandle> DeviceHandle<C> {
             output_queue,
             capture_queue,
             capture_buffers: HashMap::<u64, V4l2CaptureBuffer<C>>::new(),
+            requests: HashMap::<u64, Weak<RefCell<V4l2Request>>>::new(),
         }
     }
     fn alloc_request(&self) -> ioctl::Request {
@@ -93,6 +95,10 @@ impl<C: PlaneHandle> DeviceHandle<C> {
             }
         }
     }
+    fn insert_request_into_hash(&mut self, request: Weak<RefCell<V4l2Request>>) {
+        let timestamp = request.upgrade().unwrap().as_ref().borrow().timestamp();
+        self.requests.insert(timestamp, request);
+    }
     fn try_dequeue_capture_buffers(
         &mut self,
         frame_import_cb: &impl Fn(
@@ -105,7 +111,19 @@ impl<C: PlaneHandle> DeviceHandle<C> {
         loop {
             match self.capture_queue.dequeue_buffer(frame_import_cb) {
                 Ok(Some(buffer)) => {
-                    self.capture_buffers.insert(buffer.timestamp(), buffer);
+                    let timestamp = buffer.timestamp();
+                    self.capture_buffers.insert(timestamp, buffer);
+                    let request = self.requests.remove(&timestamp).unwrap();
+                    match request.upgrade().unwrap().as_ref().try_borrow_mut() {
+                        Ok(mut request) => request
+                            .picture()
+                            .upgrade()
+                            .unwrap()
+                            .as_ref()
+                            .borrow_mut()
+                            .drop_references(),
+                        _ => (),
+                    }
                     continue;
                 }
                 _ => break,
@@ -239,6 +257,9 @@ impl V4l2Device {
             self.handle.borrow().alloc_request(),
             output_buffer,
         )));
+        self.handle
+            .borrow_mut()
+            .insert_request_into_hash(Rc::downgrade(&request.clone()));
         Ok(request)
     }
     pub fn sync(&self, timestamp: u64) -> V4l2CaptureBuffer<DmaBufHandle<File>> {
