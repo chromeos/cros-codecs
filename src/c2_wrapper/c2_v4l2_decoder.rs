@@ -48,12 +48,4 @@ impl C2DecoderBackend for C2V4L2Decoder {
             _ => return Err(format!("Unsupported format {format:?}")),
         })
     }
-
-    fn allocate_new_frames(
-        &mut self,
-        _stream_info: &StreamInfo,
-        num_frames: usize,
-    ) -> Result<Vec<Self::DecodedHandle>, String> {
-        Ok(vec![(); num_frames])
-    }
 }

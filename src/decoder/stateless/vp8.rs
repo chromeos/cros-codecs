@@ -20,7 +20,6 @@ use crate::codec::vp8::parser::Segmentation;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::NewPictureResult;
-use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -224,7 +223,6 @@ where
     B::Handle: Clone + 'static,
 {
     type Handle = B::Handle;
-    type FramePool = B::FramePool;
 
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let frame = self
@@ -271,10 +269,6 @@ where
             decoder.coded_resolution =
                 Resolution { width: hdr.width as u32, height: hdr.height as u32 };
         })
-    }
-
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool> {
-        self.backend.frame_pool(layer)
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

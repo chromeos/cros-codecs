@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::utils::align_up;
 use crate::DecodedFormat;
@@ -12,6 +13,8 @@ use crate::Resolution;
 
 #[cfg(feature = "backend")]
 pub mod gbm_video_frame;
+#[cfg(feature = "vaapi")]
+use libva::Display;
 
 pub const Y_PLANE: usize = 0;
 pub const UV_PLANE: usize = 1;
@@ -222,5 +225,12 @@ pub trait VideoFrame {
 
     fn map_mut<'a>(&'a mut self) -> Result<Box<dyn WriteMapping<'a> + 'a>, String>;
 
+    #[cfg(feature = "v4l2")]
     fn to_native_handle(self: Box<Self>) -> Result<Self::NativeHandle, String>;
+
+    #[cfg(feature = "vaapi")]
+    fn to_native_handle(
+        self: Box<Self>,
+        display: &Rc<Display>,
+    ) -> Result<Self::NativeHandle, String>;
 }

@@ -63,10 +63,7 @@ fn upload_img<M: libva::SurfaceMemoryDescriptor>(
     };
 
     let image_fmts = display.query_image_formats().unwrap();
-    let image_fmt = image_fmts
-        .into_iter()
-        .find(|f| f.fourcc == libva::VA_FOURCC_NV12)
-        .unwrap();
+    let image_fmt = image_fmts.into_iter().find(|f| f.fourcc == libva::VA_FOURCC_NV12).unwrap();
     let mut image = libva::Image::create_from(
         surface,
         image_fmt,
@@ -126,10 +123,7 @@ fn new_h264_vaapi_encoder(
     args: &Args,
     display: &Rc<libva::Display>,
 ) -> Box<dyn VideoEncoder<PooledVaSurface<()>>> {
-    let resolution = Resolution {
-        width: args.width,
-        height: args.height,
-    };
+    let resolution = Resolution { width: args.width, height: args.height };
 
     let config = H264EncoderConfig {
         resolution,
@@ -159,10 +153,7 @@ fn new_vp9_vaapi_encoder(
     args: &Args,
     display: &Rc<libva::Display>,
 ) -> Box<dyn VideoEncoder<PooledVaSurface<()>>> {
-    let resolution = Resolution {
-        width: args.width,
-        height: args.height,
-    };
+    let resolution = Resolution { width: args.width, height: args.height };
 
     let config = VP9EncoderConfig {
         resolution,
@@ -192,10 +183,7 @@ fn new_av1_vaapi_encoder(
     args: &Args,
     display: &Rc<libva::Display>,
 ) -> Box<dyn VideoEncoder<PooledVaSurface<()>>> {
-    let resolution = Resolution {
-        width: args.width,
-        height: args.height,
-    };
+    let resolution = Resolution { width: args.width, height: args.height };
 
     let config = AV1EncoderConfig {
         resolution,
@@ -237,10 +225,7 @@ pub fn do_encode(mut input: File, args: Args) -> () {
         Rc::clone(&display),
         libva::VA_RT_FORMAT_YUV420,
         Some(libva::UsageHint::USAGE_HINT_ENCODER),
-        Resolution {
-            width: args.width,
-            height: args.height,
-        },
+        Resolution { width: args.width, height: args.height },
     );
 
     pool.add_frames(vec![(); 16]).unwrap();
@@ -277,11 +262,7 @@ pub fn do_encode(mut input: File, args: Args) -> () {
             args.fourcc,
         );
 
-        let input_frame = FrameMetadata {
-            layout,
-            timestamp: i as u64,
-            force_keyframe: false,
-        };
+        let input_frame = FrameMetadata { layout, timestamp: i as u64, force_keyframe: false };
 
         encoder.encode(input_frame, handle).unwrap();
         while let Some(coded) = encoder.poll().unwrap() {

@@ -209,6 +209,7 @@ impl V4l2Device {
                 .clone()
                 .new_frame(
                     Fourcc::from(self.handle.borrow().capture_queue.format.pixelformat.to_u32()),
+                    Resolution::from(self.handle.borrow().capture_queue.visible_rect),
                     Resolution {
                         width: self.handle.borrow().capture_queue.format.width,
                         height: self.handle.borrow().capture_queue.format.height,

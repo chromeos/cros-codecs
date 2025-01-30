@@ -20,7 +20,6 @@ use libva::SliceParameterBufferHEVCRext;
 use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
 use crate::backend::vaapi::decoder::VaapiPicture;
@@ -36,15 +35,13 @@ use crate::decoder::stateless::h265::RefPicListEntry;
 use crate::decoder::stateless::h265::RefPicSet;
 use crate::decoder::stateless::h265::StatelessH265DecoderBackend;
 use crate::decoder::stateless::h265::H265;
-use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
-use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
-use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::video_frame::gbm_video_frame::GbmVideoFrame;
 use crate::Rect;
 use crate::Resolution;
 
@@ -575,14 +572,13 @@ fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
     )))
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> VaapiBackend<M> {
+impl VaapiBackend {
     fn submit_last_slice(
         &mut self,
         picture: &mut <Self as StatelessDecoderBackendPicture<H265>>::Picture,
     ) -> anyhow::Result<()> {
         if let Some(last_slice) = picture.last_slice.take() {
-            let metadata = self.metadata_state.get_parsed()?;
-            let context = &metadata.context;
+            let context = &self.context;
             let picture = &mut picture.picture;
 
             let slice_param = BufferType::SliceParameter(SliceParameter::HEVC(last_slice.0));
@@ -615,15 +611,13 @@ pub struct VaapiH265Picture<Picture> {
     va_references: [PictureHEVC; 15],
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H265>
-    for VaapiBackend<M>
-{
-    type Picture = VaapiH265Picture<VaapiPicture<M>>;
+impl StatelessDecoderBackendPicture<H265> for VaapiBackend {
+    type Picture = VaapiH265Picture<VaapiPicture<GbmVideoFrame>>;
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for VaapiBackend<M> {
+impl StatelessH265DecoderBackend for VaapiBackend {
     fn new_sequence(&mut self, sps: &Sps) -> StatelessBackendResult<()> {
-        self.new_sequence(sps, PoolCreationMode::Highest)
+        self.new_sequence(sps)
     }
 
     fn new_picture(
@@ -631,14 +625,10 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         coded_resolution: Resolution,
         timestamp: u64,
     ) -> NewPictureResult<Self::Picture> {
-        let layer = PoolLayer::Layer(coded_resolution);
-        let pool =
-            self.frame_pool(layer).pop().ok_or(NewPictureError::NoFramePool(coded_resolution))?;
-        let surface = pool.get_surface().ok_or(NewPictureError::OutOfOutputBuffers)?;
-        let metadata = self.metadata_state.get_parsed()?;
+        let surface = self.new_surface();
 
         Ok(VaapiH265Picture {
-            picture: VaPicture::new(timestamp, Rc::clone(&metadata.context), surface),
+            picture: VaPicture::new(timestamp, Rc::clone(&self.context), surface),
             last_slice: Default::default(),
             va_references: Default::default(),
         })
@@ -654,8 +644,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         rps: &RefPicSet<Self::Handle>,
         slice: &Slice,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
-        let metadata = self.metadata_state.get_parsed()?;
-        let context = &metadata.context;
+        let context = &self.context;
 
         let surface_id = picture.picture.surface().id();
 
@@ -868,16 +857,12 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H265, VaapiBackend<M>> {
+impl StatelessDecoder<H265, VaapiBackend> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi<S>(
+    pub fn new_vaapi(
         display: Rc<Display>,
         blocking_mode: BlockingMode,
-    ) -> Result<Self, NewStatelessDecoderError>
-    where
-        M: From<S>,
-        S: From<M>,
-    {
+    ) -> Result<Self, NewStatelessDecoderError> {
         Self::new(VaapiBackend::new(display, false), blocking_mode)
     }
 }

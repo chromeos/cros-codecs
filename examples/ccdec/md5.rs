@@ -86,18 +86,11 @@ fn process_chunk(byte_chunk: &[u8], a0: u32, b0: u32, c0: u32, d0: u32) -> (u32,
         B = B.wrapping_add(left_rotate(F, shift_amounts[i]));
     }
 
-    (
-        a0.wrapping_add(A),
-        b0.wrapping_add(B),
-        c0.wrapping_add(C),
-        d0.wrapping_add(D),
-    )
+    (a0.wrapping_add(A), b0.wrapping_add(B), c0.wrapping_add(C), d0.wrapping_add(D))
 }
 
 fn pad(input: &[u8], len_already_processed: u64) -> Vec<u8> {
-    let orig_len = (input.len() as u64)
-        .wrapping_mul(8)
-        .wrapping_add(len_already_processed);
+    let orig_len = (input.len() as u64).wrapping_mul(8).wrapping_add(len_already_processed);
     let mut ret = input.to_vec();
 
     ret.push(0x80);
@@ -189,10 +182,7 @@ mod tests {
 
     #[test]
     fn digest_simple_strings() {
-        assert_eq!(
-            md5_digest("".as_bytes()),
-            "d41d8cd98f00b204e9800998ecf8427e"
-        );
+        assert_eq!(md5_digest("".as_bytes()), "d41d8cd98f00b204e9800998ecf8427e");
         assert_eq!(
             md5_digest("The quick brown fox jumps over the lazy dog".as_bytes()),
             "9e107d9d372bb6826bd81d3542a419d6"

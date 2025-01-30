@@ -328,7 +328,7 @@ impl<H: PlaneHandle> V4l2CaptureBuffer<H> {
 
     // TODO: Directly expose VideoFrame to the framework instead of doing an extra memcpy. We need
     // the VA-API changes to merge before we can do this.
-    pub fn read(&self, data: &mut [u8]) {
+    pub fn read(&mut self, data: &mut [u8]) {
         let decoded_format: DecodedFormat =
             self.format.pixelformat.to_string().parse().expect("Unable to output");
 

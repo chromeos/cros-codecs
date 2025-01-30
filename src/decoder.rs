@@ -20,7 +20,6 @@ use nix::sys::eventfd::EventFd;
 
 pub use crate::BlockingMode;
 
-use crate::decoder::stateless::PoolLayer;
 use crate::DecodedFormat;
 use crate::Resolution;
 
@@ -85,12 +84,7 @@ pub trait DecoderFormatNegotiator {
 
     /// Returns the current decoding parameters, as extracted from the stream.
     fn stream_info(&self) -> &StreamInfo;
-    /// Returns the frame pool in use for the decoder for `layer` set up for the
-    /// new format.
-    fn frame_pool(
-        &mut self,
-        layer: PoolLayer,
-    ) -> Vec<&mut dyn FramePool<Descriptor = Self::Descriptor>>;
+
     /// Attempt to change the pixel format of output frames to `format`.
     fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
 }
@@ -106,7 +100,7 @@ pub enum DecoderEvent<'a, H: DecodedHandle> {
 pub trait DynHandle {
     /// Gets an CPU mapping to the memory backing the handle.
     /// Assumes that this picture is backed by a handle and panics if not the case.
-    fn dyn_mappable_handle<'a>(&'a self) -> anyhow::Result<Box<dyn MappableHandle + 'a>>;
+    fn dyn_mappable_handle<'a>(&'a mut self) -> anyhow::Result<Box<dyn MappableHandle + 'a>>;
 }
 
 /// A trait for types that can be mapped into the client's address space.
@@ -129,7 +123,7 @@ pub trait DecodedHandle {
     type Descriptor;
 
     /// Returns a reference to an object allowing a CPU mapping of the decoded frame.
-    fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a>;
+    fn dyn_picture<'a>(&'a mut self) -> Box<dyn DynHandle + 'a>;
 
     /// Returns the timestamp of the picture.
     fn timestamp(&self) -> u64;
@@ -158,8 +152,8 @@ where
 {
     type Descriptor = H::Descriptor;
 
-    fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a> {
-        self.as_ref().dyn_picture()
+    fn dyn_picture<'a>(&'a mut self) -> Box<dyn DynHandle + 'a> {
+        self.as_mut().dyn_picture()
     }
 
     fn timestamp(&self) -> u64 {
