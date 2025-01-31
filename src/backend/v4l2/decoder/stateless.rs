@@ -4,38 +4,43 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::backend::v4l2::decoder::V4l2StreamInfo;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
-use crate::decoder::stateless::TryFormat;
 use crate::decoder::DecodedHandle;
-use crate::decoder::DynHandle;
-use crate::decoder::MappableHandle;
 use crate::decoder::StreamInfo;
 use crate::device::v4l2::stateless::device::V4l2Device;
 use crate::device::v4l2::stateless::request::V4l2Request;
+use crate::video_frame::VideoFrame;
 use crate::DecodedFormat;
 use crate::Resolution;
 
-pub struct V4l2Picture {
-    request: Rc<RefCell<V4l2Request>>,
+pub struct V4l2Picture<V: VideoFrame> {
+    request: Rc<RefCell<V4l2Request<V>>>,
     // To properly decode stream while output and capture queues
     // are processed independently it's required for v4l2 backend
     // to maintain DPB buffer recycling. The following vector
     // is used to prevent reference pictures to be reused while
     // current picture is still being decoded.
-    ref_pictures: Option<Vec<Rc<RefCell<V4l2Picture>>>>,
+    ref_pictures: Option<Vec<Rc<RefCell<V4l2Picture<V>>>>>,
 }
 
-impl V4l2Picture {
-    pub fn new(request: Rc<RefCell<V4l2Request>>) -> Self {
+impl<V: VideoFrame> V4l2Picture<V> {
+    pub fn new(request: Rc<RefCell<V4l2Request<V>>>) -> Self {
         Self { request, ref_pictures: None }
+    }
+    pub fn video_frame(&self) -> Arc<V> {
+        self.request.as_ref().borrow().result().capture_buffer.borrow().frame.clone()
     }
     pub fn timestamp(&self) -> u64 {
         self.request.as_ref().borrow().timestamp()
     }
-    pub fn set_ref_pictures(&mut self, ref_pictures: Vec<Rc<RefCell<V4l2Picture>>>) -> &mut Self {
+    pub fn set_ref_pictures(
+        &mut self,
+        ref_pictures: Vec<Rc<RefCell<V4l2Picture<V>>>>,
+    ) -> &mut Self {
         self.ref_pictures = Some(ref_pictures);
         self
     }
@@ -44,7 +49,7 @@ impl V4l2Picture {
         self.ref_pictures = None;
         self
     }
-    pub fn request(&mut self) -> Rc<RefCell<V4l2Request>> {
+    pub fn request(&mut self) -> Rc<RefCell<V4l2Request<V>>> {
         self.request.clone()
     }
     pub fn drop_references(&mut self) {
@@ -52,40 +57,23 @@ impl V4l2Picture {
     }
 }
 
-impl<'a> MappableHandle for std::cell::Ref<'a, V4l2Picture> {
-    fn read(&mut self, data: &mut [u8]) -> anyhow::Result<()> {
-        self.request.as_ref().borrow().result().read(data);
-        Ok(())
-    }
-    fn image_size(&mut self) -> usize {
-        self.request.as_ref().borrow().result().length()
-    }
-}
-
-pub struct BackendHandle {
-    pub picture: Rc<RefCell<V4l2Picture>>,
-}
-
-impl<'a> DynHandle for std::cell::RefMut<'a, BackendHandle> {
-    fn dyn_mappable_handle<'b>(&'b mut self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
-        self.picture.borrow_mut().sync();
-        Ok(Box::new(self.picture.borrow()))
-    }
-}
-
-pub struct V4l2StatelessDecoderHandle {
-    pub handle: Rc<RefCell<BackendHandle>>,
+pub struct V4l2StatelessDecoderHandle<V: VideoFrame> {
+    pub picture: Rc<RefCell<V4l2Picture<V>>>,
     pub stream_info: StreamInfo,
 }
 
-impl Clone for V4l2StatelessDecoderHandle {
+impl<V: VideoFrame> Clone for V4l2StatelessDecoderHandle<V> {
     fn clone(&self) -> Self {
-        Self { handle: Rc::clone(&self.handle), stream_info: self.stream_info.clone() }
+        Self { picture: Rc::clone(&self.picture), stream_info: self.stream_info.clone() }
     }
 }
 
-impl DecodedHandle for V4l2StatelessDecoderHandle {
-    type Descriptor = ();
+impl<V: VideoFrame> DecodedHandle for V4l2StatelessDecoderHandle<V> {
+    type Frame = V;
+
+    fn video_frame(&self) -> Arc<Self::Frame> {
+        self.picture.borrow().video_frame()
+    }
 
     fn coded_resolution(&self) -> Resolution {
         self.stream_info.coded_resolution.clone()
@@ -96,32 +84,25 @@ impl DecodedHandle for V4l2StatelessDecoderHandle {
     }
 
     fn timestamp(&self) -> u64 {
-        self.handle.borrow().picture.borrow().timestamp()
-    }
-
-    fn dyn_picture<'a>(&'a mut self) -> Box<dyn DynHandle + 'a> {
-        Box::new(self.handle.borrow_mut())
+        self.picture.borrow().timestamp()
     }
 
     fn sync(&self) -> anyhow::Result<()> {
+        self.picture.borrow_mut().sync();
         Ok(())
     }
 
     fn is_ready(&self) -> bool {
         todo!();
     }
-
-    fn resource(&self) -> std::cell::Ref<()> {
-        todo!();
-    }
 }
 
-pub struct V4l2StatelessDecoderBackend {
-    pub device: V4l2Device,
+pub struct V4l2StatelessDecoderBackend<V: VideoFrame> {
+    pub device: V4l2Device<V>,
     pub stream_info: StreamInfo,
 }
 
-impl V4l2StatelessDecoderBackend {
+impl<V: VideoFrame> V4l2StatelessDecoderBackend<V> {
     pub fn new() -> Self {
         Self {
             device: V4l2Device::new(),
@@ -135,33 +116,8 @@ impl V4l2StatelessDecoderBackend {
     }
 }
 
-impl<Codec: StatelessCodec> TryFormat<Codec> for V4l2StatelessDecoderBackend
-where
-    for<'a> &'a Codec::FormatInfo: V4l2StreamInfo,
-{
-    fn try_format(
-        &mut self,
-        format_info: &Codec::FormatInfo,
-        format: DecodedFormat,
-    ) -> anyhow::Result<()> {
-        // TODO
-        // VIDIOC_S/G_FMT has been called on both output and capture buffers.
-        // The VAAPI implementation looks to do actual format checking here.
-        // The values provided here are directly from the codec (modulo format).
-        // Hardware may handle this differently, i.e. buffer padding.
-        self.stream_info.format = format;
-
-        let display_resolution = Resolution::from(format_info.visible_rect());
-
-        self.stream_info.min_num_frames = format_info.min_num_frames();
-        self.stream_info.coded_resolution = format_info.coded_size();
-        self.stream_info.display_resolution = display_resolution;
-        Ok(())
-    }
-}
-
-impl StatelessDecoderBackend for V4l2StatelessDecoderBackend {
-    type Handle = V4l2StatelessDecoderHandle;
+impl<V: VideoFrame> StatelessDecoderBackend for V4l2StatelessDecoderBackend<V> {
+    type Handle = V4l2StatelessDecoderHandle<V>;
 
     fn stream_info(&self) -> Option<&StreamInfo> {
         // TODO

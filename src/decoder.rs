@@ -14,13 +14,17 @@ pub mod stateless;
 use std::collections::VecDeque;
 use std::os::fd::AsFd;
 use std::os::fd::BorrowedFd;
+use std::rc::Rc;
+use std::sync::Arc;
 
 use nix::errno::Errno;
 use nix::sys::eventfd::EventFd;
 
 pub use crate::BlockingMode;
 
+use crate::video_frame::VideoFrame;
 use crate::DecodedFormat;
+use crate::Fourcc;
 use crate::Resolution;
 
 /// Trait for a pool of frames in a particular format.
@@ -54,7 +58,7 @@ pub trait FramePool {
 ///
 /// This is static information obtained from the stream itself about its requirements. It does not
 /// reflect the current settings of the decoder.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StreamInfo {
     /// Pixel format for the output frames expected by the decoder.
     pub format: DecodedFormat,
@@ -70,60 +74,20 @@ pub struct StreamInfo {
     pub min_num_frames: usize,
 }
 
-/// Trait for objects allowing to negotiate the output format of a decoder.
-///
-/// A decoder always has a valid output format set, but that format can change if the stream
-/// requests it. When this happens, the decoder stops accepting new input and a
-/// [`DecoderEvent::FormatChanged`] event is emitted, carrying a negotiator trait object that
-/// allows the client to acknowledge that the format change took place, and (in the future)
-/// negotiate its specifics.
-///
-/// When the object is dropped, the decoder can accept and process new input again.
-pub trait DecoderFormatNegotiator {
-    type Descriptor;
-
-    /// Returns the current decoding parameters, as extracted from the stream.
-    fn stream_info(&self) -> &StreamInfo;
-
-    /// Attempt to change the pixel format of output frames to `format`.
-    fn try_format(&mut self, format: DecodedFormat) -> anyhow::Result<()>;
-}
-
 /// Events that can be retrieved using the `next_event` method of a decoder.
-pub enum DecoderEvent<'a, H: DecodedHandle> {
+pub enum DecoderEvent<H: DecodedHandle> {
     /// The next frame has been decoded.
     FrameReady(H),
     /// The format of the stream has changed and action is required.
-    FormatChanged(Box<dyn DecoderFormatNegotiator<Descriptor = H::Descriptor> + 'a>),
-}
-
-pub trait DynHandle {
-    /// Gets an CPU mapping to the memory backing the handle.
-    /// Assumes that this picture is backed by a handle and panics if not the case.
-    fn dyn_mappable_handle<'a>(&'a mut self) -> anyhow::Result<Box<dyn MappableHandle + 'a>>;
-}
-
-/// A trait for types that can be mapped into the client's address space.
-pub trait MappableHandle {
-    /// Read the contents of `self` into `buffer`.
-    ///
-    /// The size of `buffer` must be equal to `image_size()`, or an error will be returned.
-    fn read(&mut self, buffer: &mut [u8]) -> anyhow::Result<()>;
-
-    /// Returns the size of the `buffer` argument required to call `read` on this handle.
-    fn image_size(&mut self) -> usize;
+    FormatChanged,
 }
 
 /// The handle type used by the decoder backend. The only requirement from implementors is that
 /// they give access to the underlying handle and that they can be (cheaply) cloned.
 pub trait DecodedHandle {
-    /// Memory descriptor type - the type that provides the backend memory for the decoded frame.
-    /// `()` is a special type meaning that the backend is responsible for allocating and managing
-    /// the memory itself.
-    type Descriptor;
+    type Frame: VideoFrame;
 
-    /// Returns a reference to an object allowing a CPU mapping of the decoded frame.
-    fn dyn_picture<'a>(&'a mut self) -> Box<dyn DynHandle + 'a>;
+    fn video_frame(&self) -> Arc<Self::Frame>;
 
     /// Returns the timestamp of the picture.
     fn timestamp(&self) -> u64;
@@ -139,10 +103,6 @@ pub trait DecodedHandle {
 
     /// Wait until this handle has been completely rendered.
     fn sync(&self) -> anyhow::Result<()>;
-
-    /// Returns a reference to the internal [`DecodedHandle::Descriptor`]. Can be leveraged by
-    /// platform-specific code,
-    fn resource(&self) -> std::cell::Ref<Self::Descriptor>;
 }
 
 /// Implementation for any boxed [`DecodedHandle`], including trait objects.
@@ -150,10 +110,10 @@ impl<H> DecodedHandle for Box<H>
 where
     H: DecodedHandle + ?Sized,
 {
-    type Descriptor = H::Descriptor;
+    type Frame = H::Frame;
 
-    fn dyn_picture<'a>(&'a mut self) -> Box<dyn DynHandle + 'a> {
-        self.as_mut().dyn_picture()
+    fn video_frame(&self) -> Arc<Self::Frame> {
+        self.as_ref().video_frame()
     }
 
     fn timestamp(&self) -> u64 {
@@ -175,14 +135,10 @@ where
     fn sync(&self) -> anyhow::Result<()> {
         self.as_ref().sync()
     }
-
-    fn resource(&self) -> std::cell::Ref<Self::Descriptor> {
-        self.as_ref().resource()
-    }
 }
 
-/// Trait object for [`DecodedHandle`]s using a specific `Descriptor`.
-pub type DynDecodedHandle<D> = Box<dyn DecodedHandle<Descriptor = D>>;
+/// Trait object for [`DecodedHandle`]s using a specific `VideoFrame`.
+pub type DynDecodedHandle<F> = Box<dyn DecodedHandle<Frame = F>>;
 
 /// A queue where decoding jobs wait until they are completed, at which point they can be
 /// retrieved.

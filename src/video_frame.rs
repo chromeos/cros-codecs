@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::utils::align_up;
@@ -14,7 +15,11 @@ use crate::Resolution;
 #[cfg(feature = "backend")]
 pub mod gbm_video_frame;
 #[cfg(feature = "vaapi")]
-use libva::Display;
+use libva::{Display, Surface, SurfaceMemoryDescriptor};
+#[cfg(feature = "v4l2")]
+use v4l2r::bindings::v4l2_plane;
+#[cfg(feature = "v4l2")]
+use v4l2r::memory::{BufferHandles, Memory, MemoryType, PlaneHandle, PrimitiveBufferHandles};
 
 pub const Y_PLANE: usize = 0;
 pub const UV_PLANE: usize = 1;
@@ -31,9 +36,31 @@ pub trait WriteMapping<'a> {
     fn get(&self) -> Vec<RefCell<&'a mut [u8]>>;
 }
 
+// Rust doesn't allow type aliases in traits, so we use this stupid hack to accomplish effectively
+// the same thing.
+pub trait Equivalent<A>: From<A> + Into<A> {
+    fn from_ref(value: &A) -> &Self;
+    fn into_ref(self: &Self) -> &A;
+}
+
+impl<A> Equivalent<A> for A {
+    fn from_ref(value: &A) -> &Self {
+        value
+    }
+    fn into_ref(self: &Self) -> &A {
+        self
+    }
+}
+
 // Unified abstraction for any kind of frame data that might be sent to the hardware.
-pub trait VideoFrame {
-    type NativeHandle;
+pub trait VideoFrame: Send + Sync + Debug + 'static {
+    #[cfg(feature = "v4l2")]
+    type NativeHandle: PlaneHandle;
+
+    #[cfg(feature = "vaapi")]
+    type MemDescriptor: SurfaceMemoryDescriptor;
+    #[cfg(feature = "vaapi")]
+    type NativeHandle: Equivalent<Surface<Self::MemDescriptor>>;
 
     fn fourcc(&self) -> Fourcc;
 
@@ -226,11 +253,44 @@ pub trait VideoFrame {
     fn map_mut<'a>(&'a mut self) -> Result<Box<dyn WriteMapping<'a> + 'a>, String>;
 
     #[cfg(feature = "v4l2")]
-    fn to_native_handle(self: Box<Self>) -> Result<Self::NativeHandle, String>;
+    fn to_native_handle(&self, plane: usize) -> Result<&Self::NativeHandle, String>;
 
     #[cfg(feature = "vaapi")]
-    fn to_native_handle(
-        self: Box<Self>,
-        display: &Rc<Display>,
-    ) -> Result<Self::NativeHandle, String>;
+    fn to_native_handle(&self, display: &Rc<Display>) -> Result<Self::NativeHandle, String>;
+}
+
+// Rust has restrictions about implementing foreign types, so this is a stupid workaround to get
+// VideoFrame to implement BufferHandles.
+#[cfg(feature = "v4l2")]
+#[derive(Debug)]
+pub struct V4l2VideoFrame<V: VideoFrame>(pub V);
+
+#[cfg(feature = "v4l2")]
+impl<V: VideoFrame> From<V> for V4l2VideoFrame<V> {
+    fn from(value: V) -> Self {
+        Self(value)
+    }
+}
+
+#[cfg(feature = "v4l2")]
+impl<V: VideoFrame> BufferHandles for V4l2VideoFrame<V> {
+    type SupportedMemoryType = MemoryType;
+
+    fn len(&self) -> usize {
+        self.0.num_planes()
+    }
+
+    fn fill_v4l2_plane(&self, index: usize, plane: &mut v4l2_plane) {
+        self.0
+            .to_native_handle(index)
+            .expect("Failed to export handle for fill_v4l2_plane")
+            .fill_v4l2_plane(plane);
+    }
+}
+
+#[cfg(feature = "v4l2")]
+impl<V: VideoFrame> PrimitiveBufferHandles for V4l2VideoFrame<V> {
+    type HandleType = V::NativeHandle;
+    const MEMORY_TYPE: Self::SupportedMemoryType =
+        <V::NativeHandle as PlaneHandle>::Memory::MEMORY_TYPE;
 }

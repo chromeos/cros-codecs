@@ -15,13 +15,16 @@ use crate::decoder::stateless::DynStatelessVideoDecoder;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
+use crate::decoder::DecodedHandle;
 use crate::decoder::StreamInfo;
 use crate::multiple_desc_type;
 use crate::utils::DmabufFrame;
 use crate::utils::UserPtrFrame;
 use crate::video_frame::gbm_video_frame::GbmVideoFrame;
+use crate::video_frame::VideoFrame;
 use crate::DecodedFormat;
 use crate::EncodedFormat;
+use crate::Fourcc;
 use crate::FrameMemoryType;
 use crate::PlaneLayout;
 use crate::Resolution;
@@ -29,16 +32,13 @@ use crate::Resolution;
 #[derive(Clone, Debug)]
 pub struct C2VaapiDecoderOptions {
     pub libva_device_path: Option<PathBuf>,
-    pub frame_memory_type: FrameMemoryType,
 }
 
 pub struct C2VaapiDecoder {
     display: Rc<libva::Display>,
-    frame_memory_type: FrameMemoryType,
 }
 
 impl C2DecoderBackend for C2VaapiDecoder {
-    type DecodedHandle = GbmVideoFrame;
     type DecoderOptions = C2VaapiDecoderOptions;
 
     fn new(options: C2VaapiDecoderOptions) -> Result<Self, String> {
@@ -48,13 +48,18 @@ impl C2DecoderBackend for C2VaapiDecoder {
             None => libva::Display::open().ok_or("failed to open libva display")?,
         };
 
-        Ok(Self { display: display, frame_memory_type: options.frame_memory_type })
+        Ok(Self { display: display })
     }
 
-    fn get_decoder(
+    // TODO: Actually query the driver for this information.
+    fn supported_output_formats(&self) -> Vec<Fourcc> {
+        vec![Fourcc::from(b"NV12")]
+    }
+
+    fn get_decoder<V: VideoFrame + 'static>(
         &mut self,
         format: EncodedFormat,
-    ) -> Result<DynStatelessVideoDecoder<GbmVideoFrame>, String> {
+    ) -> Result<DynStatelessVideoDecoder<V>, String> {
         Ok(match format {
             EncodedFormat::H264 => StatelessDecoder::<H264, _>::new_vaapi(
                 self.display.clone(),

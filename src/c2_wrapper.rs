@@ -10,6 +10,7 @@ use thiserror::Error;
 
 use std::collections::VecDeque;
 use std::marker::PhantomData;
+use std::rc::Rc;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -17,8 +18,11 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::vec::Vec;
 
+use crate::decoder::StreamInfo;
+use crate::video_frame::VideoFrame;
 use crate::Fourcc;
 use crate::FrameLayout;
+use crate::Resolution;
 
 pub mod c2_decoder;
 #[cfg(feature = "v4l2")]
@@ -26,107 +30,48 @@ pub mod c2_v4l2_decoder;
 #[cfg(feature = "vaapi")]
 pub mod c2_vaapi_decoder;
 
-pub struct C2VideoFrame<'a> {
-    // TODO: This will require us to memcpy frame data. This makes it easy to prototype, but is
-    // inefficient. We will want to change this to DMA buffer FDs that we import directly.
-    pub planes: Vec<&'a mut [u8]>,
-    pub layout: FrameLayout,
-}
-
-impl C2VideoFrame<'_> {
-    // These frames are coming from an external source, so we should code a
-    // a little defensively.
-    pub fn validate_frame(
-        &self,
-        fourcc: Fourcc,
-        visible_width: usize,
-        visible_height: usize,
-    ) -> Result<(), String> {
-        if self.planes.len() != self.layout.planes.len() {
-            return Err("Malformed FrameLayout!".into());
-        }
-
-        if self.layout.format.0 != fourcc {
-            return Err("Wrong fourcc!".into());
-        }
-
-        match fourcc.to_string().as_str() {
-            "I420" => {
-                if self.layout.size.width != visible_width as u32
-                    || self.layout.size.height != visible_height as u32
-                {
-                    return Err("Visible dimensions do not match!".into());
-                }
-
-                if self.planes.len() != 3 {
-                    return Err("Wrong number of planes for I420".into());
-                }
-
-                let y_min_size = self.layout.size.get_area();
-                let chroma_stride = (self.layout.size.width as usize + 1) / 2;
-                let chroma_min_size = chroma_stride * ((self.layout.size.height as usize + 1) / 2);
-
-                if self.layout.planes[0].stride < self.layout.size.width as usize
-                    || self.layout.planes[1].stride < chroma_stride
-                    || self.layout.planes[2].stride < chroma_stride
-                {
-                    return Err("Invalid stride!".into());
-                }
-
-                if self.planes[0].len() - self.layout.planes[0].offset < y_min_size
-                    || self.planes[1].len() - self.layout.planes[1].offset < chroma_min_size
-                    || self.planes[2].len() - self.layout.planes[2].offset < chroma_min_size
-                {
-                    return Err("Insufficient memory allocated!".into());
-                }
-
-                Ok(())
-            }
-            _ => todo!("Format not yet supported!"),
-        }
-    }
-}
-
-pub trait C2DecodeWorkObject {
-    fn input(&mut self) -> &[u8];
-    // C2 technically supports multiple output worklets, but in practice many decoders don't use
-    // this feature. Note that we pass the width and height into this function because we are going
-    // to allocate the frame lazily. This is required to support DRC.
-    fn output(
-        &mut self,
-        fourcc: Fourcc,
-        visible_width: usize,
-        visible_height: usize,
-    ) -> Result<C2VideoFrame, String>;
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct C2DecodeJob<T: C2DecodeWorkObject + Clone + Default> {
-    // Many of the callback functions in C2 take C2Work items as parameters, so we need to be able
-    // to retrieve the original C++ object.
-    pub work_object: T,
-
+#[derive(Debug)]
+pub struct C2DecodeJob<V: VideoFrame> {
+    // TODO: Use VideoFrame for input too
+    pub input: Vec<u8>,
+    pub output: Vec<Arc<V>>,
     pub drain: bool,
     // TODO: Add output delay and color aspect support as needed.
 }
 
-pub trait Job {
+impl<V> Job for C2DecodeJob<V>
+where
+    V: VideoFrame,
+{
+    type Frame = V;
+
+    fn set_drain(&mut self) {
+        self.drain = true;
+    }
+
+    fn is_drain(&mut self) -> bool {
+        return self.drain;
+    }
+}
+
+impl<V: VideoFrame> Default for C2DecodeJob<V> {
+    fn default() -> Self {
+        Self { input: vec![], output: vec![], drain: false }
+    }
+}
+
+pub trait Job: Send + 'static {
+    type Frame: VideoFrame;
+
     fn set_drain(&mut self) -> ();
     fn is_drain(&mut self) -> bool;
 }
 
-pub trait C2EncodeWorkObject {
-    fn input(&mut self) -> C2VideoFrame;
-    // C2 technically supports multiple output worklets, but in practice many encoders don't use
-    // this feature.
-    fn output(&mut self) -> Result<&mut [u8], String>;
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct C2EncodeJob<T: C2EncodeWorkObject + Clone + Default> {
-    // Many of the callback functions in C2 take C2Work items as parameters, so
-    // we need to be able to retrieve the original C++ object.
-    pub work_object: T,
+#[derive(Debug)]
+pub struct C2EncodeJob<V: VideoFrame> {
+    pub input: Vec<V>,
+    // TODO: Use VideoFrame for output too
+    pub output: Vec<u8>,
     // In microseconds.
     pub timestamp: u64,
     // TODO: only support CBR right now, follow up with VBR support.
@@ -136,6 +81,34 @@ pub struct C2EncodeJob<T: C2EncodeWorkObject + Clone + Default> {
     pub framerate: Arc<AtomicU32>,
 
     pub drain: bool,
+}
+
+impl<V: VideoFrame> Default for C2EncodeJob<V> {
+    fn default() -> Self {
+        Self {
+            input: vec![],
+            output: vec![],
+            timestamp: 0,
+            bitrate: 0,
+            framerate: Arc::new(AtomicU32::new(0)),
+            drain: false,
+        }
+    }
+}
+
+impl<V> Job for C2EncodeJob<V>
+where
+    V: VideoFrame,
+{
+    type Frame = V;
+
+    fn set_drain(&mut self) {
+        self.drain = true;
+    }
+
+    fn is_drain(&mut self) -> bool {
+        return self.drain;
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -159,21 +132,22 @@ pub enum C2Status {
 }
 
 // J should be either C2DecodeJob or C2EncodeJob.
-pub trait C2Worker<J, E, W>
+pub trait C2Worker<J>
 where
-    E: FnMut(C2Status) + Send + 'static,
-    W: FnMut(J) + Send + 'static,
     J: Send + Job + 'static,
 {
     type Options: Clone + Send + 'static;
 
     fn new(
-        fourcc: Fourcc,
+        input_fourcc: Fourcc,
+        output_fourcc: Fourcc,
         awaiting_job_event: Arc<EventFd>,
-        error_cb: Arc<Mutex<E>>,
-        work_done_cb: Arc<Mutex<W>>,
+        error_cb: Arc<Mutex<dyn FnMut(C2Status) + Send + 'static>>,
+        work_done_cb: Arc<Mutex<dyn FnMut(J) + Send + 'static>>,
         work_queue: Arc<Mutex<VecDeque<J>>>,
         state: Arc<Mutex<C2State>>,
+        framepool_hint_cb: Arc<Mutex<dyn FnMut(StreamInfo) + Send + 'static>>,
+        alloc_cb: Arc<Mutex<dyn FnMut() -> Option<<J as Job>::Frame> + Send + 'static>>,
         options: Self::Options,
     ) -> Result<Self, String>
     where
@@ -189,38 +163,40 @@ pub enum C2WrapperError {
 }
 
 // Note that we do not guarantee thread safety in C2CrosCodecsWrapper.
-pub struct C2Wrapper<J, E, W, V>
+pub struct C2Wrapper<J, W>
 where
-    E: FnMut(C2Status) + Send + 'static,
-    W: FnMut(J) + Send + 'static,
     J: Send + Default + Job + 'static,
-    V: C2Worker<J, E, W>,
+    W: C2Worker<J>,
 {
     awaiting_job_event: Arc<EventFd>,
-    fourcc: Fourcc,
-    error_cb: Arc<Mutex<E>>,
-    work_done_cb: Arc<Mutex<W>>,
+    input_fourcc: Fourcc,
+    output_fourcc: Fourcc,
+    error_cb: Arc<Mutex<dyn FnMut(C2Status) + Send + 'static>>,
+    work_done_cb: Arc<Mutex<dyn FnMut(J) + Send + 'static>>,
     work_queue: Arc<Mutex<VecDeque<J>>>,
     state: Arc<Mutex<C2State>>,
-    options: <V as C2Worker<J, E, W>>::Options,
+    framepool_hint_cb: Arc<Mutex<dyn FnMut(StreamInfo) + Send + 'static>>,
+    alloc_cb: Arc<Mutex<dyn FnMut() -> Option<<J as Job>::Frame> + Send + 'static>>,
+    options: <W as C2Worker<J>>::Options,
     worker_thread: Option<JoinHandle<()>>,
     // The instance of V actually lives in the thread creation closure, not
     // this struct.
-    _phantom: PhantomData<V>,
+    _phantom: PhantomData<W>,
 }
 
-impl<J, E, W, V> C2Wrapper<J, E, W, V>
+impl<J, W> C2Wrapper<J, W>
 where
-    E: FnMut(C2Status) + Send + 'static,
-    W: FnMut(J) + Send + 'static,
     J: Send + Default + Job + 'static,
-    V: C2Worker<J, E, W>,
+    W: C2Worker<J>,
 {
     pub fn new(
-        fourcc: Fourcc,
-        error_cb: E,
-        work_done_cb: W,
-        options: <V as C2Worker<J, E, W>>::Options,
+        input_fourcc: Fourcc,
+        output_fourcc: Fourcc,
+        error_cb: impl FnMut(C2Status) + Send + 'static,
+        work_done_cb: impl FnMut(J) + Send + 'static,
+        framepool_hint_cb: impl FnMut(StreamInfo) + Send + 'static,
+        alloc_cb: impl FnMut() -> Option<<J as Job>::Frame> + Send + 'static,
+        options: <W as C2Worker<J>>::Options,
     ) -> Self {
         Self {
             awaiting_job_event: Arc::new(
@@ -228,11 +204,14 @@ where
                     .map_err(C2WrapperError::AwaitingJobEventFd)
                     .unwrap(),
             ),
-            fourcc: fourcc,
+            input_fourcc: input_fourcc,
+            output_fourcc: output_fourcc,
             error_cb: Arc::new(Mutex::new(error_cb)),
             work_done_cb: Arc::new(Mutex::new(work_done_cb)),
             work_queue: Arc::new(Mutex::new(VecDeque::new())),
             state: Arc::new(Mutex::new(C2State::C2Stopped)),
+            framepool_hint_cb: Arc::new(Mutex::new(framepool_hint_cb)),
+            alloc_cb: Arc::new(Mutex::new(alloc_cb)),
             options: options,
             worker_thread: None,
             _phantom: Default::default(),
@@ -260,21 +239,27 @@ where
             *state = C2State::C2Running;
         }
 
-        let fourcc = self.fourcc.clone();
+        let input_fourcc = self.input_fourcc.clone();
+        let output_fourcc = self.output_fourcc.clone();
         let error_cb = self.error_cb.clone();
         let work_done_cb = self.work_done_cb.clone();
         let work_queue = self.work_queue.clone();
         let state = self.state.clone();
         let options = self.options.clone();
         let awaiting_job_event = self.awaiting_job_event.clone();
+        let framepool_hint_cb = self.framepool_hint_cb.clone();
+        let alloc_cb = self.alloc_cb.clone();
         self.worker_thread = Some(thread::spawn(move || {
-            let worker = V::new(
-                fourcc,
+            let worker = W::new(
+                input_fourcc,
+                output_fourcc,
                 awaiting_job_event,
                 error_cb.clone(),
                 work_done_cb,
                 work_queue,
                 state.clone(),
+                framepool_hint_cb,
+                alloc_cb,
                 options,
             );
             match worker {
@@ -370,40 +355,12 @@ where
 
 // Instead of C2's release() function, we implement Drop and use RAII to
 // accomplish the same thing
-impl<J, E, W, V> Drop for C2Wrapper<J, E, W, V>
+impl<J, W> Drop for C2Wrapper<J, W>
 where
-    E: FnMut(C2Status) + Send + 'static,
-    W: FnMut(J) + Send + 'static,
     J: Send + Default + Job + 'static,
-    V: C2Worker<J, E, W>,
+    W: C2Worker<J>,
 {
     fn drop(&mut self) {
         self.stop();
-    }
-}
-
-impl<T> Job for C2DecodeJob<T>
-where
-    T: C2DecodeWorkObject + Clone + Default,
-{
-    fn set_drain(&mut self) {
-        self.drain = true;
-    }
-
-    fn is_drain(&mut self) -> bool {
-        return self.drain;
-    }
-}
-
-impl<T> Job for C2EncodeJob<T>
-where
-    T: C2EncodeWorkObject + Clone + Default,
-{
-    fn set_drain(&mut self) {
-        self.drain = true;
-    }
-
-    fn is_drain(&mut self) -> bool {
-        return self.drain;
     }
 }

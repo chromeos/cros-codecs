@@ -8,6 +8,7 @@ use anyhow::anyhow;
 use anyhow::Context;
 use libva::Display;
 use libva::Picture as VaPicture;
+use libva::Surface;
 use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::va_surface_id;
@@ -28,13 +29,16 @@ use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::codec::av1::parser::SEG_LVL_MAX;
 use crate::decoder::stateless::av1::Av1;
 use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
+use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
-use crate::video_frame::gbm_video_frame::GbmVideoFrame;
+use crate::decoder::DecodedHandle;
+use crate::video_frame::VideoFrame;
 use crate::Rect;
 use crate::Resolution;
 
@@ -235,11 +239,11 @@ fn build_wm_info(hdr: &FrameHeaderObu) -> [libva::AV1WarpedMotionParams; 7] {
     }
 }
 
-fn build_pic_param<M: SurfaceMemoryDescriptor>(
+fn build_pic_param<V: VideoFrame>(
     hdr: &FrameHeaderObu,
     stream_info: &StreamInfo,
     current_frame: libva::VASurfaceID,
-    reference_frames: &[Option<VADecodedHandle<M>>; NUM_REF_FRAMES],
+    reference_frames: &[Option<VADecodedHandle<V>>; NUM_REF_FRAMES],
 ) -> anyhow::Result<libva::BufferType> {
     let seq = stream_info.seq_header.clone();
 
@@ -488,11 +492,11 @@ fn build_slice_data_for_tg(tg: TileGroupObu) -> libva::BufferType {
     libva::BufferType::SliceData(Vec::from(obu.as_ref()))
 }
 
-impl StatelessDecoderBackendPicture<Av1> for VaapiBackend {
-    type Picture = VaapiPicture<GbmVideoFrame>;
+impl<V: VideoFrame> StatelessDecoderBackendPicture<Av1> for VaapiBackend<V> {
+    type Picture = VaapiPicture<V>;
 }
 
-impl StatelessAV1DecoderBackend for VaapiBackend {
+impl<V: VideoFrame> StatelessAV1DecoderBackend for VaapiBackend<V> {
     fn change_stream_info(
         &mut self,
         stream_info: &StreamInfo,
@@ -505,10 +509,13 @@ impl StatelessAV1DecoderBackend for VaapiBackend {
         &mut self,
         hdr: &FrameHeaderObu,
         timestamp: u64,
-        highest_spatial_layer: Option<u32>,
+        alloc_cb: &mut dyn FnMut() -> Option<V>,
     ) -> NewPictureResult<Self::Picture> {
-        let surface = self.new_surface();
-        Ok(VaPicture::new(timestamp, Rc::clone(&self.context), surface))
+        Ok(VaapiPicture::new(
+            timestamp,
+            Rc::clone(&self.context),
+            alloc_cb().ok_or(NewPictureError::OutOfOutputBuffers)?,
+        ))
     }
 
     fn begin_picture(
@@ -558,7 +565,7 @@ impl StatelessAV1DecoderBackend for VaapiBackend {
     }
 }
 
-impl StatelessDecoder<Av1, VaapiBackend> {
+impl<V: VideoFrame> StatelessDecoder<Av1, VaapiBackend<V>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(
         display: Rc<Display>,

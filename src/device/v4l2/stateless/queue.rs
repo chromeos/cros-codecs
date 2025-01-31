@@ -33,6 +33,7 @@ use v4l2r::ioctl::IoctlConvertError;
 use v4l2r::ioctl::QBufIoctlError;
 use v4l2r::ioctl::SFmtError;
 use v4l2r::ioctl::StreamOnError;
+use v4l2r::memory::BufferHandles;
 use v4l2r::memory::Memory;
 use v4l2r::memory::MemoryType;
 use v4l2r::memory::MmapHandle;
@@ -49,9 +50,8 @@ use crate::image_processing::MM21_TILE_HEIGHT;
 use crate::image_processing::MM21_TILE_WIDTH;
 use crate::utils::align_up;
 use crate::utils::buffer_size_for_area;
+use crate::video_frame::V4l2VideoFrame;
 use crate::video_frame::VideoFrame;
-use crate::video_frame::UV_PLANE;
-use crate::video_frame::Y_PLANE;
 use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
@@ -71,9 +71,9 @@ enum V4l2OutputQueueHandle<T: v4l2r::device::queue::direction::Direction> {
 }
 
 #[derive(Default)]
-enum V4l2CaptureQueueHandle<T: v4l2r::device::queue::direction::Direction, H: PlaneHandle> {
+enum V4l2CaptureQueueHandle<T: v4l2r::device::queue::direction::Direction, V: VideoFrame> {
     Init(Queue<T, QueueInit>),
-    Streaming(Rc<Queue<T, BuffersAllocated<Vec<H>>>>),
+    Streaming(Rc<Queue<T, BuffersAllocated<V4l2VideoFrame<V>>>>),
     #[default]
     Unknown,
 }
@@ -106,10 +106,8 @@ impl From<QueueError> for DecodeError {
     }
 }
 
-impl<H: v4l2r::memory::PlaneHandle> From<v4l2r::device::queue::qbuf::QueueError<Vec<H>>>
-    for QueueError
-{
-    fn from(_err: v4l2r::device::queue::qbuf::QueueError<Vec<H>>) -> Self {
+impl<B: BufferHandles> From<v4l2r::device::queue::qbuf::QueueError<B>> for QueueError {
+    fn from(_err: v4l2r::device::queue::qbuf::QueueError<B>) -> Self {
         QueueError::BufferQueue
     }
 }
@@ -292,19 +290,17 @@ impl V4l2OutputQueue {
     }
 }
 
-pub struct V4l2CaptureBuffer<H: PlaneHandle> {
-    frame: Box<dyn VideoFrame<NativeHandle = Vec<H>>>,
-    // We need to hang on to this DqBuffer object even though we took out the underlying data
-    // because its Drop() function is tied to reference frame management.
-    handle: DqBuffer<Capture, Vec<H>>,
+pub struct V4l2CaptureBuffer<V: VideoFrame> {
+    pub frame: Arc<V>,
+    handle: DqBuffer<Capture, V4l2VideoFrame<V>>,
     visible_rect: Rect,
     format: Format,
 }
 
-impl<H: PlaneHandle> V4l2CaptureBuffer<H> {
+impl<V: VideoFrame> V4l2CaptureBuffer<V> {
     fn new(
-        frame: Box<dyn VideoFrame<NativeHandle = Vec<H>>>,
-        handle: DqBuffer<Capture, Vec<H>>,
+        frame: Arc<V>,
+        handle: DqBuffer<Capture, V4l2VideoFrame<V>>,
         visible_rect: Rect,
         format: Format,
     ) -> Self {
@@ -325,104 +321,16 @@ impl<H: PlaneHandle> V4l2CaptureBuffer<H> {
     pub fn length(&self) -> usize {
         (Resolution::from(self.visible_rect).get_area() * 3) / 2
     }
-
-    // TODO: Directly expose VideoFrame to the framework instead of doing an extra memcpy. We need
-    // the VA-API changes to merge before we can do this.
-    pub fn read(&mut self, data: &mut [u8]) {
-        let decoded_format: DecodedFormat =
-            self.format.pixelformat.to_string().parse().expect("Unable to output");
-
-        // TODO: Replace this with convert_video_frame() in the image_processing module when the
-        // necessary conversions are merged.
-        match decoded_format {
-            DecodedFormat::NV12 => {
-                let width = Resolution::from(self.visible_rect).width as usize;
-                let height = Resolution::from(self.visible_rect).height as usize;
-                let (data_y, data_uv) =
-                    data.split_at_mut(Resolution::from(self.visible_rect).get_area());
-                let (data_u, data_v) =
-                    data_uv.split_at_mut((((width + 1) / 2) * ((height + 1) / 2)) as usize);
-
-                let src_pitches = self.frame.get_plane_pitch();
-                let src_mapping = self.frame.map().expect("Mapping failed!");
-                let src_planes = src_mapping.get();
-                nv12_to_i420(
-                    src_planes[Y_PLANE],
-                    src_pitches[Y_PLANE],
-                    data_y,
-                    width,
-                    src_planes[UV_PLANE],
-                    src_pitches[UV_PLANE],
-                    data_u,
-                    (width + 1) / 2,
-                    data_v,
-                    (width + 1) / 2,
-                    width,
-                    height,
-                );
-            }
-            DecodedFormat::MM21 => {
-                let width = Resolution::from(self.visible_rect).width as usize;
-                let height = Resolution::from(self.visible_rect).height as usize;
-                let aligned_width = align_up(width, MM21_TILE_WIDTH);
-                let aligned_height = align_up(height, MM21_TILE_HEIGHT);
-                let src_strides = self.frame.get_plane_pitch();
-                let src_y_stride = src_strides[Y_PLANE];
-                let src_uv_stride = src_strides[UV_PLANE];
-                let mut pivot_y = vec![0; aligned_width * aligned_height];
-                let mut pivot_uv = vec![0; aligned_width * aligned_height / 2];
-                let src_mapping = self.frame.map().expect("Mapping failed!");
-                let src_planes = src_mapping.get();
-                mm21_to_nv12(
-                    src_planes[Y_PLANE],
-                    src_y_stride,
-                    &mut pivot_y,
-                    aligned_width,
-                    src_planes[UV_PLANE],
-                    src_uv_stride,
-                    &mut pivot_uv,
-                    aligned_width,
-                    aligned_width,
-                    aligned_height as isize,
-                )
-                .expect("Unable to convert mm21 to nv12");
-
-                let (data_y, data_uv) =
-                    data.split_at_mut(Resolution::from(self.visible_rect).get_area());
-                // TODO: Replace with align_up function.
-                let (data_u, data_v) = data_uv.split_at_mut(
-                    (((self.visible_rect.width + 1) / 2) * ((self.visible_rect.height + 1) / 2))
-                        as usize,
-                );
-                nv12_to_i420(
-                    &pivot_y,
-                    aligned_width,
-                    data_y,
-                    width,
-                    &pivot_uv,
-                    aligned_width,
-                    data_u,
-                    align_up(width, 2) / 2,
-                    data_v,
-                    align_up(width, 2) / 2,
-                    width,
-                    height,
-                );
-            }
-            _ => panic!("handle me"),
-        }
-    }
 }
 
-pub struct V4l2CaptureQueue<H: PlaneHandle> {
-    pub visible_rect: Rect,
-    pub format: Format,
-
-    handle: RefCell<V4l2CaptureQueueHandle<direction::Capture, H>>,
+pub struct V4l2CaptureQueue<V: VideoFrame> {
+    visible_rect: Rect,
+    format: Format,
+    handle: RefCell<V4l2CaptureQueueHandle<direction::Capture, V>>,
     num_buffers: u32,
 }
 
-impl<H: PlaneHandle> V4l2CaptureQueue<H> {
+impl<V: VideoFrame> V4l2CaptureQueue<V> {
     pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_capture_mplane_queue(device).expect("Failed to get capture queue");
         log::debug!("capture queue created");
@@ -448,12 +356,8 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
                 // TODO: check if decoded format is supported.
                 self.format = handle.get_format()?;
                 // TODO: handle 10 bit format negotiation.
-                // TODO: We probably want to switch this back to MmapHandle some day. V4L2 MMAP
-                // buffers are CPU cache-able on some drivers (such as MTK's vcodec), while DMA
-                // buffers in general are not. This is important for detiling efficiency. This will
-                // require us to write a V4L2MMAP backend for VideoFrame though.
-                let handle = handle.request_buffers_generic::<Vec<H>>(
-                    <H as PlaneHandle>::Memory::MEMORY_TYPE,
+                let handle = handle.request_buffers_generic::<V4l2VideoFrame<V>>(
+                    <V::NativeHandle as PlaneHandle>::Memory::MEMORY_TYPE,
                     self.num_buffers,
                 )?;
 
@@ -467,15 +371,7 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
         Ok(self)
     }
 
-    pub fn dequeue_buffer(
-        &self,
-        frame_import_cb: &impl Fn(
-            Fourcc,
-            Resolution,
-            Vec<usize>,
-            Vec<H>,
-        ) -> Box<dyn VideoFrame<NativeHandle = Vec<H>>>,
-    ) -> Result<Option<V4l2CaptureBuffer<H>>, QueueError> {
+    pub fn dequeue_buffer(&self) -> Result<Option<V4l2CaptureBuffer<V>>, QueueError> {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2CaptureQueueHandle::Streaming(handle) => match handle.try_dequeue() {
@@ -483,15 +379,10 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
                     log::debug!("capture buffer {} dequeued", buffer.data.index());
                     // TODO handle buffer dequeuing successfully, but having an error
                     // buffer.data.has_error();
-                    let fourcc = Fourcc::from(self.format.pixelformat.to_u32());
-                    let resolution =
-                        Resolution { width: self.format.width, height: self.format.height };
-
-                    let strides: Vec<usize> =
-                        self.format.plane_fmt.iter().map(|x| x.bytesperline as usize).collect();
-                    let native_handle = buffer.take_handles().unwrap();
+                    let frame =
+                        Arc::new(buffer.take_handles().expect("Missing handle on dequeue!").0);
                     Ok(Some(V4l2CaptureBuffer::new(
-                        frame_import_cb(fourcc, resolution, strides, native_handle),
+                        frame,
                         buffer,
                         self.visible_rect,
                         self.format.clone(),
@@ -505,18 +396,13 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
 
     // TODO: Plumb in VideoFrames from external Gralloc frame pool instead of reallocating every
     // frame every time.
-    pub fn queue_buffer(
-        &self,
-        frame: Box<dyn VideoFrame<NativeHandle = Vec<H>>>,
-    ) -> Result<(), QueueError> {
+    pub fn queue_buffer(&self, frame: V) -> Result<(), QueueError> {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2CaptureQueueHandle::Streaming(handle) => {
                 let buffer = handle.try_get_free_buffer()?;
                 log::debug!("capture buffer {} queued", buffer.index());
-                let native_handle =
-                    frame.to_native_handle().expect("Failed to export VideoFrame to V4L2 handle");
-                buffer.queue_with_handles(native_handle)?;
+                buffer.queue_with_handles(frame.into())?;
             }
             _ => return Err(QueueError::State),
         }

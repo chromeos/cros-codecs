@@ -26,7 +26,6 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessVideoDecoder;
-use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::Resolution;
@@ -56,7 +55,9 @@ pub trait StatelessAV1DecoderBackend:
         &mut self,
         hdr: &FrameHeaderObu,
         timestamp: u64,
-        highest_spatial_layer: Option<u32>,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
     ) -> NewPictureResult<Self::Picture>;
 
     /// Called to set the global parameters of a picture.
@@ -166,6 +167,9 @@ where
         &mut self,
         frame_header: FrameHeaderObu,
         timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<B as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
     ) -> Result<(), DecodeError> {
         log::debug!("Processing frame {} with timestamp {}", self.codec.frame_count, timestamp);
 
@@ -179,11 +183,8 @@ where
                 handle: ref_frame.clone(),
             });
         } else if let Some(stream_info) = &self.codec.stream_info {
-            let mut backend_picture = self.backend.new_picture(
-                &frame_header,
-                timestamp,
-                self.codec.highest_spatial_layer,
-            )?;
+            let mut backend_picture =
+                self.backend.new_picture(&frame_header, timestamp, alloc_cb)?;
 
             self.backend.begin_picture(
                 &mut backend_picture,
@@ -220,9 +221,16 @@ where
         Ok(())
     }
 
-    fn decode_frame(&mut self, frame: FrameObu, timestamp: u64) -> Result<(), DecodeError> {
+    fn decode_frame(
+        &mut self,
+        frame: FrameObu,
+        timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<B as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> Result<(), DecodeError> {
         let FrameObu { header, tile_group } = frame;
-        self.decode_frame_header(header, timestamp)?;
+        self.decode_frame_header(header, timestamp, alloc_cb)?;
         self.decode_tile_group(tile_group)?;
         Ok(())
     }
@@ -295,7 +303,7 @@ where
 
 impl<B> StatelessVideoDecoder for StatelessDecoder<Av1, B>
 where
-    B: StatelessAV1DecoderBackend + TryFormat<Av1>,
+    B: StatelessAV1DecoderBackend,
     B::Handle: Clone + 'static,
 {
     type Handle = B::Handle;
@@ -305,7 +313,14 @@ where
     /// `bitstream` should initially be submitted as a whole temporal unit, however a call to this
     /// method will only consume a single OBU. The caller must be careful to check the return value
     /// and resubmit the remainder if the whole bitstream has not been consumed.
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
+    fn decode(
+        &mut self,
+        timestamp: u64,
+        bitstream: &[u8],
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<B as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> Result<usize, DecodeError> {
         let obu = match self
             .codec
             .parser
@@ -423,7 +438,7 @@ where
                      * next frame */
                     self.submit_frame(timestamp)?;
                 }
-                self.decode_frame_header(frame_header, timestamp)?;
+                self.decode_frame_header(frame_header, timestamp, alloc_cb)?;
             }
             ParsedObu::TileGroup(tile_group) => {
                 self.decode_tile_group(tile_group)?;
@@ -450,7 +465,7 @@ where
                      * next frame */
                     self.submit_frame(timestamp)?;
                 }
-                self.decode_frame(frame, timestamp)?;
+                self.decode_frame(frame, timestamp, alloc_cb)?;
                 /* submit this frame immediately, as we need to update the
                  * DPB and the reference info state *before* processing the
                  * next frame */
