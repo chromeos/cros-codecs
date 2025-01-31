@@ -472,7 +472,8 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
         num_buffers: u32,
     ) -> Result<&mut Self, QueueError> {
         self.visible_rect = visible_rect;
-        self.num_buffers = num_buffers;
+        // +2 due to HCMP1_HHI_A.h264 needing more
+        self.num_buffers = num_buffers + 2;
         self.handle.replace(match self.handle.take() {
             V4l2CaptureQueueHandle::Init(handle) => {
                 // TODO: check if decoded format is supported.
