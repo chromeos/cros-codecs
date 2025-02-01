@@ -226,7 +226,7 @@ const NUM_OUTPUT_BUFFERS: u32 = 2;
 impl V4l2OutputQueue {
     pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_output_mplane_queue(device).expect("Failed to get output queue");
-        log::debug!("Output queue:\n\tstate: None -> Init\n");
+        log::debug!("output queue created");
         let handle = Rc::new(RefCell::new(V4l2OutputQueueHandle::Init(handle)));
         Self { handle }
     }
@@ -456,7 +456,7 @@ pub struct V4l2CaptureQueue<H: PlaneHandle> {
 impl<H: PlaneHandle> V4l2CaptureQueue<H> {
     pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_capture_mplane_queue(device).expect("Failed to get capture queue");
-        log::debug!("Capture queue:\n\tstate: None -> Init\n");
+        log::debug!("capture queue created");
         let handle = RefCell::new(V4l2CaptureQueueHandle::Init(handle));
         Self {
             handle,
@@ -511,6 +511,7 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
         match handle {
             V4l2CaptureQueueHandle::Streaming(handle) => match handle.try_dequeue() {
                 Ok(mut buffer) => {
+                    log::debug!("capture buffer {} dequeued", buffer.data.index());
                     // TODO handle buffer dequeuing successfully, but having an error
                     // buffer.data.has_error();
                     let fourcc = Fourcc::from(self.format.pixelformat.to_u32());
@@ -549,7 +550,7 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
         match handle {
             V4l2CaptureQueueHandle::Streaming(handle) => {
                 let buffer = handle.try_get_free_buffer()?;
-                log::debug!("capture >> index: {}\n", buffer.index());
+                log::debug!("capture buffer {} queued", buffer.index());
                 let native_handle = frame
                     .to_native_handle()
                     .expect("Failed to export VideoFrame to V4L2 handle");
