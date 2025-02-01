@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::codec::vp8::parser::Header;
-use crate::codec::vp8::parser::MbLfAdjustments;
-use crate::codec::vp8::parser::Segmentation;
-
 use v4l2r::bindings::v4l2_ctrl_vp8_frame;
 use v4l2r::bindings::V4L2_VP8_FRAME_FLAG_KEY_FRAME;
 use v4l2r::bindings::V4L2_VP8_FRAME_FLAG_MB_NO_SKIP_COEFF;
@@ -19,9 +15,12 @@ use v4l2r::bindings::V4L2_VP8_SEGMENT_FLAG_DELTA_VALUE_MODE;
 use v4l2r::bindings::V4L2_VP8_SEGMENT_FLAG_ENABLED;
 use v4l2r::bindings::V4L2_VP8_SEGMENT_FLAG_UPDATE_FEATURE_DATA;
 use v4l2r::bindings::V4L2_VP8_SEGMENT_FLAG_UPDATE_MAP;
-
 use v4l2r::controls::codec::Vp8Frame;
 use v4l2r::controls::SafeExtControl;
+
+use crate::codec::vp8::parser::Header;
+use crate::codec::vp8::parser::MbLfAdjustments;
+use crate::codec::vp8::parser::Segmentation;
 
 #[derive(Default)]
 pub struct V4l2CtrlVp8FrameParams {

@@ -2,15 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::codec::h264::parser::Pps;
-use crate::codec::h264::parser::SliceHeader;
-use crate::codec::h264::parser::Sps;
-use crate::codec::h264::picture::Field;
-use crate::codec::h264::picture::IsIdr;
-use crate::codec::h264::picture::PictureData;
-use crate::codec::h264::picture::RcPictureData;
-use crate::codec::h264::picture::Reference;
-
 use v4l2r::bindings::v4l2_ctrl_h264_decode_params;
 use v4l2r::bindings::v4l2_ctrl_h264_pps;
 use v4l2r::bindings::v4l2_ctrl_h264_scaling_matrix;
@@ -53,6 +44,15 @@ use v4l2r::controls::codec::H264DecodeParams;
 use v4l2r::controls::codec::H264ScalingMatrix;
 use v4l2r::controls::codec::H264StartCode;
 use v4l2r::controls::SafeExtControl;
+
+use crate::codec::h264::parser::Pps;
+use crate::codec::h264::parser::SliceHeader;
+use crate::codec::h264::parser::Sps;
+use crate::codec::h264::picture::Field;
+use crate::codec::h264::picture::IsIdr;
+use crate::codec::h264::picture::PictureData;
+use crate::codec::h264::picture::RcPictureData;
+use crate::codec::h264::picture::Reference;
 
 impl From<&Sps> for v4l2_ctrl_h264_sps {
     fn from(sps: &Sps) -> Self {

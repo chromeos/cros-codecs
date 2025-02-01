@@ -4,15 +4,6 @@
 
 use std::marker::PhantomData;
 
-use crate::codec::vp9::parser::ColorRange;
-use crate::codec::vp9::parser::FrameType;
-use crate::codec::vp9::parser::Header;
-use crate::codec::vp9::parser::LoopFilterParams;
-use crate::codec::vp9::parser::QuantizationParams;
-use crate::codec::vp9::parser::SegmentationParams;
-use crate::codec::vp9::parser::MAX_SEGMENTS;
-use crate::codec::vp9::parser::SEG_LVL_MAX;
-
 use v4l2r::bindings::v4l2_ctrl_vp9_frame;
 use v4l2r::bindings::v4l2_ext_control;
 use v4l2r::bindings::v4l2_ext_control__bindgen_ty_1;
@@ -39,6 +30,15 @@ use v4l2r::bindings::V4L2_VP9_SEGMENTATION_FLAG_TEMPORAL_UPDATE;
 use v4l2r::bindings::V4L2_VP9_SEGMENTATION_FLAG_UPDATE_DATA;
 use v4l2r::bindings::V4L2_VP9_SEGMENTATION_FLAG_UPDATE_MAP;
 use v4l2r::controls::AsV4l2ControlSlice;
+
+use crate::codec::vp9::parser::ColorRange;
+use crate::codec::vp9::parser::FrameType;
+use crate::codec::vp9::parser::Header;
+use crate::codec::vp9::parser::LoopFilterParams;
+use crate::codec::vp9::parser::QuantizationParams;
+use crate::codec::vp9::parser::SegmentationParams;
+use crate::codec::vp9::parser::MAX_SEGMENTS;
+use crate::codec::vp9::parser::SEG_LVL_MAX;
 
 impl From<&LoopFilterParams> for v4l2_vp9_loop_filter {
     fn from(lf: &LoopFilterParams) -> Self {
