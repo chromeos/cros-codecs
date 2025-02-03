@@ -19,7 +19,7 @@ use crate::backend::vaapi::decoder::VaapiPicture;
 use crate::codec::av1::parser::BitDepth;
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::Profile;
-use crate::codec::av1::parser::SequenceHeaderObu;
+use crate::codec::av1::parser::StreamInfo;
 use crate::codec::av1::parser::TileGroupObu;
 use crate::codec::av1::parser::WarpModelType;
 use crate::codec::av1::parser::MAX_SEGMENTS;
@@ -36,55 +36,56 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::Rect;
 use crate::Resolution;
 
 /// The number of surfaces to allocate for this codec.
 const NUM_SURFACES: usize = 16;
 
-impl VaStreamInfo for &Rc<SequenceHeaderObu> {
+impl VaStreamInfo for &StreamInfo {
     fn va_profile(&self) -> anyhow::Result<i32> {
-        match self.seq_profile {
+        match self.seq_header.seq_profile {
             Profile::Profile0 => Ok(libva::VAProfile::VAProfileAV1Profile0),
             Profile::Profile1 => Ok(libva::VAProfile::VAProfileAV1Profile1),
             Profile::Profile2 => Err(anyhow!(
                 "Profile {:?} is not supported by VAAPI",
-                self.seq_profile
+                self.seq_header.seq_profile
             )),
         }
     }
 
     fn rt_format(&self) -> anyhow::Result<u32> {
         // See table 6.4.1.
-        match self.seq_profile {
+        match self.seq_header.seq_profile {
             Profile::Profile0 => {
-                if self.bit_depth == BitDepth::Depth8 {
+                if self.seq_header.bit_depth == BitDepth::Depth8 {
                     Ok(libva::VA_RT_FORMAT_YUV420)
-                } else if self.bit_depth == BitDepth::Depth10 {
+                } else if self.seq_header.bit_depth == BitDepth::Depth10 {
                     Ok(libva::VA_RT_FORMAT_YUV420_10)
                 } else {
                     Err(anyhow!(
                         "Unsupported bit depth {:?} for profile {:?}",
-                        self.bit_depth,
-                        self.seq_profile
+                        self.seq_header.bit_depth,
+                        self.seq_header.seq_profile
                     ))
                 }
             }
             Profile::Profile1 => {
-                if self.bit_depth == BitDepth::Depth8 {
+                if self.seq_header.bit_depth == BitDepth::Depth8 {
                     Ok(libva::VA_RT_FORMAT_YUV444)
-                } else if self.bit_depth == BitDepth::Depth10 {
+                } else if self.seq_header.bit_depth == BitDepth::Depth10 {
                     Ok(libva::VA_RT_FORMAT_YUV444_10)
                 } else {
                     Err(anyhow!(
                         "Unsupported bit depth {:?} for profile {:?}",
-                        self.bit_depth,
-                        self.seq_profile
+                        self.seq_header.bit_depth,
+                        self.seq_header.seq_profile
                     ))
                 }
             }
             Profile::Profile2 => Err(anyhow!(
                 "Profile {:?} is not supported by VAAPI",
-                self.seq_profile
+                self.seq_header.seq_profile
             )),
         }
     }
@@ -95,13 +96,13 @@ impl VaStreamInfo for &Rc<SequenceHeaderObu> {
 
     fn coded_size(&self) -> Resolution {
         Resolution::from((
-            self.max_frame_width_minus_1 as u32 + 1,
-            self.max_frame_height_minus_1 as u32 + 1,
+            self.seq_header.max_frame_width_minus_1 as u32 + 1,
+            self.seq_header.max_frame_height_minus_1 as u32 + 1,
         ))
     }
 
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
-        ((0, 0), self.coded_size().into())
+    fn visible_rect(&self) -> Rect {
+        Rect::from(((0, 0), (self.render_width, self.render_height)))
     }
 }
 
@@ -243,10 +244,12 @@ fn build_wm_info(hdr: &FrameHeaderObu) -> [libva::AV1WarpedMotionParams; 7] {
 
 fn build_pic_param<M: SurfaceMemoryDescriptor>(
     hdr: &FrameHeaderObu,
-    seq: &SequenceHeaderObu,
+    stream_info: &StreamInfo,
     current_frame: libva::VASurfaceID,
     reference_frames: &[Option<VADecodedHandle<M>>; NUM_REF_FRAMES],
 ) -> anyhow::Result<libva::BufferType> {
+    let seq = stream_info.seq_header.clone();
+
     let seq_info_fields = libva::AV1SeqFields::new(
         u32::from(seq.still_picture),
         u32::from(seq.use_128x128_superblock),
@@ -505,9 +508,9 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Av1> f
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiBackend<M> {
-    fn new_sequence(
+    fn change_stream_info(
         &mut self,
-        sequence: &Rc<SequenceHeaderObu>,
+        stream_info: &StreamInfo,
         highest_spatial_layer: Option<u32>,
     ) -> StatelessBackendResult<()> {
         let pool_creation_mode = match highest_spatial_layer {
@@ -515,15 +518,17 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
                 /* The spec mandates a 2:1 or 1.5:1 ratio, let's go with 2:1 to
                  * accomodate the other case. See 6.7.5 in the spec */
                 let layers = (0..=highest_layer).map(|layer| Resolution {
-                    width: (sequence.max_frame_width_minus_1 as u32 + 1) / (layer + 1),
-                    height: (sequence.max_frame_height_minus_1 as u32 + 1) / (layer + 1),
+                    width: (stream_info.seq_header.max_frame_width_minus_1 as u32 + 1)
+                        / (layer + 1),
+                    height: (stream_info.seq_header.max_frame_height_minus_1 as u32 + 1)
+                        / (layer + 1),
                 });
 
                 PoolCreationMode::Layers(layers.collect())
             }
             None => PoolCreationMode::Highest,
         };
-        self.new_sequence(sequence, pool_creation_mode)
+        self.new_sequence(stream_info, pool_creation_mode)
     }
 
     fn new_picture(
@@ -560,13 +565,13 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
     fn begin_picture(
         &mut self,
         picture: &mut Self::Picture,
-        sequence: &SequenceHeaderObu,
+        stream_info: &StreamInfo,
         hdr: &FrameHeaderObu,
         reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
     ) -> StatelessBackendResult<()> {
         let metadata = self.metadata_state.get_parsed()?;
 
-        let pic_param = build_pic_param(hdr, sequence, picture.surface().id(), reference_frames)
+        let pic_param = build_pic_param(hdr, stream_info, picture.surface().id(), reference_frames)
             .context("Failed to build picture parameter")?;
         let pic_param = metadata
             .context

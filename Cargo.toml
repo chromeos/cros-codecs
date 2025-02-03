@@ -42,3 +42,7 @@ required-features = ["backend"]
 [[example]]
 name = "ccenc"
 required-features = ["backend"]
+
+[[example]]
+name = "perf_test"
+required-features = ["backend"]

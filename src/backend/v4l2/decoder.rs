@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #[cfg(feature = "v4l2")]
+use crate::Rect;
 use crate::Resolution;
 
 pub mod stateless;
@@ -14,5 +15,5 @@ pub trait V4l2StreamInfo {
     /// Returns the coded size of the surfaces required to decode the stream.
     fn coded_size(&self) -> Resolution;
     /// Returns the visible rectangle within the coded size for the stream.
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32));
+    fn visible_rect(&self) -> Rect;
 }

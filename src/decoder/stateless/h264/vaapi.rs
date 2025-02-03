@@ -42,6 +42,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::Rect;
 use crate::Resolution;
 
 impl VaStreamInfo for &Rc<Sps> {
@@ -107,10 +108,15 @@ impl VaStreamInfo for &Rc<Sps> {
         Resolution::from((self.width(), self.height()))
     }
 
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
+    fn visible_rect(&self) -> Rect {
         let rect = self.visible_rectangle();
 
-        ((rect.min.x, rect.min.y), (rect.max.x, rect.max.y))
+        Rect {
+            x: rect.min.x,
+            y: rect.min.y,
+            width: rect.max.x,
+            height: rect.max.y,
+        }
     }
 }
 

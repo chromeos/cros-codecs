@@ -100,6 +100,44 @@ impl From<Resolution> for (u32, u32) {
     }
 }
 
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Rect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl From<Rect> for Resolution {
+    fn from(value: Rect) -> Self {
+        Self {
+            width: value.width - value.x,
+            height: value.height - value.y,
+        }
+    }
+}
+
+impl From<Resolution> for Rect {
+    fn from(value: Resolution) -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: value.width,
+            height: value.height,
+        }
+    }
+}
+
+impl From<((u32, u32), (u32, u32))> for Rect {
+    fn from(value: ((u32, u32), (u32, u32))) -> Self {
+        Self {
+            x: value.0 .0,
+            y: value.0 .1,
+            width: value.1 .0,
+            height: value.1 .1,
+        }
+    }
+}
 /// Wrapper around u32 when they are meant to be a fourcc.
 ///
 /// Provides conversion and display/debug implementations useful when dealing with fourcc codes.
@@ -177,6 +215,9 @@ pub enum DecodedFormat {
     I410,
     /// Y, U and V planes, 4:4:4 sampling, 16 bits per sample, LE. Only the 12 LSBs are used.
     I412,
+    /// One Y and one interleaved UV plane, 4:2:0 sampling, 8 bits per sample.
+    /// In a tiled format.
+    MM21,
 }
 
 impl FromStr for DecodedFormat {
@@ -194,9 +235,9 @@ impl FromStr for DecodedFormat {
             "i212" | "I212" => Ok(DecodedFormat::I212),
             "i410" | "I410" => Ok(DecodedFormat::I410),
             "i412" | "I412" => Ok(DecodedFormat::I412),
-            _ => {
-                Err("unrecognized output format. Valid values: i420, nv12, i422, i444, i010, i012, i210, i212, i410, i412")
-            }
+            "mm21" | "MM21" => Ok(DecodedFormat::MM21),
+            _ => Err("unrecognized output format. \
+                Valid values: i420, nv12, i422, i444, i010, i012, i210, i212, i410, i412, mm21"),
         }
     }
 }
@@ -298,6 +339,7 @@ pub fn decoded_frame_size(format: DecodedFormat, width: usize, height: usize) ->
             u_size + uv_size
         }
         DecodedFormat::I410 | DecodedFormat::I412 => (width * height * 2) * 3,
+        DecodedFormat::MM21 => panic!("Unable to convert to MM21"),
     }
 }
 
