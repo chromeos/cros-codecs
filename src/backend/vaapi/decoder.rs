@@ -42,6 +42,7 @@ use crate::image_processing::nv12_copy;
 use crate::image_processing::y410_to_i410;
 use crate::DecodedFormat;
 use crate::Fourcc;
+use crate::Rect;
 use crate::Resolution;
 
 use super::supported_formats_for_rt_format;
@@ -109,7 +110,7 @@ pub(crate) trait VaStreamInfo {
     /// Returns the coded size of the surfaces required to decode the stream.
     fn coded_size(&self) -> Resolution;
     /// Returns the visible rectangle within the coded size for the stream.
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32));
+    fn visible_rect(&self) -> Rect;
 }
 
 pub(crate) struct ParsedStreamMetadata {
@@ -206,12 +207,7 @@ impl StreamMetadataState {
 
         let min_num_surfaces = hdr.min_num_surfaces();
 
-        let visible_rect = hdr.visible_rect();
-
-        let display_resolution = Resolution {
-            width: visible_rect.1 .0 - visible_rect.0 .0,
-            height: visible_rect.1 .1 - visible_rect.0 .1,
-        };
+        let display_resolution = Resolution::from(hdr.visible_rect());
 
         let layers = match pool_creation_mode {
             PoolCreationMode::Highest => vec![coded_resolution],

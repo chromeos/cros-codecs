@@ -35,6 +35,8 @@ use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeMode;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeParams;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DpbEntry;
 //TODO use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264ScalingMatrix;
+use crate::Fourcc;
+use crate::Rect;
 use crate::Resolution;
 
 impl V4l2StreamInfo for &Rc<Sps> {
@@ -46,10 +48,15 @@ impl V4l2StreamInfo for &Rc<Sps> {
         Resolution::from((self.width(), self.height()))
     }
 
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
+    fn visible_rect(&self) -> Rect {
         let rect = self.visible_rectangle();
 
-        ((rect.min.x, rect.min.y), (rect.max.x, rect.max.y))
+        Rect {
+            x: rect.min.x,
+            y: rect.min.y,
+            width: rect.max.x,
+            height: rect.max.y,
+        }
     }
 }
 
@@ -65,7 +72,17 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             (sps.pic_width_in_mbs_minus1 + 1) as u32 * mb_unit,
             (sps.pic_height_in_map_units_minus1 + 1) as u32 * map_unit,
         ));
-        self.device.set_resolution(resolution);
+
+        let visible_rect = Rect::from((
+            (sps.visible_rectangle().min.x, sps.visible_rectangle().min.y),
+            (sps.visible_rectangle().max.x, sps.visible_rectangle().max.y),
+        ));
+        self.device.initialize_queues(
+            Fourcc::from(b"S264"),
+            resolution,
+            visible_rect,
+            sps.max_dpb_frames() as u32 + 4,
+        );
         Ok(())
     }
 

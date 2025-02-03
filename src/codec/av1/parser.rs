@@ -694,6 +694,13 @@ pub struct SequenceHeaderObu {
     pub num_planes: u32,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StreamInfo {
+    pub seq_header: Rc<SequenceHeaderObu>,
+    pub render_width: u32,
+    pub render_height: u32,
+}
+
 /// A TemporalDelimiterOBU
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TemporalDelimiterObu {
@@ -1419,8 +1426,6 @@ pub struct Parser {
     operating_point: u32,
     /// Same as SeenFrameHeader in the specification
     seen_frame_header: bool,
-    /// We keep this to implement frame_header_copy() in the specification.
-    last_frame_header: Option<FrameHeaderObu>,
     operating_point_idc: u16,
     should_probe_for_annexb: bool,
     is_first_frame: bool,
@@ -1439,6 +1444,9 @@ pub struct Parser {
     tile_rows: u32,
     tile_size_bytes: u32,
 
+    /// We keep this to implement frame_header_copy() in the specification, and to fill in
+    /// StreamInfo render_width and render_height.
+    pub last_frame_header: Option<FrameHeaderObu>,
     /// The last SequenceHeaderObu parsed.
     pub sequence_header: Option<Rc<SequenceHeaderObu>>,
 }
@@ -1710,7 +1718,7 @@ impl Parser {
             found_ref = r.0.read_bit()?;
 
             if found_ref {
-                let rf = &self.ref_info[i];
+                let rf = &self.ref_info[fh.ref_frame_idx[i] as usize];
                 fh.upscaled_width = rf.ref_upscaled_width;
                 fh.frame_width = fh.upscaled_width;
                 fh.frame_height = rf.ref_frame_height;

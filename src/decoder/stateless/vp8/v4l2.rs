@@ -13,23 +13,20 @@ use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
 use crate::backend::v4l2::decoder::V4l2StreamInfo;
-
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
-
 use crate::decoder::stateless::vp8::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::vp8::Vp8;
-
 use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
-
 use crate::device::v4l2::stateless::controls::vp8::V4l2CtrlVp8FrameParams;
-
+use crate::Fourcc;
+use crate::Rect;
 use crate::Resolution;
 
 /// The number of frames to allocate for this codec. Same as GStreamer's vavp8dec.
@@ -44,8 +41,8 @@ impl V4l2StreamInfo for &Header {
         Resolution::from((self.width as u32, self.height as u32))
     }
 
-    fn visible_rect(&self) -> ((u32, u32), (u32, u32)) {
-        ((0, 0), self.coded_size().into())
+    fn visible_rect(&self) -> Rect {
+        Rect::from(self.coded_size())
     }
 }
 
@@ -54,7 +51,14 @@ impl StatelessDecoderBackendPicture<Vp8> for V4l2StatelessDecoderBackend {
 }
 
 impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
-    fn new_sequence(&mut self, _: &Header) -> StatelessBackendResult<()> {
+    fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
+        let coded_size = Resolution::from((header.width as u32, header.height as u32));
+        self.device.initialize_queues(
+            Fourcc::from(b"VP8F"),
+            coded_size,
+            Rect::from(coded_size),
+            NUM_FRAMES as u32,
+        );
         Ok(())
     }
 
@@ -70,20 +74,26 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
         &mut self,
         picture: Self::Picture,
         hdr: &Header,
-        _: &Option<Self::Handle>,
-        _: &Option<Self::Handle>,
-        _: &Option<Self::Handle>,
+        _last_ref: &Option<Self::Handle>,
+        _golden_ref: &Option<Self::Handle>,
+        _alt_ref: &Option<Self::Handle>,
         _: &[u8],
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
     ) -> StatelessBackendResult<Self::Handle> {
         let mut vp8_frame_params = V4l2CtrlVp8FrameParams::new();
 
+        // last_ref, golden_ref, alt_ref are all None on key frame
+        // and Some on other frames
         vp8_frame_params
             .set_loop_filter_params(hdr, mb_lf_adjust)
             .set_quantization_params(hdr)
             .set_segmentation_params(segmentation)
-            .set_entropy_params(hdr);
+            .set_entropy_params(hdr)
+            .set_bool_ctx(hdr)
+            .set_frame_params(hdr);
+
+        picture.borrow_mut().request().ioctl(&vp8_frame_params);
 
         let handle = Rc::new(RefCell::new(BackendHandle {
             picture: picture.clone(),

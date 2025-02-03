@@ -8,6 +8,8 @@ use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
 use crate::device::v4l2::stateless::queue::V4l2OutputBuffer;
 use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
 use crate::device::v4l2::stateless::request::V4l2Request;
+use crate::Fourcc;
+use crate::Rect;
 use crate::Resolution;
 
 use std::cell::RefCell;
@@ -54,11 +56,8 @@ impl DeviceHandle {
             Mode::empty(),
         )
         .unwrap_or_else(|_| panic!("Cannot open {}", media_device_path.display()));
-        // TODO: handle custom configuration
-        const NUM_OUTPUT_BUFFERS: u32 = 8;
-        const NUM_CAPTURE_BUFFERS: u32 = 8;
-        let output_queue = V4l2OutputQueue::new(video_device.clone(), NUM_OUTPUT_BUFFERS);
-        let capture_queue = V4l2CaptureQueue::new(video_device.clone(), NUM_CAPTURE_BUFFERS);
+        let output_queue = V4l2OutputQueue::new(video_device.clone());
+        let capture_queue = V4l2CaptureQueue::new(video_device.clone());
         Self {
             video_device,
             media_device,
@@ -112,17 +111,23 @@ impl V4l2Device {
         self.handle.borrow().output_queue.num_free_buffers()
     }
     pub fn num_buffers(&self) -> usize {
-        self.handle.borrow().output_queue.num_buffers()
+        self.handle.borrow().capture_queue.num_buffers()
     }
-    pub fn set_resolution(&mut self, resolution: Resolution) -> &mut Self {
+    pub fn initialize_queues(
+        &mut self,
+        format: Fourcc,
+        coded_size: Resolution,
+        visible_rect: Rect,
+        num_buffers: u32,
+    ) -> &mut Self {
         self.handle
             .borrow_mut()
             .output_queue
-            .set_resolution(resolution);
+            .initialize_queue(format, coded_size);
         self.handle
             .borrow_mut()
             .capture_queue
-            .set_resolution(resolution);
+            .initialize_queue(visible_rect, num_buffers);
         self
     }
     pub fn alloc_request(&self, timestamp: u64) -> Result<V4l2Request, DecodeError> {

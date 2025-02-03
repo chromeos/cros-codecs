@@ -29,6 +29,12 @@ use v4l2r::PixelFormat;
 use v4l2r::PlaneLayout;
 
 use crate::decoder::stateless::DecodeError;
+use crate::image_processing::mm21_to_nv12;
+use crate::image_processing::nv12_copy;
+use crate::image_processing::MM21_TILE_HEIGHT;
+use crate::DecodedFormat;
+use crate::Fourcc;
+use crate::Rect;
 use crate::Resolution;
 
 //TODO: handle memory backends other than mmap
@@ -95,7 +101,6 @@ impl V4l2OutputBuffer {
 }
 
 //TODO: handle memory backends other than mmap
-//TODO: handle video formats other than h264
 //TODO: handle queue start/stop at runtime
 //TODO: handle DRC at runtime
 #[derive(Default)]
@@ -112,17 +117,23 @@ pub struct V4l2OutputQueue {
     num_buffers: u32,
 }
 
+// TODO because of the queueing model the OUTPUT buffer count must be equal to
+// or greater than the CAPTURE buffer count. The OUTPUT buffer count needs only
+// to be 2 buffers for ping pong submissions. There is no need to queue a deep
+// pipeline of buffers in the V4L2 driver because the hardware only works on one
+// frame at a time.
+const NUM_OUTPUT_BUFFERS: u32 = 20;
 impl V4l2OutputQueue {
-    pub fn new(device: Arc<Device>, num_buffers: u32) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_output_mplane_queue(device).expect("Failed to get output queue");
         log::debug!("Output queue:\n\tstate: None -> Init\n");
         let handle = Rc::new(RefCell::new(V4l2OutputQueueHandle::Init(handle)));
         Self {
             handle,
-            num_buffers,
+            num_buffers: NUM_OUTPUT_BUFFERS,
         }
     }
-    pub fn set_resolution(&mut self, res: Resolution) -> &mut Self {
+    pub fn initialize_queue(&mut self, format: Fourcc, res: Resolution) -> &mut Self {
         self.handle.replace(match self.handle.take() {
             V4l2OutputQueueHandle::Init(mut handle) => {
                 let (width, height) = res.into();
@@ -131,7 +142,7 @@ impl V4l2OutputQueue {
                     .change_format()
                     .expect("Failed to change output format")
                     .set_size(width as usize, height as usize)
-                    .set_pixelformat(PixelFormat::from_fourcc(b"S264"))
+                    .set_pixelformat(format)
                     // 1 MB per decoding unit should be enough for most streams.
                     .set_planes_layout(vec![PlaneLayout {
                         sizeimage: 1024 * 1024,
@@ -169,13 +180,6 @@ impl V4l2OutputQueue {
         });
         self
     }
-    pub fn num_buffers(&self) -> usize {
-        let handle = &*self.handle.borrow();
-        match handle {
-            V4l2OutputQueueHandle::Streaming(handle) => handle.num_buffers(),
-            _ => 0,
-        }
-    }
     pub fn num_free_buffers(&self) -> usize {
         let handle = &*self.handle.borrow();
         match handle {
@@ -212,11 +216,17 @@ impl V4l2OutputQueue {
 // TODO: handle other memory backends
 pub struct V4l2CaptureBuffer {
     handle: DqBuffer<Capture, Vec<MmapHandle>>,
+    visible_rect: Rect,
+    format: Format,
 }
 
 impl V4l2CaptureBuffer {
-    fn new(handle: DqBuffer<Capture, Vec<MmapHandle>>) -> Self {
-        Self { handle }
+    fn new(handle: DqBuffer<Capture, Vec<MmapHandle>>, visible_rect: Rect, format: Format) -> Self {
+        Self {
+            handle,
+            visible_rect,
+            format,
+        }
     }
     pub fn index(&self) -> usize {
         self.handle.data.index() as usize
@@ -224,28 +234,71 @@ impl V4l2CaptureBuffer {
     pub fn timestamp(&self) -> u64 {
         self.handle.data.timestamp().tv_usec as u64
     }
+    //TODO make this work for formats other then 420
     pub fn length(&self) -> usize {
-        let mut length = 0;
-        for i in 0..self.handle.data.num_planes() {
-            let mapping = self
-                .handle
-                .get_plane_mapping(i)
-                .expect("Failed to mmap capture buffer");
-            length += mapping.size();
-            drop(mapping);
-        }
-        length
+        (Resolution::from(self.visible_rect).get_area() * 3) / 2
     }
     pub fn read(&self, data: &mut [u8]) {
-        let mut offset = 0;
-        for i in 0..self.handle.data.num_planes() {
-            let mapping = self
-                .handle
-                .get_plane_mapping(i)
-                .expect("Failed to mmap capture buffer");
-            data[offset..offset + mapping.size()].copy_from_slice(&mapping);
-            offset += mapping.size();
-            drop(mapping);
+        let decoded_format: DecodedFormat = self
+            .format
+            .pixelformat
+            .to_string()
+            .parse()
+            .expect("Unable to output");
+
+        match decoded_format {
+            DecodedFormat::NV12 => {
+                let plane = self
+                    .handle
+                    .get_plane_mapping(0)
+                    .expect("Failed to mmap capture buffer");
+                let buffer_size = self.length();
+                let stride: usize = self.format.plane_fmt[0].bytesperline as usize;
+                let width: usize = Resolution::from(self.visible_rect).width as usize;
+                let height: usize = Resolution::from(self.visible_rect).height as usize;
+                let (src_y, src_uv) = plane.split_at(stride * height);
+                let (data_y, data_uv) =
+                    data.split_at_mut(Resolution::from(self.visible_rect).get_area());
+
+                nv12_copy(
+                    &src_y, stride, data_y, width, &src_uv, stride, data_uv, width, width, height,
+                );
+            }
+            DecodedFormat::MM21 => {
+                // check planes count
+                self.handle.data.num_planes();
+                let src_y = self
+                    .handle
+                    .get_plane_mapping(0)
+                    .expect("Failed to mmap capture buffer");
+                let src_uv = self
+                    .handle
+                    .get_plane_mapping(1)
+                    .expect("Failed to mmap capture buffer");
+                let width: usize = Resolution::from(self.visible_rect).width as usize;
+                let height: usize = Resolution::from(self.visible_rect).height as usize;
+                let height_tiled = height + (MM21_TILE_HEIGHT - 1) & !(32 - 1);
+                let src_stride = self.format.plane_fmt[0].bytesperline as usize;
+                let mut pivot_y = vec![0; src_stride * height_tiled];
+                let mut pivot_uv = vec![0; src_stride * height_tiled / 2];
+                mm21_to_nv12(
+                    &src_y,
+                    &mut pivot_y,
+                    &src_uv,
+                    &mut pivot_uv,
+                    src_stride,
+                    height_tiled,
+                )
+                .expect("Unable to convert mm21 to nv12");
+
+                let (data_y, data_uv) =
+                    data.split_at_mut(Resolution::from(self.visible_rect).get_area());
+                nv12_copy(
+                    &pivot_y, src_stride, data_y, width, &pivot_uv, src_stride, data_uv, width,
+                    width, height,
+                );
+            }
+            _ => panic!("handle me"),
         }
     }
 }
@@ -266,24 +319,29 @@ enum V4l2CaptureQueueHandle {
 pub struct V4l2CaptureQueue {
     handle: RefCell<V4l2CaptureQueueHandle>,
     num_buffers: u32,
+    visible_rect: Rect,
+    format: Format,
 }
 
 impl V4l2CaptureQueue {
-    pub fn new(device: Arc<Device>, num_buffers: u32) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_capture_mplane_queue(device).expect("Failed to get capture queue");
         log::debug!("Capture queue:\n\tstate: None -> Init\n");
         let handle = RefCell::new(V4l2CaptureQueueHandle::Init(handle));
         Self {
             handle,
-            num_buffers,
+            num_buffers: 0,
+            visible_rect: Default::default(),
+            format: Default::default(),
         }
     }
-    pub fn set_resolution(&mut self, _: Resolution) -> &mut Self {
+    pub fn initialize_queue(&mut self, visible_rect: Rect, num_buffers: u32) -> &mut Self {
+        self.visible_rect = visible_rect;
+        self.num_buffers = num_buffers;
         self.handle.replace(match self.handle.take() {
             V4l2CaptureQueueHandle::Init(handle) => {
-                let format: Format = handle.get_format().expect("Failed to get capture format");
-                log::debug!("Capture format:\n\t{:?}\n", format);
-
+                self.format = handle.get_format().expect("Failed to get capture format");
+                log::debug!("Capture format:\n\t{:?}\n", self.format);
                 let handle = handle
                     .request_buffers_generic::<Vec<MmapHandle>>(MemoryType::Mmap, self.num_buffers)
                     .expect("Failed to request capture buffers");
@@ -314,7 +372,11 @@ impl V4l2CaptureQueue {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2CaptureQueueHandle::Streaming(handle) => match handle.try_dequeue() {
-                Ok(buffer) => Some(V4l2CaptureBuffer::new(buffer)),
+                Ok(buffer) => Some(V4l2CaptureBuffer::new(
+                    buffer,
+                    self.visible_rect,
+                    self.format.clone(),
+                )),
                 _ => None,
             },
             _ => panic!("ERROR"),
@@ -333,6 +395,13 @@ impl V4l2CaptureQueue {
                 }
             }
             _ => panic!("ERROR"),
+        }
+    }
+    pub fn num_buffers(&self) -> usize {
+        let handle = &*self.handle.borrow();
+        match handle {
+            V4l2CaptureQueueHandle::Streaming(handle) => handle.num_buffers(),
+            _ => 0,
         }
     }
 }

@@ -7,8 +7,6 @@ use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
 
 use v4l2r::bindings::v4l2_ctrl_vp8_frame;
-use v4l2r::bindings::V4L2_VP8_COEFF_PROB_CNT;
-use v4l2r::bindings::V4L2_VP8_FRAME_FLAG_EXPERIMENTAL;
 use v4l2r::bindings::V4L2_VP8_FRAME_FLAG_KEY_FRAME;
 use v4l2r::bindings::V4L2_VP8_FRAME_FLAG_MB_NO_SKIP_COEFF;
 use v4l2r::bindings::V4L2_VP8_FRAME_FLAG_SHOW_FRAME;
@@ -17,7 +15,6 @@ use v4l2r::bindings::V4L2_VP8_FRAME_FLAG_SIGN_BIAS_GOLDEN;
 use v4l2r::bindings::V4L2_VP8_LF_ADJ_ENABLE;
 use v4l2r::bindings::V4L2_VP8_LF_DELTA_UPDATE;
 use v4l2r::bindings::V4L2_VP8_LF_FILTER_TYPE_SIMPLE;
-use v4l2r::bindings::V4L2_VP8_MV_PROB_CNT;
 use v4l2r::bindings::V4L2_VP8_SEGMENT_FLAG_DELTA_VALUE_MODE;
 use v4l2r::bindings::V4L2_VP8_SEGMENT_FLAG_ENABLED;
 use v4l2r::bindings::V4L2_VP8_SEGMENT_FLAG_UPDATE_FEATURE_DATA;
@@ -41,8 +38,14 @@ impl V4l2CtrlVp8FrameParams {
         hdr: &Header,
         mb_lf_adjust: &MbLfAdjustments,
     ) -> &mut Self {
+        for i in 0..4 {
+            self.handle.lf.ref_frm_delta[i] = mb_lf_adjust.ref_frame_delta[i];
+            self.handle.lf.mb_mode_delta[i] = mb_lf_adjust.mb_mode_delta[i];
+        }
+
         self.handle.lf.sharpness_level = hdr.sharpness_level;
         self.handle.lf.level = hdr.loop_filter_level;
+        self.handle.lf.padding = 0;
 
         let mut flags: u32 = 0;
         if hdr.filter_type {
@@ -55,19 +58,12 @@ impl V4l2CtrlVp8FrameParams {
             flags |= V4L2_VP8_LF_DELTA_UPDATE;
         }
         self.handle.lf.flags = flags;
-
-        for i in 0..4 {
-            self.handle.lf.ref_frm_delta[i] = mb_lf_adjust.ref_frame_delta[i];
-            self.handle.lf.mb_mode_delta[i] = mb_lf_adjust.mb_mode_delta[i];
-        }
-
         self
     }
 
     pub fn set_quantization_params(&mut self, hdr: &Header) -> &mut Self {
         self.handle.quant.y_ac_qi =
             u8::try_from(hdr.quant_indices.y_ac_qi).expect("Value out of range for u8");
-
         self.handle.quant.y_dc_delta =
             i8::try_from(hdr.quant_indices.y_dc_delta).expect("Value out of range for u8");
         self.handle.quant.y2_dc_delta =
@@ -78,12 +74,24 @@ impl V4l2CtrlVp8FrameParams {
             i8::try_from(hdr.quant_indices.uv_dc_delta).expect("Value out of range for u8");
         self.handle.quant.uv_ac_delta =
             i8::try_from(hdr.quant_indices.uv_ac_delta).expect("Value out of range for u8");
+
+        self.handle.quant.padding = 0;
         self
     }
 
     pub fn set_segmentation_params(&mut self, segmentation: &Segmentation) -> &mut Self {
-        let mut flags: u32 = 0;
+        for i in 0..4 {
+            self.handle.segment.quant_update[i] = segmentation.quantizer_update_value[i];
+            self.handle.segment.lf_update[i] = segmentation.lf_update_value[i];
+        }
 
+        for i in 0..3 {
+            self.handle.segment.segment_probs[i] = segmentation.segment_prob[i];
+        }
+
+        self.handle.segment.padding = 0;
+
+        let mut flags: u32 = 0;
         if segmentation.segmentation_enabled {
             flags |= V4L2_VP8_SEGMENT_FLAG_ENABLED;
         }
@@ -97,18 +105,6 @@ impl V4l2CtrlVp8FrameParams {
             flags |= V4L2_VP8_SEGMENT_FLAG_DELTA_VALUE_MODE;
         }
         self.handle.segment.flags = flags;
-
-        for i in 0..4 {
-            self.handle.segment.quant_update[i] = segmentation.quantizer_update_value[i];
-            self.handle.segment.lf_update[i] = segmentation.lf_update_value[i];
-        }
-
-        for i in 0..3 {
-            self.handle.segment.segment_probs[i] = segmentation.segment_prob[i];
-        }
-
-        self.handle.segment.padding = 0;
-
         self
     }
 
@@ -117,6 +113,60 @@ impl V4l2CtrlVp8FrameParams {
         self.handle.entropy.y_mode_probs = hdr.mode_probs.intra_16x16_prob;
         self.handle.entropy.uv_mode_probs = hdr.mode_probs.intra_chroma_prob;
         self.handle.entropy.mv_probs = hdr.mv_prob;
+        self
+    }
+
+    pub fn set_bool_ctx(&mut self, hdr: &Header) -> &mut Self {
+        self.handle.coder_state.range = hdr.bd_range as u8;
+        self.handle.coder_state.value = hdr.bd_value as u8;
+        self.handle.coder_state.bit_count = hdr.bd_count as u8;
+        self.handle.coder_state.padding = 0;
+        self
+    }
+
+    pub fn set_frame_params(&mut self, hdr: &Header) -> &mut Self {
+        self.handle.width = hdr.width;
+        self.handle.height = hdr.height;
+        self.handle.horizontal_scale = hdr.horiz_scale_code;
+        self.handle.vertical_scale = hdr.vert_scale_code;
+
+        self.handle.version = hdr.version;
+        self.handle.prob_skip_false = hdr.prob_skip_false;
+        self.handle.prob_intra = hdr.prob_intra;
+        self.handle.prob_last = hdr.prob_last;
+        self.handle.prob_gf = hdr.prob_golden;
+        self.handle.num_dct_parts = hdr.num_dct_partitions() as u8;
+
+        self.handle.first_part_size = hdr.first_part_size;
+        self.handle.first_part_header_bits = hdr.header_size;
+
+        for i in 0..hdr.num_dct_partitions() {
+            self.handle.dct_part_sizes[i] = hdr.partition_size[i];
+        }
+
+        self.handle.last_frame_ts = 0;
+        self.handle.golden_frame_ts = 0;
+        self.handle.alt_frame_ts = 0;
+
+        let mut flags: u32 = 0;
+        if hdr.key_frame {
+            flags |= V4L2_VP8_FRAME_FLAG_KEY_FRAME;
+        }
+        if hdr.show_frame {
+            flags |= V4L2_VP8_FRAME_FLAG_SHOW_FRAME;
+        }
+        if hdr.mb_no_coeff_skip {
+            flags |= V4L2_VP8_FRAME_FLAG_MB_NO_SKIP_COEFF;
+        }
+        if hdr.sign_bias_golden {
+            flags |= V4L2_VP8_FRAME_FLAG_SIGN_BIAS_GOLDEN;
+        }
+        if hdr.sign_bias_alternate {
+            flags |= V4L2_VP8_FRAME_FLAG_SIGN_BIAS_ALT;
+        }
+
+        self.handle.flags = flags as u64;
+
         self
     }
 }
