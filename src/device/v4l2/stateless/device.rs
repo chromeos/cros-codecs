@@ -119,18 +119,16 @@ impl V4l2Device {
         coded_size: Resolution,
         visible_rect: Rect,
         num_buffers: u32,
-    ) -> &mut Self {
+    ) -> Result<(), anyhow::Error> {
         self.handle
             .borrow_mut()
             .output_queue
-            .initialize(format, coded_size)
-            .expect("Unable to initialize output queue");
+            .initialize(format, coded_size)?;
         self.handle
             .borrow_mut()
             .capture_queue
-            .initialize(visible_rect, num_buffers)
-            .expect("Unable to initialize capture queue");
-        self
+            .initialize(visible_rect, num_buffers)?;
+        Ok(())
     }
     pub fn alloc_request(&self, timestamp: u64) -> Result<V4l2Request, DecodeError> {
         let output_buffer = self.handle.borrow().alloc_buffer()?;

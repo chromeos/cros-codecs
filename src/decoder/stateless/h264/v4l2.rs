@@ -82,7 +82,7 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             resolution,
             visible_rect,
             sps.max_dpb_frames() as u32 + 4,
-        );
+        )?;
         Ok(())
     }
 
