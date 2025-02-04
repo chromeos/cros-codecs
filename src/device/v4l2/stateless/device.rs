@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 use crate::decoder::stateless::DecodeError;
+use crate::device::v4l2::stateless::queue::QueueError;
 use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
 use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
-use crate::device::v4l2::stateless::queue::V4l2OutputBuffer;
 use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
 use crate::device::v4l2::stateless::request::V4l2Request;
 use crate::Fourcc;
@@ -19,6 +19,8 @@ use std::os::fd::RawFd;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
 
 use v4l2r::device::Device as VideoDevice;
 use v4l2r::device::DeviceConfig;
@@ -69,30 +71,46 @@ impl DeviceHandle {
     fn alloc_request(&self) -> ioctl::Request {
         ioctl::Request::alloc(&self.media_device).expect("Failed to alloc request handle")
     }
-    fn alloc_buffer(&self) -> Result<V4l2OutputBuffer, DecodeError> {
-        self.output_queue.alloc_buffer()
+    fn dequeue_output_buffer(&self) {
+        let mut back_off_duration = Duration::from_millis(1);
+        loop {
+            match self.output_queue.dequeue_buffer() {
+                Ok(_) => {
+                    break;
+                }
+                Err(QueueError::Dequeue) => {
+                    sleep(back_off_duration);
+                    back_off_duration = back_off_duration + back_off_duration;
+                    continue;
+                }
+                Err(_) => panic!("handle this better"),
+            }
+        }
+    }
+    fn dequeue_capture_buffer(&mut self) {
+        let mut back_off_duration = Duration::from_millis(1);
+        loop {
+            match self.capture_queue.dequeue_buffer() {
+                Ok(Some(buffer)) => {
+                    self.capture_buffers.insert(buffer.timestamp(), buffer);
+                    break;
+                }
+                _ => {
+                    sleep(back_off_duration);
+                    back_off_duration = back_off_duration + back_off_duration;
+                    continue;
+                }
+            }
+        }
     }
     fn sync(&mut self, timestamp: u64) -> V4l2CaptureBuffer {
         // TODO: handle synced buffers internally by capture queue
         loop {
             match self.capture_buffers.remove(&timestamp) {
                 Some(buffer) => return buffer,
-                _ => self.recycle_buffers(), // TODO: poll/select
+                _ => self.dequeue_capture_buffer(),
             };
         }
-    }
-    fn recycle_buffers(&mut self) {
-        self.output_queue.drain().expect("error needs handling");
-        // TODO: handle synced buffers internally by capture queue
-        loop {
-            match self.capture_queue.dequeue_buffer() {
-                Ok(Some(buffer)) => {
-                    self.capture_buffers.insert(buffer.timestamp(), buffer);
-                }
-                _ => break,
-            }
-        }
-        self.capture_queue.refill().expect("error needs handling");
     }
 }
 
@@ -131,7 +149,26 @@ impl V4l2Device {
         Ok(())
     }
     pub fn alloc_request(&self, timestamp: u64) -> Result<V4l2Request, DecodeError> {
-        let output_buffer = self.handle.borrow().alloc_buffer()?;
+        if self.handle.borrow().capture_queue.num_free_buffers() == 0 {
+            return Err(DecodeError::NotEnoughOutputBuffers(0));
+        }
+
+        let output_buffer = self.handle.borrow().output_queue.alloc_buffer();
+
+        let output_buffer = match output_buffer {
+            Ok(buffer) => buffer,
+            Err(DecodeError::NotEnoughOutputBuffers(_)) => {
+                self.handle.borrow_mut().dequeue_output_buffer();
+                match self.handle.borrow().output_queue.alloc_buffer() {
+                    Ok(buffer) => buffer,
+                    Err(e) => return Err(e),
+                }
+            }
+            Err(error) => return Err(error),
+        };
+
+        // dequeue capture/output
+        self.handle.borrow().capture_queue.queue_buffer()?;
 
         Ok(V4l2Request::new(
             self.clone(),
@@ -144,7 +181,7 @@ impl V4l2Device {
         self.handle.borrow_mut().sync(timestamp)
     }
     pub fn recycle_buffers(&self) {
-        self.handle.borrow_mut().recycle_buffers()
+        //self.handle.borrow_mut().recycle_buffers()
     }
 }
 
