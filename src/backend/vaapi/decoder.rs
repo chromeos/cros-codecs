@@ -480,35 +480,71 @@ impl<'a> MappableHandle for Image<'a> {
                 );
             }
             libva::VA_FOURCC_I420 => {
+                let (src_y, src_uv) = self.as_ref().split_at(offsets[1]);
+                let (src_u, src_v) = src_uv.split_at(offsets[2] - offsets[1]);
+                let (dst_y, dst_uv) = buffer.split_at_mut(width * height);
+                let (dst_u, dst_v) = dst_uv.split_at_mut(((width + 1) / 2) * ((height + 1) / 2));
                 i4xx_copy(
-                    self.as_ref(),
-                    buffer,
+                    src_y,
+                    pitches[0],
+                    dst_y,
+                    width,
+                    src_u,
+                    pitches[1],
+                    dst_u,
+                    (width + 1) / 2,
+                    src_v,
+                    pitches[2],
+                    dst_v,
+                    (width + 1) / 2,
                     width,
                     height,
-                    pitches,
-                    offsets,
                     (true, true),
                 );
             }
             libva::VA_FOURCC_422H => {
+                let (src_y, src_uv) = self.as_ref().split_at(offsets[1]);
+                let (src_u, src_v) = src_uv.split_at(offsets[2] - offsets[1]);
+                let (dst_y, dst_uv) = buffer.split_at_mut(width * height);
+                let (dst_u, dst_v) = dst_uv.split_at_mut(((width + 1) / 2) * height);
                 i4xx_copy(
-                    self.as_ref(),
-                    buffer,
+                    src_y,
+                    pitches[0],
+                    dst_y,
+                    width,
+                    src_u,
+                    pitches[1],
+                    dst_u,
+                    (width + 1) / 2,
+                    src_v,
+                    pitches[2],
+                    dst_v,
+                    (width + 1) / 2,
                     width,
                     height,
-                    pitches,
-                    offsets,
                     (true, false),
                 );
             }
             libva::VA_FOURCC_444P => {
+                let (src_y, src_uv) = self.as_ref().split_at(offsets[1]);
+                let (src_u, src_v) = src_uv.split_at(offsets[2] - offsets[1]);
+                let (dst_y, dst_uv) = buffer.split_at_mut(width * height);
+                let (dst_u, dst_v) = dst_uv.split_at_mut(width * height);
                 i4xx_copy(
-                    self.as_ref(),
-                    buffer,
+                    src_y,
+                    pitches[0],
+                    dst_y,
+                    width,
+                    src_u,
+                    pitches[1],
+                    dst_u,
+                    width,
+                    src_v,
+                    pitches[2],
+                    dst_v,
+                    width,
                     width,
                     height,
-                    pitches,
-                    offsets,
                     (false, false),
                 );
             }

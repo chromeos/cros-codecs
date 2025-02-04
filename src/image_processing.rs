@@ -66,58 +66,40 @@ pub fn extend_border_nv12(
 
 /// Copies `src` into `dst` as I4xx (YUV tri-planar).
 ///
-/// This function does not change the data layout beyond removing any padding in the source, i.e.
-/// both `src` and `dst` are 3-planar YUV buffers.
-///
-/// `strides` and `offsets` give the stride and starting position of each plane in `src`. In `dst`
-/// each plane will be put sequentially one after the other.
-///
 /// `sub_h` and `sub_v` enable horizontal and vertical sub-sampling, respectively. E.g, if both
 /// `sub_h` and `sub_v` are `true` the data will be `4:2:0`, if only `sub_v` is `true` then it will be
 /// `4:2:2`, and if both are `false` then we have `4:4:4`.
 pub fn i4xx_copy(
-    src: &[u8],
-    dst: &mut [u8],
+    src_y: &[u8],
+    src_y_stride: usize,
+    dst_y: &mut [u8],
+    dst_y_stride: usize,
+    src_u: &[u8],
+    src_u_stride: usize,
+    dst_u: &mut [u8],
+    dst_u_stride: usize,
+    src_v: &[u8],
+    src_v_stride: usize,
+    dst_v: &mut [u8],
+    dst_v_stride: usize,
     width: usize,
     height: usize,
-    strides: [usize; 3],
-    offsets: [usize; 3],
     (sub_h, sub_v): (bool, bool),
 ) {
+    for y in 0..height {
+        dst_y[(y * dst_y_stride)..(y * dst_y_stride + width)]
+            .copy_from_slice(&src_y[(y * src_y_stride)..(y * src_y_stride + width)]);
+    }
+
     // Align width and height of UV planes to 2 if sub-sampling is used.
     let uv_width = if sub_h { (width + 1) / 2 } else { width };
     let uv_height = if sub_v { (height + 1) / 2 } else { height };
 
-    let dst_y_size = width * height;
-    let dst_u_size = uv_width * uv_height;
-    let (dst_y_plane, dst_uv_planes) = dst.split_at_mut(dst_y_size);
-    let (dst_u_plane, dst_v_plane) = dst_uv_planes.split_at_mut(dst_u_size);
-
-    // Copy Y.
-    let src_y_lines = src[offsets[0]..]
-        .chunks(strides[0])
-        .map(|line| &line[..width]);
-    let dst_y_lines = dst_y_plane.chunks_mut(width);
-    for (src_line, dst_line) in src_y_lines.zip(dst_y_lines).take(height) {
-        dst_line.copy_from_slice(src_line);
-    }
-
-    // Copy U.
-    let src_u_lines = src[offsets[1]..]
-        .chunks(strides[1])
-        .map(|line| &line[..uv_width]);
-    let dst_u_lines = dst_u_plane.chunks_mut(uv_width);
-    for (src_line, dst_line) in src_u_lines.zip(dst_u_lines).take(uv_height) {
-        dst_line.copy_from_slice(src_line);
-    }
-
-    // Copy V.
-    let src_v_lines = src[offsets[2]..]
-        .chunks(strides[2])
-        .map(|line| &line[..uv_width]);
-    let dst_v_lines = dst_v_plane.chunks_mut(uv_width);
-    for (src_line, dst_line) in src_v_lines.zip(dst_v_lines).take(uv_height) {
-        dst_line.copy_from_slice(src_line);
+    for y in 0..uv_height {
+        dst_u[(y * dst_u_stride)..(y * dst_u_stride + uv_width)]
+            .copy_from_slice(&src_u[(y * src_u_stride)..(y * src_u_stride + uv_width)]);
+        dst_v[(y * dst_v_stride)..(y * dst_v_stride + uv_width)]
+            .copy_from_slice(&src_v[(y * src_v_stride)..(y * src_v_stride + uv_width)]);
     }
 }
 
