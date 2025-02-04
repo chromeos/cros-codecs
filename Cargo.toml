@@ -28,7 +28,6 @@ gbm = { version = "0.15", default-features = false, features = ["drm-support"], 
 [dev-dependencies]
 argh = "0.1.12"
 env_logger = "0.9.3"
-matroska-demuxer = "0.5.0"
 serde_json = "1.0.96"
 
 [lints.rust]

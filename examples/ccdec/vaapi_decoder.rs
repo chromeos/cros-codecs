@@ -35,8 +35,6 @@ use cros_codecs::Fourcc;
 use cros_codecs::FrameLayout;
 use cros_codecs::PlaneLayout;
 use cros_codecs::Resolution;
-use matroska_demuxer::Frame;
-use matroska_demuxer::MatroskaFile;
 
 use crate::md5::md5_digest;
 use crate::md5::MD5Context;
@@ -45,47 +43,9 @@ use crate::util::golden_md5s;
 use crate::util::Args;
 use crate::util::Md5Computation;
 
-struct MkvFrameIterator<T: AsRef<[u8]>> {
-    input: MatroskaFile<Cursor<T>>,
-    video_track: u64,
-}
-
-impl<T: AsRef<[u8]>> MkvFrameIterator<T> {
-    fn new(input: T) -> anyhow::Result<Self> {
-        let input = MatroskaFile::open(Cursor::new(input))?;
-        let video_track = input
-            .tracks()
-            .iter()
-            .find(|t| t.track_type() == matroska_demuxer::TrackType::Video)
-            .map(|t| t.track_number().get())
-            .ok_or_else(|| anyhow::anyhow!("no video track in input file"))?;
-
-        Ok(Self { input, video_track })
-    }
-}
-
-impl<T: AsRef<[u8]>> Iterator for MkvFrameIterator<T> {
-    type Item = Vec<u8>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut frame = Frame::default();
-        while self.input.next_frame(&mut frame).unwrap() {
-            if frame.track == self.video_track {
-                return Some(frame.data);
-            }
-        }
-
-        None
-    }
-}
-
-/// Detects the container type (IVF or MKV) and returns the corresponding frame iterator.
+// Returns the frame iterator for IVF file.
 fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Cow<[u8]>> + '_> {
-    if input.starts_with(&[0x1a, 0x45, 0xdf, 0xa3]) {
-        Box::new(MkvFrameIterator::new(input).unwrap().map(Cow::Owned))
-    } else {
-        Box::new(IvfIterator::new(input).map(Cow::Borrowed))
-    }
+    Box::new(IvfIterator::new(input).map(Cow::Borrowed))
 }
 
 #[derive(Debug, Clone)]
