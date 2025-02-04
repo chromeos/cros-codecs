@@ -82,17 +82,17 @@ impl DeviceHandle {
         }
     }
     fn recycle_buffers(&mut self) {
-        self.output_queue.drain();
+        self.output_queue.drain().expect("error needs handling");
         // TODO: handle synced buffers internally by capture queue
         loop {
             match self.capture_queue.dequeue_buffer() {
-                Some(buffer) => {
+                Ok(Some(buffer)) => {
                     self.capture_buffers.insert(buffer.timestamp(), buffer);
                 }
                 _ => break,
             }
         }
-        self.capture_queue.refill();
+        self.capture_queue.refill().expect("error needs handling");
     }
 }
 
