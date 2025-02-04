@@ -53,10 +53,15 @@ rust_library {
                 "libbyteorder",
                 "libthiserror",
                 "libcrc32fast",
+                "libdrm_fourcc",
+                "libgbm_sys",
                 "libnix",
                 "libv4l2r",
             ],
-            features: ["v4l2"],
+            features: [
+                "v4l2",
+                "backend",
+            ],
         },
     },
 }
