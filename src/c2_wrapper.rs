@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use nix::errno::Errno;
+use nix::sys::eventfd::EfdFlags;
+use nix::sys::eventfd::EventFd;
+
+use thiserror::Error;
+
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU32;
@@ -163,6 +169,7 @@ where
 
     fn new(
         fourcc: Fourcc,
+        awaiting_job_event: Arc<EventFd>,
         error_cb: Arc<Mutex<E>>,
         work_done_cb: Arc<Mutex<W>>,
         work_queue: Arc<Mutex<VecDeque<J>>>,
@@ -175,6 +182,12 @@ where
     fn process_loop(&mut self);
 }
 
+#[derive(Debug, Error)]
+pub enum C2WrapperError {
+    #[error("failed to create EventFd for awaiting job event: {0}")]
+    AwaitingJobEventFd(Errno),
+}
+
 // Note that we do not guarantee thread safety in C2CrosCodecsWrapper.
 pub struct C2Wrapper<J, E, W, V>
 where
@@ -183,6 +196,7 @@ where
     J: Send + Default + Job + 'static,
     V: C2Worker<J, E, W>,
 {
+    awaiting_job_event: Arc<EventFd>,
     fourcc: Fourcc,
     error_cb: Arc<Mutex<E>>,
     work_done_cb: Arc<Mutex<W>>,
@@ -209,6 +223,11 @@ where
         options: <V as C2Worker<J, E, W>>::Options,
     ) -> Self {
         Self {
+            awaiting_job_event: Arc::new(
+                EventFd::from_flags(EfdFlags::EFD_SEMAPHORE)
+                    .map_err(C2WrapperError::AwaitingJobEventFd)
+                    .unwrap(),
+            ),
             fourcc: fourcc,
             error_cb: Arc::new(Mutex::new(error_cb)),
             work_done_cb: Arc::new(Mutex::new(work_done_cb)),
@@ -247,9 +266,11 @@ where
         let work_queue = self.work_queue.clone();
         let state = self.state.clone();
         let options = self.options.clone();
+        let awaiting_job_event = self.awaiting_job_event.clone();
         self.worker_thread = Some(thread::spawn(move || {
             let worker = V::new(
                 fourcc,
+                awaiting_job_event,
                 error_cb.clone(),
                 work_done_cb,
                 work_queue,
@@ -288,6 +309,8 @@ where
 
         self.work_queue.lock().unwrap().drain(..);
 
+        self.awaiting_job_event.write(1).unwrap();
+
         C2Status::C2Ok
     }
 
@@ -304,6 +327,8 @@ where
             .lock()
             .unwrap()
             .extend(work_items.into_iter());
+
+        self.awaiting_job_event.write(1).unwrap();
 
         C2Status::C2Ok
     }
@@ -344,6 +369,8 @@ where
         let mut drain_job: J = Default::default();
         drain_job.set_drain();
         self.work_queue.lock().unwrap().push_back(drain_job);
+
+        self.awaiting_job_event.write(1).unwrap();
 
         C2Status::C2Ok
     }
