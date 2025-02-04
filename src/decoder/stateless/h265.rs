@@ -46,64 +46,6 @@ use crate::decoder::StreamInfo;
 use crate::Resolution;
 
 const MAX_DPB_SIZE: usize = 16;
-
-// Equation 5-8
-pub(crate) fn clip3(x: i32, y: i32, z: i32) -> i32 {
-    if z < x {
-        x
-    } else if z > y {
-        y
-    } else {
-        z
-    }
-}
-
-// See 6.5.3
-const fn up_right_diagonal<const N: usize, const ROWS: usize>() -> [usize; N] {
-    // Generics can't be used in const operations for now, so [0; ROWS * ROWS]
-    // is rejected by the compiler
-    assert!(ROWS * ROWS == N);
-
-    let mut i = 0;
-    let mut x = 0i32;
-    let mut y = 0i32;
-    let mut ret = [0; N];
-
-    loop {
-        while y >= 0 {
-            if x < (ROWS as i32) && y < (ROWS as i32) {
-                ret[i] = (x + ROWS as i32 * y) as usize;
-                i += 1;
-            }
-            y -= 1;
-            x += 1;
-        }
-
-        y = x;
-        x = 0;
-        if i >= N {
-            break;
-        }
-    }
-
-    ret
-}
-
-const UP_RIGHT_DIAGONAL_4X4: [usize; 16] = up_right_diagonal::<16, 4>();
-const UP_RIGHT_DIAGONAL_8X8: [usize; 64] = up_right_diagonal::<64, 8>();
-
-fn get_raster_from_up_right_diagonal_8x8(src: [u8; 64], dst: &mut [u8; 64]) {
-    for i in 0..64 {
-        dst[UP_RIGHT_DIAGONAL_8X8[i]] = src[i];
-    }
-}
-
-fn get_raster_from_up_right_diagonal_4x4(src: [u8; 16], dst: &mut [u8; 16]) {
-    for i in 0..16 {
-        dst[UP_RIGHT_DIAGONAL_4X4[i]] = src[i];
-    }
-}
-
 /// Stateless backend methods specific to H.265.
 pub trait StatelessH265DecoderBackend:
     StatelessDecoderBackend + StatelessDecoderBackendPicture<H265>
