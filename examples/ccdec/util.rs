@@ -57,6 +57,7 @@ pub struct Args {
     pub output_format: DecodedFormat,
 
     /// origin of the memory for decoded buffers (managed, prime or user). Default: managed.
+    #[allow(dead_code)]
     #[argh(option, default = "FrameMemoryType::Managed")]
     pub frame_memory: FrameMemoryType,
 
