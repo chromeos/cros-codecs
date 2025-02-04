@@ -77,11 +77,13 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
         _last_ref: &Option<Self::Handle>,
         _golden_ref: &Option<Self::Handle>,
         _alt_ref: &Option<Self::Handle>,
-        _: &[u8],
+        bitstream: &[u8],
         segmentation: &Segmentation,
         mb_lf_adjust: &MbLfAdjustments,
     ) -> StatelessBackendResult<Self::Handle> {
         let mut vp8_frame_params = V4l2CtrlVp8FrameParams::new();
+
+        picture.borrow_mut().request().write(bitstream);
 
         // last_ref, golden_ref, alt_ref are all None on key frame
         // and Some on other frames
