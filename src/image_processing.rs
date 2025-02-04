@@ -6,6 +6,9 @@
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
 
+/// TODO(greenjustin): Refactor image processing function parameters to follow the same order as
+/// LibYUV.
+
 /// Copies `src` into `dst` as NV12, handling padding.
 pub fn nv12_copy(
     src_y: &[u8],
@@ -64,6 +67,20 @@ pub fn extend_border_nv12(
     }
 }
 
+pub fn copy_plane(
+    src: &[u8],
+    src_stride: usize,
+    dst: &mut [u8],
+    dst_stride: usize,
+    width: usize,
+    height: usize,
+) {
+    for y in 0..height {
+        dst[(y * dst_stride)..(y * dst_stride + width)]
+            .copy_from_slice(&src[(y * src_stride)..(y * src_stride + width)]);
+    }
+}
+
 /// Copies `src` into `dst` as I4xx (YUV tri-planar).
 ///
 /// `sub_h` and `sub_v` enable horizontal and vertical sub-sampling, respectively. E.g, if both
@@ -86,21 +103,28 @@ pub fn i4xx_copy(
     height: usize,
     (sub_h, sub_v): (bool, bool),
 ) {
-    for y in 0..height {
-        dst_y[(y * dst_y_stride)..(y * dst_y_stride + width)]
-            .copy_from_slice(&src_y[(y * src_y_stride)..(y * src_y_stride + width)]);
-    }
+    copy_plane(src_y, src_y_stride, dst_y, dst_y_stride, width, height);
 
     // Align width and height of UV planes to 2 if sub-sampling is used.
     let uv_width = if sub_h { (width + 1) / 2 } else { width };
     let uv_height = if sub_v { (height + 1) / 2 } else { height };
 
-    for y in 0..uv_height {
-        dst_u[(y * dst_u_stride)..(y * dst_u_stride + uv_width)]
-            .copy_from_slice(&src_u[(y * src_u_stride)..(y * src_u_stride + uv_width)]);
-        dst_v[(y * dst_v_stride)..(y * dst_v_stride + uv_width)]
-            .copy_from_slice(&src_v[(y * src_v_stride)..(y * src_v_stride + uv_width)]);
-    }
+    copy_plane(
+        src_u,
+        src_u_stride,
+        dst_u,
+        dst_u_stride,
+        uv_width,
+        uv_height,
+    );
+    copy_plane(
+        src_v,
+        src_v_stride,
+        dst_v,
+        dst_v_stride,
+        uv_width,
+        uv_height,
+    );
 }
 
 /// Copies `src` into `dst` as I410, removing all padding and changing the layout from packed to
@@ -207,27 +231,36 @@ pub fn mm21_to_nv12(
     )
 }
 
-/// Simple implementation of NV12 to I420. Again, probably not fast enough for production, should
-/// TODO(b:380280455): We may want to speed this up.
-pub fn nv12_to_i420_chroma(src_uv: &[u8], dst_u: &mut [u8], dst_v: &mut [u8]) {
-    for i in 0..src_uv.len() {
-        if i % 2 == 0 {
-            dst_u[i / 2] = src_uv[i];
-        } else {
-            dst_v[i / 2] = src_uv[i];
-        }
-    }
-}
-
 pub fn nv12_to_i420(
     src_y: &[u8],
+    src_y_stride: usize,
     dst_y: &mut [u8],
+    dst_y_stride: usize,
     src_uv: &[u8],
+    src_uv_stride: usize,
     dst_u: &mut [u8],
+    dst_u_stride: usize,
     dst_v: &mut [u8],
+    dst_v_stride: usize,
+    width: usize,
+    height: usize,
 ) {
-    dst_y.copy_from_slice(src_y);
-    nv12_to_i420_chroma(src_uv, dst_u, dst_v);
+    copy_plane(src_y, src_y_stride, dst_y, dst_y_stride, width, height);
+
+    // We can just assume 4:2:0 subsampling
+    let aligned_width = (width + 1) & (!1);
+    for y in 0..((height + 1) / 2) {
+        let src_row = &src_uv[(y * src_uv_stride)..(y * src_uv_stride + aligned_width)];
+        let dst_u_row = &mut dst_u[(y * dst_u_stride)..(y * dst_u_stride + aligned_width / 2)];
+        let dst_v_row = &mut dst_v[(y * dst_v_stride)..(y * dst_v_stride + aligned_width / 2)];
+        for x in 0..aligned_width {
+            if x % 2 == 0 {
+                dst_u_row[x / 2] = src_row[x];
+            } else {
+                dst_v_row[x / 2] = src_row[x];
+            }
+        }
+    }
 }
 
 pub fn i420_to_nv12_chroma(src_u: &[u8], src_v: &[u8], dst_uv: &mut [u8]) {

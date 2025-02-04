@@ -98,7 +98,10 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
 
         picture.borrow_mut().request().submit();
 
-        Ok(V4l2StatelessDecoderHandle { handle })
+        Ok(V4l2StatelessDecoderHandle {
+            handle: handle,
+            stream_info: self.stream_info.clone(),
+        })
     }
 }
 
