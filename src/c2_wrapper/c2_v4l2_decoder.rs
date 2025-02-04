@@ -25,17 +25,10 @@ pub struct C2V4L2DecoderOptions {
 
 pub struct C2V4L2Decoder {}
 
-impl
-    C2DecoderBackend<
-        dyn StatelessVideoDecoder<
-            Handle = DynDecodedHandle<()>,
-            FramePool = dyn FramePool<Descriptor = ()>,
-        >,
-        DynDecodedHandle<()>,
-        dyn FramePool<Descriptor = ()>,
-        C2V4L2DecoderOptions,
-    > for C2V4L2Decoder
-{
+impl C2DecoderBackend for C2V4L2Decoder {
+    type DecodedHandle = ();
+    type DecoderOptions = C2V4L2DecoderOptions;
+
     fn new(_options: C2V4L2DecoderOptions) -> Result<Self, String> {
         Ok(Self {})
     }
@@ -43,7 +36,7 @@ impl
     fn get_decoder(
         &mut self,
         format: EncodedFormat,
-    ) -> Result<DynStatelessVideoDecoder<()>, String> {
+    ) -> Result<DynStatelessVideoDecoder<Self::DecodedHandle>, String> {
         Ok(match format {
             EncodedFormat::H264 => {
                 StatelessDecoder::<H264, _>::new_v4l2(BlockingMode::NonBlocking).into_trait_object()
@@ -62,7 +55,7 @@ impl
         &mut self,
         _stream_info: &StreamInfo,
         num_frames: usize,
-    ) -> Result<Vec<()>, String> {
+    ) -> Result<Vec<Self::DecodedHandle>, String> {
         Ok(vec![(); num_frames])
     }
 }

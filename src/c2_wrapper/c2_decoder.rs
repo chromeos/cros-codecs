@@ -17,10 +17,12 @@ use crate::c2_wrapper::C2Status;
 use crate::c2_wrapper::C2Worker;
 use crate::c2_wrapper::Job;
 use crate::decoder::stateless::DecodeError;
+use crate::decoder::stateless::DynStatelessVideoDecoder;
 use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
+use crate::decoder::DynDecodedHandle;
 use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::image_processing::i4xx_copy;
@@ -28,36 +30,34 @@ use crate::DecodedFormat;
 use crate::EncodedFormat;
 use crate::Fourcc;
 
-pub trait C2DecoderBackend<D, H, FP, U>
-where
-    H: DecodedHandle,
-    FP: FramePool<Descriptor = H::Descriptor> + ?Sized,
-    D: StatelessVideoDecoder<Handle = H, FramePool = FP> + ?Sized,
-{
-    fn new(options: U) -> Result<Self, String>
+pub trait C2DecoderBackend {
+    type DecodedHandle;
+    type DecoderOptions: Clone + Send + 'static;
+
+    fn new(options: Self::DecoderOptions) -> Result<Self, String>
     where
         Self: Sized;
-    fn get_decoder(&mut self, format: EncodedFormat) -> Result<Box<D>, String>;
+    // TODO: Support stateful video decoders.
+    fn get_decoder(
+        &mut self,
+        format: EncodedFormat,
+    ) -> Result<DynStatelessVideoDecoder<Self::DecodedHandle>, String>;
     fn allocate_new_frames(
         &mut self,
         stream_info: &StreamInfo,
         num_frames: usize,
-    ) -> Result<Vec<H::Descriptor>, String>;
+    ) -> Result<Vec<Self::DecodedHandle>, String>;
 }
 
-pub struct C2DecoderWorker<T, B, D, H, FP, U, E, W>
+pub struct C2DecoderWorker<B, T, E, W>
 where
+    B: C2DecoderBackend,
     T: C2DecodeWorkObject + Clone + Default + Send + 'static,
-    H: DecodedHandle,
-    FP: FramePool<Descriptor = H::Descriptor> + ?Sized,
-    D: StatelessVideoDecoder<Handle = H, FramePool = FP> + ?Sized,
-    B: C2DecoderBackend<D, H, FP, U>,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(C2DecodeJob<T>) + Send + 'static,
-    U: Clone + Send + 'static,
 {
     backend: B,
-    decoder: Box<D>,
+    decoder: DynStatelessVideoDecoder<<B as C2DecoderBackend>::DecodedHandle>,
     error_cb: Arc<Mutex<E>>,
     work_done_cb: Arc<Mutex<W>>,
     work_queue: Arc<Mutex<VecDeque<C2DecodeJob<T>>>>,
@@ -65,23 +65,14 @@ where
     in_flight_queue: VecDeque<C2DecodeJob<T>>,
     frame_num: u64,
     state: Arc<Mutex<C2State>>,
-    // TODO: Is this really the only way to fix the unconstrained type problem?
-    _phantom: PhantomData<(H, U)>,
-    // Tuples can't have more than one un-sized type, so we have to use this
-    // workaround.
-    __phantom: PhantomData<H>,
 }
 
-impl<T, B, D, H, FP, U, E, W> C2DecoderWorker<T, B, D, H, FP, U, E, W>
+impl<B, T, E, W> C2DecoderWorker<B, T, E, W>
 where
+    B: C2DecoderBackend,
     T: C2DecodeWorkObject + Clone + Default + Send + 'static,
-    B: C2DecoderBackend<D, H, FP, U>,
-    H: DecodedHandle,
-    FP: FramePool<Descriptor = H::Descriptor> + ?Sized,
-    D: StatelessVideoDecoder<Handle = H, FramePool = FP> + ?Sized,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(C2DecodeJob<T>) + Send + 'static,
-    U: Clone + Send + 'static,
 {
     // Returns true if there were any events to process
     fn check_events(&mut self) -> bool {
@@ -199,25 +190,22 @@ where
     }
 }
 
-impl<T, B, D, H, FP, U, E, W> C2Worker<C2DecodeJob<T>, U, E, W>
-    for C2DecoderWorker<T, B, D, H, FP, U, E, W>
+impl<B, T, E, W> C2Worker<C2DecodeJob<T>, E, W> for C2DecoderWorker<B, T, E, W>
 where
+    B: C2DecoderBackend,
     T: C2DecodeWorkObject + Clone + Default + Send + 'static,
-    B: C2DecoderBackend<D, H, FP, U>,
-    H: DecodedHandle,
-    FP: FramePool<Descriptor = H::Descriptor> + ?Sized,
-    D: StatelessVideoDecoder<Handle = H, FramePool = FP> + ?Sized,
     E: FnMut(C2Status) + Send + 'static,
     W: FnMut(C2DecodeJob<T>) + Send + 'static,
-    U: Clone + Send + 'static,
 {
+    type Options = <B as C2DecoderBackend>::DecoderOptions;
+
     fn new(
         fourcc: Fourcc,
         error_cb: Arc<Mutex<E>>,
         work_done_cb: Arc<Mutex<W>>,
         work_queue: Arc<Mutex<VecDeque<C2DecodeJob<T>>>>,
         state: Arc<Mutex<C2State>>,
-        options: U,
+        options: Self::Options,
     ) -> Result<Self, String> {
         let mut backend = B::new(options)?;
         let decoder = backend.get_decoder(EncodedFormat::from(fourcc))?;
@@ -231,8 +219,6 @@ where
             in_flight_queue: VecDeque::new(),
             frame_num: 0,
             state: state,
-            _phantom: Default::default(),
-            __phantom: Default::default(),
         })
     }
 

@@ -207,13 +207,7 @@ fn main() {
     };
 
     #[cfg(feature = "vaapi")]
-    let mut decoder: C2Wrapper<
-        _,
-        _,
-        _,
-        _,
-        C2DecoderWorker<_, C2VaapiDecoder, _, _, _, _, _, _>,
-    > = C2Wrapper::new(
+    let mut decoder: C2Wrapper<_, _, _, C2DecoderWorker<C2VaapiDecoder, _, _, _>> = C2Wrapper::new(
         Fourcc::from(args.input_format),
         error_cb,
         on_new_frame,
@@ -224,13 +218,7 @@ fn main() {
         },
     );
     #[cfg(feature = "v4l2")]
-    let mut decoder: C2Wrapper<
-        _,
-        _,
-        _,
-        _,
-        C2DecoderWorker<_, C2V4L2Decoder, _, _, _, _, _, _>,
-    > = C2Wrapper::new(
+    let mut decoder: C2Wrapper<_, _, _, C2DecoderWorker<C2V4L2Decoder, _, _, _>> = C2Wrapper::new(
         Fourcc::from(args.input_format),
         error_cb,
         on_new_frame,
