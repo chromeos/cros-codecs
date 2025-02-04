@@ -1,0 +1,110 @@
+// Copyright 2024 The ChromiumOS Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use v4l2r::ioctl;
+
+use crate::backend::v4l2::decoder::stateless::BackendHandle;
+use crate::backend::v4l2::decoder::stateless::V4l2Picture;
+use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
+use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
+use crate::backend::v4l2::decoder::V4l2StreamInfo;
+use crate::codec::vp9::parser::Header;
+use crate::codec::vp9::parser::Segmentation;
+use crate::codec::vp9::parser::MAX_SEGMENTS;
+use crate::codec::vp9::parser::NUM_REF_FRAMES;
+use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
+use crate::decoder::stateless::vp9::Vp9;
+use crate::decoder::stateless::NewPictureError;
+use crate::decoder::stateless::NewPictureResult;
+use crate::decoder::stateless::StatelessBackendResult;
+use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackendPicture;
+use crate::decoder::BlockingMode;
+use crate::decoder::DecodedHandle;
+use crate::device::v4l2::stateless::controls::vp9::Vp9V4l2Control;
+use crate::Fourcc;
+use crate::Rect;
+use crate::Resolution;
+
+impl V4l2StreamInfo for &Header {
+    fn min_num_frames(&self) -> usize {
+        NUM_REF_FRAMES + 1
+    }
+
+    fn coded_size(&self) -> Resolution {
+        Resolution::from((self.width, self.height))
+    }
+
+    fn visible_rect(&self) -> Rect {
+        Rect::from(((0, 0), (self.render_width, self.render_height)))
+    }
+}
+
+impl StatelessDecoderBackendPicture<Vp9> for V4l2StatelessDecoderBackend {
+    type Picture = Rc<RefCell<V4l2Picture>>;
+}
+
+impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
+    fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
+        self.device.initialize_queues(
+            Fourcc::from(b"VP9F"),
+            header.coded_size(),
+            header.visible_rect(),
+            header.min_num_frames() as u32,
+        );
+        Ok(())
+    }
+
+    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
+        let request_buffer = match self.device.alloc_request(timestamp) {
+            Ok(buffer) => buffer,
+            _ => return Err(NewPictureError::OutOfOutputBuffers),
+        };
+        Ok(Rc::new(RefCell::new(V4l2Picture::new(request_buffer))))
+    }
+
+    fn submit_picture(
+        &mut self,
+        picture: Self::Picture,
+        hdr: &Header,
+        reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
+        bitstream: &[u8],
+        segmentation: &[Segmentation; MAX_SEGMENTS],
+    ) -> StatelessBackendResult<Self::Handle> {
+        let mut ctrl = Vp9V4l2Control::from(hdr);
+
+        // We have to do this manually since v4l2r does not directly support VP9
+        let which = picture.borrow_mut().request().which();
+        ioctl::s_ext_ctrls(&self.device, which, &mut ctrl).expect("Failed to set output control");
+
+        let handle = Rc::new(RefCell::new(BackendHandle {
+            picture: picture.clone(),
+        }));
+
+        let mut reference_pictures = Vec::<Rc<RefCell<V4l2Picture>>>::new();
+        for frame in reference_frames {
+            if frame.is_some() {
+                // TODO: I don't think this is right?
+                reference_pictures.push(frame.as_ref().unwrap().handle.borrow().picture.clone());
+            }
+        }
+        picture.borrow_mut().set_ref_pictures(reference_pictures);
+
+        picture.borrow_mut().request().write(bitstream);
+
+        picture.borrow_mut().request().submit();
+
+        Ok(V4l2StatelessDecoderHandle { handle })
+    }
+}
+
+impl StatelessDecoder<Vp9, V4l2StatelessDecoderBackend> {
+    pub fn new_v4l2(blocking_mode: BlockingMode) -> Self {
+        Self::new(V4l2StatelessDecoderBackend::new(), blocking_mode)
+            .expect("Failed to create v4l2 stateless decoder backend")
+    }
+}

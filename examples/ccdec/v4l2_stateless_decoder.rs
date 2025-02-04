@@ -12,6 +12,7 @@ use cros_codecs::bitstream_utils::NalIterator;
 use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
 use cros_codecs::decoder::stateless::h264::H264;
 use cros_codecs::decoder::stateless::vp8::Vp8;
+use cros_codecs::decoder::stateless::vp9::Vp9;
 use cros_codecs::decoder::stateless::StatelessDecoder;
 use cros_codecs::decoder::stateless::StatelessVideoDecoder;
 use cros_codecs::decoder::BlockingMode;
@@ -79,7 +80,14 @@ pub fn do_decode(mut input: File, args: Args) -> () {
 
             (decoder, frame_iter)
         }
-        EncodedFormat::VP9 => todo!(),
+        EncodedFormat::VP9 => {
+            let frame_iter = Box::new(IvfIterator::new(&input).map(Cow::Borrowed))
+                as Box<dyn Iterator<Item = Cow<[u8]>>>;
+
+            let decoder = StatelessDecoder::<Vp9, _>::new_v4l2(blocking_mode).into_trait_object();
+
+            (decoder, frame_iter)
+        }
         EncodedFormat::H265 => todo!(),
         EncodedFormat::AV1 => todo!(),
     };

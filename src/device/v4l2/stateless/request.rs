@@ -35,14 +35,17 @@ impl InitRequestHandle {
             buffer,
         }
     }
+    fn which(&self) -> ioctl::CtrlWhich {
+        ioctl::CtrlWhich::Request(self.handle.as_raw_fd())
+    }
     fn ioctl<C, T>(&mut self, ctrl: C) -> &mut Self
     where
         C: Into<SafeExtControl<T>>,
         T: ExtControlTrait,
     {
-        let which = ioctl::CtrlWhich::Request(self.handle.as_raw_fd());
         let mut ctrl: SafeExtControl<T> = ctrl.into();
-        ioctl::s_ext_ctrls(&self.device, which, &mut ctrl).expect("Failed to set output control");
+        ioctl::s_ext_ctrls(&self.device, self.which(), &mut ctrl)
+            .expect("Failed to set output control");
         self
     }
     fn write(&mut self, data: &[u8]) -> &mut Self {
@@ -110,6 +113,12 @@ impl RequestHandle {
             _ => panic!("ERROR"),
         }
     }
+    fn which(&self) -> ioctl::CtrlWhich {
+        match self {
+            Self::Init(handle) => handle.which(),
+            _ => panic!("ERROR"),
+        }
+    }
     fn ioctl<C, T>(&mut self, ctrl: C) -> &mut Self
     where
         C: Into<SafeExtControl<T>>,
@@ -165,6 +174,9 @@ impl V4l2Request {
     }
     pub fn timestamp(&self) -> u64 {
         self.0.timestamp()
+    }
+    pub fn which(&self) -> ioctl::CtrlWhich {
+        self.0.which()
     }
     pub fn ioctl<C, T>(&mut self, ctrl: C) -> &mut Self
     where
