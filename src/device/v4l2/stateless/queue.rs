@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use v4l2r::bindings::v4l2_format;
+use v4l2r::device::queue::direction;
 use v4l2r::device::queue::direction::Capture;
 use v4l2r::device::queue::direction::Output;
 use v4l2r::device::queue::dqbuf::DqBuffer;
@@ -36,6 +37,19 @@ use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
+
+//TODO: handle memory backends other than mmap
+//TODO: handle video formats other than h264
+//TODO: handle queue start/stop at runtime
+//TODO: handle DRC at runtime
+//TODO: handle synced buffers in Streaming state
+#[derive(Default)]
+enum V4l2QueueHandle<T: v4l2r::device::queue::direction::Direction> {
+    Init(Queue<T, QueueInit>),
+    Streaming(Rc<Queue<T, BuffersAllocated<Vec<MmapHandle>>>>),
+    #[default]
+    Unknown,
+}
 
 //TODO: handle memory backends other than mmap
 pub struct V4l2OutputBuffer {
@@ -89,7 +103,7 @@ impl V4l2OutputBuffer {
     pub fn submit(self, timestamp: u64, request_fd: i32) {
         let handle = &*self.queue.handle.borrow();
         let queue = match handle {
-            V4l2OutputQueueHandle::Streaming(queue) => queue,
+            V4l2QueueHandle::Streaming(queue) => queue,
             _ => panic!("ERROR"),
         };
         self.handle
@@ -100,20 +114,9 @@ impl V4l2OutputBuffer {
     }
 }
 
-//TODO: handle memory backends other than mmap
-//TODO: handle queue start/stop at runtime
-//TODO: handle DRC at runtime
-#[derive(Default)]
-enum V4l2OutputQueueHandle {
-    Init(Queue<Output, QueueInit>),
-    Streaming(Rc<Queue<Output, BuffersAllocated<Vec<MmapHandle>>>>),
-    #[default]
-    Unknown,
-}
-
 #[derive(Clone)]
 pub struct V4l2OutputQueue {
-    handle: Rc<RefCell<V4l2OutputQueueHandle>>,
+    handle: Rc<RefCell<V4l2QueueHandle<direction::Output>>>,
     num_buffers: u32,
 }
 
@@ -127,7 +130,7 @@ impl V4l2OutputQueue {
     pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_output_mplane_queue(device).expect("Failed to get output queue");
         log::debug!("Output queue:\n\tstate: None -> Init\n");
-        let handle = Rc::new(RefCell::new(V4l2OutputQueueHandle::Init(handle)));
+        let handle = Rc::new(RefCell::new(V4l2QueueHandle::Init(handle)));
         Self {
             handle,
             num_buffers: NUM_OUTPUT_BUFFERS,
@@ -135,7 +138,7 @@ impl V4l2OutputQueue {
     }
     pub fn initialize_queue(&mut self, format: Fourcc, res: Resolution) -> &mut Self {
         self.handle.replace(match self.handle.take() {
-            V4l2OutputQueueHandle::Init(mut handle) => {
+            V4l2QueueHandle::Init(mut handle) => {
                 let (width, height) = res.into();
 
                 handle
@@ -171,7 +174,7 @@ impl V4l2OutputQueue {
                 handle.stream_on().expect("Failed to start output queue");
 
                 log::debug!("Output queue:\n\tstate: Init -> Streaming\n");
-                V4l2OutputQueueHandle::Streaming(handle.into())
+                V4l2QueueHandle::Streaming(handle.into())
             }
             _ => {
                 /* TODO: handle DRC */
@@ -183,14 +186,14 @@ impl V4l2OutputQueue {
     pub fn num_free_buffers(&self) -> usize {
         let handle = &*self.handle.borrow();
         match handle {
-            V4l2OutputQueueHandle::Streaming(handle) => handle.num_free_buffers(),
+            V4l2QueueHandle::Streaming(handle) => handle.num_free_buffers(),
             _ => 0,
         }
     }
     pub fn alloc_buffer(&self) -> Result<V4l2OutputBuffer, DecodeError> {
         let handle = &*self.handle.borrow();
         match handle {
-            V4l2OutputQueueHandle::Streaming(handle) => match handle.try_get_free_buffer() {
+            V4l2QueueHandle::Streaming(handle) => match handle.try_get_free_buffer() {
                 Ok(buffer) => Ok(V4l2OutputBuffer::new(self.clone(), buffer)),
                 Err(_) => Err(DecodeError::NotEnoughOutputBuffers(1)),
             },
@@ -202,7 +205,7 @@ impl V4l2OutputQueue {
     pub fn drain(&self) {
         let handle = &*self.handle.borrow();
         match handle {
-            V4l2OutputQueueHandle::Streaming(handle) => loop {
+            V4l2QueueHandle::Streaming(handle) => loop {
                 match handle.try_dequeue() {
                     Ok(buffer) => continue,
                     _ => break,
@@ -303,21 +306,8 @@ impl V4l2CaptureBuffer {
     }
 }
 
-//TODO: handle memory backends other than mmap
-//TODO: handle video formats other than h264
-//TODO: handle queue start/stop at runtime
-//TODO: handle DRC at runtime
-//TODO: handle synced buffers in Streaming state
-#[derive(Default)]
-enum V4l2CaptureQueueHandle {
-    Init(Queue<Capture, QueueInit>),
-    Streaming(Queue<Capture, BuffersAllocated<Vec<MmapHandle>>>),
-    #[default]
-    Unknown,
-}
-
 pub struct V4l2CaptureQueue {
-    handle: RefCell<V4l2CaptureQueueHandle>,
+    handle: RefCell<V4l2QueueHandle<direction::Capture>>,
     num_buffers: u32,
     visible_rect: Rect,
     format: Format,
@@ -327,7 +317,7 @@ impl V4l2CaptureQueue {
     pub fn new(device: Arc<Device>) -> Self {
         let handle = Queue::get_capture_mplane_queue(device).expect("Failed to get capture queue");
         log::debug!("Capture queue:\n\tstate: None -> Init\n");
-        let handle = RefCell::new(V4l2CaptureQueueHandle::Init(handle));
+        let handle = RefCell::new(V4l2QueueHandle::Init(handle));
         Self {
             handle,
             num_buffers: 0,
@@ -339,7 +329,7 @@ impl V4l2CaptureQueue {
         self.visible_rect = visible_rect;
         self.num_buffers = num_buffers;
         self.handle.replace(match self.handle.take() {
-            V4l2CaptureQueueHandle::Init(handle) => {
+            V4l2QueueHandle::Init(handle) => {
                 self.format = handle.get_format().expect("Failed to get capture format");
                 log::debug!("Capture format:\n\t{:?}\n", self.format);
                 let handle = handle
@@ -359,7 +349,7 @@ impl V4l2CaptureQueue {
                 handle.stream_on().expect("Failed to start capture queue");
 
                 log::debug!("Capture queue:\n\tstate: Init -> Streaming\n");
-                V4l2CaptureQueueHandle::Streaming(handle)
+                V4l2QueueHandle::Streaming(handle.into())
             }
             _ => {
                 /* TODO: handle DRC */
@@ -371,7 +361,7 @@ impl V4l2CaptureQueue {
     pub fn dequeue_buffer(&self) -> Option<V4l2CaptureBuffer> {
         let handle = &*self.handle.borrow();
         match handle {
-            V4l2CaptureQueueHandle::Streaming(handle) => match handle.try_dequeue() {
+            V4l2QueueHandle::Streaming(handle) => match handle.try_dequeue() {
                 Ok(buffer) => Some(V4l2CaptureBuffer::new(
                     buffer,
                     self.visible_rect,
@@ -385,7 +375,7 @@ impl V4l2CaptureQueue {
     pub fn refill(&self) {
         let handle = &*self.handle.borrow();
         match handle {
-            V4l2CaptureQueueHandle::Streaming(handle) => {
+            V4l2QueueHandle::Streaming(handle) => {
                 while handle.num_free_buffers() != 0 {
                     let buffer = handle
                         .try_get_free_buffer()
@@ -400,7 +390,7 @@ impl V4l2CaptureQueue {
     pub fn num_buffers(&self) -> usize {
         let handle = &*self.handle.borrow();
         match handle {
-            V4l2CaptureQueueHandle::Streaming(handle) => handle.num_buffers(),
+            V4l2QueueHandle::Streaming(handle) => handle.num_buffers(),
             _ => 0,
         }
     }
