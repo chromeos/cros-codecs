@@ -7,11 +7,8 @@
 
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
