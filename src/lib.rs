@@ -384,7 +384,7 @@ pub struct FrameLayout {
 #[macro_export]
 macro_rules! multiple_desc_type {
     (enum $s:ident { $($v:ident($t:ty),)* } ) => {
-        enum $s {
+        pub enum $s {
             $($v($t),)*
         }
 
