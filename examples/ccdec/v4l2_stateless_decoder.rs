@@ -58,7 +58,7 @@ pub fn do_decode(mut input: File, args: Args) -> () {
         .map(|p| File::create(p).expect("Failed to create output file"));
 
     let blocking_mode = if args.synchronous {
-        todo!() // BlockingMode::Blocking
+        BlockingMode::Blocking
     } else {
         BlockingMode::NonBlocking
     };
