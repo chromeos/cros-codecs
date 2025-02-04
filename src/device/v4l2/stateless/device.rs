@@ -123,7 +123,8 @@ impl V4l2Device {
         self.handle
             .borrow_mut()
             .output_queue
-            .initialize_queue(format, coded_size);
+            .initialize(format, coded_size)
+            .expect("Unable to initialize output queue");
         self.handle
             .borrow_mut()
             .capture_queue
