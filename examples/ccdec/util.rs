@@ -70,10 +70,6 @@ pub struct Args {
     #[allow(dead_code)]
     pub libva_device: Option<PathBuf>,
 
-    /// whether to decode frames synchronously
-    #[argh(switch)]
-    pub synchronous: bool,
-
     /// whether to display the MD5 of the decoded stream, and at which granularity (stream or
     /// frame)
     #[argh(option)]

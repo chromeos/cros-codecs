@@ -38,7 +38,7 @@ frames to a file. As such it can be used for testing purposes.
 ```shell
 $ cargo build --examples
 $ ./target/debug/examples/ccdec --help
-Usage: ccdec <input> [--output <output>] --input-format <input-format> [--output-format <output-format>] [--synchronous] [--compute-md5 <compute-md5>]
+Usage: ccdec <input> [--output <output>] --input-format <input-format> [--output-format <output-format>] [--compute-md5 <compute-md5>]
 
 Simple player using cros-codecs
 
@@ -49,7 +49,6 @@ Options:
   --output          output file to write the decoded frames to
   --input-format    input format to decode from.
   --output-format   pixel format to decode into. Default: i420
-  --synchronous     whether to decode frames synchronously
   --compute-md5     whether to display the MD5 of the decoded stream, and at
                     which granularity (stream or frame)
   --help            display usage information
