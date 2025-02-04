@@ -134,6 +134,8 @@ where
                         return ret;
                     }
 
+                    // MappableHandle returns a frame with all planes in the same buffer and no
+                    // padding, so we can just assume stride = width.
                     let (src_y, src_uv) = tmp_buffer
                         .split_at((visible_resolution.width * visible_resolution.height) as usize);
                     let (src_u, src_v) = src_uv.split_at(

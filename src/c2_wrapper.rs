@@ -15,6 +15,8 @@ use crate::Fourcc;
 use crate::FrameLayout;
 
 pub mod c2_decoder;
+#[cfg(feature = "vaapi")]
+pub mod c2_vaapi_decoder;
 
 pub struct C2VideoFrame<'a> {
     // TODO: This will require us to memcpy frame data. This makes it easy to prototype, but is

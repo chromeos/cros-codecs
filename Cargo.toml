@@ -9,9 +9,9 @@ edition = "2021"
 
 [features]
 default = []
-backend = []
-vaapi = ["libva", "anyhow", "byteorder", "thiserror", "crc32fast", "nix", "backend"]
-v4l2 = ["v4l2r", "anyhow", "byteorder", "thiserror", "crc32fast", "nix", "backend"]
+backend = ["anyhow", "byteorder", "thiserror", "crc32fast", "nix", "gbm", "drm"]
+vaapi = ["libva", "backend"]
+v4l2 = ["v4l2r", "backend"]
 
 [dependencies]
 anyhow = { version = "1.0.75", optional = true }
@@ -22,13 +22,13 @@ log = { version = "0", features = ["release_max_level_debug"] }
 thiserror = { version = "1.0.58", optional = true }
 crc32fast = { version = "1.3.2", optional = true }
 nix = { version = "0.28", features = ["fs", "event"], optional = true }
+drm = { version = "0.12.0", optional = true }
+gbm = { version = "0.15", default-features = false, features = ["drm-support"], optional = true }
 
 [dev-dependencies]
 argh = "0.1.12"
 env_logger = "0.9.3"
 matroska-demuxer = "0.5.0"
-drm = "0.12.0"
-gbm = { version = "0.15", default-features = false, features = ["drm-support"] }
 serde_json = "1.0.96"
 
 [lints.rust]
