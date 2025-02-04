@@ -373,11 +373,15 @@ impl V4l2CaptureBuffer {
                 let mut pivot_uv = vec![0; y_stride * height_tiled / 2];
                 mm21_to_nv12(
                     &src_y,
-                    &mut pivot_y,
-                    &src_uv,
-                    &mut pivot_uv,
                     y_stride,
-                    height_tiled,
+                    &mut pivot_y,
+                    y_stride,
+                    &src_uv,
+                    uv_stride,
+                    &mut pivot_uv,
+                    uv_stride,
+                    y_stride,
+                    height_tiled as isize,
                 )
                 .expect("Unable to convert mm21 to nv12");
 
