@@ -1037,7 +1037,7 @@ pub(crate) mod tests {
     use std::path::PathBuf;
 
     use anyhow::Context;
-    use v4l2r::device::queue::qbuf::CaptureQueueable;
+    use v4l2r::device::queue::CaptureQueueable;
     use v4l2r::device::DeviceConfig;
     use v4l2r::memory::DmaBufSource;
 
@@ -1108,11 +1108,11 @@ pub(crate) mod tests {
 
     // SAFETY: copied from gbm.h
     pub const GBM_BO_USE_SW_READ_OFTEN: gbm::BufferObjectFlags =
-        unsafe { gbm::BufferObjectFlags::from_bits_unchecked(1 << 9) };
+        unsafe { gbm::BufferObjectFlags::from_bits_truncate(1 << 9) };
 
     // SAFETY: copied from gbm.h
     pub const GBM_BO_USE_HW_VIDEO_ENCODER: gbm::BufferObjectFlags =
-        unsafe { gbm::BufferObjectFlags::from_bits_unchecked(1 << 14) };
+        unsafe { gbm::BufferObjectFlags::from_bits_truncate(1 << 14) };
 
     pub struct BoPoolAllocator {
         gbm: Arc<gbm::Device<GbmDevice>>,
@@ -1129,7 +1129,12 @@ pub(crate) mod tests {
 
         fn queue(
             &mut self,
-            buffer: QBuffer<'_, Capture, Vec<Self::PlaneHandle>, Vec<Self::PlaneHandle>>,
+            buffer: QBuffer<
+                Capture,
+                Vec<Self::PlaneHandle>,
+                Vec<Self::PlaneHandle>,
+                &Queue<Capture, BuffersAllocated<Vec<Self::PlaneHandle>>>,
+            >,
         ) -> anyhow::Result<bool> {
             let len = 2 * 1024 * 1024;
 
