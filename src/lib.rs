@@ -23,17 +23,19 @@
 pub mod bitstream_utils;
 pub mod codec;
 
-#[cfg(any(feature = "vaapi", feature = "v4l2"))]
+#[cfg(feature = "backend")]
 pub mod backend;
-#[cfg(any(feature = "vaapi", feature = "v4l2"))]
+#[cfg(feature = "backend")]
+pub mod c2_wrapper;
+#[cfg(feature = "backend")]
 pub mod decoder;
 #[cfg(feature = "v4l2")]
 pub mod device;
-#[cfg(any(feature = "vaapi", feature = "v4l2"))]
+#[cfg(feature = "backend")]
 pub mod encoder;
-#[cfg(any(feature = "vaapi", feature = "v4l2"))]
+#[cfg(feature = "backend")]
 pub mod image_processing;
-#[cfg(any(feature = "vaapi", feature = "v4l2"))]
+#[cfg(feature = "backend")]
 pub mod utils;
 
 use std::str::FromStr;
