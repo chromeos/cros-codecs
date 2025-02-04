@@ -289,17 +289,6 @@ impl V4l2OutputQueue {
             ))),
         }
     }
-    pub fn drain(&self) -> Result<(), QueueError> {
-        let handle = &*self.handle.borrow();
-        match handle {
-            V4l2OutputQueueHandle::Streaming(handle) => loop {
-                if let Err(_) = handle.try_dequeue() {
-                    break Ok(());
-                }
-            },
-            _ => return Err(QueueError::State),
-        }
-    }
     pub fn dequeue_buffer(&self) -> Result<(), QueueError> {
         let handle = &*self.handle.borrow();
         match handle {
