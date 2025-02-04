@@ -40,6 +40,7 @@ use cros_codecs::DecodedFormat;
 use cros_codecs::EncodedFormat;
 use cros_codecs::Fourcc;
 use cros_codecs::FrameLayout;
+use cros_codecs::FrameMemoryType;
 use cros_codecs::PlaneLayout;
 use cros_codecs::Resolution;
 use matroska_demuxer::Frame;
@@ -50,7 +51,6 @@ use crate::md5::MD5Context;
 use crate::util::decide_output_file_name;
 use crate::util::golden_md5s;
 use crate::util::Args;
-use crate::util::FrameMemoryType;
 use crate::util::Md5Computation;
 
 // Our buffer descriptor type.

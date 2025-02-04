@@ -13,6 +13,7 @@ use argh::FromArgs;
 
 use cros_codecs::DecodedFormat;
 use cros_codecs::EncodedFormat;
+use cros_codecs::FrameMemoryType;
 
 #[derive(Debug)]
 pub enum Md5Computation {
@@ -28,26 +29,6 @@ impl FromStr for Md5Computation {
             "stream" => Ok(Md5Computation::Stream),
             "frame" => Ok(Md5Computation::Frame),
             _ => Err("unrecognized MD5 computation option. Valid values: stream, frame"),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum FrameMemoryType {
-    Managed,
-    Prime,
-    User,
-}
-
-impl FromStr for FrameMemoryType {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "managed" => Ok(FrameMemoryType::Managed),
-            "prime" => Ok(FrameMemoryType::Prime),
-            "user" => Ok(FrameMemoryType::User),
-            _ => Err("unrecognized memory type. Valid values: managed, prime, user"),
         }
     }
 }
