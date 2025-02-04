@@ -34,6 +34,7 @@ use crate::decoder::BlockingMode;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeMode;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeParams;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DpbEntry;
+use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264StartCode;
 //TODO use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264ScalingMatrix;
 use crate::Fourcc;
 use crate::Rect;
@@ -135,7 +136,8 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             .ioctl(h264_pps)
             //TODO.ioctl(&h264_scaling_matrix)
             .ioctl(&h264_decode_params)
-            .ioctl(V4l2CtrlH264DecodeMode::FrameBased);
+            .ioctl(V4l2CtrlH264DecodeMode::FrameBased)
+            .ioctl(V4l2CtrlH264StartCode::AnnexB);
         picture.set_ref_pictures(ref_pictures);
         ////////////////////////////////////////////////////////////////////////
         // DEBUG
@@ -170,6 +172,9 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         _: &[&DpbEntry<Self::Handle>],
         _: &[&DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {
+        const START_CODE: [u8; 3] = [0, 0, 1];
+        picture.borrow_mut().request().write(&START_CODE);
+
         picture.borrow_mut().request().write(slice.nalu.as_ref());
         Ok(())
     }

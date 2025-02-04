@@ -18,6 +18,8 @@ use v4l2r::bindings::v4l2_ctrl_h264_sps;
 use v4l2r::bindings::v4l2_h264_dpb_entry;
 use v4l2r::bindings::v4l2_stateless_h264_decode_mode_V4L2_STATELESS_H264_DECODE_MODE_FRAME_BASED as V4L2_STATELESS_H264_DECODE_MODE_FRAME_BASED;
 use v4l2r::bindings::v4l2_stateless_h264_decode_mode_V4L2_STATELESS_H264_DECODE_MODE_SLICE_BASED as V4L2_STATELESS_H264_DECODE_MODE_SLICE_BASED;
+use v4l2r::bindings::v4l2_stateless_h264_start_code_V4L2_STATELESS_H264_START_CODE_ANNEX_B as V4L2_STATELESS_H264_START_CODE_ANNEX_B;
+use v4l2r::bindings::v4l2_stateless_h264_start_code_V4L2_STATELESS_H264_START_CODE_NONE as V4L2_STATELESS_H264_START_CODE_NONE;
 use v4l2r::bindings::V4L2_H264_DECODE_PARAM_FLAG_BOTTOM_FIELD;
 use v4l2r::bindings::V4L2_H264_DECODE_PARAM_FLAG_FIELD_PIC;
 use v4l2r::bindings::V4L2_H264_DECODE_PARAM_FLAG_IDR_PIC;
@@ -49,6 +51,7 @@ use v4l2r::bindings::V4L2_H264_SPS_FLAG_SEPARATE_COLOUR_PLANE;
 use v4l2r::controls::codec::H264DecodeMode;
 use v4l2r::controls::codec::H264DecodeParams;
 use v4l2r::controls::codec::H264ScalingMatrix;
+use v4l2r::controls::codec::H264StartCode;
 use v4l2r::controls::SafeExtControl;
 
 impl From<&Sps> for v4l2_ctrl_h264_sps {
@@ -279,4 +282,15 @@ impl From<V4l2CtrlH264DecodeMode> for SafeExtControl<H264DecodeMode> {
     fn from(decode_mode: V4l2CtrlH264DecodeMode) -> Self {
         SafeExtControl::<H264DecodeMode>::from_value(decode_mode as i32)
     }
+}
+
+impl From<V4l2CtrlH264StartCode> for SafeExtControl<H264StartCode> {
+    fn from(decode_mode: V4l2CtrlH264StartCode) -> Self {
+        SafeExtControl::<H264StartCode>::from_value(decode_mode as i32)
+    }
+}
+
+pub enum V4l2CtrlH264StartCode {
+    None = V4L2_STATELESS_H264_START_CODE_NONE as isize,
+    AnnexB = V4L2_STATELESS_H264_START_CODE_ANNEX_B as isize,
 }

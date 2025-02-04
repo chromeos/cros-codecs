@@ -100,11 +100,6 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
         let handle = Rc::new(RefCell::new(BackendHandle {
             picture: picture.clone(),
         }));
-        println!(
-            "{:<20} {:?}\n",
-            "submit_picture",
-            picture.borrow().timestamp()
-        );
         picture.borrow_mut().request().submit();
         Ok(V4l2StatelessDecoderHandle { handle })
     }

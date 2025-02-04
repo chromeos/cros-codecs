@@ -143,9 +143,6 @@ impl V4l2OutputBuffer {
             .get_plane_mapping(0)
             .expect("Failed to mmap output buffer");
 
-        mapping.as_mut()[self.length..self.length + 3].copy_from_slice(&[0, 0, 1]);
-        self.length += 3;
-
         mapping.as_mut()[self.length..self.length + data.len()].copy_from_slice(data);
         self.length += data.len();
 
