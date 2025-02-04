@@ -291,6 +291,11 @@ impl V4l2CaptureBuffer {
     pub fn timestamp(&self) -> u64 {
         self.handle.data.timestamp().tv_usec as u64
     }
+    // TODO enable once upstream v4l2r has rolled
+    //    pub fn has_error(&self) -> bool {
+    //        self.handle.data.has_error() as u64
+    //    }
+
     //TODO make this work for formats other then 420
     pub fn length(&self) -> usize {
         (Resolution::from(self.visible_rect).get_area() * 3) / 2
@@ -411,11 +416,15 @@ impl V4l2CaptureQueue {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2QueueHandle::Streaming(handle) => match handle.try_dequeue() {
-                Ok(buffer) => Some(V4l2CaptureBuffer::new(
-                    buffer,
-                    self.visible_rect,
-                    self.format.clone(),
-                )),
+                Ok(buffer) => {
+                    // TODO handle buffer dequeuing successfully, but having an error
+                    // buffer.data.has_error();
+                    Some(V4l2CaptureBuffer::new(
+                        buffer,
+                        self.visible_rect,
+                        self.format.clone(),
+                    ))
+                }
                 _ => None,
             },
             _ => panic!("ERROR"),
