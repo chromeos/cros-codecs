@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 use std::ffi::OsStr;
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -138,4 +140,31 @@ pub fn decide_output_file_name<'a>(output: &'a Path, index: i32) -> PathBuf {
         let new_file_name = format!("{}_{}", stem, index);
         PathBuf::from(String::from(output.to_str().unwrap()).replace(file_name, &new_file_name))
     }
+}
+
+// Vector of per frame md5 sums
+pub fn golden_md5s(path: &Option<PathBuf>) -> Vec<String> {
+    let golden_md5s: Vec<String> = match path {
+        None => vec![],
+        Some(ref path) => {
+            let mut golden_file_content = String::new();
+            File::open(&path)
+                .expect("error opening golden file")
+                .read_to_string(&mut golden_file_content)
+                .expect("error reading golden file");
+            let parsed_json: serde_json::Value =
+                serde_json::from_str(&golden_file_content).expect("error parsing golden file");
+            match &parsed_json["md5_checksums"] {
+                serde_json::Value::Array(checksums) => checksums
+                    .iter()
+                    .map(|x| match x {
+                        serde_json::Value::String(checksum) => String::from(checksum),
+                        _ => panic!("error parsing golden file"),
+                    })
+                    .collect(),
+                _ => panic!("error parsing golden file"),
+            }
+        }
+    };
+    golden_md5s
 }

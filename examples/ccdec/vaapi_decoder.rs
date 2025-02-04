@@ -47,6 +47,7 @@ use matroska_demuxer::MatroskaFile;
 use crate::md5::md5_digest;
 use crate::md5::MD5Context;
 use crate::util::decide_output_file_name;
+use crate::util::golden_md5s;
 use crate::util::Args;
 use crate::util::EncodedFormat;
 use crate::util::FrameMemoryType;
@@ -184,29 +185,7 @@ pub fn do_decode(mut input: File, args: Args) -> () {
         BlockingMode::NonBlocking
     };
 
-    let golden_md5s: Vec<String> = match args.golden {
-        None => vec![],
-        Some(ref path) => {
-            let mut golden_file_content = String::new();
-            File::open(&path)
-                .expect("error opening golden file")
-                .read_to_string(&mut golden_file_content)
-                .expect("error reading golden file");
-            let parsed_json: serde_json::Value =
-                serde_json::from_str(&golden_file_content).expect("error parsing golden file");
-            match &parsed_json["md5_checksums"] {
-                serde_json::Value::Array(checksums) => checksums
-                    .iter()
-                    .map(|x| match x {
-                        serde_json::Value::String(checksum) => String::from(checksum),
-                        _ => panic!("error parsing golden file"),
-                    })
-                    .collect(),
-                _ => panic!("error parsing golden file"),
-            }
-        }
-    };
-    let mut golden_iter = golden_md5s.iter();
+    let mut golden_iter = golden_md5s(&args.golden).into_iter();
 
     let gbm = match args.frame_memory {
         FrameMemoryType::Managed | FrameMemoryType::User => None,
@@ -352,7 +331,7 @@ pub fn do_decode(mut input: File, args: Args) -> () {
             }
 
             if args.golden.is_some() {
-                assert_eq!(&frame_md5, golden_iter.next().unwrap());
+                assert_eq!(&frame_md5, &golden_iter.next().unwrap());
             }
         }
     };
