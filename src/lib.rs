@@ -111,10 +111,7 @@ impl Resolution {
 
 impl From<(u32, u32)> for Resolution {
     fn from(value: (u32, u32)) -> Self {
-        Self {
-            width: value.0,
-            height: value.1,
-        }
+        Self { width: value.0, height: value.1 }
     }
 }
 
@@ -134,32 +131,19 @@ pub struct Rect {
 
 impl From<Rect> for Resolution {
     fn from(value: Rect) -> Self {
-        Self {
-            width: value.width - value.x,
-            height: value.height - value.y,
-        }
+        Self { width: value.width - value.x, height: value.height - value.y }
     }
 }
 
 impl From<Resolution> for Rect {
     fn from(value: Resolution) -> Self {
-        Self {
-            x: 0,
-            y: 0,
-            width: value.width,
-            height: value.height,
-        }
+        Self { x: 0, y: 0, width: value.width, height: value.height }
     }
 }
 
 impl From<((u32, u32), (u32, u32))> for Rect {
     fn from(value: ((u32, u32), (u32, u32))) -> Self {
-        Self {
-            x: value.0 .0,
-            y: value.0 .1,
-            width: value.1 .0,
-            height: value.1 .1,
-        }
+        Self { x: value.0 .0, y: value.0 .1, width: value.1 .0, height: value.1 .1 }
     }
 }
 /// Wrapper around u32 when they are meant to be a fourcc.
@@ -188,12 +172,7 @@ impl From<&[u8; 4]> for Fourcc {
 
 impl From<Fourcc> for [u8; 4] {
     fn from(n: Fourcc) -> Self {
-        [
-            n.0 as u8,
-            (n.0 >> 8) as u8,
-            (n.0 >> 16) as u8,
-            (n.0 >> 24) as u8,
-        ]
+        [n.0 as u8, (n.0 >> 8) as u8, (n.0 >> 16) as u8, (n.0 >> 24) as u8]
     }
 }
 

@@ -32,10 +32,7 @@ pub struct V4l2Picture {
 
 impl V4l2Picture {
     pub fn new(request: Rc<RefCell<V4l2Request>>) -> Self {
-        Self {
-            request,
-            ref_pictures: None,
-        }
+        Self { request, ref_pictures: None }
     }
     pub fn timestamp(&self) -> u64 {
         self.request.as_ref().borrow().timestamp()
@@ -85,10 +82,7 @@ pub struct V4l2StatelessDecoderHandle {
 
 impl Clone for V4l2StatelessDecoderHandle {
     fn clone(&self) -> Self {
-        Self {
-            handle: Rc::clone(&self.handle),
-            stream_info: self.stream_info.clone(),
-        }
+        Self { handle: Rc::clone(&self.handle), stream_info: self.stream_info.clone() }
     }
 }
 

@@ -26,10 +26,7 @@ impl Default for EncoderConfig {
         Self {
             profile: Profile::Profile0,
             bit_depth: BitDepth::Depth8,
-            resolution: Resolution {
-                width: 320,
-                height: 240,
-            },
+            resolution: Resolution { width: 320, height: 240 },
             pred_structure: PredictionStructure::LowDelay { limit: 1024 },
             initial_tunings: Default::default(),
         }

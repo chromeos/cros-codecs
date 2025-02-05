@@ -150,10 +150,7 @@ impl<'n, W: Write> Synthesizer<'n, Sps, W> {
         writer: W,
         ep_enabled: bool,
     ) -> SynthesizerResult<()> {
-        let mut s = Self {
-            writer: NaluWriter::<W>::new(writer, ep_enabled),
-            nalu: sps,
-        };
+        let mut s = Self { writer: NaluWriter::<W>::new(writer, ep_enabled), nalu: sps };
 
         s.writer.write_header(ref_idc, NaluType::Sps as u8)?;
         s.seq_parameter_set_data()?;
@@ -292,11 +289,7 @@ impl<'n, W: Write> Synthesizer<'n, Sps, W> {
             self.u(1, self.nalu.seq_scaling_matrix_present_flag)?;
 
             if self.nalu.seq_scaling_matrix_present_flag {
-                let scaling_list_count = if self.nalu.chroma_format_idc != 3 {
-                    8
-                } else {
-                    12
-                };
+                let scaling_list_count = if self.nalu.chroma_format_idc != 3 { 8 } else { 12 };
 
                 for i in 0..scaling_list_count {
                     // Assume if scaling lists are zeroed that they are not present.
@@ -373,10 +366,7 @@ impl<'n, W: Write> Synthesizer<'n, Pps, W> {
         writer: W,
         ep_enabled: bool,
     ) -> SynthesizerResult<()> {
-        let mut s = Self {
-            writer: NaluWriter::<W>::new(writer, ep_enabled),
-            nalu: pps,
-        };
+        let mut s = Self { writer: NaluWriter::<W>::new(writer, ep_enabled), nalu: pps };
 
         s.writer.write_header(ref_idc, NaluType::Pps as u8)?;
         s.pic_parameter_set_rbsp()?;
@@ -503,9 +493,8 @@ mod tests {
         let sps = Sps {
             profile_idc: Profile::High as u8,
             seq_scaling_matrix_present_flag: true,
-            scaling_lists_4x4: [[
-                11, 20, 10, 20, 10, 22, 10, 20, 10, 20, 13, 20, 10, 20, 10, 24,
-            ]; 6],
+            scaling_lists_4x4: [[11, 20, 10, 20, 10, 22, 10, 20, 10, 20, 13, 20, 10, 20, 10, 24];
+                6],
             scaling_lists_8x8: [
                 [
                     33, 20, 10, 21, 33, 20, 12, 20, 33, 23, 10, 20, 33, 20, 10, 20, 33, 24, 10, 20,

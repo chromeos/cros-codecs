@@ -120,10 +120,7 @@ where
 
         log::trace!("synced recon picture frame_num={}", self.dpb_meta.frame_num);
 
-        Ok(DpbEntry {
-            recon_pic,
-            meta: self.dpb_meta,
-        })
+        Ok(DpbEntry { recon_pic, meta: self.dpb_meta })
     }
 }
 

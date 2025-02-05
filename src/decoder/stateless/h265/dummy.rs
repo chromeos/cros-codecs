@@ -63,9 +63,7 @@ impl StatelessH265DecoderBackend for Backend {
         &mut self,
         _: Self::Picture,
     ) -> crate::decoder::stateless::StatelessBackendResult<Self::Handle> {
-        Ok(Handle {
-            handle: Rc::new(RefCell::new(Default::default())),
-        })
+        Ok(Handle { handle: Rc::new(RefCell::new(Default::default())) })
     }
 }
 impl StatelessDecoder<H265, Backend> {

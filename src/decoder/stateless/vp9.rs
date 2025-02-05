@@ -107,10 +107,7 @@ struct NegotiationInfo {
 impl From<&Header> for NegotiationInfo {
     fn from(hdr: &Header) -> Self {
         NegotiationInfo {
-            coded_resolution: Resolution {
-                width: hdr.width,
-                height: hdr.height,
-            },
+            coded_resolution: Resolution { width: hdr.width, height: hdr.height },
             bit_depth: hdr.bit_depth,
             profile: hdr.profile,
         }
@@ -273,10 +270,8 @@ where
             DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
             DecodingState::Decoding => {
                 // First allocate all the pictures we need for this superframe.
-                let num_required_pictures = frames
-                    .iter()
-                    .filter(|f| !f.header.show_existing_frame)
-                    .count();
+                let num_required_pictures =
+                    frames.iter().filter(|f| !f.header.show_existing_frame).count();
                 let frames_with_pictures = frames
                     .into_iter()
                     .enumerate()
@@ -400,18 +395,12 @@ pub mod tests {
 
     #[test]
     fn show_existing_frame_block() {
-        test_decoder_dummy(
-            &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME,
-            BlockingMode::Blocking,
-        );
+        test_decoder_dummy(&DECODE_TEST_25FPS_SHOW_EXISTING_FRAME, BlockingMode::Blocking);
     }
 
     #[test]
     fn show_existing_frame_nonblock() {
-        test_decoder_dummy(
-            &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME,
-            BlockingMode::NonBlocking,
-        );
+        test_decoder_dummy(&DECODE_TEST_25FPS_SHOW_EXISTING_FRAME, BlockingMode::NonBlocking);
     }
 
     pub const DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2: TestStream = TestStream {
@@ -421,18 +410,12 @@ pub mod tests {
 
     #[test]
     fn show_existing_frame2_block() {
-        test_decoder_dummy(
-            &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2,
-            BlockingMode::Blocking,
-        );
+        test_decoder_dummy(&DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2, BlockingMode::Blocking);
     }
 
     #[test]
     fn show_existing_frame2_nonblock() {
-        test_decoder_dummy(
-            &DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2,
-            BlockingMode::NonBlocking,
-        );
+        test_decoder_dummy(&DECODE_TEST_25FPS_SHOW_EXISTING_FRAME2, BlockingMode::NonBlocking);
     }
 
     // Remuxed from the original matroska source in libvpx using ffmpeg:

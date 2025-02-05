@@ -57,12 +57,8 @@ impl<C: PlaneHandle> DeviceHandle<C> {
         );
         // TODO: probe capabilties to find releted media device path
         let media_device_path = Path::new("/dev/media-dec0");
-        let media_device = open(
-            media_device_path,
-            OFlag::O_RDWR | OFlag::O_CLOEXEC,
-            Mode::empty(),
-        )
-        .unwrap_or_else(|_| panic!("Cannot open {}", media_device_path.display()));
+        let media_device = open(media_device_path, OFlag::O_RDWR | OFlag::O_CLOEXEC, Mode::empty())
+            .unwrap_or_else(|_| panic!("Cannot open {}", media_device_path.display()));
         let output_queue = V4l2OutputQueue::new(video_device.clone());
         let capture_queue = V4l2CaptureQueue::new(video_device.clone());
         Self {
@@ -185,14 +181,8 @@ impl V4l2Device {
         visible_rect: Rect,
         num_buffers: u32,
     ) -> Result<(), anyhow::Error> {
-        self.handle
-            .borrow_mut()
-            .output_queue
-            .initialize(format, coded_size)?;
-        self.handle
-            .borrow_mut()
-            .capture_queue
-            .initialize(visible_rect, num_buffers)?;
+        self.handle.borrow_mut().output_queue.initialize(format, coded_size)?;
+        self.handle.borrow_mut().capture_queue.initialize(visible_rect, num_buffers)?;
         Ok(())
     }
     pub fn alloc_request(&self, timestamp: u64) -> Result<Rc<RefCell<V4l2Request>>, DecodeError> {
@@ -218,14 +208,7 @@ impl V4l2Device {
             self.gbm_device
                 .clone()
                 .new_frame(
-                    Fourcc::from(
-                        self.handle
-                            .borrow()
-                            .capture_queue
-                            .format
-                            .pixelformat
-                            .to_u32(),
-                    ),
+                    Fourcc::from(self.handle.borrow().capture_queue.format.pixelformat.to_u32()),
                     Resolution {
                         width: self.handle.borrow().capture_queue.format.width,
                         height: self.handle.borrow().capture_queue.format.height,
@@ -234,20 +217,18 @@ impl V4l2Device {
                 .expect("Failed to allocate capture buffer!"),
         );
         self.handle.borrow().capture_queue.queue_buffer(frame)?;
-        self.handle
-            .borrow_mut()
-            .try_dequeue_capture_buffers(
-                &move |fourcc: Fourcc,
-                       resolution: Resolution,
-                       strides: Vec<usize>,
-                       native_handle: Vec<DmaBufHandle<File>>| {
-                    Box::new(
-                        <Arc<GbmDevice> as Clone>::clone(&self.gbm_device)
-                            .import_from_v4l2(fourcc, resolution, strides, native_handle)
-                            .expect("Failed to import V4L2 handles!"),
-                    )
-                },
-            );
+        self.handle.borrow_mut().try_dequeue_capture_buffers(&move |fourcc: Fourcc,
+                                                                    resolution: Resolution,
+                                                                    strides: Vec<usize>,
+                                                                    native_handle: Vec<
+            DmaBufHandle<File>,
+        >| {
+            Box::new(
+                <Arc<GbmDevice> as Clone>::clone(&self.gbm_device)
+                    .import_from_v4l2(fourcc, resolution, strides, native_handle)
+                    .expect("Failed to import V4L2 handles!"),
+            )
+        });
 
         let request = Rc::new(RefCell::new(V4l2Request::new(
             self.clone(),
@@ -255,9 +236,7 @@ impl V4l2Device {
             self.handle.borrow().alloc_request(),
             output_buffer,
         )));
-        self.handle
-            .borrow_mut()
-            .insert_request_into_hash(Rc::downgrade(&request.clone()));
+        self.handle.borrow_mut().insert_request_into_hash(Rc::downgrade(&request.clone()));
         Ok(request)
     }
     pub fn sync(&self, timestamp: u64) -> V4l2CaptureBuffer<DmaBufHandle<File>> {

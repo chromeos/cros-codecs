@@ -42,9 +42,7 @@ impl<W: Write> ObuWriter<W> {
 
     /// Writes fixed bit size integer. Corresponds to `f(n)` in AV1 spec defined in 4.10.2.
     pub fn write_f<T: Into<u32>>(&mut self, bits: usize, value: T) -> ObuWriterResult<usize> {
-        self.0
-            .write_f(bits, value)
-            .map_err(ObuWriterError::BitWriterError)
+        self.0.write_f(bits, value).map_err(ObuWriterError::BitWriterError)
     }
 
     /// Writes variable length unsigned n-bit number. Corresponds to `uvlc()` in AV1 spec
@@ -179,10 +177,8 @@ mod tests {
 
     #[test]
     fn test_su() {
-        let vector = TEST_VECTOR
-            .iter()
-            .map(|e| *e as i32)
-            .chain(TEST_VECTOR.iter().map(|e| -(*e as i32)));
+        let vector =
+            TEST_VECTOR.iter().map(|e| *e as i32).chain(TEST_VECTOR.iter().map(|e| -(*e as i32)));
 
         for value in vector {
             let bits = 32 - value.abs().leading_zeros() as usize + 1; // For sign

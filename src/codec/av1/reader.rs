@@ -214,9 +214,7 @@ impl<'a> Reader<'a> {
     pub fn decode_unsigned_subexp_with_ref(&mut self, mx: i32, r: i32) -> Result<u32, String> {
         let v = self.decode_subexp(mx)?;
         if (r << 1) <= mx {
-            Ok(helpers::inverse_recenter(r, v.try_into().unwrap())
-                .try_into()
-                .unwrap())
+            Ok(helpers::inverse_recenter(r, v.try_into().unwrap()).try_into().unwrap())
         } else {
             let res = mx - 1 - helpers::inverse_recenter(mx - 1 - r, v.try_into().unwrap());
             Ok(res.try_into().unwrap())

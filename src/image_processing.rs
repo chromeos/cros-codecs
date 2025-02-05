@@ -117,22 +117,8 @@ pub fn i4xx_copy(
     let uv_width = if sub_h { (width + 1) / 2 } else { width };
     let uv_height = if sub_v { (height + 1) / 2 } else { height };
 
-    copy_plane(
-        src_u,
-        src_u_stride,
-        dst_u,
-        dst_u_stride,
-        uv_width,
-        uv_height,
-    );
-    copy_plane(
-        src_v,
-        src_v_stride,
-        dst_v,
-        dst_v_stride,
-        uv_width,
-        uv_height,
-    );
+    copy_plane(src_u, src_u_stride, dst_u, dst_u_stride, uv_width, uv_height);
+    copy_plane(src_v, src_v_stride, dst_v, dst_v_stride, uv_width, uv_height);
 }
 
 /// Copies `src` into `dst` as I410, removing all padding and changing the layout from packed to
@@ -145,9 +131,7 @@ pub fn y410_to_i410(
     strides: [usize; 3],
     offsets: [usize; 3],
 ) {
-    let src_lines = src[offsets[0]..]
-        .chunks(strides[0])
-        .map(|line| &line[..width * 4]);
+    let src_lines = src[offsets[0]..].chunks(strides[0]).map(|line| &line[..width * 4]);
 
     let dst_y_size = width * 2 * height;
     let dst_u_size = width * 2 * height;
@@ -158,14 +142,11 @@ pub fn y410_to_i410(
     let dst_u_lines = dst_u_plane.chunks_mut(width * 2);
     let dst_v_lines = dst_v_plane.chunks_mut(width * 2);
 
-    for (src_line, (dst_y_line, (dst_u_line, dst_v_line))) in src_lines
-        .zip(dst_y_lines.zip(dst_u_lines.zip(dst_v_lines)))
-        .take(height)
+    for (src_line, (dst_y_line, (dst_u_line, dst_v_line))) in
+        src_lines.zip(dst_y_lines.zip(dst_u_lines.zip(dst_v_lines))).take(height)
     {
         for (src, (dst_y, (dst_u, dst_v))) in src_line.chunks(4).zip(
-            dst_y_line
-                .chunks_mut(2)
-                .zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2))),
+            dst_y_line.chunks_mut(2).zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2))),
         ) {
             let y = LittleEndian::read_u16(&[src[1] >> 2 | src[2] << 6, src[2] >> 2 & 0b11]);
             let u = LittleEndian::read_u16(&[src[0], src[1] & 0b11]);
@@ -449,10 +430,7 @@ pub fn convert_video_frame(src: &impl VideoFrame, dst: &mut impl VideoFrame) -> 
             );
             Ok(())
         }
-        _ => Err(format!(
-            "Unsupported conversion {:?} -> {:?}",
-            conversion.0, conversion.1
-        )),
+        _ => Err(format!("Unsupported conversion {:?} -> {:?}", conversion.0, conversion.1)),
     }
 }
 

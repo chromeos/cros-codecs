@@ -323,10 +323,7 @@ where
             return C2Status::C2BadState;
         }
 
-        self.work_queue
-            .lock()
-            .unwrap()
-            .extend(work_items.into_iter());
+        self.work_queue.lock().unwrap().extend(work_items.into_iter());
 
         self.awaiting_job_event.write(1).unwrap();
 
@@ -342,12 +339,7 @@ where
             return C2Status::C2BadState;
         }
 
-        let mut tmp = self
-            .work_queue
-            .lock()
-            .unwrap()
-            .drain(..)
-            .collect::<Vec<J>>();
+        let mut tmp = self.work_queue.lock().unwrap().drain(..).collect::<Vec<J>>();
         flushed_work.append(&mut tmp);
 
         C2Status::C2Ok

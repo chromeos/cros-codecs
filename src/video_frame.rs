@@ -195,24 +195,22 @@ pub trait VideoFrame {
         let plane_size = self.get_plane_size();
 
         for plane in 0..self.num_planes() {
-            let minimum_pitch = align_up(
-                self.resolution().width as usize,
-                horizontal_subsampling[plane],
-            ) * bytes_per_element[plane]
-                / horizontal_subsampling[plane];
+            let minimum_pitch =
+                align_up(self.resolution().width as usize, horizontal_subsampling[plane])
+                    * bytes_per_element[plane]
+                    / horizontal_subsampling[plane];
             if plane_pitch[plane] < minimum_pitch {
                 return Err(
-                    "Pitch of plane {plane} is insufficient to accomodate format!".to_string(),
+                    "Pitch of plane {plane} is insufficient to accomodate format!".to_string()
                 );
             }
-            let minimum_size = align_up(
-                self.resolution().height as usize,
-                vertical_subsampling[plane],
-            ) / vertical_subsampling[plane]
-                * plane_pitch[plane];
+            let minimum_size =
+                align_up(self.resolution().height as usize, vertical_subsampling[plane])
+                    / vertical_subsampling[plane]
+                    * plane_pitch[plane];
             if plane_size[plane] < minimum_size {
                 return Err(
-                    "Size of plane {plane} is insufficient to accomodate format!".to_string(),
+                    "Size of plane {plane} is insufficient to accomodate format!".to_string()
                 );
             }
         }

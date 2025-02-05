@@ -121,10 +121,9 @@ impl fmt::Display for MmcoError {
             MmcoError::NoShortTermPic => {
                 write!(f, "could not find ShortTerm picture to mark in the DPB")
             }
-            MmcoError::ExpectedMarked => write!(
-                f,
-                "a ShortTerm picture was expected to be marked for MMCO=3"
-            ),
+            MmcoError::ExpectedMarked => {
+                write!(f, "a ShortTerm picture was expected to be marked for MMCO=3")
+            }
             MmcoError::ExpectedExisting => {
                 write!(f, "picture cannot be marked as nonexisting for MMCO=3")
             }
@@ -176,9 +175,7 @@ impl<T: Clone> Dpb<T> {
     // Returns the number of reference frames, counting the first field only if
     // dealing with interlaced content.
     pub fn num_ref_frames(&self) -> usize {
-        self.pictures()
-            .filter(|p| p.is_ref() && !p.is_second_field())
-            .count()
+        self.pictures().filter(|p| p.is_ref() && !p.is_second_field()).count()
     }
 
     /// Get a reference to the dpb's interlaced mode.
@@ -237,11 +234,7 @@ impl<T: Clone> Dpb<T> {
             .pictures()
             .position(|p| matches!(p.reference(), Reference::ShortTerm) && p.pic_num == pic_num);
 
-        log::debug!(
-            "find_short_term_with_pic_num: {}, found position {:?}",
-            pic_num,
-            position
-        );
+        log::debug!("find_short_term_with_pic_num: {}, found position {:?}", pic_num, position);
 
         position
     }
@@ -284,11 +277,7 @@ impl<T: Clone> Dpb<T> {
         picture: RcPictureData,
         handle: Option<T>,
     ) -> Result<(), StorePictureError> {
-        let max_pics = if self.interlaced {
-            self.max_num_pics * 2
-        } else {
-            self.max_num_pics
-        };
+        let max_pics = if self.interlaced { self.max_num_pics * 2 } else { self.max_num_pics };
 
         if self.entries.len() >= max_pics {
             return Err(StorePictureError::DpbIsFull);
@@ -533,10 +522,7 @@ impl<T: Clone> Dpb<T> {
 
         while num_ref_pics >= max_num_ref_frames {
             if let Some(to_unmark) = self.find_short_term_lowest_frame_num_wrap() {
-                to_unmark
-                    .pic
-                    .borrow_mut()
-                    .set_reference(Reference::None, true);
+                to_unmark.pic.borrow_mut().set_reference(Reference::None, true);
                 num_ref_pics -= 1;
             } else {
                 log::warn!("could not find a ShortTerm picture to unmark in the DPB");
@@ -557,14 +543,10 @@ impl<T: Clone> Dpb<T> {
         log::debug!("MMCO op 1 for pic_num_x {}", pic_num_x);
         log::trace!("Dpb state before MMCO=1: {:#?}", self);
 
-        let to_mark = self
-            .find_short_term_with_pic_num(pic_num_x)
-            .ok_or(MmcoError::NoShortTermPic)?;
+        let to_mark =
+            self.find_short_term_with_pic_num(pic_num_x).ok_or(MmcoError::NoShortTermPic)?;
 
-        to_mark
-            .pic
-            .borrow_mut()
-            .set_reference(Reference::None, matches!(pic.field, Field::Frame));
+        to_mark.pic.borrow_mut().set_reference(Reference::None, matches!(pic.field, Field::Frame));
 
         Ok(())
     }
@@ -574,10 +556,7 @@ impl<T: Clone> Dpb<T> {
         pic: &PictureData,
         marking: &RefPicMarkingInner,
     ) -> Result<(), MmcoError> {
-        log::debug!(
-            "MMCO op 2 for long_term_pic_num {}",
-            marking.long_term_pic_num
-        );
+        log::debug!("MMCO op 2 for long_term_pic_num {}", marking.long_term_pic_num);
 
         log::trace!("Dpb state before MMCO=2: {:#?}", self);
 
@@ -585,10 +564,7 @@ impl<T: Clone> Dpb<T> {
             .find_long_term_with_long_term_pic_num(marking.long_term_pic_num)
             .ok_or(MmcoError::NoShortTermPic)?;
 
-        to_mark
-            .pic
-            .borrow_mut()
-            .set_reference(Reference::None, matches!(pic.field, Field::Frame));
+        to_mark.pic.borrow_mut().set_reference(Reference::None, matches!(pic.field, Field::Frame));
 
         Ok(())
     }
@@ -603,9 +579,8 @@ impl<T: Clone> Dpb<T> {
         log::debug!("MMCO op 3 for pic_num_x {}", pic_num_x);
         log::trace!("Dpb state before MMCO=3: {:#?}", self);
 
-        let to_mark_as_long_pos = self
-            .find_short_term_with_pic_num_pos(pic_num_x)
-            .ok_or(MmcoError::NoShortTermPic)?;
+        let to_mark_as_long_pos =
+            self.find_short_term_with_pic_num_pos(pic_num_x).ok_or(MmcoError::NoShortTermPic)?;
         let to_mark_as_long = &self.entries[to_mark_as_long_pos].pic;
 
         if !matches!(to_mark_as_long.borrow().reference(), Reference::ShortTerm) {
@@ -674,9 +649,7 @@ impl<T: Clone> Dpb<T> {
 
         let is_frame = matches!(pic.field, Field::Frame);
         let to_mark_as_long = &self.entries[to_mark_as_long_pos].pic;
-        to_mark_as_long
-            .borrow_mut()
-            .set_reference(Reference::LongTerm, is_frame);
+        to_mark_as_long.borrow_mut().set_reference(Reference::LongTerm, is_frame);
         to_mark_as_long.borrow_mut().long_term_frame_idx = long_term_frame_idx;
 
         if let Some(other_field) = to_mark_as_long.borrow().other_field() {
@@ -697,10 +670,7 @@ impl<T: Clone> Dpb<T> {
 
     /// Returns the new `max_long_term_frame_idx`.
     pub fn mmco_op_4(&mut self, marking: &RefPicMarkingInner) -> MaxLongTermFrameIdx {
-        log::debug!(
-            "MMCO op 4, max_long_term_frame_idx: {:?}",
-            marking.max_long_term_frame_idx
-        );
+        log::debug!("MMCO op 4, max_long_term_frame_idx: {:?}", marking.max_long_term_frame_idx);
 
         log::trace!("Dpb state before MMCO=4: {:#?}", self);
 
@@ -824,11 +794,7 @@ impl<T: Clone> Dpb<T> {
                         Reference::LongTerm => "LongTerm",
                     };
 
-                    let field = if !p.is_second_field() {
-                        "First field"
-                    } else {
-                        "Second field"
-                    };
+                    let field = if !p.is_second_field() { "First field" } else { "Second field" };
 
                     let field = format!("{}, {:?}", field, p.field);
 
@@ -862,11 +828,7 @@ impl<T: Clone> Dpb<T> {
                         Reference::LongTerm => "LongTerm",
                     };
 
-                    let field = if !p.is_second_field() {
-                        "First field"
-                    } else {
-                        "Second field"
-                    };
+                    let field = if !p.is_second_field() { "First field" } else { "Second field" };
 
                     let field = format!("{}, {:?}", field, p.field);
 
@@ -965,19 +927,15 @@ impl<T: Clone> Dpb<T> {
     /// 8.2.4.2.1 Initialization process for the reference picture list for P
     /// and SP slices in frames
     fn build_ref_pic_list_p(&self) -> DpbPicRefList<T> {
-        let mut ref_pic_list_p0: Vec<_> = self
-            .short_term_refs_iter()
-            .filter(|h| !h.pic.borrow().is_second_field())
-            .collect();
+        let mut ref_pic_list_p0: Vec<_> =
+            self.short_term_refs_iter().filter(|h| !h.pic.borrow().is_second_field()).collect();
 
         Self::sort_pic_num_descending(&mut ref_pic_list_p0);
 
         let num_short_term_refs = ref_pic_list_p0.len();
 
-        ref_pic_list_p0.extend(
-            self.long_term_refs_iter()
-                .filter(|h| !h.pic.borrow().is_second_field()),
-        );
+        ref_pic_list_p0
+            .extend(self.long_term_refs_iter().filter(|h| !h.pic.borrow().is_second_field()));
         Self::sort_long_term_pic_num_ascending(&mut ref_pic_list_p0[num_short_term_refs..]);
 
         #[cfg(debug_assertions)]
@@ -1020,10 +978,8 @@ impl<T: Clone> Dpb<T> {
     // 8.2.4.2.3 Initialization process for reference picture lists for B slices
     // in frames
     fn build_ref_pic_list_b(&self, cur_pic: &PictureData) -> (DpbPicRefList<T>, DpbPicRefList<T>) {
-        let mut short_term_refs: Vec<_> = self
-            .short_term_refs_iter()
-            .filter(|h| !h.pic.borrow().is_second_field())
-            .collect();
+        let mut short_term_refs: Vec<_> =
+            self.short_term_refs_iter().filter(|h| !h.pic.borrow().is_second_field()).collect();
 
         // When pic_order_cnt_type is equal to 0, reference pictures that are
         // marked as "non-existing" as specified in clause 8.2.5.2 are not
@@ -1171,10 +1127,8 @@ impl<T: Clone> Dpb<T> {
         // field is included into the list refFrameListLongTerm. A reference
         // entry in which only one field is marked as "used for long-term
         // reference" is included into the list refFrameListLongTerm
-        let mut ref_frame_list_long_term: Vec<_> = self
-            .long_term_refs_iter()
-            .filter(|h| !h.pic.borrow().nonexisting)
-            .collect();
+        let mut ref_frame_list_long_term: Vec<_> =
+            self.long_term_refs_iter().filter(|h| !h.pic.borrow().nonexisting).collect();
 
         Self::sort_long_term_frame_idx_ascending(&mut ref_frame_list_long_term);
 
@@ -1229,10 +1183,7 @@ impl<T: Clone> Dpb<T> {
 
     /// Returns the lists of reference pictures for `pic`.
     pub fn build_ref_pic_lists(&self, pic: &PictureData) -> ReferencePicLists {
-        let num_refs = self
-            .pictures()
-            .filter(|p| p.is_ref() && !p.nonexisting)
-            .count();
+        let num_refs = self.pictures().filter(|p| p.is_ref() && !p.nonexisting).count();
 
         // 8.2.4.2.1 ~ 8.2.4.2.4: When this process is invoked, there shall be
         // at least one reference frame or complementary reference field pair
@@ -1247,10 +1198,7 @@ impl<T: Clone> Dpb<T> {
             if matches!(pic.field, Field::Frame) {
                 (self.build_ref_pic_list_p(), self.build_ref_pic_list_b(pic))
             } else {
-                (
-                    self.build_ref_field_pic_list_p(pic),
-                    self.build_ref_field_pic_list_b(pic),
-                )
+                (self.build_ref_field_pic_list_p(pic), self.build_ref_field_pic_list_b(pic))
             };
 
         let dpb_start = self.entries.as_ptr();
@@ -1285,12 +1233,7 @@ impl<T> Default for Dpb<T> {
 
 impl<T> std::fmt::Debug for Dpb<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let pics = self
-            .entries
-            .iter()
-            .map(|h| &h.pic)
-            .enumerate()
-            .collect::<Vec<_>>();
+        let pics = self.entries.iter().map(|h| &h.pic).enumerate().collect::<Vec<_>>();
         f.debug_struct("Dpb")
             .field("pictures", &pics)
             .field("max_num_pics", &self.max_num_pics)

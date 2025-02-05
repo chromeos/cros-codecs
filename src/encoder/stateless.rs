@@ -119,10 +119,7 @@ where
 {
     #[allow(dead_code)]
     pub(crate) fn new(blocking: BlockingMode) -> Self {
-        Self {
-            blocking,
-            promises: Default::default(),
-        }
+        Self { blocking, promises: Default::default() }
     }
 
     /// Add new pending job to the queue. Which will be returned to client if it is done.
@@ -346,11 +343,7 @@ where
     }
 
     fn encode(&mut self, metadata: FrameMetadata, handle: Handle) -> EncodeResult<()> {
-        log::trace!(
-            "encode: timestamp={} layout={:?}",
-            metadata.timestamp,
-            metadata.layout
-        );
+        log::trace!("encode: timestamp={} layout={:?}", metadata.timestamp, metadata.layout);
 
         // Import `handle` to backends representation
         let backend_pic = self.backend.import_picture(&metadata, handle)?;

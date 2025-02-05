@@ -131,12 +131,7 @@ impl VaStreamInfo for &Rc<Sps> {
     fn visible_rect(&self) -> Rect {
         let rect = self.visible_rectangle();
 
-        Rect {
-            x: rect.min.x,
-            y: rect.min.y,
-            width: rect.max.x,
-            height: rect.max.y,
-        }
+        Rect { x: rect.min.x, y: rect.min.y, width: rect.max.x, height: rect.max.y }
     }
 }
 
@@ -206,13 +201,7 @@ fn fill_va_h264_pic(
 /// Builds an invalid VaPictureH264. These pictures are used to fill empty
 /// array slots there is no data to fill them with.
 fn build_invalid_va_h264_pic() -> libva::PictureH264 {
-    libva::PictureH264::new(
-        libva::VA_INVALID_ID,
-        0,
-        libva::VA_PICTURE_H264_INVALID,
-        0,
-        0,
-    )
+    libva::PictureH264::new(libva::VA_INVALID_ID, 0, libva::VA_PICTURE_H264_INVALID, 0, 0)
 }
 
 fn build_iq_matrix(pps: &Pps) -> BufferType {
@@ -227,10 +216,7 @@ fn build_iq_matrix(pps: &Pps) -> BufferType {
         get_raster_from_zigzag_8x8(pps.scaling_lists_8x8[i], &mut scaling_list8x8[i]);
     });
 
-    BufferType::IQMatrix(IQMatrix::H264(IQMatrixBufferH264::new(
-        scaling_list4x4,
-        scaling_list8x8,
-    )))
+    BufferType::IQMatrix(IQMatrix::H264(IQMatrixBufferH264::new(scaling_list4x4, scaling_list8x8)))
 }
 
 fn build_pic_param<M: SurfaceMemoryDescriptor>(
@@ -342,9 +328,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         hdr.frame_num,
     );
 
-    Ok(BufferType::PictureParameter(PictureParameter::H264(
-        pic_param,
-    )))
+    Ok(BufferType::PictureParameter(PictureParameter::H264(pic_param)))
 }
 
 fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
@@ -367,10 +351,7 @@ fn fill_ref_pic_list<M: SurfaceMemoryDescriptor>(
 
     let va_pics: [libva::PictureH264; 32] = match va_pics.try_into() {
         Ok(va_pics) => va_pics,
-        Err(e) => panic!(
-            "Bug: wrong number of references, expected 32, got {:?}",
-            e.len()
-        ),
+        Err(e) => panic!("Bug: wrong number of references, expected 32, got {:?}", e.len()),
     };
 
     va_pics
@@ -485,9 +466,7 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
         chroma_offset_l1,
     );
 
-    Ok(BufferType::SliceParameter(SliceParameter::H264(
-        slice_param,
-    )))
+    Ok(BufferType::SliceParameter(SliceParameter::H264(slice_param)))
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H264>
@@ -516,14 +495,12 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         let surface_id = picture.surface().id();
 
         let pic_param = build_pic_param(hdr, picture_data, surface_id, dpb, sps, pps)?;
-        let pic_param = context
-            .create_buffer(pic_param)
-            .context("while creating picture parameter buffer")?;
+        let pic_param =
+            context.create_buffer(pic_param).context("while creating picture parameter buffer")?;
 
         let iq_matrix = build_iq_matrix(pps);
-        let iq_matrix = context
-            .create_buffer(iq_matrix)
-            .context("while creating IQ matrix buffer")?;
+        let iq_matrix =
+            context.create_buffer(iq_matrix).context("while creating IQ matrix buffer")?;
 
         picture.add_buffer(pic_param);
         picture.add_buffer(iq_matrix);
@@ -571,17 +548,11 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
 
     fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
         let highest_pool = self.highest_pool();
-        let surface = highest_pool
-            .get_surface()
-            .ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let surface = highest_pool.get_surface().ok_or(NewPictureError::OutOfOutputBuffers)?;
 
         let metadata = self.metadata_state.get_parsed()?;
 
-        Ok(VaPicture::new(
-            timestamp,
-            Rc::clone(&metadata.context),
-            surface,
-        ))
+        Ok(VaPicture::new(timestamp, Rc::clone(&metadata.context), surface))
     }
 
     fn new_field_picture(
@@ -590,9 +561,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         first_field: &Self::Handle,
     ) -> NewPictureResult<Self::Picture> {
         // Decode to the same surface as the first field picture.
-        Ok(first_field
-            .borrow()
-            .new_picture_from_same_surface(timestamp))
+        Ok(first_field.borrow().new_picture_from_same_surface(timestamp))
     }
 }
 
@@ -753,11 +722,7 @@ mod tests {
     #[ignore]
     fn test_25fps_block() {
         use crate::decoder::stateless::h264::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(
-            &DECODE_TEST_25FPS,
-            DecodedFormat::NV12,
-            BlockingMode::Blocking,
-        );
+        test_decoder_vaapi(&DECODE_TEST_25FPS, DecodedFormat::NV12, BlockingMode::Blocking);
     }
 
     #[test]
@@ -765,11 +730,7 @@ mod tests {
     #[ignore]
     fn test_25fps_nonblock() {
         use crate::decoder::stateless::h264::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(
-            &DECODE_TEST_25FPS,
-            DecodedFormat::NV12,
-            BlockingMode::NonBlocking,
-        );
+        test_decoder_vaapi(&DECODE_TEST_25FPS, DecodedFormat::NV12, BlockingMode::NonBlocking);
     }
 
     #[test]

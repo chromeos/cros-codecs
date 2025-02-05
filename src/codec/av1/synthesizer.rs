@@ -107,10 +107,7 @@ where
     W: Write,
 {
     fn new(writer: W, obu: &'o O) -> Self {
-        Self {
-            writer: ObuWriter::new(writer),
-            obu,
-        }
+        Self { writer: ObuWriter::new(writer), obu }
     }
 
     fn f<T: Into<u32>>(&mut self, bits: usize, value: T) -> SynthesizerResult<()> {
@@ -494,10 +491,7 @@ where
             if !matches!(cc.color_primaries, ColorPrimaries::Unspecified) {
                 self.invalid_element_value("color_primaries")?;
             }
-            if !matches!(
-                cc.transfer_characteristics,
-                TransferCharacteristics::Unspecified
-            ) {
+            if !matches!(cc.transfer_characteristics, TransferCharacteristics::Unspecified) {
                 self.invalid_element_value("transfer_characteristics")?;
             }
             if !matches!(cc.matrix_coefficients, MatrixCoefficients::Unspecified) {
@@ -715,10 +709,7 @@ where
 
             self.f(2, self.obu.frame_type as u32)?;
             if self.obu.frame_is_intra
-                ^ matches!(
-                    self.obu.frame_type,
-                    FrameType::IntraOnlyFrame | FrameType::KeyFrame
-                )
+                ^ matches!(self.obu.frame_type, FrameType::IntraOnlyFrame | FrameType::KeyFrame)
             {
                 self.invalid_element_value("FrameIsIntra")?;
             }
@@ -815,10 +806,7 @@ where
 
                     if op.idc == 0 || (in_temporal_layer && in_spatial_layer) {
                         let n = usize::from(
-                            sequence
-                                .decoder_model_info
-                                .buffer_removal_time_length_minus_1
-                                + 1,
+                            sequence.decoder_model_info.buffer_removal_time_length_minus_1 + 1,
                         );
 
                         self.f(n, op.decoder_buffer_delay)?;
@@ -842,10 +830,7 @@ where
             && sequence.enable_order_hint
         {
             for i in 0..NUM_REF_FRAMES {
-                self.f(
-                    sequence.order_hint_bits as usize,
-                    self.obu.ref_order_hint[i],
-                )?;
+                self.f(sequence.order_hint_bits as usize, self.obu.ref_order_hint[i])?;
             }
         }
 
@@ -970,10 +955,7 @@ where
     /// Writes AV1 5.9.31. Temporal point info syntax
     fn temporal_point_info(&mut self, sequence: &'o SequenceHeaderObu) -> SynthesizerResult<()> {
         let n = usize::try_from(
-            sequence
-                .decoder_model_info
-                .frame_presentation_time_length_minus_1
-                + 1,
+            sequence.decoder_model_info.frame_presentation_time_length_minus_1 + 1,
         )?;
 
         self.f(n, self.obu.frame_presentation_time)?;
@@ -1050,10 +1032,7 @@ where
     fn read_interpolation_filter(&mut self) -> SynthesizerResult<()> {
         self.f(1, self.obu.is_filter_switchable)?;
         if self.obu.is_filter_switchable {
-            if !matches!(
-                self.obu.interpolation_filter,
-                InterpolationFilter::Switchable
-            ) {
+            if !matches!(self.obu.interpolation_filter, InterpolationFilter::Switchable) {
                 self.invalid_element_value("interpolation_filter")?;
             }
         } else {
@@ -1107,10 +1086,7 @@ where
                     // NOTE: Same as above
                     const UPDATE_MODE_DELTA: bool = true;
                     if UPDATE_MODE_DELTA {
-                        self.su(
-                            1 + 6,
-                            self.obu.loop_filter_params.loop_filter_mode_deltas[i],
-                        )?;
+                        self.su(1 + 6, self.obu.loop_filter_params.loop_filter_mode_deltas[i])?;
                     }
                 }
             }
@@ -1563,9 +1539,8 @@ mod tests {
     #[test]
     fn sequence_header_obu_test25fps() {
         // Extraced from ./src/codec/av1/test_data/test-25fps.ivf.av1
-        const SEQ_HDR_RAW: [u8; 13] = [
-            0x0a, 0x0b, 0x00, 0x00, 0x00, 0x04, 0x3c, 0xff, 0xbd, 0xff, 0xf9, 0x80, 0x40,
-        ];
+        const SEQ_HDR_RAW: [u8; 13] =
+            [0x0a, 0x0b, 0x00, 0x00, 0x00, 0x04, 0x3c, 0xff, 0xbd, 0xff, 0xf9, 0x80, 0x40];
 
         let seq_hdr = SequenceHeaderObu {
             obu_header: ObuHeader {
@@ -1631,9 +1606,8 @@ mod tests {
     #[test]
     fn sequence_header_obu_av1_annexb() {
         // Extraced from: ./src/codec/av1/test_data/av1-annexb.ivf.av1
-        const SEQ_HDR_RAW: [u8; 12] = [
-            0x0a, 0x0a, 0x00, 0x00, 0x00, 0x02, 0xaf, 0xff, 0xbf, 0xff, 0x30, 0x08,
-        ];
+        const SEQ_HDR_RAW: [u8; 12] =
+            [0x0a, 0x0a, 0x00, 0x00, 0x00, 0x02, 0xaf, 0xff, 0xbf, 0xff, 0x30, 0x08];
 
         let seq_hdr = SequenceHeaderObu {
             obu_header: ObuHeader {
@@ -1793,10 +1767,7 @@ mod tests {
                 ..Default::default()
             },
 
-            cdef_params: CdefParams {
-                cdef_damping: 3,
-                ..Default::default()
-            },
+            cdef_params: CdefParams { cdef_damping: 3, ..Default::default() },
 
             superres_denom: SUPERRES_NUM as u32,
             upscaled_width: WIDTH,

@@ -196,11 +196,7 @@ where
                 },
             ],
             va_profile,
-            if low_power {
-                VAEntrypointEncSliceLP
-            } else {
-                VAEntrypointEncSlice
-            },
+            if low_power { VAEntrypointEncSliceLP } else { VAEntrypointEncSlice },
         )?;
 
         let context = display.create_context::<M>(
@@ -268,10 +264,8 @@ where
             self.scratch_pool.add_frames(vec![()])?;
         }
 
-        let surface = self
-            .scratch_pool
-            .get_surface()
-            .ok_or(StatelessBackendError::OutOfResources)?;
+        let surface =
+            self.scratch_pool.get_surface().ok_or(StatelessBackendError::OutOfResources)?;
 
         Ok(Reconstructed(surface))
     }
@@ -356,13 +350,7 @@ where
         coded_buf: EncCodedBuffer,
         coded_output: Vec<u8>,
     ) -> Self {
-        Self {
-            handle,
-            references,
-            coded_buf,
-            coded_output,
-            _phantom: Default::default(),
-        }
+        Self { handle, references, coded_buf, coded_output, _phantom: Default::default() }
     }
 }
 
@@ -505,12 +493,7 @@ pub(crate) mod tests {
             pool: VaSurfacePool<()>,
             frame_layout: FrameLayout,
         ) -> Self {
-            Self {
-                counter: 0,
-                display,
-                pool,
-                frame_layout,
-            }
+            Self { counter: 0, display, pool, frame_layout }
         }
     }
 
@@ -553,10 +536,7 @@ pub(crate) mod tests {
             pool: VaSurfacePool<()>,
             frame_layout: FrameLayout,
         ) -> Self {
-            Self {
-                raw_iterator,
-                pool_iter: PooledFrameIterator::new(display, pool, frame_layout),
-            }
+            Self { raw_iterator, pool_iter: PooledFrameIterator::new(display, pool, frame_layout) }
         }
     }
 

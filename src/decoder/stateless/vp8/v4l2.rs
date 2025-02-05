@@ -134,14 +134,9 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
 
         request.ioctl(&vp8_frame_params);
 
-        let handle = Rc::new(RefCell::new(BackendHandle {
-            picture: picture.clone(),
-        }));
+        let handle = Rc::new(RefCell::new(BackendHandle { picture: picture.clone() }));
         request.submit();
-        Ok(V4l2StatelessDecoderHandle {
-            handle: handle,
-            stream_info: self.stream_info.clone(),
-        })
+        Ok(V4l2StatelessDecoderHandle { handle: handle, stream_info: self.stream_info.clone() })
     }
 }
 

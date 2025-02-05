@@ -206,17 +206,9 @@ where
         let request_id = BackendRequestId(self.request_counter);
         self.request_counter = self.request_counter.wrapping_add(1);
 
-        log::trace!(
-            "Got new request id={request_id:?} timestamp={}",
-            meta.timestamp
-        );
+        log::trace!("Got new request id={request_id:?} timestamp={}", meta.timestamp);
 
-        let request = BackendRequest {
-            request_id,
-            meta,
-            handle,
-            tunings: self.tunings.clone(),
-        };
+        let request = BackendRequest { request_id, meta, handle, tunings: self.tunings.clone() };
 
         self.queue.push_back(request);
         self.process()?;
@@ -230,10 +222,7 @@ where
         }
 
         if let Some(buffer) = self.coded_queue.pop_front() {
-            log::debug!(
-                "Returning coded buffer timestamp={}",
-                buffer.metadata.timestamp
-            );
+            log::debug!("Returning coded buffer timestamp={}", buffer.metadata.timestamp);
             return Ok(Some(buffer));
         }
         Ok(None)

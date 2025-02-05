@@ -566,12 +566,7 @@ impl<'a> MappableHandle for Image<'a> {
             libva::VA_FOURCC_Y412 => {
                 y412_to_i412(self.as_ref(), buffer, width, height, pitches, offsets);
             }
-            _ => {
-                return Err(anyhow!(
-                    "unsupported format 0x{:x}",
-                    image_inner.format.fourcc
-                ))
-            }
+            _ => return Err(anyhow!("unsupported format 0x{:x}", image_inner.format.fourcc)),
         }
 
         Ok(())
@@ -666,9 +661,7 @@ where
     {
         let metadata = self.metadata_state.get_parsed()?;
 
-        Ok(Rc::new(RefCell::new(VaapiDecodedHandle::new(
-            picture, metadata,
-        )?)))
+        Ok(Rc::new(RefCell::new(VaapiDecodedHandle::new(picture, metadata)?)))
     }
 
     /// Gets a set of supported formats for the particular stream being
@@ -693,16 +686,11 @@ where
 
     pub(crate) fn highest_pool(&mut self) -> &mut VaSurfacePool<M> {
         /* we guarantee that there is at least one pool, at minimum */
-        self.surface_pools
-            .iter_mut()
-            .max_by_key(|p| p.coded_resolution().height)
-            .unwrap()
+        self.surface_pools.iter_mut().max_by_key(|p| p.coded_resolution().height).unwrap()
     }
 
     pub(crate) fn pool(&mut self, layer: Resolution) -> Option<&mut VaSurfacePool<M>> {
-        self.surface_pools
-            .iter_mut()
-            .find(|p| p.coded_resolution() == layer)
+        self.surface_pools.iter_mut().find(|p| p.coded_resolution() == layer)
     }
 }
 
@@ -742,10 +730,7 @@ where
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {
-        self.metadata_state
-            .get_parsed()
-            .ok()
-            .map(|m| &m.stream_info)
+        self.metadata_state.get_parsed().ok().map(|m| &m.stream_info)
     }
 }
 
@@ -763,14 +748,9 @@ where
         let supported_formats_for_stream = self.supported_formats_for_stream()?;
 
         if supported_formats_for_stream.contains(&format) {
-            let map_format = FORMAT_MAP
-                .iter()
-                .find(|&map| map.decoded_format == format)
-                .ok_or_else(|| {
-                    anyhow!(
-                        "cannot find corresponding VA format for decoded format {:?}",
-                        format
-                    )
+            let map_format =
+                FORMAT_MAP.iter().find(|&map| map.decoded_format == format).ok_or_else(|| {
+                    anyhow!("cannot find corresponding VA format for decoded format {:?}", format)
                 })?;
 
             let old_metadata_state =

@@ -146,11 +146,8 @@ impl<'a> WriteMapping<'a> for GbmMapping<'a> {
 impl<'a> Drop for GbmMapping<'a> {
     fn drop(&mut self) {
         for plane_idx in 0..self.map_datas.len() {
-            let bo = if self.frame.bo.len() == 1 {
-                self.frame.bo[0]
-            } else {
-                self.frame.bo[plane_idx]
-            };
+            let bo =
+                if self.frame.bo.len() == 1 { self.frame.bo[0] } else { self.frame.bo[plane_idx] };
             let map_data = self.map_datas[plane_idx];
             unsafe { gbm_bo_unmap(bo, map_data) };
         }
@@ -181,9 +178,7 @@ impl GbmVideoFrame {
                     gbm_bo_get_offset(self.bo[0], plane_idx as libc::c_int) as isize
                 })
             } else {
-                (self.bo[plane_idx], unsafe {
-                    gbm_bo_get_offset(self.bo[plane_idx], 0) as isize
-                })
+                (self.bo[plane_idx], unsafe { gbm_bo_get_offset(self.bo[plane_idx], 0) as isize })
             };
             let (raw_mem, map_data) = map_bo(bo, is_writable)?;
             ret.map_datas.push(map_data);
@@ -218,10 +213,7 @@ impl VideoFrame for GbmVideoFrame {
         for plane_idx in 0..self.num_planes() {
             ret.push(
                 plane_pitch[plane_idx]
-                    * align_up(
-                        self.resolution().height as usize,
-                        vertical_subsampling[plane_idx],
-                    )
+                    * align_up(self.resolution().height as usize, vertical_subsampling[plane_idx])
                     / vertical_subsampling[plane_idx],
             );
         }
@@ -290,10 +282,7 @@ impl GbmDevice {
         if device.is_null() {
             Err("Could not create GBM device from file!".to_string())
         } else {
-            Ok(Arc::new(Self {
-                device: device,
-                _device_file: device_file,
-            }))
+            Ok(Arc::new(Self { device: device, _device_file: device_file }))
         }
     }
 
@@ -321,13 +310,7 @@ impl GbmDevice {
             let fake_width = align_up((buffer_size as f64).sqrt() as u32, 32);
             let fake_height = align_up(buffer_size as u32, fake_width) / fake_width;
             let bo = unsafe {
-                gbm_bo_create(
-                    self.device,
-                    fake_width,
-                    fake_height,
-                    DrmFourcc::R8 as u32,
-                    usage,
-                )
+                gbm_bo_create(self.device, fake_width, fake_height, DrmFourcc::R8 as u32, usage)
             };
             if bo.is_null() {
                 Err("Error allocating compressed buffer!".to_string())
@@ -408,16 +391,10 @@ impl GbmDevice {
             return Err("Cannot import empty V4L2 handle!".to_string());
         }
         if !ret.is_contiguous() && strides.len() != ret.num_planes() {
-            return Err(format!(
-                "Invalid number of strides for format {}",
-                fourcc.to_string()
-            ));
+            return Err(format!("Invalid number of strides for format {}", fourcc.to_string()));
         }
         if !ret.is_contiguous() && native_handle.len() != ret.num_planes() {
-            return Err(format!(
-                "Invalid number of V4L2 planes for format {}",
-                fourcc.to_string()
-            ));
+            return Err(format!("Invalid number of V4L2 planes for format {}", fourcc.to_string()));
         }
 
         // TODO: Pass in a parameter that determines this usage rather than just OR'ing everything

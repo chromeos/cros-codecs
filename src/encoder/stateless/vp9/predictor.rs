@@ -71,10 +71,7 @@ impl<Picture, Reference> LowDelayVP9<Picture, Reference> {
             intra_only: matches!(frame_type, FrameType::KeyFrame),
             refresh_frame_flags: 0x01,
             ref_frame_idx: [0, 0, 0],
-            quant: QuantizationParams {
-                base_q_idx,
-                ..Default::default()
-            },
+            quant: QuantizationParams { base_q_idx, ..Default::default() },
 
             ..Default::default()
         }

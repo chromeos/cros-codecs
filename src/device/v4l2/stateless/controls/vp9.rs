@@ -42,12 +42,8 @@ use crate::codec::vp9::parser::SEG_LVL_MAX;
 
 impl From<&LoopFilterParams> for v4l2_vp9_loop_filter {
     fn from(lf: &LoopFilterParams) -> Self {
-        let mut ret = Self {
-            level: lf.level,
-            sharpness: lf.sharpness,
-            flags: 0,
-            ..Default::default()
-        };
+        let mut ret =
+            Self { level: lf.level, sharpness: lf.sharpness, flags: 0, ..Default::default() };
 
         if lf.delta_enabled {
             ret.flags |= V4L2_VP9_LOOP_FILTER_FLAG_DELTA_ENABLED as u8;
@@ -77,9 +73,7 @@ impl From<&QuantizationParams> for v4l2_vp9_quantization {
 
 impl From<&SegmentationParams> for v4l2_vp9_segmentation {
     fn from(seg_params: &SegmentationParams) -> Self {
-        let mut ret = Self {
-            ..Default::default()
-        };
+        let mut ret = Self { ..Default::default() };
 
         if seg_params.enabled {
             ret.flags |= V4L2_VP9_SEGMENTATION_FLAG_ENABLED as u8;
@@ -203,7 +197,7 @@ impl From<&Header> for Vp9V4l2Control {
 
 impl AsV4l2ControlSlice for &mut Vp9V4l2Control {
     fn as_v4l2_control_slice(&mut self) -> &mut [v4l2_ext_control] {
-         std::slice::from_mut(&mut self.0)
+        std::slice::from_mut(&mut self.0)
     }
 }
 

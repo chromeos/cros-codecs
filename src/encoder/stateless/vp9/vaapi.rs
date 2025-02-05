@@ -101,16 +101,8 @@ where
 
         let refs = [
             (&request.last_frame_ref, LAST_FRAME - 1, LAST_FRAME_AS_REF),
-            (
-                &request.golden_frame_ref,
-                GOLDEN_FRAME - 1,
-                GOLDEN_FRAME_AS_REF,
-            ),
-            (
-                &request.altref_frame_ref,
-                ALTREF_FRAME - 1,
-                ALTREF_FRAME_AS_REF,
-            ),
+            (&request.golden_frame_ref, GOLDEN_FRAME - 1, GOLDEN_FRAME_AS_REF),
+            (&request.altref_frame_ref, ALTREF_FRAME - 1, ALTREF_FRAME_AS_REF),
         ];
 
         for (r, ref_idx, ref_ctrl) in refs {
@@ -234,11 +226,8 @@ where
         let rc_param =
             libva::BufferType::EncMiscParameter(libva::EncMiscParameter::RateControl(rc_param));
 
-        let mut picture = Picture::new(
-            request.input_meta.timestamp,
-            Rc::clone(self.context()),
-            request.input,
-        );
+        let mut picture =
+            Picture::new(request.input_meta.timestamp, Rc::clone(self.context()), request.input);
 
         let framerate_param = BufferType::EncMiscParameter(libva::EncMiscParameter::FrameRate(
             libva::EncMiscParameterFrameRate::new(request.tunings.framerate, 0),
@@ -288,14 +277,8 @@ where
             BitDepth::Depth10 | BitDepth::Depth12 => VAProfileVP9Profile2,
         };
 
-        let backend = VaapiBackend::new(
-            display,
-            va_profile,
-            fourcc,
-            coded_size,
-            bitrate_control,
-            low_power,
-        )?;
+        let backend =
+            VaapiBackend::new(display, va_profile, fourcc, coded_size, bitrate_control, low_power)?;
         Self::new_vp9(backend, config, blocking_mode)
     }
 }
@@ -344,16 +327,9 @@ pub(super) mod tests {
 
         let frame_layout = FrameLayout {
             format: (fourcc, 0),
-            size: Resolution {
-                width: WIDTH,
-                height: HEIGHT,
-            },
+            size: Resolution { width: WIDTH, height: HEIGHT },
             planes: vec![
-                PlaneLayout {
-                    buffer_index: 0,
-                    offset: 0,
-                    stride: WIDTH as usize,
-                },
+                PlaneLayout { buffer_index: 0, offset: 0, stride: WIDTH as usize },
                 PlaneLayout {
                     buffer_index: 0,
                     offset: (WIDTH * HEIGHT) as usize,
@@ -363,19 +339,14 @@ pub(super) mod tests {
         };
 
         let display = Display::open().unwrap();
-        let entrypoints = display
-            .query_config_entrypoints(VAProfileVP9Profile0)
-            .unwrap();
+        let entrypoints = display.query_config_entrypoints(VAProfileVP9Profile0).unwrap();
         let low_power = entrypoints.contains(&VAEntrypointEncSliceLP);
 
         let mut backend = VaapiBackend::<Descriptor, Surface>::new(
             Rc::clone(&display),
             VAProfileVP9Profile0,
             fourcc,
-            Resolution {
-                width: WIDTH,
-                height: HEIGHT,
-            },
+            Resolution { width: WIDTH, height: HEIGHT },
             libva::VA_RC_CBR,
             low_power,
         )
@@ -396,11 +367,8 @@ pub(super) mod tests {
 
         upload_test_frame_nv12(&display, &surface, 0.0);
 
-        let input_meta = FrameMetadata {
-            layout: frame_layout,
-            force_keyframe: false,
-            timestamp: 0,
-        };
+        let input_meta =
+            FrameMetadata { layout: frame_layout, force_keyframe: false, timestamp: 0 };
 
         let pic = backend.import_picture(&input_meta, surface).unwrap();
 
@@ -446,10 +414,7 @@ pub(super) mod tests {
             let file_header =
                 IvfFileHeader::new(IvfFileHeader::CODEC_VP9, WIDTH as u16, HEIGHT as u16, 30, 1);
 
-            let frame_header = IvfFrameHeader {
-                frame_size: output.len() as u32,
-                timestamp: 0,
-            };
+            let frame_header = IvfFrameHeader { frame_size: output.len() as u32, timestamp: 0 };
 
             file_header.writo_into(&mut out).unwrap();
             frame_header.writo_into(&mut out).unwrap();
@@ -473,16 +438,11 @@ pub(super) mod tests {
         let _ = env_logger::try_init();
 
         let display = libva::Display::open().unwrap();
-        let entrypoints = display
-            .query_config_entrypoints(VAProfileVP9Profile0)
-            .unwrap();
+        let entrypoints = display.query_config_entrypoints(VAProfileVP9Profile0).unwrap();
         let low_power = entrypoints.contains(&VAEntrypointEncSliceLP);
 
         let config = EncoderConfig {
-            resolution: Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            resolution: Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
             initial_tunings: Tunings {
                 rate_control: RateControl::ConstantBitrate(200_000),
                 framerate: 30,
@@ -493,21 +453,10 @@ pub(super) mod tests {
 
         let frame_layout = FrameLayout {
             format: (b"NV12".into(), 0),
-            size: Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            size: Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
             planes: vec![
-                PlaneLayout {
-                    buffer_index: 0,
-                    offset: 0,
-                    stride: WIDTH,
-                },
-                PlaneLayout {
-                    buffer_index: 0,
-                    offset: WIDTH * HEIGHT,
-                    stride: WIDTH,
-                },
+                PlaneLayout { buffer_index: 0, offset: 0, stride: WIDTH },
+                PlaneLayout { buffer_index: 0, offset: WIDTH * HEIGHT, stride: WIDTH },
             ],
         };
 
@@ -525,10 +474,7 @@ pub(super) mod tests {
             Rc::clone(&display),
             VA_RT_FORMAT_YUV420,
             Some(UsageHint::USAGE_HINT_ENCODER),
-            Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
         );
 
         pool.add_frames(vec![(); 16]).unwrap();
@@ -581,17 +527,12 @@ pub(super) mod tests {
         let _ = env_logger::try_init();
 
         let display = libva::Display::open().unwrap();
-        let entrypoints = display
-            .query_config_entrypoints(VAProfileVP9Profile2)
-            .unwrap();
+        let entrypoints = display.query_config_entrypoints(VAProfileVP9Profile2).unwrap();
         let low_power = entrypoints.contains(&VAEntrypointEncSliceLP);
 
         let config = EncoderConfig {
             bit_depth: BitDepth::Depth10,
-            resolution: Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            resolution: Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
             initial_tunings: Tunings {
                 rate_control: RateControl::ConstantBitrate(200_000),
                 framerate: 30,
@@ -602,21 +543,10 @@ pub(super) mod tests {
 
         let frame_layout = FrameLayout {
             format: (b"P010".into(), 0),
-            size: Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            size: Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
             planes: vec![
-                PlaneLayout {
-                    buffer_index: 0,
-                    offset: 0,
-                    stride: WIDTH,
-                },
-                PlaneLayout {
-                    buffer_index: 0,
-                    offset: WIDTH * HEIGHT,
-                    stride: WIDTH,
-                },
+                PlaneLayout { buffer_index: 0, offset: 0, stride: WIDTH },
+                PlaneLayout { buffer_index: 0, offset: WIDTH * HEIGHT, stride: WIDTH },
             ],
         };
 
@@ -634,10 +564,7 @@ pub(super) mod tests {
             Rc::clone(&display),
             VA_RT_FORMAT_YUV420_10,
             Some(UsageHint::USAGE_HINT_ENCODER),
-            Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
         );
 
         pool.add_frames(vec![(); 16]).unwrap();

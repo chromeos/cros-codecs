@@ -18,11 +18,7 @@ struct EmulationPrevention<W: Write> {
 
 impl<W: Write> EmulationPrevention<W> {
     fn new(writer: W, ep_enabled: bool) -> Self {
-        Self {
-            out: writer,
-            prev_bytes: [None; 2],
-            ep_enabled,
-        }
+        Self { out: writer, prev_bytes: [None; 2], ep_enabled }
     }
 
     fn write_byte(&mut self, curr_byte: u8) -> std::io::Result<()> {
@@ -44,13 +40,7 @@ impl<W: Write> EmulationPrevention<W> {
 
     /// Writes a H.264 NALU header.
     fn write_header(&mut self, idc: u8, type_: u8) -> NaluWriterResult<()> {
-        self.out.write_all(&[
-            0x00,
-            0x00,
-            0x00,
-            0x01,
-            (idc & 0b11) << 5 | (type_ & 0b11111),
-        ])?;
+        self.out.write_all(&[0x00, 0x00, 0x00, 0x01, (idc & 0b11) << 5 | (type_ & 0b11111)])?;
 
         Ok(())
     }
@@ -138,9 +128,7 @@ impl<W: Write> NaluWriter<W> {
     /// Writes fixed bit size integer (up to 32 bit) output with emulation
     /// prevention if enabled. Corresponds to `f(n)` in H.264 spec.
     pub fn write_f<T: Into<u32>>(&mut self, bits: usize, value: T) -> NaluWriterResult<usize> {
-        self.0
-            .write_f(bits, value)
-            .map_err(NaluWriterError::BitWriterError)
+        self.0.write_f(bits, value).map_err(NaluWriterError::BitWriterError)
     }
 
     /// An alias to [`Self::write_f`] Corresponds to `n(n)` in H.264 spec.

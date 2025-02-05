@@ -41,9 +41,7 @@ impl StatelessVp8DecoderBackend for Backend {
         _: &Segmentation,
         _: &MbLfAdjustments,
     ) -> StatelessBackendResult<Self::Handle> {
-        Ok(Handle {
-            handle: Rc::new(RefCell::new(Default::default())),
-        })
+        Ok(Handle { handle: Rc::new(RefCell::new(Default::default())) })
     }
 }
 

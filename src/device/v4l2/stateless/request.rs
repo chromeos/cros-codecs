@@ -32,13 +32,7 @@ impl InitRequestHandle {
         handle: ioctl::Request,
         output_buffer: V4l2OutputBuffer,
     ) -> Self {
-        Self {
-            device,
-            timestamp,
-            handle,
-            output_buffer,
-            picture: Weak::new(),
-        }
+        Self { device, timestamp, handle, output_buffer, picture: Weak::new() }
     }
     fn which(&self) -> ioctl::CtrlWhich {
         ioctl::CtrlWhich::Request(self.handle.as_raw_fd())
@@ -93,9 +87,7 @@ struct DoneRequestHandle {
 
 impl DoneRequestHandle {
     fn result(&self) -> V4l2Result {
-        V4l2Result {
-            capture_buffer: self.capture_buffer.clone(),
-        }
+        V4l2Result { capture_buffer: self.capture_buffer.clone() }
     }
 }
 
@@ -115,12 +107,7 @@ impl RequestHandle {
         handle: ioctl::Request,
         output_buffer: V4l2OutputBuffer,
     ) -> Self {
-        Self::Init(InitRequestHandle::new(
-            device,
-            timestamp,
-            handle,
-            output_buffer,
-        ))
+        Self::Init(InitRequestHandle::new(device, timestamp, handle, output_buffer))
     }
     fn timestamp(&self) -> u64 {
         match self {

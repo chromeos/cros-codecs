@@ -28,10 +28,7 @@ pub struct PooledVaSurface<M: SurfaceMemoryDescriptor> {
 
 impl<M: SurfaceMemoryDescriptor> PooledVaSurface<M> {
     fn new(surface: Surface<M>, pool: &Rc<RefCell<VaSurfacePoolInner<M>>>) -> Self {
-        Self {
-            surface: Some(surface),
-            pool: Rc::downgrade(pool),
-        }
+        Self { surface: Some(surface), pool: Rc::downgrade(pool) }
     }
 
     /// Detach this surface from the pool. It will not be returned, and we can dispose of it
@@ -76,11 +73,7 @@ impl<M: SurfaceMemoryDescriptor> Drop for PooledVaSurface<M> {
             }
 
             // The surface cannot be returned to the pool and can be gracefully dropped.
-            log::debug!(
-                "Dropping stale surface: {}, ({:?})",
-                surface.id(),
-                surface.size()
-            )
+            log::debug!("Dropping stale surface: {}, ({:?})", surface.id(), surface.size())
         }
     }
 }
@@ -123,9 +116,7 @@ impl<M: SurfaceMemoryDescriptor> VaSurfacePool<M> {
         let mut inner = (*self.inner).borrow_mut();
 
         if Resolution::from(surface.size()).can_contain(inner.coded_resolution) {
-            inner
-                .managed_surfaces
-                .insert(surface.id(), surface.size().into());
+            inner.managed_surfaces.insert(surface.id(), surface.size().into());
             inner.surfaces.push_back(surface);
             Ok(())
         } else {
@@ -188,12 +179,8 @@ impl<M: SurfaceMemoryDescriptor> FramePool for VaSurfacePool<M> {
         let mut inner = (*self.inner).borrow_mut();
 
         inner.coded_resolution = resolution;
-        inner
-            .managed_surfaces
-            .retain(|_, res| res.can_contain(resolution));
-        inner
-            .surfaces
-            .retain(|s| Resolution::from(s.size()).can_contain(resolution));
+        inner.managed_surfaces.retain(|_, res| res.can_contain(resolution));
+        inner.surfaces.retain(|s| Resolution::from(s.size()).can_contain(resolution));
     }
 
     fn add_frames(&mut self, descriptors: Vec<Self::Descriptor>) -> Result<(), anyhow::Error> {
@@ -214,9 +201,7 @@ impl<M: SurfaceMemoryDescriptor> FramePool for VaSurfacePool<M> {
             .map_err(|e| anyhow::anyhow!(e))?;
 
         for surface in &surfaces {
-            inner
-                .managed_surfaces
-                .insert(surface.id(), surface.size().into());
+            inner.managed_surfaces.insert(surface.id(), surface.size().into());
         }
         inner.surfaces.extend(surfaces);
 

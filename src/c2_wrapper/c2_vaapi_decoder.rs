@@ -43,11 +43,7 @@ impl drm::Device for GbmDevice {}
 /// Simple helper methods for opening a `Card`.
 impl GbmDevice {
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(path)
-            .map(GbmDevice)
+        std::fs::OpenOptions::new().read(true).write(true).open(path).map(GbmDevice)
     }
 }
 
@@ -109,9 +105,8 @@ impl C2DecoderBackend for C2VaapiDecoder {
     fn new(options: C2VaapiDecoderOptions) -> Result<Self, String> {
         let gbm = match options.frame_memory_type {
             FrameMemoryType::Prime => {
-                let gbm_path = options
-                    .gbm_device_path
-                    .unwrap_or(PathBuf::from("/dev/dri/renderD128"));
+                let gbm_path =
+                    options.gbm_device_path.unwrap_or(PathBuf::from("/dev/dri/renderD128"));
                 let gbm = GbmDevice::open(gbm_path)
                     .and_then(gbm::Device::new)
                     .map_err(|_| "failed to create GBM device")?;
@@ -127,11 +122,7 @@ impl C2DecoderBackend for C2VaapiDecoder {
             None => libva::Display::open().ok_or("failed to open libva display")?,
         };
 
-        Ok(Self {
-            display: display,
-            frame_memory_type: options.frame_memory_type,
-            gbm: gbm,
-        })
+        Ok(Self { display: display, frame_memory_type: options.frame_memory_type, gbm: gbm })
     }
 
     fn get_decoder(
@@ -183,9 +174,9 @@ impl C2DecoderBackend for C2VaapiDecoder {
         }
 
         Ok(match self.frame_memory_type {
-            FrameMemoryType::Managed => (0..num_frames)
-                .map(|_| BufferDescriptor::Managed(()))
-                .collect(),
+            FrameMemoryType::Managed => {
+                (0..num_frames).map(|_| BufferDescriptor::Managed(())).collect()
+            }
             FrameMemoryType::Prime => {
                 let mut ret: Vec<BufferDescriptor> = Vec::new();
                 for _i in 0..num_frames {

@@ -46,9 +46,7 @@ pub struct Handle {
 
 impl Clone for Handle {
     fn clone(&self) -> Self {
-        Self {
-            handle: Rc::clone(&self.handle),
-        }
+        Self { handle: Rc::clone(&self.handle) }
     }
 }
 

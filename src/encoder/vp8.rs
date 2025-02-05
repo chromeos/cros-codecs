@@ -17,10 +17,7 @@ impl Default for EncoderConfig {
     fn default() -> Self {
         // Artificially encoder configuration with intent to be widely supported.
         Self {
-            resolution: Resolution {
-                width: 320,
-                height: 240,
-            },
+            resolution: Resolution { width: 320, height: 240 },
             pred_structure: PredictionStructure::LowDelay { limit: 2048 },
         }
     }

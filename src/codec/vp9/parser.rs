@@ -424,12 +424,7 @@ pub struct Frame<'a> {
 
 impl<'a> Frame<'a> {
     pub fn new(bitstream: &'a [u8], header: Header, offset: usize, size: usize) -> Self {
-        Self {
-            bitstream,
-            header,
-            offset,
-            size,
-        }
+        Self { bitstream, header, offset, size }
     }
 }
 
@@ -556,11 +551,8 @@ impl Header {
 
     /// An implementation of get_dc_quant as per "8.6.1 Dequantization functions"
     fn get_dc_quant(&self, segment_id: u8, luma: bool) -> i16 {
-        let delta_q_dc = if luma {
-            self.quant.delta_q_y_dc
-        } else {
-            self.quant.delta_q_uv_dc
-        } as i32;
+        let delta_q_dc =
+            if luma { self.quant.delta_q_y_dc } else { self.quant.delta_q_uv_dc } as i32;
         let qindex = self.get_qindex(segment_id);
         let q_table_idx = (qindex as i32 + delta_q_dc).clamp(0, 255) as u8;
 
@@ -654,9 +646,7 @@ impl Parser {
         let data = resource.as_ref();
         let index_offset = data.len() - sz_index as usize;
         let first_byte = data[index_offset];
-        let last_byte = *data
-            .last()
-            .ok_or_else(|| String::from("superframe header is empty"))?;
+        let last_byte = *data.last().ok_or_else(|| String::from("superframe header is empty"))?;
 
         if first_byte != last_byte {
             // Also not a superframe, we must pass both tests as per the specification.
@@ -682,10 +672,7 @@ impl Parser {
             frame_sizes.push(frame_size as usize);
         }
 
-        Ok(SuperframeHeader {
-            frames_in_superframe,
-            frame_sizes,
-        })
+        Ok(SuperframeHeader { frames_in_superframe, frame_sizes })
     }
 
     fn read_signed_8(r: &mut BitReader, nbits: u8) -> Result<i8, String> {
@@ -703,10 +690,7 @@ impl Parser {
         let marker = r.read_bits::<u32>(2)?;
 
         if marker != FRAME_MARKER {
-            return Err(format!(
-                "Broken stream: expected frame marker, found {:?}",
-                marker
-            ));
+            return Err(format!("Broken stream: expected frame marker, found {:?}", marker));
         }
 
         Ok(())
@@ -938,11 +922,7 @@ impl Parser {
     fn read_prob(r: &mut BitReader) -> Result<u8, String> {
         let prob_coded = r.read_bit()?;
 
-        let prob = if prob_coded {
-            r.read_bits::<u8>(8)?
-        } else {
-            255
-        };
+        let prob = if prob_coded { r.read_bits::<u8>(8)? } else { 255 };
 
         Ok(prob)
     }
@@ -973,11 +953,7 @@ impl Parser {
             seg.temporal_update = r.read_bit()?;
 
             for i in 0..PREDICTION_PROBS {
-                seg.pred_probs[i] = if seg.temporal_update {
-                    Self::read_prob(r)?
-                } else {
-                    255
-                };
+                seg.pred_probs[i] = if seg.temporal_update { Self::read_prob(r)? } else { 255 };
             }
         }
 
@@ -1188,12 +1164,7 @@ impl Parser {
     ) -> Result<Frame<'a>, String> {
         let header = self.parse_frame_header(bitstream, offset)?;
 
-        Ok(Frame {
-            header,
-            bitstream,
-            offset,
-            size,
-        })
+        Ok(Frame { header, bitstream, offset, size })
     }
 
     /// Parses VP9 frames from the data in `resource`. This can result in more than one frame if the
@@ -1233,9 +1204,7 @@ mod tests {
         const VP9_TEST_SUPERFRAME: &[u8] = include_bytes!("test_data/vp9-superframe.bin");
 
         let mut parser = Parser::default();
-        let frames = parser
-            .parse_chunk(VP9_TEST_SUPERFRAME)
-            .expect("Parsing a superframe failed");
+        let frames = parser.parse_chunk(VP9_TEST_SUPERFRAME).expect("Parsing a superframe failed");
 
         assert_eq!(frames.len(), 2);
         assert_eq!(frames[0].offset, 0);
@@ -1253,9 +1222,7 @@ mod tests {
         let ivf_iter = IvfIterator::new(TEST_STREAM);
 
         for (frame_n, packet) in ivf_iter.enumerate() {
-            let frames = parser
-                .parse_chunk(packet.as_ref())
-                .expect("Parsing a superframe failed");
+            let frames = parser.parse_chunk(packet.as_ref()).expect("Parsing a superframe failed");
 
             if frame_n == 0 {
                 assert_eq!(frames.len(), 1);
@@ -1296,10 +1263,7 @@ mod tests {
                 assert_eq!(h.ref_frame_sign_bias, [0, 0, 0, 0]);
 
                 assert!(!h.allow_high_precision_mv);
-                assert!(matches!(
-                    h.interpolation_filter,
-                    InterpolationFilter::EightTap
-                ));
+                assert!(matches!(h.interpolation_filter, InterpolationFilter::EightTap));
 
                 assert!(h.refresh_frame_context);
                 assert!(h.frame_parallel_decoding_mode);
@@ -1386,10 +1350,7 @@ mod tests {
                 assert_eq!(h.ref_frame_sign_bias, [0, 0, 0, 0]);
 
                 assert!(h.allow_high_precision_mv);
-                assert!(matches!(
-                    h.interpolation_filter,
-                    InterpolationFilter::EightTap
-                ));
+                assert!(matches!(h.interpolation_filter, InterpolationFilter::EightTap));
 
                 assert!(h.refresh_frame_context);
                 assert!(h.frame_parallel_decoding_mode);
@@ -1469,10 +1430,7 @@ mod tests {
                 assert_eq!(h.ref_frame_sign_bias, [0, 0, 0, 1]);
 
                 assert!(!h.allow_high_precision_mv);
-                assert!(matches!(
-                    h.interpolation_filter,
-                    InterpolationFilter::EightTap
-                ));
+                assert!(matches!(h.interpolation_filter, InterpolationFilter::EightTap));
 
                 assert!(h.refresh_frame_context);
                 assert!(h.frame_parallel_decoding_mode);
