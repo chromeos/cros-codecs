@@ -270,7 +270,8 @@ impl From<Fourcc> for DecodedFormat {
     fn from(fourcc: Fourcc) -> DecodedFormat {
         match fourcc.to_string().as_str() {
             "I420" => DecodedFormat::I420,
-            "NV12" => DecodedFormat::NV12,
+            "NV12" | "NM12" => DecodedFormat::NV12,
+            "MM21" => DecodedFormat::MM21,
             _ => todo!("Fourcc {} not yet supported", fourcc),
         }
     }

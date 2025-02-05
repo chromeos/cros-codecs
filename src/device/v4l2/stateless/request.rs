@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
+use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::rc::Rc;
 
 use v4l2r::controls::ExtControlTrait;
 use v4l2r::controls::SafeExtControl;
 use v4l2r::ioctl;
+use v4l2r::memory::DmaBufHandle;
 
 use crate::device::v4l2::stateless::device::V4l2Device;
 use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
@@ -78,7 +80,7 @@ impl PendingRequestHandle {
 }
 
 struct DoneRequestHandle {
-    buffer: Rc<RefCell<V4l2CaptureBuffer>>,
+    buffer: Rc<RefCell<V4l2CaptureBuffer<DmaBufHandle<File>>>>,
 }
 
 impl DoneRequestHandle {
@@ -204,7 +206,7 @@ impl V4l2Request {
 }
 
 pub struct V4l2Result {
-    buffer: Rc<RefCell<V4l2CaptureBuffer>>,
+    buffer: Rc<RefCell<V4l2CaptureBuffer<DmaBufHandle<File>>>>,
 }
 
 impl V4l2Result {
