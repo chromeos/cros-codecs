@@ -18,8 +18,6 @@ use crate::decoder::stateless::DynStatelessVideoDecoder;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
-use crate::decoder::DynDecodedHandle;
-use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::multiple_desc_type;
 use crate::utils::DmabufFrame;

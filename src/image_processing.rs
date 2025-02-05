@@ -178,12 +178,7 @@ pub fn y410_to_i410(
 }
 
 #[cfg(feature = "v4l2")]
-pub fn detile_row(
-    mut src: *const u8,
-    src_tile_stride: isize,
-    mut dst: *mut u8,
-    width: usize,
-) -> Result<(), String> {
+pub fn detile_row(mut src: *const u8, src_tile_stride: isize, mut dst: *mut u8, width: usize) {
     let mut w = width;
     while w > 0 {
         // Verified all parameters before calling these.
@@ -195,16 +190,14 @@ pub fn detile_row(
             dst = dst.offset(MM21_TILE_WIDTH as isize);
         }
     }
-
-    Ok(())
 }
 
 // Detiles a plane of data using implementation from LibYUV::DetilePlane.
 #[cfg(feature = "v4l2")]
 pub fn detile_plane(
-    mut src: &[u8],
+    src: &[u8],
     src_stride: usize,
-    mut dst: &mut [u8],
+    dst: &mut [u8],
     mut dst_stride: isize,
     width: usize,
     mut height: isize,

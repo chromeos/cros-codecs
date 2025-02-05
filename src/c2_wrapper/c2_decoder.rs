@@ -15,11 +15,8 @@ use thiserror::Error;
 
 use std::clone::Clone;
 use std::collections::VecDeque;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::thread;
-use std::time::Duration;
 
 use crate::c2_wrapper::C2DecodeJob;
 use crate::c2_wrapper::C2DecodeWorkObject;
@@ -30,11 +27,8 @@ use crate::c2_wrapper::Job;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DynStatelessVideoDecoder;
 use crate::decoder::stateless::PoolLayer;
-use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
-use crate::decoder::DynDecodedHandle;
-use crate::decoder::FramePool;
 use crate::decoder::StreamInfo;
 use crate::image_processing::i4xx_copy;
 use crate::DecodedFormat;
@@ -254,22 +248,24 @@ where
                 self.decoder.poll_fd(),
                 EpollEvent::new(EpollFlags::EPOLLIN, 1),
             )
-            .map_err(C2DecoderPollErrorWrapper::EpollAdd);
+            .map_err(C2DecoderPollErrorWrapper::EpollAdd)
+            .unwrap();
         self.epoll_fd
             .add(
                 self.awaiting_job_event.as_fd(),
                 EpollEvent::new(EpollFlags::EPOLLIN, 2),
             )
-            .map_err(C2DecoderPollErrorWrapper::EpollAdd);
+            .map_err(C2DecoderPollErrorWrapper::EpollAdd)
+            .unwrap();
 
         while *self.state.lock().unwrap() == C2State::C2Running {
             // Poll for decoder events or pending job events.
             let mut events = [EpollEvent::empty()];
-            let nb_fds = self.epoll_fd.wait(&mut events, EpollTimeout::ZERO).unwrap();
+            self.epoll_fd.wait(&mut events, EpollTimeout::ZERO).unwrap();
 
-            if (events == [EpollEvent::new(EpollFlags::EPOLLIN, 1)]) {
+            if events == [EpollEvent::new(EpollFlags::EPOLLIN, 1)] {
                 self.awaiting_job_event.read().unwrap();
-            } else if (events == [EpollEvent::new(EpollFlags::EPOLLIN, 2)]) {
+            } else if events == [EpollEvent::new(EpollFlags::EPOLLIN, 2)] {
                 self.decoder.next_event();
             }
 

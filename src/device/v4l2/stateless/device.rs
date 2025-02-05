@@ -8,7 +8,6 @@ use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
 use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
 use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
 use crate::device::v4l2::stateless::request::V4l2Request;
-use crate::utils::align_up;
 use crate::video_frame::gbm_video_frame::GbmDevice;
 use crate::video_frame::VideoFrame;
 use crate::Fourcc;
