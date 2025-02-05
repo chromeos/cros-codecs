@@ -7,6 +7,11 @@
 //! This module is for anything that doesn't fit into the other top-level modules. Try not to add
 //! new code here unless it really doesn't belong anywhere else.
 
+use std::marker::Copy;
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::Sub;
 use std::os::fd::OwnedFd;
 use std::time::Duration;
 
@@ -23,6 +28,13 @@ use crate::Fourcc;
 use crate::FrameLayout;
 use crate::PlaneLayout;
 use crate::Resolution;
+
+pub fn align_up<T>(x: T, alignment: T) -> T
+where
+    T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + From<u8> + Copy,
+{
+    ((x + alignment - T::from(1)) / alignment) * alignment
+}
 
 /// Simple decoding loop that plays the stream once from start to finish.
 #[allow(clippy::type_complexity)]
