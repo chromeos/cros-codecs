@@ -472,9 +472,7 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
         num_buffers: u32,
     ) -> Result<&mut Self, QueueError> {
         self.visible_rect = visible_rect;
-        // TODO: 20 is chosen as a magic number necessary to keep the buffers
-        // flowing. Ideally it would be as close to the dpb as possible.
-        self.num_buffers = num_buffers + 20;
+        self.num_buffers = num_buffers;
         self.handle.replace(match self.handle.take() {
             V4l2CaptureQueueHandle::Init(handle) => {
                 // TODO: check if decoded format is supported.

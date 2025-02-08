@@ -27,7 +27,6 @@ pub struct V4l2Picture {
     // to maintain DPB buffer recycling. The following vector
     // is used to prevent reference pictures to be reused while
     // current picture is still being decoded.
-    // TODO: handle ref list inernally by V4l2Request.
     ref_pictures: Option<Vec<Rc<RefCell<V4l2Picture>>>>,
 }
 
@@ -52,6 +51,9 @@ impl V4l2Picture {
     }
     pub fn request(&mut self) -> Rc<RefCell<V4l2Request>> {
         self.request.clone()
+    }
+    pub fn drop_references(&mut self) {
+        self.ref_pictures = None;
     }
 }
 
