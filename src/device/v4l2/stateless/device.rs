@@ -2,25 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::decoder::stateless::DecodeError;
-use crate::device::v4l2::stateless::queue::QueueError;
-use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
-use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
-use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
-use crate::device::v4l2::stateless::request::V4l2Request;
-use crate::video_frame::gbm_video_frame::GbmDevice;
-use crate::video_frame::VideoFrame;
-use crate::Fourcc;
-use crate::Rect;
-use crate::Resolution;
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
-use std::os::fd::AsRawFd;
-use std::os::fd::RawFd;
-use std::path::Path;
-use std::path::PathBuf;
+use std::os::fd::{AsRawFd, RawFd};
+use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::thread::sleep;
@@ -34,6 +20,18 @@ use v4l2r::memory::PlaneHandle;
 use v4l2r::nix::fcntl::open;
 use v4l2r::nix::fcntl::OFlag;
 use v4l2r::nix::sys::stat::Mode;
+
+use crate::decoder::stateless::DecodeError;
+use crate::device::v4l2::stateless::queue::QueueError;
+use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
+use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
+use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
+use crate::device::v4l2::stateless::request::V4l2Request;
+use crate::video_frame::gbm_video_frame::GbmDevice;
+use crate::video_frame::VideoFrame;
+use crate::Fourcc;
+use crate::Rect;
+use crate::Resolution;
 
 //TODO: handle other memory backends for OUTPUT queue
 //TODO: handle video formats other than h264
