@@ -147,27 +147,6 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             .ioctl(V4l2CtrlH264DecodeMode::FrameBased)
             .ioctl(V4l2CtrlH264StartCode::AnnexB);
         picture.set_ref_pictures(ref_pictures);
-        ////////////////////////////////////////////////////////////////////////
-        // DEBUG
-        ////////////////////////////////////////////////////////////////////////
-        {
-            let mut dpb_timestamps = Vec::<u64>::new();
-            for entry in dpb.entries() {
-                match &entry.reference {
-                    Some(handle) => {
-                        dpb_timestamps.push(handle.handle.borrow().picture.borrow().timestamp())
-                    }
-                    None => todo!(),
-                };
-            }
-            log::debug!(
-                "{:<20} {:?} {:?}\n",
-                "start_picture",
-                picture.timestamp(),
-                dpb_timestamps
-            );
-        }
-        ////////////////////////////////////////////////////////////////////////
         Ok(())
     }
 
@@ -194,11 +173,6 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         let handle = Rc::new(RefCell::new(BackendHandle {
             picture: picture.clone(),
         }));
-        log::debug!(
-            "{:<20} {:?}\n",
-            "submit_picture",
-            picture.borrow().timestamp()
-        );
         let request = picture.borrow_mut().request();
         let mut request = request.as_ref().borrow_mut();
         request.submit();
