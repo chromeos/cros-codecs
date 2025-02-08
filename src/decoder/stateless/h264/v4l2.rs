@@ -130,8 +130,10 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             .set_dpb_entries(dpb_entries)
             .set_slice_header(slice_header);
         let mut picture = picture.borrow_mut();
-        picture
-            .request()
+
+        let request = picture.request();
+        let mut request = request.as_ref().borrow_mut();
+        request
             .ioctl(h264_sps)
             .ioctl(h264_pps)
             //TODO.ioctl(&h264_scaling_matrix)
@@ -173,9 +175,12 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         _: &[&DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {
         const START_CODE: [u8; 3] = [0, 0, 1];
-        picture.borrow_mut().request().write(&START_CODE);
 
-        picture.borrow_mut().request().write(slice.nalu.as_ref());
+        let request = picture.borrow_mut().request();
+        let mut request = request.as_ref().borrow_mut();
+
+        request.write(&START_CODE);
+        request.write(slice.nalu.as_ref());
         Ok(())
     }
 
@@ -188,7 +193,10 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             "submit_picture",
             picture.borrow().timestamp()
         );
-        picture.borrow_mut().request().submit();
+        let request = picture.borrow_mut().request();
+        let mut request = request.as_ref().borrow_mut();
+        request.submit();
+
         Ok(V4l2StatelessDecoderHandle {
             handle: handle,
             stream_info: self.stream_info.clone(),
