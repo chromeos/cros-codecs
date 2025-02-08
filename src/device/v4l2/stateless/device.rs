@@ -275,9 +275,6 @@ impl V4l2Device {
             },
         )
     }
-    pub fn recycle_buffers(&self) {
-        //self.handle.borrow_mut().recycle_buffers()
-    }
 }
 
 impl AsRawFd for V4l2Device {

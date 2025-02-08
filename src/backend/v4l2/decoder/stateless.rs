@@ -207,7 +207,6 @@ impl StatelessDecoderBackend for V4l2StatelessDecoderBackend {
     }
 
     fn frame_pool(&mut self, _: PoolLayer) -> Vec<&mut Self::FramePool> {
-        self.device.recycle_buffers();
         vec![self]
     }
 }
