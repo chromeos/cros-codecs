@@ -84,7 +84,7 @@ impl<C: PlaneHandle> DeviceHandle<C> {
                 Ok(_) => {
                     break;
                 }
-                Err(QueueError::Dequeue) => {
+                Err(QueueError::BufferDequeue) => {
                     sleep(back_off_duration);
                     back_off_duration = back_off_duration + back_off_duration;
                     continue;
