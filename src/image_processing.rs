@@ -178,20 +178,26 @@ pub fn y410_to_i410(
 }
 
 #[cfg(feature = "v4l2")]
-pub fn detile_row(mut src: *const u8, src_tile_stride: isize, mut dst: *mut u8, width: usize) {
+// SAFETY: Verified by caller that |src| and |dst| is valid and not
+// a NULL-pointer or invalid memory.
+pub unsafe fn detile_row(
+    mut src: *const u8,
+    src_tile_stride: isize,
+    mut dst: *mut u8,
+    width: usize,
+) {
     let mut w = width;
     while w > 0 {
-        // Verified all parameters before calling these.
-        unsafe {
-            let v0: uint8x16_t = vld1q_u8(src);
-            src = src.offset(src_tile_stride as isize);
-            w = w - MM21_TILE_WIDTH;
-            vst1q_u8(dst, v0);
-            dst = dst.offset(MM21_TILE_WIDTH as isize);
-        }
+        let v0: uint8x16_t = vld1q_u8(src);
+        src = src.offset(src_tile_stride as isize);
+        w = w - MM21_TILE_WIDTH;
+        vst1q_u8(dst, v0);
+        dst = dst.offset(MM21_TILE_WIDTH as isize);
     }
 }
 
+// TODO(bchoobineh): Use a fuzzer to verify the correctness of this SIMD
+// code compared to its Rust equivalent
 // Detiles a plane of data using implementation from LibYUV::DetilePlane.
 #[cfg(feature = "v4l2")]
 pub fn detile_plane(
@@ -205,7 +211,7 @@ pub fn detile_plane(
 ) -> Result<(), String> {
     let src_tile_stride = (16 * tile_height) as isize;
 
-    if width <= 0 || height == 0 || (((tile_height) & ((tile_height) - 1)) > 0) {
+    if width == 0 || height == 0 || (((tile_height) & ((tile_height) - 1)) > 0) {
         return Err("Invalid width, height, or tile height is not a power of 2.".to_owned());
     }
 
@@ -213,11 +219,11 @@ pub fn detile_plane(
         return Err("Width not aligned properly to tile width.".to_owned());
     }
 
-    if src.len() < (src_stride * (height as usize)) {
+    if src.len() < (src_stride * (height.abs() as usize)) {
         return Err("Src buffer not big enough.".to_owned());
     }
 
-    if dst.len() < (dst_stride * height) as usize {
+    if dst.len() < (dst_stride * height.abs()) as usize {
         return Err("Dst buffer not big enough.".to_owned());
     }
 
@@ -227,7 +233,7 @@ pub fn detile_plane(
     // Image inversion
     if height < 0 {
         height = -height;
-        // Verified the validity of src buffer and height.
+        // SAFETY: Verified the validity of src buffer and height.
         unsafe {
             src_ptr = src_ptr.offset(((height - 1) * dst_stride) as isize);
         }
@@ -236,16 +242,19 @@ pub fn detile_plane(
 
     // Detile Plane
     for y in 0..height {
-        // For testing purposes we are using the DETILE_ROW_NEON
-        detile_row(src_ptr, src_tile_stride, dst_ptr, width);
-        // Verified the validity of the src and dst buffers.
+        // SAFETY: Verified validity of src and dst pointers.
+        unsafe {
+            detile_row(src_ptr, src_tile_stride, dst_ptr, width);
+        }
+
+        // SAFETY: Verified the validity of the src and dst buffers.
         unsafe {
             dst_ptr = dst_ptr.offset(dst_stride as isize);
             src_ptr = src_ptr.offset(MM21_TILE_WIDTH as isize);
         }
         // Advance to next row of tiles.
         if (y & (tile_height - 1) as isize) == ((tile_height - 1) as isize) {
-            // Verified validity of the src buffers.
+            // SAFETY: Verified validity of the src buffers.
             unsafe {
                 src_ptr = src_ptr.offset(-src_tile_stride + (src_stride * tile_height) as isize);
             }
