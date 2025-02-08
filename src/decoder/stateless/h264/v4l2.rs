@@ -92,7 +92,13 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
             Ok(buffer) => buffer,
             _ => return Err(NewPictureError::OutOfOutputBuffers),
         };
-        Ok(Rc::new(RefCell::new(V4l2Picture::new(request_buffer))))
+
+        let picture = Rc::new(RefCell::new(V4l2Picture::new(request_buffer.clone())));
+        request_buffer
+            .as_ref()
+            .borrow_mut()
+            .set_picture_ref(Rc::<RefCell<V4l2Picture>>::downgrade(&picture));
+        Ok(picture)
     }
 
     fn new_field_picture(&mut self, _: u64, _: &Self::Handle) -> NewPictureResult<Self::Picture> {

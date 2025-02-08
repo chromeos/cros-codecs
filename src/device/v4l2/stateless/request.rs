@@ -5,13 +5,14 @@
 use std::cell::RefCell;
 use std::fs::File;
 use std::os::fd::AsRawFd;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use v4l2r::controls::ExtControlTrait;
 use v4l2r::controls::SafeExtControl;
 use v4l2r::ioctl;
 use v4l2r::memory::DmaBufHandle;
 
+use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::device::v4l2::stateless::device::V4l2Device;
 use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
 use crate::device::v4l2::stateless::queue::V4l2OutputBuffer;
@@ -21,6 +22,7 @@ struct InitRequestHandle {
     timestamp: u64,
     handle: ioctl::Request,
     output_buffer: V4l2OutputBuffer,
+    picture: Weak<RefCell<V4l2Picture>>,
 }
 
 impl InitRequestHandle {
@@ -35,6 +37,7 @@ impl InitRequestHandle {
             timestamp,
             handle,
             output_buffer,
+            picture: Weak::new(),
         }
     }
     fn which(&self) -> ioctl::CtrlWhich {
@@ -62,13 +65,18 @@ impl InitRequestHandle {
         PendingRequestHandle {
             device: self.device.clone(),
             timestamp: self.timestamp,
+            picture: self.picture,
         }
+    }
+    fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture>>) {
+        self.picture = picture;
     }
 }
 
 struct PendingRequestHandle {
     device: V4l2Device,
     timestamp: u64,
+    picture: Weak<RefCell<V4l2Picture>>,
 }
 
 impl PendingRequestHandle {
@@ -168,6 +176,18 @@ impl RequestHandle {
             _ => panic!("ERROR"),
         }
     }
+    fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture>>) {
+        match self {
+            Self::Init(handle) => handle.set_picture_ref(picture),
+            _ => panic!("ERROR"),
+        }
+    }
+    fn picture(&mut self) -> Weak<RefCell<V4l2Picture>> {
+        match self {
+            Self::Pending(handle) => handle.picture.clone(),
+            _ => panic!("ERROR"),
+        }
+    }
 }
 
 pub struct V4l2Request(RequestHandle);
@@ -207,6 +227,12 @@ impl V4l2Request {
     }
     pub fn result(&self) -> V4l2Result {
         self.0.result()
+    }
+    pub fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture>>) {
+        self.0.set_picture_ref(picture);
+    }
+    pub fn picture(&mut self) -> Weak<RefCell<V4l2Picture>> {
+        self.0.picture()
     }
 }
 
