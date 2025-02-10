@@ -7,9 +7,6 @@ use std::marker::PhantomData;
 use v4l2r::bindings::v4l2_ctrl_vp9_frame;
 use v4l2r::bindings::v4l2_ext_control;
 use v4l2r::bindings::v4l2_ext_control__bindgen_ty_1;
-use v4l2r::bindings::v4l2_vp9_loop_filter;
-use v4l2r::bindings::v4l2_vp9_quantization;
-use v4l2r::bindings::v4l2_vp9_segmentation;
 use v4l2r::bindings::V4L2_CID_STATELESS_VP9_FRAME;
 use v4l2r::bindings::V4L2_VP9_FRAME_FLAG_ALLOW_HIGH_PREC_MV;
 use v4l2r::bindings::V4L2_VP9_FRAME_FLAG_COLOR_RANGE_FULL_SWING;
@@ -34,143 +31,135 @@ use v4l2r::controls::AsV4l2ControlSlice;
 use crate::codec::vp9::parser::ColorRange;
 use crate::codec::vp9::parser::FrameType;
 use crate::codec::vp9::parser::Header;
-use crate::codec::vp9::parser::LoopFilterParams;
-use crate::codec::vp9::parser::QuantizationParams;
-use crate::codec::vp9::parser::SegmentationParams;
 use crate::codec::vp9::parser::LAST_FRAME;
 use crate::codec::vp9::parser::MAX_REF_FRAMES;
 use crate::codec::vp9::parser::MAX_SEGMENTS;
 use crate::codec::vp9::parser::SEG_LVL_MAX;
 
-impl From<&LoopFilterParams> for v4l2_vp9_loop_filter {
-    fn from(lf: &LoopFilterParams) -> Self {
-        let mut ret =
-            Self { level: lf.level, sharpness: lf.sharpness, flags: 0, ..Default::default() };
-
-        if lf.delta_enabled {
-            ret.flags |= V4L2_VP9_LOOP_FILTER_FLAG_DELTA_ENABLED as u8;
-        }
-        if lf.delta_update {
-            ret.flags |= V4L2_VP9_LOOP_FILTER_FLAG_DELTA_UPDATE as u8;
-        }
-
-        ret.ref_deltas.clone_from_slice(&lf.ref_deltas);
-        ret.mode_deltas.clone_from_slice(&lf.mode_deltas);
-
-        ret
-    }
+#[derive(Default)]
+pub struct V4l2CtrlVp9FrameParams {
+    handle: v4l2_ctrl_vp9_frame,
 }
 
-impl From<&QuantizationParams> for v4l2_vp9_quantization {
-    fn from(quant: &QuantizationParams) -> Self {
-        Self {
-            base_q_idx: quant.base_q_idx,
-            delta_q_y_dc: quant.delta_q_y_dc,
-            delta_q_uv_dc: quant.delta_q_uv_dc,
-            delta_q_uv_ac: quant.delta_q_uv_ac,
-            ..Default::default()
-        }
+impl V4l2CtrlVp9FrameParams {
+    pub fn new() -> Self {
+        Default::default()
     }
-}
 
-impl From<&SegmentationParams> for v4l2_vp9_segmentation {
-    fn from(seg_params: &SegmentationParams) -> Self {
-        let mut ret = Self { ..Default::default() };
+    pub fn set_loop_filter_params(&mut self, hdr: &Header) -> &mut Self {
+        self.handle.lf.level = hdr.lf.level;
+        self.handle.lf.sharpness = hdr.lf.sharpness;
+        self.handle.lf.flags = 0;
 
-        if seg_params.enabled {
-            ret.flags |= V4L2_VP9_SEGMENTATION_FLAG_ENABLED as u8;
+        if hdr.lf.delta_enabled {
+            self.handle.lf.flags |= V4L2_VP9_LOOP_FILTER_FLAG_DELTA_ENABLED as u8;
         }
-        if seg_params.update_map {
-            ret.flags |= V4L2_VP9_SEGMENTATION_FLAG_UPDATE_MAP as u8;
+        if hdr.lf.delta_update {
+            self.handle.lf.flags |= V4L2_VP9_LOOP_FILTER_FLAG_DELTA_UPDATE as u8;
         }
-        if seg_params.temporal_update {
-            ret.flags |= V4L2_VP9_SEGMENTATION_FLAG_TEMPORAL_UPDATE as u8;
+
+        self.handle.lf.ref_deltas.clone_from_slice(&hdr.lf.ref_deltas);
+        self.handle.lf.mode_deltas.clone_from_slice(&hdr.lf.mode_deltas);
+
+        self
+    }
+
+    pub fn set_quantization_params(&mut self, hdr: &Header) -> &mut Self {
+        self.handle.quant.base_q_idx = hdr.quant.base_q_idx;
+        self.handle.quant.delta_q_y_dc = hdr.quant.delta_q_y_dc;
+        self.handle.quant.delta_q_uv_dc = hdr.quant.delta_q_uv_dc;
+        self.handle.quant.delta_q_uv_ac = hdr.quant.delta_q_uv_ac;
+        self
+    }
+
+    pub fn set_segmentation_params(&mut self, hdr: &Header) -> &mut Self {
+        if hdr.seg.enabled {
+            self.handle.seg.flags |= V4L2_VP9_SEGMENTATION_FLAG_ENABLED as u8;
         }
-        if seg_params.update_data {
-            ret.flags |= V4L2_VP9_SEGMENTATION_FLAG_UPDATE_DATA as u8;
+        if hdr.seg.update_map {
+            self.handle.seg.flags |= V4L2_VP9_SEGMENTATION_FLAG_UPDATE_MAP as u8;
         }
-        if seg_params.abs_or_delta_update {
-            ret.flags |= V4L2_VP9_SEGMENTATION_FLAG_ABS_OR_DELTA_UPDATE as u8;
+        if hdr.seg.temporal_update {
+            self.handle.seg.flags |= V4L2_VP9_SEGMENTATION_FLAG_TEMPORAL_UPDATE as u8;
+        }
+        if hdr.seg.update_data {
+            self.handle.seg.flags |= V4L2_VP9_SEGMENTATION_FLAG_UPDATE_DATA as u8;
+        }
+        if hdr.seg.abs_or_delta_update {
+            self.handle.seg.flags |= V4L2_VP9_SEGMENTATION_FLAG_ABS_OR_DELTA_UPDATE as u8;
         }
 
         for i in 0..MAX_SEGMENTS {
-            ret.feature_data[i].clone_from_slice(&seg_params.feature_data[i]);
+            self.handle.seg.feature_data[i].clone_from_slice(&hdr.seg.feature_data[i]);
             let mut feature_enabled = 0u8;
             for j in 0..SEG_LVL_MAX {
-                feature_enabled |= (seg_params.feature_enabled[i][j] as u8) << j;
+                feature_enabled |= (hdr.seg.feature_enabled[i][j] as u8) << j;
             }
-            ret.feature_enabled[i] = feature_enabled;
+            self.handle.seg.feature_enabled[i] = feature_enabled;
         }
 
-        ret.tree_probs.clone_from_slice(&seg_params.tree_probs);
-        ret.pred_probs.clone_from_slice(&seg_params.pred_probs);
+        self.handle.seg.tree_probs.clone_from_slice(&hdr.seg.tree_probs);
+        self.handle.seg.pred_probs.clone_from_slice(&hdr.seg.pred_probs);
 
-        ret
+        self
     }
-}
 
-impl From<&Header> for v4l2_ctrl_vp9_frame {
-    fn from(hdr: &Header) -> Self {
-        let mut ret = Self {
-            lf: v4l2_vp9_loop_filter::from(&hdr.lf),
-            quant: v4l2_vp9_quantization::from(&hdr.quant),
-            seg: v4l2_vp9_segmentation::from(&hdr.seg),
-            compressed_header_size: hdr.header_size_in_bytes,
-            uncompressed_header_size: hdr.uncompressed_header_size_in_bytes,
-            frame_width_minus_1: (hdr.width - 1) as u16,
-            frame_height_minus_1: (hdr.height - 1) as u16,
-            render_width_minus_1: (hdr.render_width - 1) as u16,
-            render_height_minus_1: (hdr.render_height - 1) as u16,
-            reset_frame_context: hdr.reset_frame_context,
-            frame_context_idx: hdr.frame_context_idx,
-            profile: hdr.profile as u8,
-            bit_depth: hdr.bit_depth as u8,
-            interpolation_filter: hdr.interpolation_filter as u8,
-            tile_cols_log2: hdr.tile_cols_log2,
-            tile_rows_log2: hdr.tile_rows_log2,
-            ..Default::default()
-        };
+    pub fn set_frame_params(&mut self, hdr: &Header) -> &mut Self {
+        self.handle.compressed_header_size = hdr.header_size_in_bytes;
+        self.handle.uncompressed_header_size = hdr.uncompressed_header_size_in_bytes;
+        self.handle.frame_width_minus_1 = (hdr.width - 1) as u16;
+        self.handle.frame_height_minus_1 = (hdr.height - 1) as u16;
+        self.handle.render_width_minus_1 = (hdr.render_width - 1) as u16;
+        self.handle.render_height_minus_1 = (hdr.render_height - 1) as u16;
+        self.handle.reset_frame_context = hdr.reset_frame_context;
+        self.handle.frame_context_idx = hdr.frame_context_idx;
+        self.handle.profile = hdr.profile as u8;
+        self.handle.bit_depth = hdr.bit_depth as u8;
+        self.handle.interpolation_filter = hdr.interpolation_filter as u8;
+        self.handle.tile_cols_log2 = hdr.tile_cols_log2;
+        self.handle.tile_rows_log2 = hdr.tile_rows_log2;
 
         // The MTK V4L2 stateless driver ignores the reference_mode field current.
         // TODO: Implement this properly for future drivers?
-        ret.reference_mode = V4L2_VP9_REFERENCE_MODE_SINGLE_REFERENCE as u8;
+        self.handle.reference_mode = V4L2_VP9_REFERENCE_MODE_SINGLE_REFERENCE as u8;
 
         for i in 0..(MAX_REF_FRAMES - LAST_FRAME) {
-            ret.ref_frame_sign_bias |= ((hdr.ref_frame_sign_bias[i + LAST_FRAME] != 0) as u8) << i;
+            self.handle.ref_frame_sign_bias |=
+                ((hdr.ref_frame_sign_bias[i + LAST_FRAME] != 0) as u8) << i;
         }
 
         if hdr.frame_type == FrameType::KeyFrame {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_KEY_FRAME;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_KEY_FRAME;
         }
         if hdr.show_frame {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_SHOW_FRAME;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_SHOW_FRAME;
         }
         if hdr.error_resilient_mode {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_ERROR_RESILIENT;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_ERROR_RESILIENT;
         }
         if hdr.intra_only {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_INTRA_ONLY;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_INTRA_ONLY;
         }
         if hdr.allow_high_precision_mv {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_ALLOW_HIGH_PREC_MV;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_ALLOW_HIGH_PREC_MV;
         }
         if hdr.refresh_frame_context {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_REFRESH_FRAME_CTX;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_REFRESH_FRAME_CTX;
         }
         if hdr.frame_parallel_decoding_mode {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_PARALLEL_DEC_MODE;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_PARALLEL_DEC_MODE;
         }
         if hdr.subsampling_x {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_X_SUBSAMPLING;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_X_SUBSAMPLING;
         }
         if hdr.subsampling_y {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_Y_SUBSAMPLING;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_Y_SUBSAMPLING;
         }
         if hdr.color_range == ColorRange::FullSwing {
-            ret.flags |= V4L2_VP9_FRAME_FLAG_COLOR_RANGE_FULL_SWING;
+            self.handle.flags |= V4L2_VP9_FRAME_FLAG_COLOR_RANGE_FULL_SWING;
         }
 
-        ret
+        self
     }
 }
 
@@ -179,9 +168,9 @@ impl From<&Header> for v4l2_ctrl_vp9_frame {
 // and just implementing the AsV4l2ControlSlice trait.
 pub struct Vp9V4l2Control(v4l2_ext_control, PhantomData<v4l2_ctrl_vp9_frame>);
 
-impl From<&Header> for Vp9V4l2Control {
-    fn from(hdr: &Header) -> Self {
-        let payload = Box::new(v4l2_ctrl_vp9_frame::from(hdr));
+impl From<&V4l2CtrlVp9FrameParams> for Vp9V4l2Control {
+    fn from(decode_params: &V4l2CtrlVp9FrameParams) -> Self {
+        let payload = Box::new(decode_params.handle);
 
         Self(
             v4l2_ext_control {
