@@ -19,13 +19,11 @@ use crate::codec::h264::picture::Field;
 
 pub type Nalu<'a> = nalu::Nalu<'a, NaluHeader>;
 
-pub(super) const DEFAULT_4X4_INTRA: [u8; 16] = [
-    6, 13, 13, 20, 20, 20, 28, 28, 28, 28, 32, 32, 32, 37, 37, 42,
-];
+pub(super) const DEFAULT_4X4_INTRA: [u8; 16] =
+    [6, 13, 13, 20, 20, 20, 28, 28, 28, 28, 32, 32, 32, 37, 37, 42];
 
-pub(super) const DEFAULT_4X4_INTER: [u8; 16] = [
-    10, 14, 14, 20, 20, 20, 24, 24, 24, 24, 27, 27, 27, 30, 30, 34,
-];
+pub(super) const DEFAULT_4X4_INTER: [u8; 16] =
+    [10, 14, 14, 20, 20, 20, 24, 24, 24, 24, 27, 27, 27, 30, 30, 34];
 
 pub(super) const DEFAULT_8X8_INTRA: [u8; 64] = [
     6, 10, 10, 13, 11, 13, 16, 16, 16, 16, 18, 18, 18, 18, 18, 23, 23, 23, 23, 23, 23, 25, 25, 25,
@@ -841,10 +839,7 @@ impl Sps {
             0 => (1, 2 - u32::from(self.frame_mbs_only_flag)),
             _ => {
                 let (sub_width_c, sub_height_c) = self.sub_width_height_c();
-                (
-                    sub_width_c,
-                    sub_height_c * (2 - u32::from(self.frame_mbs_only_flag)),
-                )
+                (sub_width_c, sub_height_c * (2 - u32::from(self.frame_mbs_only_flag)))
             }
         }
     }
@@ -858,10 +853,7 @@ impl Sps {
         if !self.frame_cropping_flag {
             return Rect {
                 min: Point { x: 0, y: 0 },
-                max: Point {
-                    x: self.width(),
-                    y: self.height(),
-                },
+                max: Point { x: self.width(), y: self.height() },
             };
         }
 
@@ -873,10 +865,7 @@ impl Sps {
         let crop_bottom = crop_unit_y * self.frame_crop_bottom_offset;
 
         Rect {
-            min: Point {
-                x: crop_left,
-                y: crop_top,
-            },
+            min: Point { x: crop_left, y: crop_top },
             max: Point {
                 x: self.width() - crop_left - crop_right,
                 y: self.height() - crop_top - crop_bottom,
@@ -1773,11 +1762,7 @@ impl Parser {
                 }
             }
 
-            scaling_list.as_mut()[j] = if next_scale == 0 {
-                last_scale
-            } else {
-                next_scale
-            };
+            scaling_list.as_mut()[j] = if next_scale == 0 { last_scale } else { next_scale };
 
             last_scale = scaling_list.as_mut()[j];
         }
@@ -2469,32 +2454,24 @@ impl Parser {
                 | NaluType::SliceIdr
                 | NaluType::SliceExt
         ) {
-            return Err(format!(
-                "Invalid NALU type: {:?} is not a slice NALU",
-                nalu.header.type_
-            ));
+            return Err(format!("Invalid NALU type: {:?} is not a slice NALU", nalu.header.type_));
         }
 
         let data = nalu.as_ref();
         // Skip the header
         let mut r = BitReader::new(&data[nalu.header.len()..], true);
 
-        let mut header = SliceHeader {
-            first_mb_in_slice: r.read_ue()?,
-            ..Default::default()
-        };
+        let mut header = SliceHeader { first_mb_in_slice: r.read_ue()?, ..Default::default() };
 
         let slice_type = r.read_ue_max::<u8>(9)? % 5;
         header.slice_type = SliceType::try_from(slice_type)?;
 
         header.pic_parameter_set_id = r.read_ue()?;
 
-        let pps = self
-            .get_pps(header.pic_parameter_set_id)
-            .ok_or::<String>(format!(
-                "Could not get PPS for pic_parameter_set_id {}",
-                header.pic_parameter_set_id
-            ))?;
+        let pps = self.get_pps(header.pic_parameter_set_id).ok_or::<String>(format!(
+            "Could not get PPS for pic_parameter_set_id {}",
+            header.pic_parameter_set_id
+        ))?;
 
         let sps = &pps.sps;
 
@@ -2643,9 +2620,7 @@ pub struct NaluHeader {
 impl Header for NaluHeader {
     fn parse<T: AsRef<[u8]>>(cursor: &mut Cursor<T>) -> Result<Self, String> {
         let mut byte_buf = [0u8; 1];
-        cursor
-            .read_exact(&mut byte_buf)
-            .map_err(|_| String::from("Broken Data"))?;
+        cursor.read_exact(&mut byte_buf).map_err(|_| String::from("Broken Data"))?;
         let byte = byte_buf[0];
         let _ = cursor.seek(SeekFrom::Current(-1 * byte_buf.len() as i64));
 
@@ -2658,11 +2633,7 @@ impl Header for NaluHeader {
         let ref_idc = (byte & 0x60) >> 5;
         let idr_pic_flag = matches!(type_, NaluType::SliceIdr);
 
-        Ok(NaluHeader {
-            ref_idc,
-            type_,
-            idr_pic_flag,
-        })
+        Ok(NaluHeader { ref_idc, type_, idr_pic_flag })
     }
 
     fn is_end(&self) -> bool {
@@ -3015,9 +2986,8 @@ mod tests {
         // This SPS contains invalid frame_crop_*_offset settings. This led to
         // unconditional panic in the parser in the past. This test make sure a
         // panic is avoided.
-        let invalid_sps = vec![
-            0x00, 0x00, 0x01, 0x07, 0x00, 0x00, 0x0a, 0xfb, 0xb0, 0x32, 0xc0, 0xca, 0x80,
-        ];
+        let invalid_sps =
+            vec![0x00, 0x00, 0x01, 0x07, 0x00, 0x00, 0x0a, 0xfb, 0xb0, 0x32, 0xc0, 0xca, 0x80];
 
         let mut cursor = Cursor::new(invalid_sps.as_ref());
         let mut parser = Parser::default();
@@ -3034,21 +3004,12 @@ mod tests {
             MaxLongTermFrameIdx::from_value_plus1(0),
             MaxLongTermFrameIdx::NoLongTermFrameIndices
         );
-        assert_eq!(
-            MaxLongTermFrameIdx::NoLongTermFrameIndices.to_value_plus1(),
-            0
-        );
+        assert_eq!(MaxLongTermFrameIdx::NoLongTermFrameIndices.to_value_plus1(), 0);
 
-        assert_eq!(
-            MaxLongTermFrameIdx::from_value_plus1(1),
-            MaxLongTermFrameIdx::Idx(0)
-        );
+        assert_eq!(MaxLongTermFrameIdx::from_value_plus1(1), MaxLongTermFrameIdx::Idx(0));
         assert_eq!(MaxLongTermFrameIdx::Idx(0).to_value_plus1(), 1);
 
-        assert_eq!(
-            MaxLongTermFrameIdx::from_value_plus1(25),
-            MaxLongTermFrameIdx::Idx(24)
-        );
+        assert_eq!(MaxLongTermFrameIdx::from_value_plus1(25), MaxLongTermFrameIdx::Idx(24));
         assert_eq!(MaxLongTermFrameIdx::Idx(24).to_value_plus1(), 25);
 
         // Check PartialOrd<u32> implementation.

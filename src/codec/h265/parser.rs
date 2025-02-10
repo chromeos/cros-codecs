@@ -246,9 +246,7 @@ impl NaluHeader {
 impl Header for NaluHeader {
     fn parse<T: AsRef<[u8]>>(cursor: &mut std::io::Cursor<T>) -> Result<Self, String> {
         let mut data = [0u8; 2];
-        cursor
-            .read_exact(&mut data)
-            .map_err(|_| String::from("Broken Data"))?;
+        cursor.read_exact(&mut data).map_err(|_| String::from("Broken Data"))?;
         let mut r = BitReader::new(&data, false);
         let _ = cursor.seek(SeekFrom::Current(-1 * data.len() as i64));
 
@@ -982,10 +980,7 @@ impl Sps {
         if !self.conformance_window_flag {
             return Rect {
                 min: Point { x: 0, y: 0 },
-                max: Point {
-                    x: u32::from(self.width()),
-                    y: u32::from(self.height()),
-                },
+                max: Point { x: u32::from(self.width()), y: u32::from(self.height()) },
             };
         }
         const SUB_HEIGHT_C: [u32; 5] = [1, 2, 1, 1, 1];
@@ -999,10 +994,7 @@ impl Sps {
         let crop_bottom = crop_unit_y * self.conf_win_bottom_offset;
 
         Rect {
-            min: Point {
-                x: crop_left,
-                y: crop_top,
-            },
+            min: Point { x: crop_left, y: crop_top },
             max: Point {
                 x: u32::from(self.width()) - crop_left - crop_right,
                 y: u32::from(self.height()) - crop_top - crop_bottom,
@@ -2245,11 +2237,9 @@ impl Parser {
 
         vps.sub_layer_ordering_info_present_flag = r.read_bit()?;
 
-        let start = if vps.sub_layer_ordering_info_present_flag {
-            0
-        } else {
-            vps.max_sub_layers_minus1
-        } as usize;
+        let start =
+            if vps.sub_layer_ordering_info_present_flag { 0 } else { vps.max_sub_layers_minus1 }
+                as usize;
 
         for i in start..=usize::from(vps.max_sub_layers_minus1) {
             vps.max_dec_pic_buffering_minus1[i] = r.read_ue_max(15)?;
@@ -2982,10 +2972,7 @@ impl Parser {
             vui.num_units_in_tick |= r.read_bits::<u32>(1)?;
 
             if vui.num_units_in_tick == 0 {
-                log::warn!(
-                    "Incompliant value for num_units_in_tick {}",
-                    vui.num_units_in_tick
-                );
+                log::warn!("Incompliant value for num_units_in_tick {}", vui.num_units_in_tick);
             }
 
             vui.time_scale = r.read_bits::<u32>(31)? << 1;
@@ -3118,11 +3105,8 @@ impl Parser {
             sps.separate_colour_plane_flag = r.read_bit()?;
         }
 
-        sps.chroma_array_type = if sps.separate_colour_plane_flag {
-            0
-        } else {
-            sps.chroma_format_idc
-        };
+        sps.chroma_array_type =
+            if sps.separate_colour_plane_flag { 0 } else { sps.chroma_format_idc };
 
         sps.pic_width_in_luma_samples = r.read_ue_bounded(1, 16888)?;
         sps.pic_height_in_luma_samples = r.read_ue_bounded(1, 16888)?;
@@ -3184,10 +3168,7 @@ impl Parser {
             u32::from(sps.pic_width_in_luma_samples) * u32::from(sps.pic_height_in_luma_samples);
 
         if sps.max_tb_log2_size_y > std::cmp::min(sps.ctb_log2_size_y, 5) {
-            return Err(format!(
-                "Invalid value for MaxTbLog2SizeY: {}",
-                sps.max_tb_log2_size_y
-            ));
+            return Err(format!("Invalid value for MaxTbLog2SizeY: {}", sps.max_tb_log2_size_y));
         }
 
         sps.pic_size_in_ctbs_y = sps.pic_width_in_ctbs_y * sps.pic_height_in_ctbs_y;
@@ -3589,11 +3570,7 @@ impl Parser {
             r.skip_bits(4)?; // pps_extension_4bits
         }
 
-        log::debug!(
-            "Parsed PPS({}), NAL size was {}",
-            pps.pic_parameter_set_id,
-            nalu.size
-        );
+        log::debug!("Parsed PPS({}), NAL size was {}", pps.pic_parameter_set_id, nalu.size);
 
         if self.active_ppses.keys().len() >= MAX_PPS_COUNT {
             return Err("Broken Data: number of active PPSs > MAX_PPS_COUNT".into());
@@ -3763,10 +3740,7 @@ impl Parser {
                 | NaluType::IdrNLp
                 | NaluType::CraNut,
         ) {
-            return Err(format!(
-                "Invalid NALU type: {:?} is not a slice NALU",
-                nalu.header.type_
-            ));
+            return Err(format!("Invalid NALU type: {:?} is not a slice NALU", nalu.header.type_));
         }
 
         let data = nalu.as_ref();
@@ -3775,10 +3749,8 @@ impl Parser {
         // Skip the header
         let mut r = BitReader::new(&data[hdr_len..], true);
 
-        let mut hdr = SliceHeader {
-            first_slice_segment_in_pic_flag: r.read_bit()?,
-            ..Default::default()
-        };
+        let mut hdr =
+            SliceHeader { first_slice_segment_in_pic_flag: r.read_bit()?, ..Default::default() };
 
         if nalu.header.type_.is_irap() {
             hdr.no_output_of_prior_pics_flag = r.read_bit()?;
@@ -3786,12 +3758,10 @@ impl Parser {
 
         hdr.pic_parameter_set_id = r.read_ue_max(63)?;
 
-        let pps = self
-            .get_pps(hdr.pic_parameter_set_id)
-            .ok_or::<String>(format!(
-                "Could not get PPS for pic_parameter_set_id {}",
-                hdr.pic_parameter_set_id
-            ))?;
+        let pps = self.get_pps(hdr.pic_parameter_set_id).ok_or::<String>(format!(
+            "Could not get PPS for pic_parameter_set_id {}",
+            hdr.pic_parameter_set_id
+        ))?;
 
         let sps = &pps.sps;
 
@@ -3806,10 +3776,7 @@ impl Parser {
             hdr.segment_address = r.read_bits(num_bits)?;
 
             if hdr.segment_address > sps.pic_size_in_ctbs_y - 1 {
-                return Err(format!(
-                    "Invalid slice_segment_address {}",
-                    hdr.segment_address
-                ));
+                return Err(format!("Invalid slice_segment_address {}", hdr.segment_address));
             }
         }
 
@@ -3834,10 +3801,7 @@ impl Parser {
                 if u32::from(hdr.pic_order_cnt_lsb)
                     > 2u32.pow(u32::from(sps.log2_max_pic_order_cnt_lsb_minus4 + 4))
                 {
-                    return Err(format!(
-                        "Invalid pic_order_cnt_lsb {}",
-                        hdr.pic_order_cnt_lsb
-                    ));
+                    return Err(format!("Invalid pic_order_cnt_lsb {}", hdr.pic_order_cnt_lsb));
                 }
 
                 hdr.short_term_ref_pic_set_sps_flag = r.read_bit()?;
@@ -4141,11 +4105,7 @@ impl Parser {
 
         hdr.n_emulation_prevention_bytes = epb as u32;
 
-        log::debug!(
-            "Parsed slice {:?}, NAL size was {}",
-            nalu_header.type_,
-            nalu.size
-        );
+        log::debug!("Parsed slice {:?}, NAL size was {}", nalu_header.type_, nalu.size);
 
         Ok(Slice { header: hdr, nalu })
     }
@@ -4513,10 +4473,7 @@ mod tests {
         assert_eq!(vps.profile_tier_level.general_profile_idc, 1);
         for i in 0..32 {
             let val = i == 1 || i == 2;
-            assert_eq!(
-                vps.profile_tier_level.general_profile_compatibility_flag[i],
-                val
-            );
+            assert_eq!(vps.profile_tier_level.general_profile_compatibility_flag[i], val);
         }
         assert!(vps.profile_tier_level.general_progressive_source_flag);
         assert!(!vps.profile_tier_level.general_interlaced_source_flag);
@@ -4527,19 +4484,10 @@ mod tests {
         assert!(!vps.profile_tier_level.general_max_8bit_constraint_flag,);
         assert!(!vps.profile_tier_level.general_max_422chroma_constraint_flag,);
         assert!(!vps.profile_tier_level.general_max_420chroma_constraint_flag,);
-        assert!(
-            !vps.profile_tier_level
-                .general_max_monochrome_constraint_flag,
-        );
+        assert!(!vps.profile_tier_level.general_max_monochrome_constraint_flag,);
         assert!(!vps.profile_tier_level.general_intra_constraint_flag);
-        assert!(
-            !vps.profile_tier_level
-                .general_one_picture_only_constraint_flag,
-        );
-        assert!(
-            !vps.profile_tier_level
-                .general_lower_bit_rate_constraint_flag,
-        );
+        assert!(!vps.profile_tier_level.general_one_picture_only_constraint_flag,);
+        assert!(!vps.profile_tier_level.general_lower_bit_rate_constraint_flag,);
         assert!(!vps.profile_tier_level.general_max_14bit_constraint_flag,);
         assert_eq!(vps.profile_tier_level.general_level_idc, Level::L2);
 
@@ -4579,10 +4527,7 @@ mod tests {
         assert_eq!(sps.profile_tier_level.general_profile_idc, 1);
         for i in 0..32 {
             let val = i == 1 || i == 2;
-            assert_eq!(
-                sps.profile_tier_level.general_profile_compatibility_flag[i],
-                val
-            );
+            assert_eq!(sps.profile_tier_level.general_profile_compatibility_flag[i], val);
         }
         assert!(sps.profile_tier_level.general_progressive_source_flag);
         assert!(!sps.profile_tier_level.general_interlaced_source_flag);
@@ -4593,19 +4538,10 @@ mod tests {
         assert!(!sps.profile_tier_level.general_max_8bit_constraint_flag,);
         assert!(!sps.profile_tier_level.general_max_422chroma_constraint_flag,);
         assert!(!sps.profile_tier_level.general_max_420chroma_constraint_flag,);
-        assert!(
-            !sps.profile_tier_level
-                .general_max_monochrome_constraint_flag,
-        );
+        assert!(!sps.profile_tier_level.general_max_monochrome_constraint_flag,);
         assert!(!sps.profile_tier_level.general_intra_constraint_flag);
-        assert!(
-            !sps.profile_tier_level
-                .general_one_picture_only_constraint_flag,
-        );
-        assert!(
-            !sps.profile_tier_level
-                .general_lower_bit_rate_constraint_flag,
-        );
+        assert!(!sps.profile_tier_level.general_one_picture_only_constraint_flag,);
+        assert!(!sps.profile_tier_level.general_lower_bit_rate_constraint_flag,);
         assert!(!sps.profile_tier_level.general_max_14bit_constraint_flag,);
         assert_eq!(sps.profile_tier_level.general_level_idc, Level::L2);
 

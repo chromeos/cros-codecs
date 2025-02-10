@@ -47,10 +47,9 @@ impl VaStreamInfo for &StreamInfo {
         match self.seq_header.seq_profile {
             Profile::Profile0 => Ok(libva::VAProfile::VAProfileAV1Profile0),
             Profile::Profile1 => Ok(libva::VAProfile::VAProfileAV1Profile1),
-            Profile::Profile2 => Err(anyhow!(
-                "Profile {:?} is not supported by VAAPI",
-                self.seq_header.seq_profile
-            )),
+            Profile::Profile2 => {
+                Err(anyhow!("Profile {:?} is not supported by VAAPI", self.seq_header.seq_profile))
+            }
         }
     }
 
@@ -83,10 +82,9 @@ impl VaStreamInfo for &StreamInfo {
                     ))
                 }
             }
-            Profile::Profile2 => Err(anyhow!(
-                "Profile {:?} is not supported by VAAPI",
-                self.seq_header.seq_profile
-            )),
+            Profile::Profile2 => {
+                Err(anyhow!("Profile {:?} is not supported by VAAPI", self.seq_header.seq_profile))
+            }
         }
     }
 
@@ -229,11 +227,7 @@ fn build_wm_info(hdr: &FrameHeaderObu) -> [libva::AV1WarpedMotionParams; 7] {
             params
         };
 
-        wm.push(libva::AV1WarpedMotionParams::new(
-            wm_type,
-            params,
-            u8::from(!gm.warp_valid[i]),
-        ));
+        wm.push(libva::AV1WarpedMotionParams::new(wm_type, params, u8::from(!gm.warp_valid[i])));
     }
 
     match wm.try_into() {
@@ -320,12 +314,8 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         BitDepth::Depth12 => 2,
     };
 
-    let ref_frame_map: [libva::VASurfaceID; NUM_REF_FRAMES] = reference_frames
-        .iter()
-        .map(va_surface_id)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let ref_frame_map: [libva::VASurfaceID; NUM_REF_FRAMES] =
+        reference_frames.iter().map(va_surface_id).collect::<Vec<_>>().try_into().unwrap();
 
     let width_in_sbs_minus_1 = {
         let mut width_in_sbs_minus_1 = [0; MAX_TILE_COLS - 1];
@@ -470,9 +460,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         &wm,
     );
 
-    Ok(libva::BufferType::PictureParameter(
-        libva::PictureParameter::AV1(pic_param),
-    ))
+    Ok(libva::BufferType::PictureParameter(libva::PictureParameter::AV1(pic_param)))
 }
 
 fn build_slice_params_for_tg(tg: &TileGroupObu) -> anyhow::Result<libva::BufferType> {
@@ -493,9 +481,7 @@ fn build_slice_params_for_tg(tg: &TileGroupObu) -> anyhow::Result<libva::BufferT
         );
     }
 
-    Ok(libva::BufferType::SliceParameter(
-        libva::SliceParameter::AV1(slice_params),
-    ))
+    Ok(libva::BufferType::SliceParameter(libva::SliceParameter::AV1(slice_params)))
 }
 
 fn build_slice_data_for_tg(tg: TileGroupObu) -> libva::BufferType {
@@ -539,27 +525,17 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
     ) -> NewPictureResult<Self::Picture> {
         let pool = match highest_spatial_layer {
             Some(_) => {
-                let layer = Resolution {
-                    width: hdr.upscaled_width,
-                    height: hdr.frame_height,
-                };
+                let layer = Resolution { width: hdr.upscaled_width, height: hdr.frame_height };
 
-                self.pool(layer)
-                    .ok_or(NewPictureError::NoFramePool(layer))?
+                self.pool(layer).ok_or(NewPictureError::NoFramePool(layer))?
             }
             None => self.highest_pool(),
         };
 
-        let surface = pool
-            .get_surface()
-            .ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let surface = pool.get_surface().ok_or(NewPictureError::OutOfOutputBuffers)?;
 
         let metadata = self.metadata_state.get_parsed()?;
-        Ok(VaPicture::new(
-            timestamp,
-            Rc::clone(&metadata.context),
-            surface,
-        ))
+        Ok(VaPicture::new(timestamp, Rc::clone(&metadata.context), surface))
     }
 
     fn begin_picture(
@@ -599,9 +575,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessAV1DecoderBackend for VaapiB
 
         picture.add_buffer(buffer);
 
-        let buffer = context
-            .create_buffer(slice_data)
-            .context("Failed to create slice data buffer")?;
+        let buffer =
+            context.create_buffer(slice_data).context("Failed to create slice data buffer")?;
 
         picture.add_buffer(buffer);
 
@@ -673,11 +648,7 @@ mod tests {
     #[ignore]
     fn test_25fps_av1_blocking() {
         use crate::decoder::stateless::av1::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(
-            &DECODE_TEST_25FPS,
-            DecodedFormat::NV12,
-            BlockingMode::Blocking,
-        );
+        test_decoder_vaapi(&DECODE_TEST_25FPS, DecodedFormat::NV12, BlockingMode::Blocking);
     }
 
     #[test]
@@ -685,10 +656,6 @@ mod tests {
     #[ignore]
     fn test_25fps_av1_non_blocking() {
         use crate::decoder::stateless::av1::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(
-            &DECODE_TEST_25FPS,
-            DecodedFormat::NV12,
-            BlockingMode::NonBlocking,
-        );
+        test_decoder_vaapi(&DECODE_TEST_25FPS, DecodedFormat::NV12, BlockingMode::NonBlocking);
     }
 }

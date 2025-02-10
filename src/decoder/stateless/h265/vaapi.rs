@@ -116,10 +116,8 @@ impl VaStreamInfo for &Sps {
         let profile_idc = self.profile_tier_level.general_profile_idc;
         let profile = Profile::try_from(profile_idc).map_err(|err| anyhow!(err))?;
 
-        let bit_depth = std::cmp::max(
-            self.bit_depth_luma_minus8 + 8,
-            self.bit_depth_chroma_minus8 + 8,
-        );
+        let bit_depth =
+            std::cmp::max(self.bit_depth_luma_minus8 + 8, self.bit_depth_chroma_minus8 + 8);
 
         let chroma_format_idc = self.chroma_format_idc;
         let err = Err(anyhow!(
@@ -158,10 +156,8 @@ impl VaStreamInfo for &Sps {
     }
 
     fn rt_format(&self) -> anyhow::Result<u32> {
-        let bit_depth = std::cmp::max(
-            self.bit_depth_luma_minus8 + 8,
-            self.bit_depth_chroma_minus8 + 8,
-        );
+        let bit_depth =
+            std::cmp::max(self.bit_depth_luma_minus8 + 8, self.bit_depth_chroma_minus8 + 8);
 
         let chroma_format_idc = self.chroma_format_idc;
 
@@ -194,12 +190,7 @@ impl VaStreamInfo for &Sps {
     fn visible_rect(&self) -> Rect {
         let rect = self.visible_rectangle();
 
-        Rect {
-            x: rect.min.x,
-            y: rect.min.y,
-            width: rect.max.x,
-            height: rect.max.y,
-        }
+        Rect { x: rect.min.x, y: rect.min.y, width: rect.max.x, height: rect.max.y }
     }
 }
 
@@ -338,9 +329,7 @@ fn build_picture_rext(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
         pps_rext.cr_qp_offset_list.map(|x| x as i8),
     );
 
-    Ok(BufferType::PictureParameter(
-        libva::PictureParameter::HEVCRext(rext),
-    ))
+    Ok(BufferType::PictureParameter(libva::PictureParameter::HEVCRext(rext)))
 }
 
 fn build_picture_scc(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
@@ -359,16 +348,12 @@ fn build_picture_scc(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
     let (predictor_palette_entries, predictor_palette_size) =
         if pps_scc.palette_predictor_initializers_present_flag {
             (
-                pps_scc
-                    .palette_predictor_initializer
-                    .map(|outer| outer.map(u16::from)),
+                pps_scc.palette_predictor_initializer.map(|outer| outer.map(u16::from)),
                 pps_scc.num_palette_predictor_initializers,
             )
         } else if sps_scc.palette_predictor_initializers_present_flag {
             (
-                sps_scc
-                    .palette_predictor_initializer
-                    .map(|outer| outer.map(|inner| inner as u16)),
+                sps_scc.palette_predictor_initializer.map(|outer| outer.map(|inner| inner as u16)),
                 sps_scc.num_palette_predictor_initializer_minus1 + 1,
             )
         } else {
@@ -386,9 +371,7 @@ fn build_picture_scc(sps: &Sps, pps: &Pps) -> anyhow::Result<BufferType> {
         pps_scc.act_cr_qp_offset_plus3,
     );
 
-    Ok(BufferType::PictureParameter(
-        libva::PictureParameter::HEVCScc(scc),
-    ))
+    Ok(BufferType::PictureParameter(libva::PictureParameter::HEVCScc(scc)))
 }
 
 fn build_pic_param<M: SurfaceMemoryDescriptor>(
@@ -520,10 +503,7 @@ fn build_pic_param<M: SurfaceMemoryDescriptor>(
         current_picture.short_term_ref_pic_set_size_bits,
     );
 
-    Ok((
-        BufferType::PictureParameter(libva::PictureParameter::HEVC(pic_param)),
-        reference_frames,
-    ))
+    Ok((BufferType::PictureParameter(libva::PictureParameter::HEVC(pic_param)), reference_frames))
 }
 
 fn find_scaling_list(sps: &Sps, pps: &Pps) -> ScalingListType {
@@ -590,9 +570,7 @@ fn build_iq_matrix(sps: &Sps, pps: &Pps) -> BufferType {
         scaling_list_8x8,
         scaling_list_16x16,
         scaling_list_32x32_r,
-        scaling_lists
-            .scaling_list_dc_coef_minus8_16x16
-            .map(|x| (x + 8) as u8),
+        scaling_lists.scaling_list_dc_coef_minus8_16x16.map(|x| (x + 8) as u8),
         scaling_list_dc_32x32,
     )))
 }
@@ -632,11 +610,7 @@ pub struct VaapiH265Picture<Picture> {
 
     // We are always one slice behind, so that we can mark the last one in
     // submit_picture()
-    last_slice: Option<(
-        SliceParameterBufferHEVC,
-        Option<SliceParameterBufferHEVCRext>,
-        Vec<u8>,
-    )>,
+    last_slice: Option<(SliceParameterBufferHEVC, Option<SliceParameterBufferHEVCRext>, Vec<u8>)>,
 
     va_references: [PictureHEVC; 15],
 }
@@ -658,13 +632,9 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
         timestamp: u64,
     ) -> NewPictureResult<Self::Picture> {
         let layer = PoolLayer::Layer(coded_resolution);
-        let pool = self
-            .frame_pool(layer)
-            .pop()
-            .ok_or(NewPictureError::NoFramePool(coded_resolution))?;
-        let surface = pool
-            .get_surface()
-            .ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let pool =
+            self.frame_pool(layer).pop().ok_or(NewPictureError::NoFramePool(coded_resolution))?;
+        let surface = pool.get_surface().ok_or(NewPictureError::OutOfOutputBuffers)?;
         let metadata = self.metadata_state.get_parsed()?;
 
         Ok(VaapiH265Picture {
@@ -696,17 +666,15 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
 
         let picture = &mut picture.picture;
 
-        let pic_param = context
-            .create_buffer(pic_param)
-            .context("while creating picture parameter buffer")?;
+        let pic_param =
+            context.create_buffer(pic_param).context("while creating picture parameter buffer")?;
 
         picture.add_buffer(pic_param);
 
         if !matches!(find_scaling_list(sps, pps), ScalingListType::None) {
             let iq_matrix = build_iq_matrix(sps, pps);
-            let iq_matrix = context
-                .create_buffer(iq_matrix)
-                .context("while creating IQ matrix buffer")?;
+            let iq_matrix =
+                context.create_buffer(iq_matrix).context("while creating IQ matrix buffer")?;
 
             picture.add_buffer(iq_matrix);
         }
@@ -764,11 +732,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH265DecoderBackend for Vaapi
             hdr.loop_filter_across_slices_enabled_flag as u32,
         );
 
-        let collocated_ref_idx = if hdr.temporal_mvp_enabled_flag {
-            hdr.collocated_ref_idx
-        } else {
-            0xff
-        };
+        let collocated_ref_idx =
+            if hdr.temporal_mvp_enabled_flag { hdr.collocated_ref_idx } else { 0xff };
 
         let pwt = &hdr.pred_weight_table;
 

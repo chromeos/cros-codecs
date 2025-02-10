@@ -93,11 +93,7 @@ where
             }
         }
 
-        Self::apply_ctrl(
-            &device,
-            "prepend SPS PPS to IDR",
-            VideoPrependSpsPpsToIdr(true),
-        )?;
+        Self::apply_ctrl(&device, "prepend SPS PPS to IDR", VideoPrependSpsPpsToIdr(true))?;
 
         let profile = match config.profile {
             Profile::Main => VideoHEVCProfile::Main,
@@ -105,10 +101,7 @@ where
             Profile::MainStill => VideoHEVCProfile::MainStill,
 
             _ => {
-                log::error!(
-                    "Unrecognized h265 profile for v4l2 backend: {:?}",
-                    config.profile
-                );
+                log::error!("Unrecognized h265 profile for v4l2 backend: {:?}", config.profile);
                 return Err(InitializationError::Unsupported(UnsupportedError::Profile));
             }
         };
@@ -176,14 +169,8 @@ mod tests {
     // Ignore this test by default as it requires v4l2m2m-compatible hardware.
     #[test]
     fn test_v4l2_encoder_userptr() {
-        const VISIBLE_SIZE: Resolution = Resolution {
-            width: 500,
-            height: 500,
-        };
-        const CODED_SIZE: Resolution = Resolution {
-            width: 512,
-            height: 512,
-        };
+        const VISIBLE_SIZE: Resolution = Resolution { width: 500, height: 500 };
+        const CODED_SIZE: Resolution = Resolution { width: 512, height: 512 };
         const FRAME_COUNT: u64 = 100;
 
         let _ = env_logger::try_init();
@@ -195,16 +182,10 @@ mod tests {
         let mut encoder = V4L2StatefulH265Encoder::new(
             device,
             MmapingCapture,
-            EncoderConfig {
-                resolution: VISIBLE_SIZE,
-                ..Default::default()
-            },
+            EncoderConfig { resolution: VISIBLE_SIZE, ..Default::default() },
             Fourcc::from(b"NM12"),
             CODED_SIZE,
-            Tunings {
-                rate_control: RateControl::ConstantBitrate(400_000),
-                ..Default::default()
-            },
+            Tunings { rate_control: RateControl::ConstantBitrate(400_000), ..Default::default() },
         )
         .unwrap();
 
@@ -212,12 +193,8 @@ mod tests {
         let layout = v4l2_format_to_frame_layout(&format);
 
         let mut bitstream = Vec::new();
-        let buffer_size = format
-            .plane_fmt
-            .iter()
-            .map(|plane| plane.sizeimage)
-            .max()
-            .unwrap() as usize;
+        let buffer_size =
+            format.plane_fmt.iter().map(|plane| plane.sizeimage).max().unwrap() as usize;
         let mut frame_producer = userptr_test_frame_generator(FRAME_COUNT, layout, buffer_size);
 
         simple_encode_loop(&mut encoder, &mut frame_producer, |coded| {
@@ -238,14 +215,8 @@ mod tests {
     // Ignore this test by default as it requires v4l2m2m-compatible hardware.
     #[test]
     fn test_v4l2_encoder_mmap() {
-        const VISIBLE_SIZE: Resolution = Resolution {
-            width: 500,
-            height: 500,
-        };
-        const CODED_SIZE: Resolution = Resolution {
-            width: 512,
-            height: 512,
-        };
+        const VISIBLE_SIZE: Resolution = Resolution { width: 500, height: 500 };
+        const CODED_SIZE: Resolution = Resolution { width: 512, height: 512 };
         const FRAME_COUNT: u64 = 100;
 
         let _ = env_logger::try_init();
@@ -257,16 +228,10 @@ mod tests {
         let encoder = V4L2StatefulH265Encoder::new(
             device,
             MmapingCapture,
-            EncoderConfig {
-                resolution: VISIBLE_SIZE,
-                ..Default::default()
-            },
+            EncoderConfig { resolution: VISIBLE_SIZE, ..Default::default() },
             Fourcc::from(b"NM12"),
             CODED_SIZE,
-            Tunings {
-                rate_control: RateControl::ConstantBitrate(400_000),
-                ..Default::default()
-            },
+            Tunings { rate_control: RateControl::ConstantBitrate(400_000), ..Default::default() },
         )
         .unwrap();
 
@@ -288,14 +253,8 @@ mod tests {
     // Ignore this test by default as it requires v4l2m2m-compatible hardware.
     #[test]
     fn test_v4l2_encoder_dmabuf() {
-        const VISIBLE_SIZE: Resolution = Resolution {
-            width: 500,
-            height: 500,
-        };
-        const CODED_SIZE: Resolution = Resolution {
-            width: 512,
-            height: 512,
-        };
+        const VISIBLE_SIZE: Resolution = Resolution { width: 500, height: 500 };
+        const CODED_SIZE: Resolution = Resolution { width: 512, height: 512 };
         const FRAME_COUNT: u64 = 100;
 
         let _ = env_logger::try_init();
@@ -313,10 +272,7 @@ mod tests {
         let encoder = V4L2StatefulH265Encoder::<DmabufFrame, _>::new(
             device.clone(),
             BoPoolAllocator::new(gbm.clone()),
-            EncoderConfig {
-                resolution: VISIBLE_SIZE,
-                ..Default::default()
-            },
+            EncoderConfig { resolution: VISIBLE_SIZE, ..Default::default() },
             Fourcc::from(b"NV12"),
             CODED_SIZE,
             Tunings {

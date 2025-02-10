@@ -137,10 +137,7 @@ pub struct ControlError {
 
 impl std::fmt::Display for ControlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "failed to set '{}': {:?}",
-            self.which, self.error
-        ))
+        f.write_fmt(format_args!("failed to set '{}': {:?}", self.which, self.error))
     }
 }
 
@@ -287,9 +284,7 @@ impl BufferHandles for DmabufFrame {
 
         plane.m.fd = fd.as_raw_fd();
         plane.data_offset = plane_layout.offset as u32;
-        plane.length = fstat(fd.as_raw_fd())
-            .map(|stat| stat.st_size as u32)
-            .unwrap_or(0);
+        plane.length = fstat(fd.as_raw_fd()).map(|stat| stat.st_size as u32).unwrap_or(0);
 
         if plane.length == 0 {
             log::warn!("Failed to fstat proper plane size index={index}");
@@ -471,16 +466,9 @@ where
 
     /// Sets the frame rate using S_PARM ioctl for the queue type on the device.
     pub(crate) fn apply_parm(device: &Device, queue_type: QueueType, framerate: u32) {
-        let mut parm = v4l2_streamparm {
-            type_: queue_type as u32,
-            ..Default::default()
-        };
+        let mut parm = v4l2_streamparm { type_: queue_type as u32, ..Default::default() };
 
-        let (num, denum) = if framerate != 0 {
-            (1, framerate)
-        } else {
-            (0, 1)
-        };
+        let (num, denum) = if framerate != 0 { (1, framerate) } else { (0, 1) };
 
         if matches!(queue_type, v4l2r::QueueType::VideoOutputMplane) {
             parm.parm.output.capability = 0;
@@ -513,10 +501,7 @@ where
                 },
                 _ => {}
             },
-            Err(errno) => log::warn!(
-                "{:?}: Failed to set parm: {errno:?}",
-                queue_type.direction()
-            ),
+            Err(errno) => log::warn!("{:?}: Failed to set parm: {errno:?}", queue_type.direction()),
         }
     }
 
@@ -554,12 +539,8 @@ where
         device: &Device,
         visible_size: Resolution,
     ) -> Result<(), ioctl::SSelectionError> {
-        let rect = v4l2r::Rect {
-            left: 0,
-            top: 0,
-            width: visible_size.width,
-            height: visible_size.height,
-        };
+        let rect =
+            v4l2r::Rect { left: 0, top: 0, width: visible_size.width, height: visible_size.height };
 
         log::trace!(
             "Trying to apply to selection to (left: {}, top: {}, width: {}, height: {})",
@@ -628,10 +609,7 @@ where
             width: coded_size.width,
             height: coded_size.height,
             pixelformat: capture_pixfmt,
-            plane_fmt: vec![v4l2r::PlaneLayout {
-                sizeimage: coded_buffer_size,
-                bytesperline: 0,
-            }],
+            plane_fmt: vec![v4l2r::PlaneLayout { sizeimage: coded_buffer_size, bytesperline: 0 }],
         };
 
         let capture_format = capture_queue
@@ -650,9 +628,8 @@ where
             plane_fmt: vec![],
         };
 
-        let output_format = output_queue
-            .set_format(output_format)
-            .map_err(InitializationError::SetFormatOutput)?;
+        let output_format =
+            output_queue.set_format(output_format).map_err(InitializationError::SetFormatOutput)?;
 
         log::debug!("CAPTURE queue format = {capture_format:#?}");
         log::debug!("OUTPUT queue format = {output_format:#?}");
@@ -663,9 +640,7 @@ where
         Self::apply_ctrl(&device, "header mode", VideoHeaderMode::JoinedWith1stFrame)?;
 
         if visible_size.width > output_format.width || visible_size.height > output_format.height {
-            return Err(InitializationError::Unsupported(
-                UnsupportedError::FrameUpscaling,
-            ));
+            return Err(InitializationError::Unsupported(UnsupportedError::FrameUpscaling));
         } else if visible_size.width != output_format.width
             || visible_size.height != output_format.height
         {
@@ -686,14 +661,10 @@ where
             .map_err(InitializationError::RequestBufferOutput)?;
 
         log::debug!("CAPTURE: Invoking stream on");
-        capture_queue
-            .stream_on()
-            .map_err(InitializationError::StreamOnCapture)?;
+        capture_queue.stream_on().map_err(InitializationError::StreamOnCapture)?;
 
         log::debug!("OUTPUT: Invoking stream on");
-        output_queue
-            .stream_on()
-            .map_err(InitializationError::StreamOnOutput)?;
+        output_queue.stream_on().map_err(InitializationError::StreamOnOutput)?;
 
         log::debug!("Sending start command to encoder");
         ioctl::encoder_cmd::<_, ()>(&device, &EncoderCommand::Start)
@@ -733,10 +704,8 @@ where
             let buffer = self.capture_queue.try_get_free_buffer()?;
             let buffer_index = buffer.index();
 
-            let queued = self
-                .capture_buffers
-                .queue(buffer)
-                .map_err(BackendError::QueueBitstreamBuffer)?;
+            let queued =
+                self.capture_buffers.queue(buffer).map_err(BackendError::QueueBitstreamBuffer)?;
 
             if !queued {
                 log::warn!("CAPTURE: Capture buffer was queued. Will retry later");
@@ -788,9 +757,7 @@ where
 
         if !buffer.data.flags().intersects(BufferFlags::TIMESTAMP_COPY) {
             log::error!("CAPTURE: Buffer does not have TIMESTAMP_COPY flag");
-            return Err(BackendError::Unsupported(
-                UnsupportedError::NoTimestampCopyFlag,
-            ));
+            return Err(BackendError::Unsupported(UnsupportedError::NoTimestampCopyFlag));
         }
 
         let Some((request_id, meta)) = self.currently_processed.remove(&timestamp) else {
@@ -798,15 +765,11 @@ where
             return Err(BackendError::FailedToMapCapture(timestamp));
         };
 
-        let bitstream = self
-            .capture_buffers
-            .export(buffer)
-            .map_err(BackendError::MapBitstreamBuffer)?;
+        let bitstream =
+            self.capture_buffers.export(buffer).map_err(BackendError::MapBitstreamBuffer)?;
 
-        let output = BackendOutput {
-            request_id,
-            buffer: CodedBitstreamBuffer::new(meta, bitstream),
-        };
+        let output =
+            BackendOutput { request_id, buffer: CodedBitstreamBuffer::new(meta, bitstream) };
 
         Ok(Some(output))
     }
@@ -857,27 +820,16 @@ where
         if request.meta.force_keyframe {
             let mut force = SafeExtControl::<VideoForceKeyFrame>::from_value(1);
             ioctl::s_ext_ctrls(&self.device, ioctl::CtrlWhich::Current, &mut force).map_err(
-                |error| ControlError {
-                    which: "force keyframe",
-                    error: error.error.into(),
-                },
+                |error| ControlError { which: "force keyframe", error: error.error.into() },
             )?;
         }
 
-        request
-            .handle
-            .queue(buffer)
-            .map_err(BackendError::QueueFrameHandleError)?;
+        request.handle.queue(buffer).map_err(BackendError::QueueFrameHandleError)?;
 
-        log::debug!(
-            "OUTPUT: Queued buffer index={} timestamp={:?}",
-            index,
-            timestamp
-        );
+        log::debug!("OUTPUT: Queued buffer index={} timestamp={:?}", index, timestamp);
 
         // TODO: Use RequestId for this?
-        self.currently_processed
-            .insert(timestamp, (request.request_id, request.meta));
+        self.currently_processed.insert(timestamp, (request.request_id, request.meta));
 
         Ok(())
     }
@@ -1001,10 +953,7 @@ pub fn find_device_with_capture(pixfmt: v4l2r::PixelFormat) -> Option<PathBuf> {
 pub fn v4l2_format_to_frame_layout(format: &v4l2r::Format) -> FrameLayout {
     let mut layout = FrameLayout {
         format: (Fourcc::from(format.pixelformat.to_u32()), 0),
-        size: Resolution {
-            width: format.width,
-            height: format.height,
-        },
+        size: Resolution { width: format.width, height: format.height },
         planes: format
             .plane_fmt
             .iter()
@@ -1064,11 +1013,7 @@ pub(crate) mod tests {
     /// Simple helper methods for opening a `Card`.
     impl GbmDevice {
         pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-            std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(path)
-                .map(GbmDevice)
+            std::fs::OpenOptions::new().read(true).write(true).open(path).map(GbmDevice)
         }
     }
 
@@ -1206,10 +1151,7 @@ pub(crate) mod tests {
                 fill_test_frame_nm12(
                     self.meta.layout.size.width as usize,
                     self.meta.layout.size.height as usize,
-                    [
-                        self.meta.layout.planes[0].stride,
-                        self.meta.layout.planes[1].stride,
-                    ],
+                    [self.meta.layout.planes[0].stride, self.meta.layout.planes[1].stride],
                     get_test_frame_t(self.meta.timestamp, self.frame_count),
                     y_plane.as_mut(),
                     uv_plane.as_mut(),
@@ -1219,10 +1161,8 @@ pub(crate) mod tests {
             } else if self.meta.layout.format == (Fourcc::from(b"NV12"), 0) {
                 let mut plane = buffer.get_plane_mapping(0).unwrap();
 
-                let strides = [
-                    self.meta.layout.planes[0].stride,
-                    self.meta.layout.planes[0].stride,
-                ];
+                let strides =
+                    [self.meta.layout.planes[0].stride, self.meta.layout.planes[0].stride];
                 let offsets = [
                     self.meta.layout.planes[0].offset,
                     self.meta.layout.planes[0].stride * self.meta.layout.size.height as usize,
@@ -1255,11 +1195,7 @@ pub(crate) mod tests {
 
     impl TestMmapFrameGenerator {
         pub fn new(max_count: u64, frame_layout: FrameLayout) -> Self {
-            Self {
-                counter: 0,
-                max_count,
-                frame_layout,
-            }
+            Self { counter: 0, max_count, frame_layout }
         }
     }
 
@@ -1279,10 +1215,7 @@ pub(crate) mod tests {
                 force_keyframe: false,
             };
 
-            let handle = TestMmapFrame {
-                meta: meta.clone(),
-                frame_count: self.max_count,
-            };
+            let handle = TestMmapFrame { meta: meta.clone(), frame_count: self.max_count };
 
             Some((meta, handle))
         }
@@ -1321,13 +1254,7 @@ pub(crate) mod tests {
             visible_size: Resolution,
             gbm: Arc<gbm::Device<GbmDevice>>,
         ) -> Self {
-            Self {
-                counter: 0,
-                max_count,
-                coded_size,
-                visible_size,
-                gbm,
-            }
+            Self { counter: 0, max_count, coded_size, visible_size, gbm }
         }
     }
 
@@ -1381,11 +1308,7 @@ pub(crate) mod tests {
                     inodes.push(stat.st_ino);
                 }
 
-                planes.push(crate::PlaneLayout {
-                    buffer_index,
-                    offset,
-                    stride,
-                })
+                planes.push(crate::PlaneLayout { buffer_index, offset, stride })
             }
 
             let layout = FrameLayout {

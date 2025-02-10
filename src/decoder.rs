@@ -208,10 +208,7 @@ impl<T> ReadyFramesQueue<T> {
     fn new() -> Result<Self, Errno> {
         let poll_fd = EventFd::new()?;
 
-        Ok(Self {
-            queue: Default::default(),
-            poll_fd,
-        })
+        Ok(Self { queue: Default::default(), poll_fd })
     }
 
     /// Push `handle` to the back of the queue.
@@ -272,9 +269,7 @@ mod tests {
     fn test_ready_frame_queue_poll() {
         let mut queue = ReadyFramesQueue::<()>::new().unwrap();
         let epoll = Epoll::new(EpollCreateFlags::empty()).unwrap();
-        epoll
-            .add(queue.poll_fd(), EpollEvent::new(EpollFlags::EPOLLIN, 1))
-            .unwrap();
+        epoll.add(queue.poll_fd(), EpollEvent::new(EpollFlags::EPOLLIN, 1)).unwrap();
 
         // Empty queue should not signal.
         let mut events = [EpollEvent::empty()];

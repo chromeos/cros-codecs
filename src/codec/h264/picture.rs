@@ -159,9 +159,7 @@ impl PictureData {
         let nalu_hdr = &slice.nalu.header;
 
         let is_idr = if nalu_hdr.idr_pic_flag {
-            IsIdr::Yes {
-                idr_pic_id: hdr.idr_pic_id,
-            }
+            IsIdr::Yes { idr_pic_id: hdr.idr_pic_id }
         } else {
             IsIdr::No
         };
@@ -176,17 +174,9 @@ impl PictureData {
             Field::Frame
         };
 
-        let reference = if nalu_hdr.ref_idc != 0 {
-            Reference::ShortTerm
-        } else {
-            Reference::None
-        };
+        let reference = if nalu_hdr.ref_idc != 0 { Reference::ShortTerm } else { Reference::None };
 
-        let pic_num = if !hdr.field_pic_flag {
-            hdr.frame_num
-        } else {
-            2 * hdr.frame_num + 1
-        };
+        let pic_num = if !hdr.field_pic_flag { hdr.frame_num } else { 2 * hdr.frame_num + 1 };
 
         let (
             pic_order_cnt_lsb,
@@ -206,12 +196,7 @@ impl PictureData {
                 hdr.delta_pic_order_cnt[0],
                 hdr.delta_pic_order_cnt[1],
             ),
-            _ => (
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-            ),
+            _ => (Default::default(), Default::default(), Default::default(), Default::default()),
         };
 
         let coded_resolution = Resolution::from((sps.width(), sps.height()));
@@ -390,10 +375,7 @@ impl PictureData {
         first_field.borrow_mut().set_second_field_to(&second_field);
         second_field.borrow_mut().set_first_field_to(&first_field);
 
-        (
-            RcPictureData { pic: first_field },
-            RcPictureData { pic: second_field },
-        )
+        (RcPictureData { pic: first_field }, RcPictureData { pic: second_field })
     }
 }
 
@@ -406,10 +388,7 @@ impl std::fmt::Debug for PictureData {
             .field("pic_order_cnt", &self.pic_order_cnt)
             .field("pic_order_cnt_msb", &self.pic_order_cnt_msb)
             .field("pic_order_cnt_lsb", &self.pic_order_cnt_lsb)
-            .field(
-                "delta_pic_order_cnt_bottom",
-                &self.delta_pic_order_cnt_bottom,
-            )
+            .field("delta_pic_order_cnt_bottom", &self.delta_pic_order_cnt_bottom)
             .field("delta_pic_order_cnt0", &self.delta_pic_order_cnt0)
             .field("delta_pic_order_cnt1", &self.delta_pic_order_cnt1)
             .field("pic_num", &self.pic_num)
@@ -424,10 +403,7 @@ impl std::fmt::Debug for PictureData {
             .field("nal_ref_idc", &self.nal_ref_idc)
             .field("is_idr", &self.is_idr)
             .field("reference", &self.reference)
-            .field(
-                "ref_pic_list_modification_flag_l0",
-                &self.ref_pic_list_modification_flag_l0,
-            )
+            .field("ref_pic_list_modification_flag_l0", &self.ref_pic_list_modification_flag_l0)
             .field("abs_diff_pic_num_minus1", &self.abs_diff_pic_num_minus1)
             .field("has_mmco_5", &self.has_mmco_5)
             .field("nonexisting", &self.nonexisting)

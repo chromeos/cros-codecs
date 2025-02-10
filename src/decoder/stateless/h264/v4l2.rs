@@ -52,12 +52,7 @@ impl V4l2StreamInfo for &Rc<Sps> {
     fn visible_rect(&self) -> Rect {
         let rect = self.visible_rectangle();
 
-        Rect {
-            x: rect.min.x,
-            y: rect.min.y,
-            width: rect.max.x,
-            height: rect.max.y,
-        }
+        Rect { x: rect.min.x, y: rect.min.y, width: rect.max.x, height: rect.max.y }
     }
 }
 
@@ -170,17 +165,12 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
     }
 
     fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle> {
-        let handle = Rc::new(RefCell::new(BackendHandle {
-            picture: picture.clone(),
-        }));
+        let handle = Rc::new(RefCell::new(BackendHandle { picture: picture.clone() }));
         let request = picture.borrow_mut().request();
         let mut request = request.as_ref().borrow_mut();
         request.submit();
 
-        Ok(V4l2StatelessDecoderHandle {
-            handle: handle,
-            stream_info: self.stream_info.clone(),
-        })
+        Ok(V4l2StatelessDecoderHandle { handle: handle, stream_info: self.stream_info.clone() })
     }
 }
 

@@ -96,10 +96,7 @@ pub struct CodedBitstreamBuffer {
 
 impl CodedBitstreamBuffer {
     pub fn new(metadata: FrameMetadata, bitstream: Vec<u8>) -> Self {
-        Self {
-            metadata,
-            bitstream,
-        }
+        Self { metadata, bitstream }
     }
 }
 
@@ -251,11 +248,7 @@ pub(crate) mod tests {
 
                 let dist = (dot_col - col).powi(2) + (dot_row - row).powi(2);
 
-                let y = if dist < dot_size2 {
-                    0.0
-                } else {
-                    (row + col) / (width + height)
-                };
+                let y = if dist < dot_size2 { 0.0 } else { (row + col) / (width + height) };
 
                 let (u, v) = if dist < dot_size2 {
                     (0.5, 0.5)
@@ -416,11 +409,8 @@ pub(crate) mod tests {
                 panic!("Unrecognized frame layout used during test");
             }
 
-            let meta = FrameMetadata {
-                timestamp,
-                layout: frame.layout.clone(),
-                force_keyframe: false,
-            };
+            let meta =
+                FrameMetadata { timestamp, layout: frame.layout.clone(), force_keyframe: false };
 
             (meta, frame)
         })

@@ -108,10 +108,8 @@ fn supported_formats_for_rt_format(
     entrypoint: u32,
     image_formats: &[libva::VAImageFormat],
 ) -> anyhow::Result<HashSet<FormatMap>> {
-    let mut attrs = vec![VAConfigAttrib {
-        type_: VAConfigAttribType::VAConfigAttribRTFormat,
-        value: 0,
-    }];
+    let mut attrs =
+        vec![VAConfigAttrib { type_: VAConfigAttribType::VAConfigAttribRTFormat, value: 0 }];
 
     display.get_config_attributes(profile, entrypoint, &mut attrs)?;
 
@@ -135,11 +133,8 @@ fn supported_formats_for_rt_format(
     }
 
     // Only retain those that the hardware can actually map into.
-    supported_formats.retain(|&entry| {
-        image_formats
-            .iter()
-            .any(|fmt| fmt.fourcc == entry.va_fourcc)
-    });
+    supported_formats
+        .retain(|&entry| image_formats.iter().any(|fmt| fmt.fourcc == entry.va_fourcc));
 
     Ok(supported_formats)
 }
@@ -185,9 +180,7 @@ fn p01x_to_i01x(
     // VAAPI's Y samples are two byte little endian with the bottom six bits ignored. We need to
     // convert that to two byte little endian with top 6 bits ignored.
 
-    let src_y_lines = src[offsets[0]..]
-        .chunks(strides[0])
-        .map(|line| &line[..width * 2]);
+    let src_y_lines = src[offsets[0]..].chunks(strides[0]).map(|line| &line[..width * 2]);
     let dst_y_lines = dst.chunks_mut(width * 2);
 
     for (src_line, dst_line) in src_y_lines.zip(dst_y_lines).take(height) {
@@ -209,9 +202,7 @@ fn p01x_to_i01x(
     // Copy U and V and deinterleave into different planes.
     //
     // We need to perform the same bit shift as luma, but also to de-interleave the data.
-    let src_uv_lines = src[offsets[1]..]
-        .chunks(strides[1])
-        .map(|line| &line[..width * 2]);
+    let src_uv_lines = src[offsets[1]..].chunks(strides[1]).map(|line| &line[..width * 2]);
     let (dst_u_plane, dst_v_plane) = dst[dst_u_offset..].split_at_mut(dst_u_size);
     let dst_u_lines = dst_u_plane.chunks_mut(width);
     let dst_v_lines = dst_v_plane.chunks_mut(width);
@@ -256,9 +247,7 @@ fn y21x_to_i21x(
 
     // YUYV representation, i.e. 4 16-bit words per two Y samples meaning we have 4 * width bytes
     // of data per line.
-    let src_lines = src[offsets[0]..]
-        .chunks(strides[0])
-        .map(|line| &line[..width * 4]);
+    let src_lines = src[offsets[0]..].chunks(strides[0]).map(|line| &line[..width * 4]);
 
     let dst_y_size = width * 2 * height;
     let dst_u_size = uv_width * 2 * height;
@@ -269,14 +258,11 @@ fn y21x_to_i21x(
     let dst_u_lines = dst_u_plane.chunks_mut(uv_width * 2);
     let dst_v_lines = dst_v_plane.chunks_mut(uv_width * 2);
 
-    for (src_line, (dst_y_line, (dst_u_line, dst_v_line))) in src_lines
-        .zip(dst_y_lines.zip(dst_u_lines.zip(dst_v_lines)))
-        .take(height)
+    for (src_line, (dst_y_line, (dst_u_line, dst_v_line))) in
+        src_lines.zip(dst_y_lines.zip(dst_u_lines.zip(dst_v_lines))).take(height)
     {
         for (src, (dst_y, (dst_u, dst_v))) in src_line.chunks(8).zip(
-            dst_y_line
-                .chunks_mut(4)
-                .zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2))),
+            dst_y_line.chunks_mut(4).zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2))),
         ) {
             let y0 = LittleEndian::read_u16(&src[0..2]) >> sample_shift;
             let u = LittleEndian::read_u16(&src[2..4]) >> sample_shift;
@@ -303,9 +289,7 @@ fn y412_to_i412(
     strides: [usize; 3],
     offsets: [usize; 3],
 ) {
-    let src_lines = src[offsets[0]..]
-        .chunks(strides[0])
-        .map(|line| &line[..width * 8]);
+    let src_lines = src[offsets[0]..].chunks(strides[0]).map(|line| &line[..width * 8]);
 
     let dst_y_size = width * 2 * height;
     let dst_u_size = width * 2 * height;
@@ -316,14 +300,11 @@ fn y412_to_i412(
     let dst_u_lines = dst_u_plane.chunks_mut(width * 2);
     let dst_v_lines = dst_v_plane.chunks_mut(width * 2);
 
-    for (src_line, (dst_y_line, (dst_u_line, dst_v_line))) in src_lines
-        .zip(dst_y_lines.zip(dst_u_lines.zip(dst_v_lines)))
-        .take(height)
+    for (src_line, (dst_y_line, (dst_u_line, dst_v_line))) in
+        src_lines.zip(dst_y_lines.zip(dst_u_lines.zip(dst_v_lines))).take(height)
     {
         for (src, (dst_y, (dst_u, dst_v))) in src_line.chunks(8).zip(
-            dst_y_line
-                .chunks_mut(2)
-                .zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2))),
+            dst_y_line.chunks_mut(2).zip(dst_u_line.chunks_mut(2).zip(dst_v_line.chunks_mut(2))),
         ) {
             let y = LittleEndian::read_u16(&src[2..4]);
             let u = LittleEndian::read_u16(&src[0..2]);

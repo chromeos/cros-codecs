@@ -146,15 +146,10 @@ pub fn simple_playback_loop_userptr_frames(
 ) -> anyhow::Result<Vec<UserPtrFrame>> {
     let alloc_function = match stream_info.format {
         DecodedFormat::I420 | DecodedFormat::NV12 => &UserPtrFrame::new_nv12,
-        _ => anyhow::bail!(
-            "{:?} format is unsupported with user memory",
-            stream_info.format
-        ),
+        _ => anyhow::bail!("{:?} format is unsupported with user memory", stream_info.format),
     };
 
-    Ok((0..nb_frames)
-        .map(|_| alloc_function(stream_info.coded_resolution))
-        .collect::<Vec<_>>())
+    Ok((0..nb_frames).map(|_| alloc_function(stream_info.coded_resolution)).collect::<Vec<_>>())
 }
 
 /// A structure that holds user-allocated memory for a frame as well as its layout.
@@ -187,16 +182,8 @@ impl UserPtrFrame {
                 format: (Fourcc::from(b"NV12"), 0),
                 size: Resolution::from((width as u32, height as u32)),
                 planes: vec![
-                    PlaneLayout {
-                        buffer_index: 0,
-                        offset: 0,
-                        stride,
-                    },
-                    PlaneLayout {
-                        buffer_index: 0,
-                        offset: uv_start,
-                        stride,
-                    },
+                    PlaneLayout { buffer_index: 0, offset: 0, stride },
+                    PlaneLayout { buffer_index: 0, offset: uv_start, stride },
                 ],
             },
             uv_start.max(uv_size),
@@ -222,11 +209,7 @@ impl UserPtrFrame {
             })
             .collect();
 
-        Self {
-            buffers,
-            mem_layout,
-            layout,
-        }
+        Self { buffers, mem_layout, layout }
     }
 }
 

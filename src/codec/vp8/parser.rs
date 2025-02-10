@@ -241,16 +241,9 @@ impl Header {
             // Size of first partition.
             .chain(std::iter::once(self.first_part_size as usize))
             // Size of the partitions description area.
-            .chain(std::iter::once(
-                self.num_dct_partitions().saturating_sub(1) * 3,
-            ))
+            .chain(std::iter::once(self.num_dct_partitions().saturating_sub(1) * 3))
             // Size of other DCT partitions.
-            .chain(
-                self.partition_size
-                    .iter()
-                    .take(self.num_dct_partitions())
-                    .map(|s| *s as usize),
-            )
+            .chain(self.partition_size.iter().take(self.num_dct_partitions()).map(|s| *s as usize))
             .sum()
     }
 
@@ -262,9 +255,8 @@ impl Header {
 
         let mut reader = BitReader::new(bitstream, false);
 
-        let frame_tag = reader
-            .read_le::<u32>(3)
-            .map_err(|err| ParseUncompressedChunkError::IoError(err))?;
+        let frame_tag =
+            reader.read_le::<u32>(3).map_err(|err| ParseUncompressedChunkError::IoError(err))?;
 
         let mut header = Header {
             key_frame: (frame_tag & 0x1) == 0,
@@ -297,9 +289,7 @@ impl Header {
         }
 
         if reader.position() % 8 != 0 {
-            Err(ParseUncompressedChunkError::IoError(
-                "Misaligned VP8 header".into(),
-            ))
+            Err(ParseUncompressedChunkError::IoError("Misaligned VP8 header".into()))
         } else {
             header.data_chunk_size = (reader.position() / 8) as u8;
             Ok(header)
@@ -383,22 +373,18 @@ impl fmt::Display for ParseFrameError {
             ParseFrameError::ParseUncompressedChunk(x) => {
                 write!(f, "error while parsing uncompressed chunk of frame: {}", x)
             }
-            ParseFrameError::InvalidPartitionSize(x, y) => write!(
-                f,
-                "partition end {} is bigger than bitstream length {}",
-                x, y
-            ),
+            ParseFrameError::InvalidPartitionSize(x, y) => {
+                write!(f, "partition end {} is bigger than bitstream length {}", x, y)
+            }
             ParseFrameError::ParseFrameHeader(x) => {
                 write!(f, "error while parsing frame header: {}", x)
             }
             ParseFrameError::ComputePartitionSizes(x) => {
                 write!(f, "error while computing frames partitions sizes: {}", x)
             }
-            ParseFrameError::BitstreamTooShort(x, y) => write!(
-                f,
-                "bitstream is shorter ({} bytes) than computed length of frame {}",
-                x, y
-            ),
+            ParseFrameError::BitstreamTooShort(x, y) => {
+                write!(f, "bitstream is shorter ({} bytes) than computed length of frame {}", x, y)
+            }
         }
     }
 }
@@ -725,10 +711,7 @@ impl Parser {
         let first_part_end = header.data_chunk_size as usize + header.first_part_size as usize;
 
         if first_part_end > bitstream.len() {
-            return Err(ParseFrameError::InvalidPartitionSize(
-                first_part_end,
-                bitstream.len(),
-            ));
+            return Err(ParseFrameError::InvalidPartitionSize(first_part_end, bitstream.len()));
         }
 
         let compressed_area = &bitstream[header.data_chunk_size as usize..];
@@ -738,17 +721,10 @@ impl Parser {
 
         let frame_len = header.frame_len();
         if frame_len > bitstream.as_ref().len() {
-            return Err(ParseFrameError::BitstreamTooShort(
-                bitstream.as_ref().len(),
-                frame_len,
-            ));
+            return Err(ParseFrameError::BitstreamTooShort(bitstream.as_ref().len(), frame_len));
         }
 
-        Ok(Frame {
-            bitstream,
-            frame_len,
-            header,
-        })
+        Ok(Frame { bitstream, frame_len, header })
     }
 }
 
@@ -779,9 +755,7 @@ mod tests {
     #[test]
     fn gst_intra() {
         let mut parser = Parser::default();
-        let frame = parser
-            .parse_frame(VP8_TEST_0_INTRA)
-            .expect("Parsing a intra frame failed");
+        let frame = parser.parse_frame(VP8_TEST_0_INTRA).expect("Parsing a intra frame failed");
 
         assert!(frame.header.key_frame);
 
@@ -813,9 +787,7 @@ mod tests {
     #[test]
     fn gst_inter() {
         let mut parser = Parser::default();
-        let frame = parser
-            .parse_frame(VP8_TEST_0_INTER)
-            .expect("Parsing a inter frame failed");
+        let frame = parser.parse_frame(VP8_TEST_0_INTER).expect("Parsing a inter frame failed");
 
         assert!(!frame.header.key_frame);
 

@@ -143,11 +143,7 @@ impl PictureData {
     }
 
     pub fn set_reference(&mut self, reference: Reference) {
-        log::debug!(
-            "Set reference of POC {} to {:?}",
-            self.pic_order_cnt_val,
-            reference
-        );
+        log::debug!("Set reference of POC {} to {:?}", self.pic_order_cnt_val, reference);
 
         self.reference = reference;
     }

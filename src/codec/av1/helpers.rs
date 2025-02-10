@@ -169,18 +169,10 @@ pub fn resolve_divisor(d: i32) -> Result<(u32, i32), String> {
     let n = floor_log2(abs_d);
     let e = abs_d - (1 << n);
 
-    let f = if n > DIV_LUT_BITS {
-        round2(e, n - DIV_LUT_BITS)
-    } else {
-        e << (DIV_LUT_BITS - n)
-    };
+    let f = if n > DIV_LUT_BITS { round2(e, n - DIV_LUT_BITS) } else { e << (DIV_LUT_BITS - n) };
 
     let div_shift = n + DIV_LUT_PREC_BITS;
-    let div_factor = if d < 0 {
-        -DIV_LUT[f as usize]
-    } else {
-        DIV_LUT[f as usize]
-    };
+    let div_factor = if d < 0 { -DIV_LUT[f as usize] } else { DIV_LUT[f as usize] };
 
     Ok((div_shift, div_factor))
 }

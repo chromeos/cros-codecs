@@ -23,10 +23,7 @@ impl Default for EncoderConfig {
         // Artificially encoder configuration with intent to be widely supported.
         Self {
             bit_depth: BitDepth::Depth8,
-            resolution: Resolution {
-                width: 320,
-                height: 240,
-            },
+            resolution: Resolution { width: 320, height: 240 },
             pred_structure: PredictionStructure::LowDelay { limit: 2048 },
             initial_tunings: Default::default(),
         }

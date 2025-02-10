@@ -145,10 +145,7 @@ where
         input: Picture,
         frame_metadata: FrameMetadata,
     ) -> EncodeResult<Vec<Request>> {
-        log::trace!(
-            "New frame added to queue timestamp={}",
-            frame_metadata.timestamp
-        );
+        log::trace!("New frame added to queue timestamp={}", frame_metadata.timestamp);
         // Add new frame in the request queue and request new encoding if possible
         self.queue.push_back((input, frame_metadata));
         self.next_request()
@@ -242,10 +239,7 @@ mod tests {
             timestamp,
             layout: crate::FrameLayout {
                 format: (Fourcc::from(b"NV12"), 0),
-                size: crate::Resolution {
-                    width: 0,
-                    height: 0,
-                },
+                size: crate::Resolution { width: 0, height: 0 },
                 planes: vec![],
             },
             force_keyframe,
@@ -257,10 +251,7 @@ mod tests {
     fn test_tuning_delay() {
         let _ = env_logger::try_init();
 
-        let tunings_prev = Tunings {
-            framerate: 1,
-            ..Default::default()
-        };
+        let tunings_prev = Tunings { framerate: 1, ..Default::default() };
 
         let mut predictor: LowDelay<u32, u32, MockDelegate, MockRequest> = LowDelay {
             queue: Default::default(),
@@ -280,10 +271,7 @@ mod tests {
         requests.extend(predictor.new_frame(2, dummy_frame_meta(2, false)).unwrap());
         requests.extend(predictor.new_frame(3, dummy_frame_meta(3, false)).unwrap());
 
-        let tunings_next = Tunings {
-            framerate: 2,
-            ..Default::default()
-        };
+        let tunings_next = Tunings { framerate: 2, ..Default::default() };
 
         predictor.tune(tunings_next.clone()).unwrap();
 
@@ -337,11 +325,7 @@ mod tests {
 
         for i in 0..FRAME_COUNT {
             let keyframe = i % KEYFRAME_REQUEST_PERIOD == 0;
-            requests.extend(
-                predictor
-                    .new_frame(i, dummy_frame_meta(i as u64, keyframe))
-                    .unwrap(),
-            );
+            requests.extend(predictor.new_frame(i, dummy_frame_meta(i as u64, keyframe)).unwrap());
         }
 
         for i in 0..FRAME_COUNT {

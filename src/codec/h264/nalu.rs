@@ -65,12 +65,8 @@ where
             Some(offset) => offset,
             None => {
                 let cur_pos = cursor.position();
-                let end_pos = cursor
-                    .seek(SeekFrom::End(0))
-                    .map_err(|err| err.to_string())?;
-                let _ = cursor
-                    .seek(SeekFrom::Start(cur_pos))
-                    .map_err(|err| err.to_string())?;
+                let end_pos = cursor.seek(SeekFrom::End(0)).map_err(|err| err.to_string())?;
+                let _ = cursor.seek(SeekFrom::Start(cur_pos)).map_err(|err| err.to_string())?;
                 (end_pos - cur_pos) as usize
             } // Whatever data is left must be part of the current NALU
         };
@@ -102,9 +98,7 @@ where
 {
     fn find_start_code(data: &mut Cursor<&'a [u8]>, offset: usize) -> Option<usize> {
         // discard all zeroes until the start code pattern is found
-        data.get_ref()[offset..]
-            .windows(3)
-            .position(|window| window == [0x00, 0x00, 0x01])
+        data.get_ref()[offset..].windows(3).position(|window| window == [0x00, 0x00, 0x01])
     }
 
     pub fn into_owned(self) -> Nalu<'static, U> {

@@ -59,9 +59,7 @@ impl StatelessH264DecoderBackend for Backend {
     }
 
     fn submit_picture(&mut self, _: Self::Picture) -> StatelessBackendResult<Self::Handle> {
-        Ok(Handle {
-            handle: Rc::new(RefCell::new(Default::default())),
-        })
+        Ok(Handle { handle: Rc::new(RefCell::new(Default::default())) })
     }
 
     fn new_picture(&mut self, _: u64) -> NewPictureResult<()> {

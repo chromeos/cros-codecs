@@ -168,11 +168,7 @@ where
         frame_header: FrameHeaderObu,
         timestamp: u64,
     ) -> Result<(), DecodeError> {
-        log::debug!(
-            "Processing frame {} with timestamp {}",
-            self.codec.frame_count,
-            timestamp
-        );
+        log::debug!("Processing frame {} with timestamp {}", self.codec.frame_count, timestamp);
 
         if frame_header.show_existing_frame {
             let ref_frame = self.codec.reference_frames
@@ -210,9 +206,7 @@ where
 
     fn decode_tile_group(&mut self, tile_group: TileGroupObu) -> anyhow::Result<()> {
         let picture = match self.codec.current_pic.as_mut() {
-            Some(CurrentPicState::RegularFrame {
-                backend_picture, ..
-            }) => backend_picture,
+            Some(CurrentPicState::RegularFrame { backend_picture, .. }) => backend_picture,
             Some(CurrentPicState::ShowExistingFrame { .. }) => {
                 return Err(anyhow!("Broken stream: cannot decode a tile group for a frame with show_existing_frame set"));
             }
@@ -235,19 +229,12 @@ where
     }
 
     fn submit_frame(&mut self, timestamp: u64) -> anyhow::Result<()> {
-        log::debug!(
-            "Finishing frame {} with timestamp: {}",
-            self.codec.frame_count,
-            timestamp
-        );
+        log::debug!("Finishing frame {} with timestamp: {}", self.codec.frame_count, timestamp);
 
         let picture = self.codec.current_pic.take();
 
         let (handle, header) = match picture {
-            Some(CurrentPicState::RegularFrame {
-                header,
-                backend_picture,
-            }) => {
+            Some(CurrentPicState::RegularFrame { header, backend_picture }) => {
                 let handle = self.backend.submit_picture(backend_picture)?;
 
                 if self.blocking_mode == BlockingMode::Blocking {
@@ -301,10 +288,7 @@ where
             }
         }
 
-        self.codec
-            .parser
-            .ref_frame_update(&header)
-            .map_err(|err| anyhow!(err))?;
+        self.codec.parser.ref_frame_update(&header).map_err(|err| anyhow!(err))?;
         self.codec.frame_count += 1;
         Ok(())
     }
@@ -378,12 +362,7 @@ where
 
         /* We are in `Decoding` state if we reached here */
 
-        match self
-            .codec
-            .parser
-            .parse_obu(obu)
-            .map_err(|err| DecodeError::ParseFrameError(err))?
-        {
+        match self.codec.parser.parse_obu(obu).map_err(|err| DecodeError::ParseFrameError(err))? {
             ParsedObu::SequenceHeader(sequence) => {
                 let sequence_differs = match &self.codec.stream_info {
                     Some(old_stream_info) => *old_stream_info.seq_header != *sequence,
@@ -453,12 +432,9 @@ where
             }
             ParsedObu::Frame(frame) => {
                 let stream_info =
-                    self.codec
-                        .stream_info
-                        .as_ref()
-                        .ok_or(DecodeError::DecoderError(anyhow!(
-                            "broken stream: a picture is being decoded without a sequence header"
-                        )))?;
+                    self.codec.stream_info.as_ref().ok_or(DecodeError::DecoderError(anyhow!(
+                        "broken stream: a picture is being decoded without a sequence header"
+                    )))?;
                 if stream_info.render_width != frame.header.render_width
                     || stream_info.render_height != frame.header.render_height
                 {

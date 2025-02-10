@@ -199,8 +199,7 @@ where
         }
 
         // Do DPB management
-        self.codec
-            .update_references(&frame.header, &decoded_handle)?;
+        self.codec.update_references(&frame.header, &decoded_handle)?;
 
         if show_frame {
             self.ready_queue.push(decoded_handle);
@@ -269,10 +268,8 @@ where
 
     fn next_event(&mut self) -> Option<DecoderEvent<B::Handle>> {
         self.query_next_event(|decoder, hdr| {
-            decoder.coded_resolution = Resolution {
-                width: hdr.width as u32,
-                height: hdr.height as u32,
-            };
+            decoder.coded_resolution =
+                Resolution { width: hdr.width as u32, height: hdr.height as u32 };
         })
     }
 

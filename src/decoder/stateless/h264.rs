@@ -446,12 +446,7 @@ where
                 }
             }
 
-            _ => {
-                return Err(anyhow!(
-                    "Invalid pic_order_cnt_type: {}",
-                    sps.pic_order_cnt_type
-                ))
-            }
+            _ => return Err(anyhow!("Invalid pic_order_cnt_type: {}", sps.pic_order_cnt_type)),
         }
 
         match pic.field {
@@ -522,19 +517,12 @@ where
             ));
         }
 
-        let cur_field = if hdr.bottom_field_flag {
-            Field::Bottom
-        } else {
-            Field::Top
-        };
+        let cur_field = if hdr.bottom_field_flag { Field::Bottom } else { Field::Top };
 
         if !hdr.field_pic_flag || cur_field == prev_field_pic.field {
             let field = prev_field_pic.field;
 
-            return Err(FindFirstFieldError::ExpectedComplementaryField(
-                field.opposite(),
-                field,
-            ));
+            return Err(FindFirstFieldError::ExpectedComplementaryField(field.opposite(), field));
         }
 
         drop(prev_field_pic);
@@ -627,13 +615,9 @@ where
     ) -> anyhow::Result<()> {
         let long_term_pic_num = rplm.long_term_pic_num;
 
-        let handle = dpb
-            .find_long_term_with_long_term_pic_num(long_term_pic_num)
-            .with_context(|| {
-                format!(
-                    "No LongTerm reference found with long_term_pic_num {}",
-                    long_term_pic_num
-                )
+        let handle =
+            dpb.find_long_term_with_long_term_pic_num(long_term_pic_num).with_context(|| {
+                format!("No LongTerm reference found with long_term_pic_num {}", long_term_pic_num)
             })?;
 
         if *ref_idx_lx >= ref_pic_list_x.len() {
@@ -763,10 +747,7 @@ where
             _ => Vec::new(),
         };
 
-        Ok(RefPicLists {
-            ref_pic_list0,
-            ref_pic_list1,
-        })
+        Ok(RefPicLists { ref_pic_list0, ref_pic_list1 })
     }
 
     fn handle_memory_management_ops(&mut self, pic: &mut PictureData) -> Result<(), MmcoError> {
@@ -821,11 +802,8 @@ where
         let max_dpb_frames = sps.max_dpb_frames();
         let interlaced = !sps.frame_mbs_only_flag;
         let max_num_order_frames = sps.max_num_order_frames() as usize;
-        let max_num_reorder_frames = if max_num_order_frames > max_dpb_frames {
-            0
-        } else {
-            max_num_order_frames
-        };
+        let max_num_reorder_frames =
+            if max_num_order_frames > max_dpb_frames { 0 } else { max_num_order_frames };
 
         self.dpb.set_limits(max_dpb_frames, max_num_reorder_frames);
         self.dpb.set_interlaced(interlaced);
@@ -928,9 +906,7 @@ where
                 // marking is easier. This is inspired by the GStreamer implementation.
                 let (first_field, second_field) = PictureData::split_frame(pic);
 
-                self.codec
-                    .dpb
-                    .store_picture(first_field, Some(handle.clone()))?;
+                self.codec.dpb.store_picture(first_field, Some(handle.clone()))?;
                 self.codec.dpb.store_picture(second_field, Some(handle))?;
             } else {
                 self.codec.dpb.store_picture(pic.into_rc(), Some(handle))?;
@@ -969,9 +945,7 @@ where
             let mut pic = PictureData::new_non_existing(unused_short_term_frame_num, timestamp);
             self.codec.compute_pic_order_count(&mut pic, sps)?;
 
-            self.codec
-                .dpb
-                .update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
+            self.codec.dpb.update_pic_nums(unused_short_term_frame_num, max_frame_num, &pic);
 
             self.codec.dpb.sliding_window_marking(&mut pic, sps);
 
@@ -1052,10 +1026,8 @@ where
         }
 
         // Start by securing the backend picture before modifying our state.
-        let first_field = self
-            .codec
-            .find_first_field(&slice.header)
-            .context("while looking for first field")?;
+        let first_field =
+            self.codec.find_first_field(&slice.header).context("while looking for first field")?;
         let mut backend_pic = if let Some(first_field) = &first_field {
             self.backend.new_field_picture(timestamp, &first_field.1)
         } else {
@@ -1081,12 +1053,8 @@ where
             self.handle_frame_num_gap(&pps.sps, frame_num, timestamp)?;
         }
 
-        let pic = self.init_current_pic(
-            slice,
-            &pps.sps,
-            first_field.as_ref().map(|f| &f.0),
-            timestamp,
-        )?;
+        let pic =
+            self.init_current_pic(slice, &pps.sps, first_field.as_ref().map(|f| &f.0), timestamp)?;
         let ref_pic_lists = self.codec.dpb.build_ref_pic_lists(&pic);
 
         debug!("Decode picture POC {:?}", pic.pic_order_cnt);
@@ -1100,13 +1068,7 @@ where
             &slice.header,
         )?;
 
-        Ok(CurrentPicState {
-            pic,
-            pps,
-            backend_pic,
-            ref_pic_lists,
-            current_macroblock,
-        })
+        Ok(CurrentPicState { pic, pps, backend_pic, ref_pic_lists, current_macroblock })
     }
 
     // Check whether first_mb_in_slice increases monotonically for the current
@@ -1151,11 +1113,8 @@ where
         self.check_first_mb_in_slice(&mut cur_pic.current_macroblock, slice);
 
         // A slice can technically refer to another PPS.
-        let pps = self
-            .codec
-            .parser
-            .get_pps(slice.header.pic_parameter_set_id)
-            .context("Invalid PPS")?;
+        let pps =
+            self.codec.parser.get_pps(slice.header.pic_parameter_set_id).context("Invalid PPS")?;
         cur_pic.pps = Rc::clone(pps);
 
         // Make sure that no negotiation is possible mid-picture. How could it?
@@ -1164,12 +1123,8 @@ where
             anyhow::bail!("invalid stream: inter-frame renegotiation requested");
         }
 
-        let RefPicLists {
-            ref_pic_list0,
-            ref_pic_list1,
-        } = self
-            .codec
-            .create_ref_pic_lists(&cur_pic.pic, &slice.header, &cur_pic.ref_pic_lists)?;
+        let RefPicLists { ref_pic_list0, ref_pic_list1 } =
+            self.codec.create_ref_pic_lists(&cur_pic.pic, &slice.header, &cur_pic.ref_pic_lists)?;
 
         self.backend.decode_slice(
             &mut cur_pic.backend_pic,
@@ -1443,18 +1398,12 @@ pub mod tests {
 
     #[test]
     fn test_64x64_progressive_i_p_b_p_high_block() {
-        test_decoder_dummy(
-            &DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH,
-            BlockingMode::Blocking,
-        );
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH, BlockingMode::Blocking);
     }
 
     #[test]
     fn test_64x64_progressive_i_p_b_p_high_nonblock() {
-        test_decoder_dummy(
-            &DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH,
-            BlockingMode::NonBlocking,
-        );
+        test_decoder_dummy(&DECODE_64X64_PROGRESSIVE_I_P_B_P_HIGH, BlockingMode::NonBlocking);
     }
 
     /// Same as Chromium's test-25fps.h264

@@ -1889,11 +1889,7 @@ impl Parser {
                 s.bit_depth = BitDepth::Depth10;
             }
         } else if s.seq_profile as u32 <= 2 {
-            s.bit_depth = if cc.high_bitdepth {
-                BitDepth::Depth10
-            } else {
-                BitDepth::Depth8
-            };
+            s.bit_depth = if cc.high_bitdepth { BitDepth::Depth10 } else { BitDepth::Depth8 };
         }
 
         if s.seq_profile as u32 == 1 {
@@ -2016,10 +2012,7 @@ impl Parser {
     }
 
     fn parse_sequence_header_obu(&mut self, obu: &Obu) -> Result<Rc<SequenceHeaderObu>, String> {
-        let mut s = SequenceHeaderObu {
-            obu_header: obu.header.clone(),
-            ..Default::default()
-        };
+        let mut s = SequenceHeaderObu { obu_header: obu.header.clone(), ..Default::default() };
 
         let mut r = Reader::new(obu.as_ref());
         let profile = r.0.read_bits::<u32>(3)?;
@@ -2402,9 +2395,7 @@ impl Parser {
         }
 
         if self.tile_cols_log2 > 0 || self.tile_rows_log2 > 0 {
-            let num_bits: usize = (self.tile_rows_log2 + self.tile_cols_log2)
-                .try_into()
-                .unwrap();
+            let num_bits: usize = (self.tile_rows_log2 + self.tile_cols_log2).try_into().unwrap();
             ti.context_update_tile_id = r.0.read_bits::<u32>(num_bits)?;
 
             if ti.context_update_tile_id >= self.tile_rows * self.tile_cols {
@@ -2893,11 +2884,7 @@ impl Parser {
     fn setup_shear(warp_params: &[i32; 6]) -> Result<bool, String> {
         let mut default = true;
         for (i, param) in warp_params.iter().enumerate() {
-            let default_value = if i % 3 == 2 {
-                1 << WARPEDMODEL_PREC_BITS
-            } else {
-                0
-            };
+            let default_value = if i % 3 == 2 { 1 << WARPEDMODEL_PREC_BITS } else { 0 };
             if *param != default_value {
                 default = false;
                 break;
@@ -2971,11 +2958,8 @@ impl Parser {
 
         let prec_diff = WARPEDMODEL_PREC_BITS - prec_bits;
 
-        let (round, sub) = if (idx % 3) == 2 {
-            (1 << WARPEDMODEL_PREC_BITS, 1 << prec_bits)
-        } else {
-            (0, 0)
-        };
+        let (round, sub) =
+            if (idx % 3) == 2 { (1 << WARPEDMODEL_PREC_BITS, 1 << prec_bits) } else { (0, 0) };
 
         let mx = 1 << abs_bits;
         let r = (prev_gm_params[ref_frame][idx] >> prec_diff) - sub;
@@ -2997,11 +2981,7 @@ impl Parser {
         for ref_frame in ReferenceFrameType::Last as usize..=ReferenceFrameType::AltRef as usize {
             gm.gm_type[ref_frame] = WarpModelType::Identity;
             for i in 0..6 {
-                gm.gm_params[ref_frame][i] = if i % 3 == 2 {
-                    1 << WARPEDMODEL_PREC_BITS
-                } else {
-                    0
-                }
+                gm.gm_params[ref_frame][i] = if i % 3 == 2 { 1 << WARPEDMODEL_PREC_BITS } else { 0 }
             }
             gm.warp_valid[ref_frame] = true;
         }
@@ -3019,11 +2999,8 @@ impl Parser {
             for ref_frame in ReferenceFrameType::Last as usize..ReferenceFrameType::AltRef as usize
             {
                 for i in 0..5 {
-                    prev_gm_params[ref_frame][i] = if i % 3 == 2 {
-                        1 << WARPEDMODEL_PREC_BITS
-                    } else {
-                        0
-                    }
+                    prev_gm_params[ref_frame][i] =
+                        if i % 3 == 2 { 1 << WARPEDMODEL_PREC_BITS } else { 0 }
                 }
             }
         } else {
@@ -3031,9 +3008,7 @@ impl Parser {
             // 1. The variable prevFrame is set equal to ref_frame_idx[ primary_ref_frame ].
             // 2. PrevGmParams is set equal to SavedGmParams[ prevFrame ].
             let prev_frame = fh.ref_frame_idx[fh.primary_ref_frame as usize];
-            prev_gm_params = self.ref_info[prev_frame as usize]
-                .global_motion_params
-                .gm_params;
+            prev_gm_params = self.ref_info[prev_frame as usize].global_motion_params.gm_params;
         }
 
         for ref_frame in ReferenceFrameType::Last as usize..=ReferenceFrameType::AltRef as usize {
@@ -3172,9 +3147,7 @@ impl Parser {
             }
 
             // load_grain_params()
-            *fg = self.ref_info[fg.film_grain_params_ref_idx as usize]
-                .film_grain_params
-                .clone();
+            *fg = self.ref_info[fg.film_grain_params_ref_idx as usize].film_grain_params.clone();
 
             fg.grain_seed = temp_grain_seed;
 
@@ -3213,10 +3186,7 @@ impl Parser {
             for i in 0..fg.num_cb_points as usize {
                 fg.point_cb_value[i] = r.0.read_bits::<u32>(8)? as u8;
                 if i > 0 && fg.point_cb_value[i - 1] >= fg.point_cb_value[i] {
-                    return Err(format!(
-                        "Invalid point_cb_value[{}] {}",
-                        i, fg.point_cb_value[i]
-                    ));
+                    return Err(format!("Invalid point_cb_value[{}] {}", i, fg.point_cb_value[i]));
                 }
                 fg.point_cb_scaling[i] = r.0.read_bits::<u32>(8)? as u8;
             }
@@ -3225,10 +3195,7 @@ impl Parser {
             for i in 0..fg.num_cr_points as usize {
                 fg.point_cr_value[i] = r.0.read_bits::<u32>(8)? as u8;
                 if i > 0 && fg.point_cr_value[i - 1] >= fg.point_cr_value[i] {
-                    return Err(format!(
-                        "Invalid point_cr_value[{}] {}",
-                        i, fg.point_cr_value[i]
-                    ));
+                    return Err(format!("Invalid point_cr_value[{}] {}", i, fg.point_cr_value[i]));
                 }
                 fg.point_cr_scaling[i] = r.0.read_bits::<u32>(8)? as u8;
             }
@@ -3291,10 +3258,7 @@ impl Parser {
     fn parse_uncompressed_frame_header(&mut self, obu: &Obu) -> Result<FrameHeaderObu, String> {
         let mut r = Reader::new(obu.as_ref());
 
-        let mut fh = FrameHeaderObu {
-            obu_header: obu.header.clone(),
-            ..Default::default()
-        };
+        let mut fh = FrameHeaderObu { obu_header: obu.header.clone(), ..Default::default() };
 
         // Section 6.8.1: It is a requirement of bitstream conformance that a
         // sequence header OBU has been received before a frame header OBU.
@@ -3314,18 +3278,8 @@ impl Parser {
             enable_restoration,
             enable_warped_motion,
             color_config:
-                ColorConfig {
-                    subsampling_x,
-                    subsampling_y,
-                    separate_uv_delta_q,
-                    mono_chrome,
-                    ..
-                },
-            timing_info:
-                TimingInfo {
-                    equal_picture_interval,
-                    ..
-                },
+                ColorConfig { subsampling_x, subsampling_y, separate_uv_delta_q, mono_chrome, .. },
+            timing_info: TimingInfo { equal_picture_interval, .. },
             decoder_model_info:
                 DecoderModelInfo {
                     frame_presentation_time_length_minus_1,
@@ -3408,9 +3362,8 @@ impl Parser {
 
                 if film_grain_params_present {
                     // load_grain_params()
-                    fh.film_grain_params = self.ref_info[fh.frame_to_show_map_idx as usize]
-                        .film_grain_params
-                        .clone();
+                    fh.film_grain_params =
+                        self.ref_info[fh.frame_to_show_map_idx as usize].film_grain_params.clone();
                 }
 
                 // See 5.10.
@@ -3423,10 +3376,8 @@ impl Parser {
             }
 
             fh.frame_type = FrameType::try_from(r.0.read_bits::<u32>(2)?)?;
-            fh.frame_is_intra = matches!(
-                fh.frame_type,
-                FrameType::IntraOnlyFrame | FrameType::KeyFrame
-            );
+            fh.frame_is_intra =
+                matches!(fh.frame_type, FrameType::IntraOnlyFrame | FrameType::KeyFrame);
 
             fh.show_frame = r.0.read_bit()?;
 
@@ -3824,10 +3775,7 @@ impl Parser {
     }
 
     fn parse_tile_group_obu<'a>(&mut self, obu: Obu<'a>) -> Result<TileGroupObu<'a>, String> {
-        let mut tg = TileGroupObu {
-            obu,
-            ..Default::default()
-        };
+        let mut tg = TileGroupObu { obu, ..Default::default() };
 
         let mut r = Reader::new(tg.obu.as_ref());
 
@@ -3869,8 +3817,7 @@ impl Parser {
             if last_tile {
                 tile_size = u32::try_from(sz).unwrap();
             } else {
-                tile_size =
-                    r.0.read_le::<u32>(self.tile_size_bytes.try_into().unwrap())? + 1;
+                tile_size = r.0.read_le::<u32>(self.tile_size_bytes.try_into().unwrap())? + 1;
                 sz -= u64::from(tile_size + self.tile_size_bytes);
             }
 
@@ -3911,10 +3858,7 @@ impl Parser {
 
     fn parse_frame_obu<'a>(&mut self, obu: Obu<'a>) -> Result<FrameObu<'a>, String> {
         if !matches!(obu.header.obu_type, ObuType::Frame) {
-            return Err(format!(
-                "Expected a FrameOBU, got {:?}",
-                obu.header.obu_type
-            ));
+            return Err(format!("Expected a FrameOBU, got {:?}", obu.header.obu_type));
         }
 
         let frame_header_obu = self.parse_frame_header_obu(&obu)?;
@@ -3928,18 +3872,12 @@ impl Parser {
         };
         let tile_group_obu = self.parse_tile_group_obu(obu)?;
 
-        Ok(FrameObu {
-            header: frame_header_obu,
-            tile_group: tile_group_obu,
-        })
+        Ok(FrameObu { header: frame_header_obu, tile_group: tile_group_obu })
     }
 
     pub fn parse_frame_header_obu(&mut self, obu: &Obu) -> Result<FrameHeaderObu, String> {
         if !matches!(obu.header.obu_type, ObuType::FrameHeader | ObuType::Frame) {
-            return Err(format!(
-                "Expected a FrameHeaderOBU, got {:?}",
-                obu.header.obu_type
-            ));
+            return Err(format!("Expected a FrameHeaderOBU, got {:?}", obu.header.obu_type));
         }
 
         if self.seen_frame_header {
@@ -3978,12 +3916,7 @@ impl Parser {
         }
 
         let &SequenceHeaderObu {
-            color_config:
-                ColorConfig {
-                    subsampling_x,
-                    subsampling_y,
-                    ..
-                },
+            color_config: ColorConfig { subsampling_x, subsampling_y, .. },
             film_grain_params_present,
             bit_depth,
             ..
@@ -4035,15 +3968,13 @@ impl Parser {
     pub fn parse_obu<'a>(&mut self, obu: Obu<'a>) -> Result<ParsedObu<'a>, String> {
         match obu.header.obu_type {
             ObuType::Reserved => Ok(ParsedObu::Reserved),
-            ObuType::SequenceHeader => self
-                .parse_sequence_header_obu(&obu)
-                .map(ParsedObu::SequenceHeader),
-            ObuType::TemporalDelimiter => self
-                .parse_temporal_delimiter_obu()
-                .map(|_| ParsedObu::TemporalDelimiter),
-            ObuType::FrameHeader => self
-                .parse_frame_header_obu(&obu)
-                .map(ParsedObu::FrameHeader),
+            ObuType::SequenceHeader => {
+                self.parse_sequence_header_obu(&obu).map(ParsedObu::SequenceHeader)
+            }
+            ObuType::TemporalDelimiter => {
+                self.parse_temporal_delimiter_obu().map(|_| ParsedObu::TemporalDelimiter)
+            }
+            ObuType::FrameHeader => self.parse_frame_header_obu(&obu).map(ParsedObu::FrameHeader),
             ObuType::TileGroup => self.parse_tile_group_obu(obu).map(ParsedObu::TileGroup),
             ObuType::Metadata => Ok(ParsedObu::Metadata),
             ObuType::Frame => self.parse_frame_obu(obu).map(ParsedObu::Frame),
@@ -4089,10 +4020,7 @@ impl Default for Parser {
 
 impl Clone for Parser {
     fn clone(&self) -> Self {
-        let sequence_header = self
-            .sequence_header
-            .as_ref()
-            .map(|s| Rc::new((**s).clone()));
+        let sequence_header = self.sequence_header.as_ref().map(|s| Rc::new((**s).clone()));
 
         Self {
             stream_format: self.stream_format.clone(),
@@ -4239,14 +4167,8 @@ mod tests {
             StreamFormat::AnnexB(annexb_state) => annexb_state,
             _ => panic!("Wrong StreamFormat, expected AnnexB"),
         };
-        assert_eq!(
-            annexb_state.temporal_unit_consumed,
-            annexb_state.temporal_unit_size
-        );
-        assert_eq!(
-            annexb_state.frame_unit_consumed,
-            annexb_state.frame_unit_size
-        );
+        assert_eq!(annexb_state.temporal_unit_consumed, annexb_state.temporal_unit_size);
+        assert_eq!(annexb_state.frame_unit_consumed, annexb_state.frame_unit_size);
     }
 
     #[test]

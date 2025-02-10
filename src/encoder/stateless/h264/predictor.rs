@@ -74,9 +74,7 @@ impl<Picture, Reference> LowDelayH264<Picture, Reference> {
         trace!("beginning new sequence");
         let config = &self.delegate.config;
 
-        let mut sps = SpsBuilder::new()
-            .seq_parameter_set_id(0)
-            .profile_idc(config.profile);
+        let mut sps = SpsBuilder::new().seq_parameter_set_id(0).profile_idc(config.profile);
 
         // H.264 Table 6-1
         sps = match config.profile {
@@ -143,16 +141,8 @@ impl<Picture, Reference>
             self.new_sequence();
         }
 
-        let sps = self
-            .delegate
-            .sps
-            .clone()
-            .ok_or(EncodeError::InvalidInternalState)?;
-        let pps = self
-            .delegate
-            .pps
-            .clone()
-            .ok_or(EncodeError::InvalidInternalState)?;
+        let sps = self.delegate.sps.clone().ok_or(EncodeError::InvalidInternalState)?;
+        let pps = self.delegate.pps.clone().ok_or(EncodeError::InvalidInternalState)?;
 
         let dpb_meta = DpbEntryMeta {
             poc: ((self.counter * 2) & 0xffff) as u16,
@@ -215,16 +205,8 @@ impl<Picture, Reference>
             ref_list_0.push(Rc::clone(reference));
         }
 
-        let sps = self
-            .delegate
-            .sps
-            .clone()
-            .ok_or(EncodeError::InvalidInternalState)?;
-        let pps = self
-            .delegate
-            .pps
-            .clone()
-            .ok_or(EncodeError::InvalidInternalState)?;
+        let sps = self.delegate.sps.clone().ok_or(EncodeError::InvalidInternalState)?;
+        let pps = self.delegate.pps.clone().ok_or(EncodeError::InvalidInternalState)?;
 
         let dpb_meta = DpbEntryMeta {
             poc: ((self.counter * 2) & 0xffff) as u16,

@@ -72,16 +72,12 @@ impl<T: Clone> Dpb<T> {
 
     /// Gets the position of `needle` in the DPB, if any.
     fn get_position(&self, needle: &Rc<RefCell<PictureData>>) -> Option<usize> {
-        self.entries
-            .iter()
-            .position(|handle| Rc::ptr_eq(&handle.0, needle))
+        self.entries.iter().position(|handle| Rc::ptr_eq(&handle.0, needle))
     }
 
     /// Finds a reference picture in the DPB using `poc`.
     pub fn find_ref_by_poc(&self, poc: i32) -> Option<DpbEntry<T>> {
-        let position = self
-            .pictures()
-            .position(|p| p.is_ref() && p.pic_order_cnt_val == poc);
+        let position = self.pictures().position(|p| p.is_ref() && p.pic_order_cnt_val == poc);
 
         log::debug!("find_ref_by_poc: {}, found position {:?}", poc, position);
         Some(self.entries[position?].clone())
@@ -89,9 +85,8 @@ impl<T: Clone> Dpb<T> {
 
     /// Finds a reference picture in the DPB using `poc` and `mask`.
     pub fn find_ref_by_poc_masked(&self, poc: i32, mask: i32) -> Option<DpbEntry<T>> {
-        let position = self
-            .pictures()
-            .position(|p| p.is_ref() && p.pic_order_cnt_val & mask == poc);
+        let position =
+            self.pictures().position(|p| p.is_ref() && p.pic_order_cnt_val & mask == poc);
 
         log::debug!("find_ref_by_poc: {}, found position {:?}", poc, position);
         Some(self.entries[position?].clone())
@@ -103,11 +98,7 @@ impl<T: Clone> Dpb<T> {
             matches!(p.reference(), Reference::ShortTerm) && p.pic_order_cnt_val == poc
         });
 
-        log::debug!(
-            "find_short_term_ref_by_poc: {}, found position {:?}",
-            poc,
-            position
-        );
+        log::debug!("find_short_term_ref_by_poc: {}, found position {:?}", poc, position);
         Some(self.entries[position?].clone())
     }
 
@@ -262,11 +253,7 @@ impl<T: Clone> Dpb<T> {
 
     /// Returns all the references in the DPB.
     pub fn get_all_references(&self) -> Vec<DpbEntry<T>> {
-        self.entries
-            .iter()
-            .filter(|e| e.0.borrow().is_ref())
-            .cloned()
-            .collect()
+        self.entries.iter().filter(|e| e.0.borrow().is_ref()).cloned().collect()
     }
 }
 
@@ -274,21 +261,13 @@ impl<T: Clone> Default for Dpb<T> {
     fn default() -> Self {
         // See https://github.com/rust-lang/rust/issues/26925 on why this can't
         // be derived.
-        Self {
-            entries: Default::default(),
-            max_num_pics: Default::default(),
-        }
+        Self { entries: Default::default(), max_num_pics: Default::default() }
     }
 }
 
 impl<T: Clone> std::fmt::Debug for Dpb<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let pics = self
-            .entries
-            .iter()
-            .map(|h| &h.0)
-            .enumerate()
-            .collect::<Vec<_>>();
+        let pics = self.entries.iter().map(|h| &h.0).enumerate().collect::<Vec<_>>();
         f.debug_struct("Dpb")
             .field("pictures", &pics)
             .field("max_num_pics", &self.max_num_pics)

@@ -178,11 +178,7 @@ impl V4l2OutputBuffer {
             Rc<Queue<Output, BuffersAllocated<Vec<MmapHandle>>>>,
         >,
     ) -> Self {
-        Self {
-            queue,
-            handle,
-            length: 0,
-        }
+        Self { queue, handle, length: 0 }
     }
     pub fn index(&self) -> usize {
         self.handle.index()
@@ -191,10 +187,7 @@ impl V4l2OutputBuffer {
         self.length
     }
     pub fn write(&mut self, data: &[u8]) -> &mut Self {
-        let mut mapping = self
-            .handle
-            .get_plane_mapping(0)
-            .expect("Failed to mmap output buffer");
+        let mut mapping = self.handle.get_plane_mapping(0).expect("Failed to mmap output buffer");
 
         mapping.as_mut()[self.length..self.length + data.len()].copy_from_slice(data);
         self.length += data.len();
@@ -284,18 +277,14 @@ impl V4l2OutputQueue {
                 Ok(buffer) => Ok(V4l2OutputBuffer::new(self.clone(), buffer)),
                 Err(_) => Err(DecodeError::NotEnoughOutputBuffers(1)),
             },
-            _ => Err(DecodeError::DecoderError(anyhow!(
-                "Invalid hardware handle"
-            ))),
+            _ => Err(DecodeError::DecoderError(anyhow!("Invalid hardware handle"))),
         }
     }
     pub fn dequeue_buffer(&self) -> Result<(), QueueError> {
         let handle = &*self.handle.borrow();
         match handle {
             V4l2OutputQueueHandle::Streaming(handle) => {
-                handle
-                    .try_dequeue()
-                    .map_err(|_| QueueError::BufferDequeue)?;
+                handle.try_dequeue().map_err(|_| QueueError::BufferDequeue)?;
                 Ok(())
             }
             _ => Err(QueueError::State),
@@ -319,12 +308,7 @@ impl<H: PlaneHandle> V4l2CaptureBuffer<H> {
         visible_rect: Rect,
         format: Format,
     ) -> Self {
-        Self {
-            frame,
-            handle,
-            visible_rect,
-            format,
-        }
+        Self { frame, handle, visible_rect, format }
     }
     pub fn index(&self) -> usize {
         self.handle.data.index() as usize
@@ -345,12 +329,8 @@ impl<H: PlaneHandle> V4l2CaptureBuffer<H> {
     // TODO: Directly expose VideoFrame to the framework instead of doing an extra memcpy. We need
     // the VA-API changes to merge before we can do this.
     pub fn read(&self, data: &mut [u8]) {
-        let decoded_format: DecodedFormat = self
-            .format
-            .pixelformat
-            .to_string()
-            .parse()
-            .expect("Unable to output");
+        let decoded_format: DecodedFormat =
+            self.format.pixelformat.to_string().parse().expect("Unable to output");
 
         // TODO: Replace this with convert_video_frame() in the image_processing module when the
         // necessary conversions are merged.
@@ -504,17 +484,11 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
                     // TODO handle buffer dequeuing successfully, but having an error
                     // buffer.data.has_error();
                     let fourcc = Fourcc::from(self.format.pixelformat.to_u32());
-                    let resolution = Resolution {
-                        width: self.format.width,
-                        height: self.format.height,
-                    };
+                    let resolution =
+                        Resolution { width: self.format.width, height: self.format.height };
 
-                    let strides: Vec<usize> = self
-                        .format
-                        .plane_fmt
-                        .iter()
-                        .map(|x| x.bytesperline as usize)
-                        .collect();
+                    let strides: Vec<usize> =
+                        self.format.plane_fmt.iter().map(|x| x.bytesperline as usize).collect();
                     let native_handle = buffer.take_handles().unwrap();
                     Ok(Some(V4l2CaptureBuffer::new(
                         frame_import_cb(fourcc, resolution, strides, native_handle),
@@ -540,9 +514,8 @@ impl<H: PlaneHandle> V4l2CaptureQueue<H> {
             V4l2CaptureQueueHandle::Streaming(handle) => {
                 let buffer = handle.try_get_free_buffer()?;
                 log::debug!("capture buffer {} queued", buffer.index());
-                let native_handle = frame
-                    .to_native_handle()
-                    .expect("Failed to export VideoFrame to V4L2 handle");
+                let native_handle =
+                    frame.to_native_handle().expect("Failed to export VideoFrame to V4L2 handle");
                 buffer.queue_with_handles(native_handle)?;
             }
             _ => return Err(QueueError::State),

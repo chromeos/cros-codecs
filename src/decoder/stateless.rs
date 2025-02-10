@@ -206,11 +206,7 @@ where
     /// `apply_format` is a closure called when the object is dropped, and is responsible for
     /// applying the format and allowing decoding to resume.
     fn new(decoder: &'a mut D, format_hint: FH, apply_format: F) -> Self {
-        Self {
-            decoder,
-            format_hint,
-            apply_format,
-        }
+        Self { decoder, format_hint, apply_format }
     }
 }
 
@@ -388,11 +384,7 @@ where
     }
 
     fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut Self::FramePool> {
-        self.0
-            .frame_pool(layer)
-            .into_iter()
-            .map(|p| p as &mut Self::FramePool)
-            .collect()
+        self.0.frame_pool(layer).into_iter().map(|p| p as &mut Self::FramePool).collect()
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {
@@ -503,16 +495,10 @@ where
         let epoll_fd =
             Epoll::new(EpollCreateFlags::empty()).map_err(NewStatelessDecoderError::Epoll)?;
         epoll_fd
-            .add(
-                ready_queue.poll_fd(),
-                EpollEvent::new(EpollFlags::EPOLLIN, 1),
-            )
+            .add(ready_queue.poll_fd(), EpollEvent::new(EpollFlags::EPOLLIN, 1))
             .map_err(NewStatelessDecoderError::EpollAdd)?;
         epoll_fd
-            .add(
-                awaiting_format_event.as_fd(),
-                EpollEvent::new(EpollFlags::EPOLLIN, 2),
-            )
+            .add(awaiting_format_event.as_fd(), EpollEvent::new(EpollFlags::EPOLLIN, 2))
             .map_err(NewStatelessDecoderError::EpollAdd)?;
 
         Ok(Self {
@@ -545,27 +531,22 @@ where
     {
         // The next event is either the next frame, or, if we are awaiting negotiation, the format
         // change event that will allow us to keep going.
-        self.ready_queue
-            .next()
-            .map(DecoderEvent::FrameReady)
-            .or_else(|| {
-                if let DecodingState::AwaitingFormat(format_info) = &self.decoding_state {
-                    Some(DecoderEvent::FormatChanged(Box::new(
-                        StatelessDecoderFormatNegotiator::new(
-                            self,
-                            format_info.clone(),
-                            move |decoder, sps| {
-                                on_format_changed(decoder, sps);
-                                decoder.decoding_state = DecodingState::Decoding;
-                                // Stop signaling the format change event.
-                                decoder.awaiting_format_event.read().unwrap();
-                            },
-                        ),
-                    )))
-                } else {
-                    None
-                }
-            })
+        self.ready_queue.next().map(DecoderEvent::FrameReady).or_else(|| {
+            if let DecodingState::AwaitingFormat(format_info) = &self.decoding_state {
+                Some(DecoderEvent::FormatChanged(Box::new(StatelessDecoderFormatNegotiator::new(
+                    self,
+                    format_info.clone(),
+                    move |decoder, sps| {
+                        on_format_changed(decoder, sps);
+                        decoder.decoding_state = DecodingState::Decoding;
+                        // Stop signaling the format change event.
+                        decoder.awaiting_format_event.read().unwrap();
+                    },
+                ))))
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -577,9 +558,7 @@ where
     fn try_format(&mut self, format: crate::DecodedFormat) -> anyhow::Result<()> {
         match &self.decoding_state {
             DecodingState::AwaitingFormat(sps) => self.backend.try_format(sps, format),
-            _ => Err(anyhow::anyhow!(
-                "current decoder state does not allow format change"
-            )),
+            _ => Err(anyhow::anyhow!("current decoder state does not allow format change")),
         }
     }
 }

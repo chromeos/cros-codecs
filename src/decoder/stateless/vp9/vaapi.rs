@@ -63,10 +63,9 @@ fn get_rt_format(
             }
         }
         Profile::Profile2 => match bit_depth {
-            BitDepth::Depth8 => Err(anyhow!(
-                "Unsupported bit depth for profile 2: {:?}",
-                bit_depth
-            )),
+            BitDepth::Depth8 => {
+                Err(anyhow!("Unsupported bit depth for profile 2: {:?}", bit_depth))
+            }
             BitDepth::Depth10 => Ok(libva::VA_RT_FORMAT_YUV420_10),
             BitDepth::Depth12 => Ok(libva::VA_RT_FORMAT_YUV420_12),
         },
@@ -116,12 +115,7 @@ impl VaStreamInfo for &Header {
     }
 
     fn rt_format(&self) -> anyhow::Result<u32> {
-        get_rt_format(
-            self.profile,
-            self.bit_depth,
-            self.subsampling_x,
-            self.subsampling_y,
-        )
+        get_rt_format(self.profile, self.bit_depth, self.subsampling_x, self.subsampling_y)
     }
 
     fn min_num_surfaces(&self) -> usize {
@@ -169,11 +163,7 @@ fn build_pic_param(
     let lf = &hdr.lf;
     let seg = &hdr.seg;
 
-    let seg_pred_prob = if seg.temporal_update {
-        seg.pred_probs
-    } else {
-        [0xff, 0xff, 0xff]
-    };
+    let seg_pred_prob = if seg.temporal_update { seg.pred_probs } else { [0xff, 0xff, 0xff] };
 
     let pic_param = libva::PictureParameterBufferVP9::new(
         hdr.width.try_into().unwrap(),
@@ -192,9 +182,7 @@ fn build_pic_param(
         hdr.bit_depth as u8,
     );
 
-    Ok(libva::BufferType::PictureParameter(
-        libva::PictureParameter::VP9(pic_param),
-    ))
+    Ok(libva::BufferType::PictureParameter(libva::PictureParameter::VP9(pic_param)))
 }
 
 fn build_slice_param(
@@ -230,14 +218,14 @@ fn build_slice_param(
         Err(_) => panic!("Invalid segment parameters"),
     };
 
-    Ok(libva::BufferType::SliceParameter(
-        libva::SliceParameter::VP9(libva::SliceParameterBufferVP9::new(
+    Ok(libva::BufferType::SliceParameter(libva::SliceParameter::VP9(
+        libva::SliceParameterBufferVP9::new(
             slice_size as u32,
             0,
             libva::VA_SLICE_DATA_FLAG_ALL,
             seg_params,
-        )),
-    ))
+        ),
+    )))
 }
 
 impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<Vp9> for VaapiBackend<M> {
@@ -251,9 +239,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
 
     fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
         let highest_pool = self.highest_pool();
-        let surface = highest_pool
-            .get_surface()
-            .ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let surface = highest_pool.get_surface().ok_or(NewPictureError::OutOfOutputBuffers)?;
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
@@ -271,12 +257,8 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessVp9DecoderBackend for VaapiB
         let metadata = self.metadata_state.get_parsed()?;
         let context = &metadata.context;
 
-        let reference_frames: [u32; NUM_REF_FRAMES] = reference_frames
-            .iter()
-            .map(va_surface_id)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+        let reference_frames: [u32; NUM_REF_FRAMES] =
+            reference_frames.iter().map(va_surface_id).collect::<Vec<_>>().try_into().unwrap();
 
         let pic_param = context
             .create_buffer(build_pic_param(hdr, reference_frames)?)
@@ -366,11 +348,7 @@ mod tests {
     #[ignore]
     fn test_25fps_block() {
         use crate::decoder::stateless::vp9::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(
-            &DECODE_TEST_25FPS,
-            DecodedFormat::NV12,
-            BlockingMode::Blocking,
-        );
+        test_decoder_vaapi(&DECODE_TEST_25FPS, DecodedFormat::NV12, BlockingMode::Blocking);
     }
 
     #[test]
@@ -378,11 +356,7 @@ mod tests {
     #[ignore]
     fn test_25fps_nonblock() {
         use crate::decoder::stateless::vp9::tests::DECODE_TEST_25FPS;
-        test_decoder_vaapi(
-            &DECODE_TEST_25FPS,
-            DecodedFormat::NV12,
-            BlockingMode::NonBlocking,
-        );
+        test_decoder_vaapi(&DECODE_TEST_25FPS, DecodedFormat::NV12, BlockingMode::NonBlocking);
     }
 
     #[test]
@@ -522,10 +496,7 @@ mod tests {
 
         assert_eq!(pic_param.inner().frame_width, 320);
         assert_eq!(pic_param.inner().frame_height, 240);
-        assert_eq!(
-            pic_param.inner().reference_frames,
-            [libva::VA_INVALID_SURFACE; NUM_REF_FRAMES]
-        );
+        assert_eq!(pic_param.inner().reference_frames, [libva::VA_INVALID_SURFACE; NUM_REF_FRAMES]);
 
         // Safe because this bitfield is initialized by the decoder.
         assert_eq!(unsafe { pic_param.inner().pic_fields.value }, unsafe {
@@ -549,10 +520,7 @@ mod tests {
 
         assert_eq!(slice_param.inner().slice_data_size, 10674);
         assert_eq!(slice_param.inner().slice_data_offset, 0);
-        assert_eq!(
-            slice_param.inner().slice_data_flag,
-            libva::VA_SLICE_DATA_FLAG_ALL
-        );
+        assert_eq!(slice_param.inner().slice_data_flag, libva::VA_SLICE_DATA_FLAG_ALL);
 
         for seg_param in &slice_param.inner().seg_param {
             // Safe because this bitfield is initialized by the decoder.
@@ -610,18 +578,12 @@ mod tests {
 
         assert_eq!(slice_param.inner().slice_data_size, 2390);
         assert_eq!(slice_param.inner().slice_data_offset, 0);
-        assert_eq!(
-            slice_param.inner().slice_data_flag,
-            libva::VA_SLICE_DATA_FLAG_ALL
-        );
+        assert_eq!(slice_param.inner().slice_data_flag, libva::VA_SLICE_DATA_FLAG_ALL);
 
         for seg_param in &slice_param.inner().seg_param {
             // Safe because this bitfield is initialized by the decoder.
             assert_eq!(unsafe { seg_param.segment_flags.value }, 0);
-            assert_eq!(
-                seg_param.filter_level,
-                [[16, 0], [15, 15], [14, 14], [14, 14]]
-            );
+            assert_eq!(seg_param.filter_level, [[16, 0], [15, 15], [14, 14], [14, 14]]);
             assert_eq!(seg_param.luma_ac_quant_scale, 136);
             assert_eq!(seg_param.luma_dc_quant_scale, 111);
             assert_eq!(seg_param.chroma_ac_quant_scale, 136);
@@ -672,18 +634,12 @@ mod tests {
 
         assert_eq!(slice_param.inner().slice_data_size, 108);
         assert_eq!(slice_param.inner().slice_data_offset, 0);
-        assert_eq!(
-            slice_param.inner().slice_data_flag,
-            libva::VA_SLICE_DATA_FLAG_ALL
-        );
+        assert_eq!(slice_param.inner().slice_data_flag, libva::VA_SLICE_DATA_FLAG_ALL);
 
         for seg_param in &slice_param.inner().seg_param {
             // Safe because this bitfield is initialized by the decoder.
             assert_eq!(unsafe { seg_param.segment_flags.value }, 0);
-            assert_eq!(
-                seg_param.filter_level,
-                [[38, 0], [36, 36], [34, 34], [34, 34]]
-            );
+            assert_eq!(seg_param.filter_level, [[38, 0], [36, 36], [34, 34], [34, 34]]);
             assert_eq!(seg_param.luma_ac_quant_scale, 864);
             assert_eq!(seg_param.luma_dc_quant_scale, 489);
             assert_eq!(seg_param.chroma_ac_quant_scale, 864);

@@ -244,17 +244,11 @@ where
 
     fn process_loop(&mut self) {
         self.epoll_fd
-            .add(
-                self.decoder.poll_fd(),
-                EpollEvent::new(EpollFlags::EPOLLIN, 1),
-            )
+            .add(self.decoder.poll_fd(), EpollEvent::new(EpollFlags::EPOLLIN, 1))
             .map_err(C2DecoderPollErrorWrapper::EpollAdd)
             .unwrap();
         self.epoll_fd
-            .add(
-                self.awaiting_job_event.as_fd(),
-                EpollEvent::new(EpollFlags::EPOLLIN, 2),
-            )
+            .add(self.awaiting_job_event.as_fd(), EpollEvent::new(EpollFlags::EPOLLIN, 2))
             .map_err(C2DecoderPollErrorWrapper::EpollAdd)
             .unwrap();
 

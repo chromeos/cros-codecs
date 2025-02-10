@@ -123,10 +123,7 @@ struct NegotiationInfo {
 impl From<&Sps> for NegotiationInfo {
     fn from(sps: &Sps) -> Self {
         NegotiationInfo {
-            coded_resolution: Resolution {
-                width: sps.width().into(),
-                height: sps.height().into(),
-            },
+            coded_resolution: Resolution { width: sps.width().into(), height: sps.height().into() },
             general_profile_idc: sps.profile_tier_level.general_profile_idc,
             bit_depth_luma_minus8: sps.bit_depth_luma_minus8,
             bit_depth_chroma_minus8: sps.bit_depth_chroma_minus8,
@@ -194,10 +191,8 @@ where
 
         let rplm = &hdr.ref_pic_list_modification;
 
-        let num_rps_curr_temp_list0 = std::cmp::max(
-            u32::from(hdr.num_ref_idx_l0_active_minus1) + 1,
-            hdr.num_pic_total_curr,
-        );
+        let num_rps_curr_temp_list0 =
+            std::cmp::max(u32::from(hdr.num_ref_idx_l0_active_minus1) + 1, hdr.num_pic_total_curr);
 
         // This could be simplified using a Vec, but lets not change the
         // algorithm from the spec too much.
@@ -209,9 +204,8 @@ where
         while r_idx < num_rps_curr_temp_list0 {
             let mut i = 0;
             while i < self.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_st_curr_before[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
+                ref_pic_list_temp0[r_idx as usize] =
+                    self.ref_pic_set_st_curr_before[i].clone().map(RefPicListEntry::DpbEntry);
 
                 i += 1;
                 r_idx += 1;
@@ -219,9 +213,8 @@ where
 
             let mut i = 0;
             while i < self.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_st_curr_after[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
+                ref_pic_list_temp0[r_idx as usize] =
+                    self.ref_pic_set_st_curr_after[i].clone().map(RefPicListEntry::DpbEntry);
 
                 i += 1;
                 r_idx += 1;
@@ -229,9 +222,8 @@ where
 
             let mut i = 0;
             while i < self.num_poc_lt_curr && r_idx < num_rps_curr_temp_list0 {
-                ref_pic_list_temp0[r_idx as usize] = self.ref_pic_set_lt_curr[i]
-                    .clone()
-                    .map(RefPicListEntry::DpbEntry);
+                ref_pic_list_temp0[r_idx as usize] =
+                    self.ref_pic_set_lt_curr[i].clone().map(RefPicListEntry::DpbEntry);
 
                 i += 1;
                 r_idx += 1;
@@ -280,27 +272,24 @@ where
             while r_idx < num_rps_curr_temp_list1 {
                 let mut i = 0;
                 while i < self.num_poc_st_curr_after && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_st_curr_after[i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
+                    ref_pic_list_temp1[r_idx as usize] =
+                        self.ref_pic_set_st_curr_after[i].clone().map(RefPicListEntry::DpbEntry);
                     i += 1;
                     r_idx += 1;
                 }
 
                 let mut i = 0;
                 while i < self.num_poc_st_curr_before && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_st_curr_before[i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
+                    ref_pic_list_temp1[r_idx as usize] =
+                        self.ref_pic_set_st_curr_before[i].clone().map(RefPicListEntry::DpbEntry);
                     i += 1;
                     r_idx += 1;
                 }
 
                 let mut i = 0;
                 while i < self.num_poc_lt_curr && r_idx < num_rps_curr_temp_list1 {
-                    ref_pic_list_temp1[r_idx as usize] = self.ref_pic_set_lt_curr[i]
-                        .clone()
-                        .map(RefPicListEntry::DpbEntry);
+                    ref_pic_list_temp1[r_idx as usize] =
+                        self.ref_pic_set_lt_curr[i].clone().map(RefPicListEntry::DpbEntry);
                     i += 1;
                     r_idx += 1;
                 }
@@ -380,10 +369,7 @@ struct ReferencePicLists<T> {
 
 impl<T> Default for ReferencePicLists<T> {
     fn default() -> Self {
-        Self {
-            ref_pic_list0: Default::default(),
-            ref_pic_list1: Default::default(),
-        }
+        Self { ref_pic_list0: Default::default(), ref_pic_list1: Default::default() }
     }
 }
 
@@ -492,10 +478,8 @@ where
 
         let max_dpb_size = std::cmp::min(sps.max_dpb_size(), 16);
         self.codec.dpb.set_max_num_pics(max_dpb_size);
-        self.coded_resolution = Resolution {
-            width: u32::from(sps.width()),
-            height: u32::from(sps.height()),
-        };
+        self.coded_resolution =
+            Resolution { width: u32::from(sps.width()), height: u32::from(sps.height()) };
         Ok(())
     }
 
@@ -763,15 +747,10 @@ where
 
         log::debug!(
             "Adding POCs {:?} to the ready queue while draining",
-            pics.iter()
-                .map(|p| p.0.borrow().pic_order_cnt_val)
-                .collect::<Vec<_>>()
+            pics.iter().map(|p| p.0.borrow().pic_order_cnt_val).collect::<Vec<_>>()
         );
 
-        log::trace!(
-            "{:#?}",
-            pics.iter().map(|p| p.0.borrow()).collect::<Vec<_>>()
-        );
+        log::trace!("{:#?}", pics.iter().map(|p| p.0.borrow()).collect::<Vec<_>>());
 
         self.ready_queue.extend(pics.into_iter().map(|h| h.1));
         self.codec.dpb.clear();
@@ -807,11 +786,7 @@ where
             BumpingType::AfterDecoding => Dpb::<B::Handle>::needs_additional_bumping,
         };
 
-        let sps = self
-            .codec
-            .parser
-            .get_sps(self.codec.cur_sps_id)
-            .context("Invalid SPS id")?;
+        let sps = self.codec.parser.get_sps(self.codec.cur_sps_id).context("Invalid SPS id")?;
 
         while needs_bumping(&mut self.codec.dpb, sps) {
             match self.codec.dpb.bump(false) {
@@ -840,16 +815,10 @@ where
 
             log::debug!(
                 "Adding POCs {:?} to the ready queue before decoding",
-                bumped
-                    .iter()
-                    .map(|p| p.0.borrow().pic_order_cnt_val)
-                    .collect::<Vec<_>>()
+                bumped.iter().map(|p| p.0.borrow().pic_order_cnt_val).collect::<Vec<_>>()
             );
 
-            log::trace!(
-                "{:#?}",
-                bumped.iter().map(|p| p.0.borrow()).collect::<Vec<_>>()
-            );
+            log::trace!("{:#?}", bumped.iter().map(|p| p.0.borrow()).collect::<Vec<_>>());
 
             let bumped = bumped.into_iter().map(|p| p.1).collect::<Vec<_>>();
             self.ready_queue.extend(bumped);
@@ -925,11 +894,7 @@ where
             slice,
         )?;
 
-        Ok(Some(CurrentPicState {
-            pic,
-            backend_pic,
-            ref_pic_lists: Default::default(),
-        }))
+        Ok(Some(CurrentPicState { pic, backend_pic, ref_pic_lists: Default::default() }))
     }
 
     fn update_current_set_ids(&mut self, pps_id: u8) -> anyhow::Result<()> {
@@ -956,10 +921,7 @@ where
             .context("invalid PPS ID")?;
         let sps = pps.sps.as_ref();
 
-        pic.ref_pic_lists = self
-            .codec
-            .rps
-            .build_ref_pic_lists(&slice.header, pps, &pic.pic)?;
+        pic.ref_pic_lists = self.codec.rps.build_ref_pic_lists(&slice.header, pps, &pic.pic)?;
 
         // Make sure that no negotiation is possible mid-picture. How could it?
         // We'd lose the context with the previous slices on it.
@@ -1006,16 +968,10 @@ where
 
         log::debug!(
             "Adding POCs {:?} to the ready queue after decoding",
-            bumped
-                .iter()
-                .map(|p| p.0.borrow().pic_order_cnt_val)
-                .collect::<Vec<_>>()
+            bumped.iter().map(|p| p.0.borrow().pic_order_cnt_val).collect::<Vec<_>>()
         );
 
-        log::trace!(
-            "{:#?}",
-            bumped.iter().map(|p| p.0.borrow()).collect::<Vec<_>>()
-        );
+        log::trace!("{:#?}", bumped.iter().map(|p| p.0.borrow()).collect::<Vec<_>>());
 
         let bumped = bumped.into_iter().map(|p| p.1).collect::<Vec<_>>();
         self.ready_queue.extend(bumped);
@@ -1028,11 +984,9 @@ where
         renegotiation_type: RenegotiationType,
     ) -> anyhow::Result<()> {
         let sps = match renegotiation_type {
-            RenegotiationType::CurrentSps => self
-                .codec
-                .parser
-                .get_sps(self.codec.cur_sps_id)
-                .context("Invalid SPS")?,
+            RenegotiationType::CurrentSps => {
+                self.codec.parser.get_sps(self.codec.cur_sps_id).context("Invalid SPS")?
+            }
             RenegotiationType::NewSps(sps) => sps,
         };
 
@@ -1040,11 +994,9 @@ where
             // Make sure all the frames we decoded so far are in the ready queue.
             self.drain()?;
             let sps = match renegotiation_type {
-                RenegotiationType::CurrentSps => self
-                    .codec
-                    .parser
-                    .get_sps(self.codec.cur_sps_id)
-                    .context("Invalid SPS")?,
+                RenegotiationType::CurrentSps => {
+                    self.codec.parser.get_sps(self.codec.cur_sps_id).context("Invalid SPS")?
+                }
                 RenegotiationType::NewSps(sps) => sps,
             };
             self.backend.new_sequence(sps)?;
@@ -1055,11 +1007,7 @@ where
     }
 
     fn process_nalu(&mut self, timestamp: u64, nalu: Nalu) -> Result<(), DecodeError> {
-        log::debug!(
-            "Processing NALU {:?}, length is {}",
-            nalu.header.type_,
-            nalu.size
-        );
+        log::debug!("Processing NALU {:?}, length is {}", nalu.header.type_, nalu.size);
 
         match nalu.header.type_ {
             NaluType::VpsNut => {

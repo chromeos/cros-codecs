@@ -88,9 +88,7 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
         let which = request.which();
         ioctl::s_ext_ctrls(&self.device, which, &mut ctrl).expect("Failed to set output control");
 
-        let handle = Rc::new(RefCell::new(BackendHandle {
-            picture: picture.clone(),
-        }));
+        let handle = Rc::new(RefCell::new(BackendHandle { picture: picture.clone() }));
 
         let mut reference_pictures = Vec::<Rc<RefCell<V4l2Picture>>>::new();
         for frame in reference_frames {
@@ -104,10 +102,7 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
         request.write(bitstream);
         request.submit();
 
-        Ok(V4l2StatelessDecoderHandle {
-            handle: handle,
-            stream_info: self.stream_info.clone(),
-        })
+        Ok(V4l2StatelessDecoderHandle { handle: handle, stream_info: self.stream_info.clone() })
     }
 }
 

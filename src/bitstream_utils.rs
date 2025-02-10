@@ -217,10 +217,7 @@ impl<'a> BitReader<'a> {
     pub fn read_ue_bounded<U: TryFrom<u32>>(&mut self, min: u32, max: u32) -> Result<U, String> {
         let ue = self.read_ue()?;
         if ue > max || ue < min {
-            Err(format!(
-                "Value out of bounds: expected {} - {}, got {}",
-                min, max, ue
-            ))
+            Err(format!("Value out of bounds: expected {} - {}, got {}", min, max, ue))
         } else {
             Ok(U::try_from(ue).map_err(|_| String::from("Conversion error"))?)
         }
@@ -247,10 +244,7 @@ impl<'a> BitReader<'a> {
     pub fn read_se_bounded<U: TryFrom<i32>>(&mut self, min: i32, max: i32) -> Result<U, String> {
         let se = self.read_se()?;
         if se < min || se > max {
-            Err(format!(
-                "Value out of bounds, expected between {}-{}, got {}",
-                min, max, se
-            ))
+            Err(format!("Value out of bounds, expected between {}-{}, got {}", min, max, se))
         } else {
             Ok(U::try_from(se).map_err(|_| String::from("Conversion error"))?)
         }
@@ -275,9 +269,7 @@ impl<'a> BitReader<'a> {
 
     fn get_byte(&mut self) -> Result<u8, GetByteError> {
         let mut buf = [0u8; 1];
-        self.data
-            .read_exact(&mut buf)
-            .map_err(|_| GetByteError::OutOfBits)?;
+        self.data.read_exact(&mut buf).map_err(|_| GetByteError::OutOfBits)?;
         Ok(buf[0])
     }
 
@@ -334,10 +326,7 @@ impl<'a> Iterator for IvfIterator<'a> {
         self.cursor.seek(std::io::SeekFrom::Current(8)).ok()?;
 
         let start = self.cursor.position() as usize;
-        let _ = self
-            .cursor
-            .seek(std::io::SeekFrom::Current(len as i64))
-            .ok()?;
+        let _ = self.cursor.seek(std::io::SeekFrom::Current(len as i64)).ok()?;
         let end = self.cursor.position() as usize;
 
         Some(&self.cursor.get_ref()[start..end])
@@ -484,11 +473,7 @@ pub struct BitWriter<W: Write> {
 
 impl<W: Write> BitWriter<W> {
     pub fn new(writer: W) -> Self {
-        Self {
-            out: writer,
-            curr_byte: 0,
-            nth_bit: 0,
-        }
+        Self { out: writer, curr_byte: 0, nth_bit: 0 }
     }
 
     /// Writes fixed bit size integer (up to 32 bit)
@@ -607,17 +592,13 @@ mod tests {
 
     #[test]
     fn test_ivf_frame_header() {
-        let mut hdr = IvfFrameHeader {
-            frame_size: 199249,
-            timestamp: 0,
-        };
+        let mut hdr = IvfFrameHeader { frame_size: 199249, timestamp: 0 };
 
         let mut buf = Vec::new();
         hdr.writo_into(&mut buf).unwrap();
 
-        const EXPECTED: [u8; 12] = [
-            0x51, 0x0a, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ];
+        const EXPECTED: [u8; 12] =
+            [0x51, 0x0a, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
         assert_eq!(&buf, &EXPECTED);
 
@@ -627,9 +608,8 @@ mod tests {
         buf.clear();
         hdr.writo_into(&mut buf).unwrap();
 
-        const EXPECTED2: [u8; 12] = [
-            0x34, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ];
+        const EXPECTED2: [u8; 12] =
+            [0x34, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
         assert_eq!(&buf, &EXPECTED2);
     }

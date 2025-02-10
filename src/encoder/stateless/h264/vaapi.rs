@@ -78,13 +78,7 @@ where
     /// Builds an invalid [`libva::PictureH264`]. This is usually a place
     /// holder to fill staticly sized array.
     fn build_invalid_va_h264_pic_enc() -> libva::PictureH264 {
-        libva::PictureH264::new(
-            libva::VA_INVALID_ID,
-            0,
-            libva::VA_PICTURE_H264_INVALID,
-            0,
-            0,
-        )
+        libva::PictureH264::new(libva::VA_INVALID_ID, 0, libva::VA_PICTURE_H264_INVALID, 0, 0)
     }
 
     /// Builds [`libva::PictureH264`] from `frame`
@@ -214,12 +208,8 @@ where
             .try_into()
             .unwrap_or_else(|_| panic!());
 
-        for (idx, ref_frame) in request
-            .ref_list_0
-            .iter()
-            .chain(request.ref_list_1.iter())
-            .enumerate()
-            .take(16)
+        for (idx, ref_frame) in
+            request.ref_list_0.iter().chain(request.ref_list_1.iter()).enumerate().take(16)
         {
             reference_frames[idx] = Self::build_h264_pic(&ref_frame.recon_pic, &ref_frame.meta);
         }
@@ -313,15 +303,9 @@ where
 
         let (num_ref_idx_l0_active_minus1, num_ref_idx_l1_active_minus1) =
             if header.num_ref_idx_active_override_flag {
-                (
-                    header.num_ref_idx_l0_active_minus1,
-                    header.num_ref_idx_l1_active_minus1,
-                )
+                (header.num_ref_idx_l0_active_minus1, header.num_ref_idx_l1_active_minus1)
             } else {
-                (
-                    pps.num_ref_idx_l0_default_active_minus1,
-                    pps.num_ref_idx_l1_default_active_minus1,
-                )
+                (pps.num_ref_idx_l0_default_active_minus1, pps.num_ref_idx_l1_default_active_minus1)
             };
         BufferType::EncSliceParameter(EncSliceParameter::H264(EncSliceParameterBufferH264::new(
             header.first_mb_in_slice,
@@ -471,14 +455,8 @@ where
             RateControl::ConstantQuality(_) => libva::VA_RC_CQP,
         };
 
-        let backend = VaapiBackend::new(
-            display,
-            va_profile,
-            fourcc,
-            coded_size,
-            bitrate_control,
-            low_power,
-        )?;
+        let backend =
+            VaapiBackend::new(display, va_profile, fourcc, coded_size, bitrate_control, low_power)?;
 
         Self::new_h264(backend, config, blocking_mode)
     }
@@ -528,16 +506,9 @@ pub(super) mod tests {
 
         let frame_layout = FrameLayout {
             format: (fourcc, 0),
-            size: Resolution {
-                width: WIDTH,
-                height: HEIGHT,
-            },
+            size: Resolution { width: WIDTH, height: HEIGHT },
             planes: vec![
-                PlaneLayout {
-                    buffer_index: 0,
-                    offset: 0,
-                    stride: WIDTH as usize,
-                },
+                PlaneLayout { buffer_index: 0, offset: 0, stride: WIDTH as usize },
                 PlaneLayout {
                     buffer_index: 0,
                     offset: (WIDTH * HEIGHT) as usize,
@@ -554,10 +525,7 @@ pub(super) mod tests {
             Rc::clone(&display),
             VAProfileH264Main,
             fourcc,
-            Resolution {
-                width: WIDTH,
-                height: HEIGHT,
-            },
+            Resolution { width: WIDTH, height: HEIGHT },
             libva::VA_RC_CBR,
             low_power,
         )
@@ -578,11 +546,8 @@ pub(super) mod tests {
 
         upload_test_frame_nv12(&display, &surface, 0.0);
 
-        let input_meta = FrameMetadata {
-            layout: frame_layout,
-            force_keyframe: false,
-            timestamp: 0,
-        };
+        let input_meta =
+            FrameMetadata { layout: frame_layout, force_keyframe: false, timestamp: 0 };
 
         let pic = backend.import_picture(&input_meta, surface).unwrap();
 
@@ -616,11 +581,8 @@ pub(super) mod tests {
             .idr_pic_id(0)
             .build();
 
-        let dpb_entry_meta = DpbEntryMeta {
-            poc: 0,
-            frame_num: 0,
-            is_reference: IsReference::ShortTerm,
-        };
+        let dpb_entry_meta =
+            DpbEntryMeta { poc: 0, frame_num: 0, is_reference: IsReference::ShortTerm };
 
         let request = BackendRequest {
             sps: Rc::clone(&sps),
@@ -679,10 +641,7 @@ pub(super) mod tests {
 
         let config = EncoderConfig {
             profile: Profile::Main,
-            resolution: Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            resolution: Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
             initial_tunings: Tunings {
                 rate_control: RateControl::ConstantBitrate(1_200_000),
                 framerate: 30,
@@ -693,21 +652,10 @@ pub(super) mod tests {
 
         let frame_layout = FrameLayout {
             format: (b"NV12".into(), 0),
-            size: Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            size: Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
             planes: vec![
-                PlaneLayout {
-                    buffer_index: 0,
-                    offset: 0,
-                    stride: WIDTH,
-                },
-                PlaneLayout {
-                    buffer_index: 0,
-                    offset: WIDTH * HEIGHT,
-                    stride: WIDTH,
-                },
+                PlaneLayout { buffer_index: 0, offset: 0, stride: WIDTH },
+                PlaneLayout { buffer_index: 0, offset: WIDTH * HEIGHT, stride: WIDTH },
             ],
         };
 
@@ -725,10 +673,7 @@ pub(super) mod tests {
             Rc::clone(&display),
             VA_RT_FORMAT_YUV420,
             Some(UsageHint::USAGE_HINT_ENCODER),
-            Resolution {
-                width: WIDTH as u32,
-                height: HEIGHT as u32,
-            },
+            Resolution { width: WIDTH as u32, height: HEIGHT as u32 },
         );
 
         pool.add_frames(vec![(); 16]).unwrap();

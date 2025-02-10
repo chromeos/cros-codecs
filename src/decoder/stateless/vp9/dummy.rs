@@ -39,9 +39,7 @@ impl StatelessVp9DecoderBackend for Backend {
         _: &[u8],
         _: &[Segmentation; MAX_SEGMENTS],
     ) -> StatelessBackendResult<Self::Handle> {
-        Ok(Handle {
-            handle: Rc::new(RefCell::new(Default::default())),
-        })
+        Ok(Handle { handle: Rc::new(RefCell::new(Default::default())) })
     }
 }
 

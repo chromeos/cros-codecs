@@ -137,11 +137,7 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
         let height = self.delegate.config.resolution.height;
 
         // Superblock size
-        let sb_size = if self.delegate.sequence.use_128x128_superblock {
-            128
-        } else {
-            64
-        };
+        let sb_size = if self.delegate.sequence.use_128x128_superblock { 128 } else { 64 };
 
         // Use frame counter for order hinting
         let order_hint_mask = (1 << self.delegate.sequence.order_hint_bits) - 1;
@@ -195,10 +191,7 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
             tx_mode: TxMode::Select,
 
             // Provide the Q index from config
-            quantization_params: QuantizationParams {
-                base_q_idx,
-                ..Default::default()
-            },
+            quantization_params: QuantizationParams { base_q_idx, ..Default::default() },
 
             // Use single tile for now
             tile_info: TileInfo {
@@ -213,10 +206,7 @@ impl<Picture, Reference> LowDelayAV1<Picture, Reference> {
             },
 
             // CDEF is not used currently, use default value to keep Synthesizer happy
-            cdef_params: CdefParams {
-                cdef_damping: 3,
-                ..Default::default()
-            },
+            cdef_params: CdefParams { cdef_damping: 3, ..Default::default() },
 
             // No superres
             superres_denom: SUPERRES_NUM as u32,
@@ -289,15 +279,7 @@ impl<Picture, Reference> LowDelayDelegate<Picture, Reference, BackendRequest<Pic
         let mut frame = self.create_frame_header(FrameType::InterFrame)?;
 
         // Use previous frame as last frame reference
-        let references = [
-            self.references.front().cloned(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ];
+        let references = [self.references.front().cloned(), None, None, None, None, None, None];
 
         let order_hint_mask = (1 << self.delegate.sequence.order_hint_bits) - 1;
         let mut ref_frame_ctrl_l0 = [ReferenceFrameType::Intra; REFS_PER_FRAME];
