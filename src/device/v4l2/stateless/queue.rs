@@ -328,11 +328,13 @@ pub struct V4l2CaptureQueue<V: VideoFrame> {
     format: Format,
     handle: RefCell<V4l2CaptureQueueHandle<direction::Capture, V>>,
     num_buffers: u32,
+    device: Arc<Device>,
 }
 
 impl<V: VideoFrame> V4l2CaptureQueue<V> {
     pub fn new(device: Arc<Device>) -> Self {
-        let handle = Queue::get_capture_mplane_queue(device).expect("Failed to get capture queue");
+        let handle =
+            Queue::get_capture_mplane_queue(device.clone()).expect("Failed to get capture queue");
         log::debug!("capture queue created");
         let handle = RefCell::new(V4l2CaptureQueueHandle::Init(handle));
         Self {
@@ -340,6 +342,7 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
             num_buffers: 0,
             visible_rect: Default::default(),
             format: Default::default(),
+            device: device,
         }
     }
 
@@ -379,10 +382,10 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
                     log::debug!("capture buffer {} dequeued", buffer.data.index());
                     // TODO handle buffer dequeuing successfully, but having an error
                     // buffer.data.has_error();
-                    let frame =
-                        Arc::new(buffer.take_handles().expect("Missing handle on dequeue!").0);
+                    let mut frame = buffer.take_handles().expect("Missing handle on dequeue!").0;
+                    frame.process_dqbuf(self.device.clone(), &self.format, &buffer.data);
                     Ok(Some(V4l2CaptureBuffer::new(
-                        frame,
+                        Arc::new(frame),
                         buffer,
                         self.visible_rect,
                         self.format.clone(),

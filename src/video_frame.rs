@@ -5,6 +5,7 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::utils::align_up;
 use crate::DecodedFormat;
@@ -15,12 +16,25 @@ use crate::Resolution;
 pub mod frame_pool;
 #[cfg(feature = "backend")]
 pub mod gbm_video_frame;
+#[cfg(feature = "v4l2")]
+pub mod v4l2_mmap_video_frame;
+
 #[cfg(feature = "vaapi")]
 use libva::{Display, Surface, SurfaceMemoryDescriptor};
 #[cfg(feature = "v4l2")]
 use v4l2r::bindings::v4l2_plane;
 #[cfg(feature = "v4l2")]
+use v4l2r::device::queue::direction::Capture;
+#[cfg(feature = "v4l2")]
+use v4l2r::device::queue::dqbuf::DqBuffer;
+#[cfg(feature = "v4l2")]
+use v4l2r::device::Device;
+#[cfg(feature = "v4l2")]
+use v4l2r::ioctl::V4l2Buffer;
+#[cfg(feature = "v4l2")]
 use v4l2r::memory::{BufferHandles, Memory, MemoryType, PlaneHandle, PrimitiveBufferHandles};
+#[cfg(feature = "v4l2")]
+use v4l2r::Format;
 
 pub const Y_PLANE: usize = 0;
 pub const UV_PLANE: usize = 1;
@@ -54,7 +68,7 @@ impl<A> Equivalent<A> for A {
 }
 
 // Unified abstraction for any kind of frame data that might be sent to the hardware.
-pub trait VideoFrame: Send + Sync + Debug + 'static {
+pub trait VideoFrame: Send + Sync + Sized + Debug + 'static {
     #[cfg(feature = "v4l2")]
     type NativeHandle: PlaneHandle;
 
@@ -255,6 +269,9 @@ pub trait VideoFrame: Send + Sync + Debug + 'static {
 
     #[cfg(feature = "v4l2")]
     fn to_native_handle(&self, plane: usize) -> Result<&Self::NativeHandle, String>;
+
+    #[cfg(feature = "v4l2")]
+    fn process_dqbuf(&mut self, device: Arc<Device>, format: &Format, buf: &V4l2Buffer);
 
     #[cfg(feature = "vaapi")]
     fn to_native_handle(&self, display: &Rc<Display>) -> Result<Self::NativeHandle, String>;

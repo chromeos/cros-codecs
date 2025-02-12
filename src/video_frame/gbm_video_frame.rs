@@ -32,13 +32,25 @@ use gbm_sys::{
 };
 use nix::libc;
 
+#[cfg(feature = "v4l2")]
+use crate::v4l2r::device::Device;
+#[cfg(feature = "v4l2")]
+use crate::video_frame::V4l2VideoFrame;
 #[cfg(feature = "vaapi")]
 use libva::{
     Display, ExternalBufferDescriptor, MemoryType, Surface, UsageHint, VADRMPRIMESurfaceDescriptor,
     VADRMPRIMESurfaceDescriptorLayer, VADRMPRIMESurfaceDescriptorObject,
 };
 #[cfg(feature = "v4l2")]
+use v4l2r::device::queue::direction::Capture;
+#[cfg(feature = "v4l2")]
+use v4l2r::device::queue::dqbuf::DqBuffer;
+#[cfg(feature = "v4l2")]
+use v4l2r::ioctl::V4l2Buffer;
+#[cfg(feature = "v4l2")]
 use v4l2r::memory::{DmaBufHandle, DmaBufSource};
+#[cfg(feature = "v4l2")]
+use v4l2r::Format;
 
 // The gbm crate's wrapper for map() doesn't have the lifetime semantics that we want, so we need
 // to implement our own.
@@ -342,6 +354,10 @@ impl VideoFrame for GbmVideoFrame {
             Ok(&self.export_handles[plane])
         }
     }
+
+    // No-op for GBM buffers since the backing FD already disambiguates them.
+    #[cfg(feature = "v4l2")]
+    fn process_dqbuf(&mut self, device: Arc<Device>, format: &Format, buf: &V4l2Buffer) {}
 
     #[cfg(feature = "vaapi")]
     fn to_native_handle(&self, display: &Rc<Display>) -> Result<Self::NativeHandle, String> {
