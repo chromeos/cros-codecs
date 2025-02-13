@@ -41,7 +41,6 @@ use v4l2r::bindings::V4L2_H264_SPS_FLAG_QPPRIME_Y_ZERO_TRANSFORM_BYPASS;
 use v4l2r::bindings::V4L2_H264_SPS_FLAG_SEPARATE_COLOUR_PLANE;
 use v4l2r::controls::codec::H264DecodeMode;
 use v4l2r::controls::codec::H264DecodeParams;
-use v4l2r::controls::codec::H264ScalingMatrix;
 use v4l2r::controls::codec::H264StartCode;
 use v4l2r::controls::SafeExtControl;
 
@@ -53,6 +52,8 @@ use crate::codec::h264::picture::IsIdr;
 use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::RcPictureData;
 use crate::codec::h264::picture::Reference;
+use crate::decoder::stateless::h264::get_raster_from_zigzag_4x4;
+use crate::decoder::stateless::h264::get_raster_from_zigzag_8x8;
 
 impl From<&Sps> for v4l2_ctrl_h264_sps {
     fn from(sps: &Sps) -> Self {
@@ -165,6 +166,23 @@ impl From<&Pps> for v4l2_ctrl_h264_pps {
     }
 }
 
+impl From<&Pps> for v4l2_ctrl_h264_scaling_matrix {
+    fn from(pps: &Pps) -> Self {
+        let mut scaling_list_4x4 = [[0; 16]; 6];
+        let mut scaling_list_8x8 = [[0; 64]; 6];
+
+        (0..6).for_each(|i| {
+            get_raster_from_zigzag_4x4(pps.scaling_lists_4x4[i], &mut scaling_list_4x4[i]);
+        });
+
+        (0..2).for_each(|i| {
+            get_raster_from_zigzag_8x8(pps.scaling_lists_8x8[i], &mut scaling_list_8x8[i]);
+        });
+
+        Self { scaling_list_4x4, scaling_list_8x8 }
+    }
+}
+
 pub struct V4l2CtrlH264DpbEntry {
     pub timestamp: u64,
     pub pic: RcPictureData,
@@ -199,26 +217,6 @@ impl From<&V4l2CtrlH264DpbEntry> for v4l2_h264_dpb_entry {
             flags,
             ..Default::default()
         }
-    }
-}
-
-#[derive(Default)]
-pub struct V4l2CtrlH264ScalingMatrix {
-    handle: v4l2_ctrl_h264_scaling_matrix,
-}
-
-impl V4l2CtrlH264ScalingMatrix {
-    pub fn new() -> Self {
-        Default::default()
-    }
-    pub fn set(&mut self) -> &mut Self {
-        todo!()
-    }
-}
-
-impl From<&V4l2CtrlH264ScalingMatrix> for SafeExtControl<H264ScalingMatrix> {
-    fn from(scaling_matrix: &V4l2CtrlH264ScalingMatrix) -> Self {
-        SafeExtControl::<H264ScalingMatrix>::from(scaling_matrix.handle)
     }
 }
 
