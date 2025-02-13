@@ -10,16 +10,13 @@ use nix::sys::epoll::EpollFlags;
 use nix::sys::epoll::EpollTimeout;
 use nix::sys::eventfd::EventFd;
 
-use std::borrow::Borrow;
-use std::clone::Clone;
 use std::collections::VecDeque;
+use std::marker::PhantomData;
 use std::os::fd::AsFd;
+#[cfg(feature = "vaapi")]
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::thread;
-use std::time::Duration;
 use thiserror::Error;
 
 use crate::c2_wrapper::C2DecodeJob;
@@ -29,12 +26,10 @@ use crate::c2_wrapper::C2Worker;
 use crate::c2_wrapper::Job;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DynStatelessVideoDecoder;
-use crate::decoder::stateless::StatelessVideoDecoder;
-use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
 use crate::image_processing::convert_video_frame;
-use crate::image_processing::i4xx_copy;
+#[cfg(feature = "vaapi")]
 use crate::utils::align_up;
 use crate::video_frame::frame_pool::FramePool;
 use crate::video_frame::frame_pool::PooledVideoFrame;
@@ -45,12 +40,10 @@ use crate::video_frame::gbm_video_frame::GbmVideoFrame;
 #[cfg(feature = "v4l2")]
 use crate::video_frame::v4l2_mmap_video_frame::V4l2MmapVideoFrame;
 use crate::video_frame::VideoFrame;
-use crate::DecodedFormat;
 use crate::EncodedFormat;
 use crate::Fourcc;
-use crate::Resolution;
 #[cfg(feature = "vaapi")]
-use libva::Surface;
+use crate::Resolution;
 
 #[derive(Debug, Error)]
 pub enum C2DecoderPollErrorWrapper {
@@ -93,9 +86,7 @@ where
     V: VideoFrame,
     B: C2DecoderBackend,
 {
-    backend: B,
     decoder: C2Decoder<V>,
-    output_fourcc: Fourcc,
     epoll_fd: Epoll,
     awaiting_job_event: Arc<EventFd>,
     auxiliary_frame_pool: Option<FramePool<AuxiliaryVideoFrame>>,
@@ -104,10 +95,10 @@ where
     framepool_hint_cb: Arc<Mutex<dyn FnMut(StreamInfo) + Send + 'static>>,
     alloc_cb: Arc<Mutex<dyn FnMut() -> Option<V> + Send + 'static>>,
     work_queue: Arc<Mutex<VecDeque<C2DecodeJob<V>>>>,
-    pending_job: Option<C2DecodeJob<V>>,
     in_flight_queue: VecDeque<C2DecodeJob<V>>,
     frame_num: u64,
     state: Arc<Mutex<C2State>>,
+    _phantom: PhantomData<B>,
 }
 
 impl<V, B> C2DecoderWorker<V, B>
@@ -124,7 +115,7 @@ where
             };
             match &mut self.decoder {
                 C2Decoder::ImportingDecoder(decoder) => match decoder.next_event() {
-                    Some(DecoderEvent::FrameReady(mut frame)) => {
+                    Some(DecoderEvent::FrameReady(frame)) => {
                         frame.sync().unwrap();
                         let mut job = self.in_flight_queue.pop_front().unwrap();
                         job.output.push(frame.video_frame());
@@ -143,7 +134,7 @@ where
                     _ => break,
                 },
                 C2Decoder::ConvertingDecoder(decoder) => match decoder.next_event() {
-                    Some(DecoderEvent::FrameReady(mut frame)) => {
+                    Some(DecoderEvent::FrameReady(frame)) => {
                         frame.sync().unwrap();
                         let mut job = self.in_flight_queue.pop_front().unwrap();
                         let mut dst_frame =
@@ -244,9 +235,7 @@ where
             }
         };
         Ok(Self {
-            backend: backend,
             decoder: decoder,
-            output_fourcc: output_fourcc,
             auxiliary_frame_pool: auxiliary_frame_pool,
             epoll_fd: Epoll::new(EpollCreateFlags::empty())
                 .map_err(C2DecoderPollErrorWrapper::Epoll)
@@ -257,10 +246,10 @@ where
             framepool_hint_cb: framepool_hint_cb,
             alloc_cb: alloc_cb,
             work_queue: work_queue,
-            pending_job: None,
             in_flight_queue: VecDeque::new(),
             frame_num: 0,
             state: state,
+            _phantom: Default::default(),
         })
     }
 
@@ -268,7 +257,8 @@ where
         self.epoll_fd = Epoll::new(EpollCreateFlags::empty())
             .map_err(C2DecoderPollErrorWrapper::Epoll)
             .unwrap();
-        self.epoll_fd
+        let _ = self
+            .epoll_fd
             .add(
                 match &self.decoder {
                     C2Decoder::ImportingDecoder(decoder) => decoder.poll_fd(),
@@ -285,7 +275,7 @@ where
         while *self.state.lock().unwrap() == C2State::C2Running {
             // Poll for decoder events or pending job events.
             let mut events = [EpollEvent::empty()];
-            let nb_fds = self.epoll_fd.wait(&mut events, EpollTimeout::NONE).unwrap();
+            let _nb_fds = self.epoll_fd.wait(&mut events, EpollTimeout::NONE).unwrap();
 
             if events == [EpollEvent::new(EpollFlags::EPOLLIN, 2)] {
                 self.awaiting_job_event.read().unwrap();

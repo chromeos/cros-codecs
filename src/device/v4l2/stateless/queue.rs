@@ -44,15 +44,9 @@ use v4l2r::PlaneLayout;
 
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::StatelessBackendError;
-use crate::image_processing::mm21_to_nv12;
-use crate::image_processing::nv12_to_i420;
-use crate::image_processing::MM21_TILE_HEIGHT;
-use crate::image_processing::MM21_TILE_WIDTH;
-use crate::utils::align_up;
 use crate::utils::buffer_size_for_area;
 use crate::video_frame::V4l2VideoFrame;
 use crate::video_frame::VideoFrame;
-use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
@@ -294,7 +288,6 @@ pub struct V4l2CaptureBuffer<V: VideoFrame> {
     pub frame: Arc<V>,
     handle: DqBuffer<Capture, V4l2VideoFrame<V>>,
     visible_rect: Rect,
-    format: Format,
 }
 
 impl<V: VideoFrame> V4l2CaptureBuffer<V> {
@@ -302,9 +295,8 @@ impl<V: VideoFrame> V4l2CaptureBuffer<V> {
         frame: Arc<V>,
         handle: DqBuffer<Capture, V4l2VideoFrame<V>>,
         visible_rect: Rect,
-        format: Format,
     ) -> Self {
-        Self { frame, handle, visible_rect, format }
+        Self { frame, handle, visible_rect }
     }
     pub fn index(&self) -> usize {
         self.handle.data.index() as usize
@@ -384,12 +376,7 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
                     // buffer.data.has_error();
                     let mut frame = buffer.take_handles().expect("Missing handle on dequeue!").0;
                     frame.process_dqbuf(self.device.clone(), &self.format, &buffer.data);
-                    Ok(Some(V4l2CaptureBuffer::new(
-                        Arc::new(frame),
-                        buffer,
-                        self.visible_rect,
-                        self.format.clone(),
-                    )))
+                    Ok(Some(V4l2CaptureBuffer::new(Arc::new(frame), buffer, self.visible_rect)))
                 }
                 _ => Ok(None),
             },

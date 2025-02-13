@@ -16,13 +16,8 @@ use crate::Fourcc;
 use crate::Resolution;
 
 use crate::v4l2r::device::Device;
-use v4l2r::bindings::v4l2_plane;
-use v4l2r::device::queue::direction::Capture;
-use v4l2r::device::queue::dqbuf::DqBuffer;
 use v4l2r::ioctl::{mmap, PlaneMapping, V4l2Buffer};
-use v4l2r::memory::{
-    BufferHandles, Memory, MemoryType, MmapHandle, PlaneHandle, PrimitiveBufferHandles,
-};
+use v4l2r::memory::MmapHandle;
 use v4l2r::Format;
 
 pub struct V4l2MmapMapping {
@@ -149,7 +144,7 @@ impl VideoFrame for V4l2MmapVideoFrame {
     }
 
     #[cfg(feature = "v4l2")]
-    fn to_native_handle(&self, plane: usize) -> Result<&Self::NativeHandle, String> {
+    fn to_native_handle(&self, _plane: usize) -> Result<&Self::NativeHandle, String> {
         Ok(&self.handle)
     }
 

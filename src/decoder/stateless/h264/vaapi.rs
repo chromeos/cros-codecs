@@ -6,10 +6,9 @@ use std::rc::Rc;
 
 use anyhow::anyhow;
 use anyhow::Context as AnyhowContext;
-use libva::Picture as VaPicture;
 use libva::{
     BufferType, Display, IQMatrix, IQMatrixBufferH264, PictureParameter,
-    PictureParameterBufferH264, SliceParameter, Surface, SurfaceMemoryDescriptor,
+    PictureParameterBufferH264, SliceParameter,
 };
 
 use crate::backend::vaapi::decoder::va_surface_id;

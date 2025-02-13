@@ -7,10 +7,7 @@ use std::rc::Rc;
 use anyhow::anyhow;
 use anyhow::Context;
 use libva::Display;
-use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
-use libva::Surface;
-use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::VaStreamInfo;

@@ -14,7 +14,6 @@ pub mod stateless;
 use std::collections::VecDeque;
 use std::os::fd::AsFd;
 use std::os::fd::BorrowedFd;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use nix::errno::Errno;
@@ -24,7 +23,6 @@ pub use crate::BlockingMode;
 
 use crate::video_frame::VideoFrame;
 use crate::DecodedFormat;
-use crate::Fourcc;
 use crate::Resolution;
 
 /// Trait for a pool of frames in a particular format.

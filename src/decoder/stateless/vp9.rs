@@ -36,7 +36,6 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
-use crate::video_frame::VideoFrame;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP9.

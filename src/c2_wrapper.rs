@@ -10,7 +10,6 @@ use thiserror::Error;
 
 use std::collections::VecDeque;
 use std::marker::PhantomData;
-use std::rc::Rc;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -21,8 +20,6 @@ use std::vec::Vec;
 use crate::decoder::StreamInfo;
 use crate::video_frame::VideoFrame;
 use crate::Fourcc;
-use crate::FrameLayout;
-use crate::Resolution;
 
 pub mod c2_decoder;
 #[cfg(feature = "v4l2")]

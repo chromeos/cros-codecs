@@ -15,19 +15,9 @@ use crate::decoder::stateless::DynStatelessVideoDecoder;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::BlockingMode;
-use crate::decoder::DecodedHandle;
-use crate::decoder::StreamInfo;
-use crate::multiple_desc_type;
-use crate::utils::DmabufFrame;
-use crate::utils::UserPtrFrame;
-use crate::video_frame::gbm_video_frame::GbmVideoFrame;
 use crate::video_frame::VideoFrame;
-use crate::DecodedFormat;
 use crate::EncodedFormat;
 use crate::Fourcc;
-use crate::FrameMemoryType;
-use crate::PlaneLayout;
-use crate::Resolution;
 
 #[derive(Clone, Debug)]
 pub struct C2VaapiDecoderOptions {

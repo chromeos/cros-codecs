@@ -4,7 +4,6 @@
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -21,19 +20,13 @@ use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::StreamInfo;
-use crate::image_processing::nv12_to_i420;
-use crate::utils::align_up;
-use crate::video_frame::gbm_video_frame::GbmDevice;
-use crate::video_frame::gbm_video_frame::GbmVideoFrame;
-use crate::video_frame::Equivalent;
-use crate::video_frame::{VideoFrame, UV_PLANE, Y_PLANE};
+use crate::video_frame::VideoFrame;
 use crate::DecodedFormat;
-use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
 
 /// A decoded frame handle.
-pub(crate) type DecodedHandle<V: VideoFrame> = Rc<RefCell<VaapiDecodedHandle<V>>>;
+pub(crate) type DecodedHandle<V> = Rc<RefCell<VaapiDecodedHandle<V>>>;
 
 /// Gets the VASurfaceID for the given `picture`.
 pub(crate) fn va_surface_id<V: VideoFrame>(
@@ -80,6 +73,7 @@ pub(crate) trait VaStreamInfo {
     /// Returns the VA profile of the stream.
     fn va_profile(&self) -> anyhow::Result<i32>;
     /// Returns the RT format of the stream.
+    #[allow(dead_code)]
     fn rt_format(&self) -> anyhow::Result<u32>;
     /// Returns the minimum number of surfaces required to decode the stream.
     fn min_num_surfaces(&self) -> usize;
@@ -200,7 +194,8 @@ pub struct VaapiBackend<V: VideoFrame> {
     pub display: Rc<Display>,
     pub context: Rc<Context>,
     stream_info: StreamInfo,
-    supports_context_reuse: bool,
+    // TODO: We should try to support context reuse
+    _supports_context_reuse: bool,
     _phantom_data: PhantomData<V>,
 }
 
@@ -234,7 +229,7 @@ impl<V: VideoFrame> VaapiBackend<V> {
         Self {
             display: display,
             context: context,
-            supports_context_reuse: supports_context_reuse,
+            _supports_context_reuse: supports_context_reuse,
             stream_info: init_stream_info,
             _phantom_data: Default::default(),
         }
@@ -301,7 +296,7 @@ pub struct VaapiPicture<V: VideoFrame> {
 }
 
 impl<V: VideoFrame> VaapiPicture<V> {
-    pub fn new(timestamp: u64, context: Rc<Context>, mut backing_frame: V) -> Self {
+    pub fn new(timestamp: u64, context: Rc<Context>, backing_frame: V) -> Self {
         let display = context.display();
         let surface = backing_frame
             .to_native_handle(display)
