@@ -182,7 +182,7 @@ impl From<&V4l2CtrlH264DpbEntry> for v4l2_h264_dpb_entry {
         };
 
         let mut flags: u32 = V4L2_H264_DPB_ENTRY_FLAG_VALID;
-        if pic.nal_ref_idc != 0 {
+        if matches!(pic.reference(), Reference::LongTerm | Reference::ShortTerm) {
             flags |= V4L2_H264_DPB_ENTRY_FLAG_ACTIVE;
         }
         if matches!(pic.reference(), Reference::LongTerm) {
