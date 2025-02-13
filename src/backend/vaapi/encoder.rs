@@ -6,6 +6,7 @@ use std::any::Any;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use anyhow::anyhow;
 use libva::Config;
 use libva::Context;
 use libva::Display;
@@ -32,6 +33,7 @@ use crate::encoder::stateless::StatelessEncoderBackendImport;
 use crate::encoder::FrameMetadata;
 use crate::encoder::RateControl;
 use crate::encoder::Tunings;
+use crate::video_frame::VideoFrame;
 use crate::Fourcc;
 use crate::Resolution;
 
@@ -285,33 +287,15 @@ where
     }
 }
 
-impl<M> StatelessEncoderBackendImport<M, Surface<M>> for VaapiBackend<M, Surface<M>>
-where
-    M: libva::SurfaceMemoryDescriptor,
+impl<V: VideoFrame> StatelessEncoderBackendImport<V, Surface<V::MemDescriptor>>
+    for VaapiBackend<V::MemDescriptor, Surface<V::MemDescriptor>>
 {
     fn import_picture(
         &mut self,
-        meta: &FrameMetadata,
-        handle: M,
-    ) -> StatelessBackendResult<Surface<M>> {
-        let fourcc = meta.layout.format.0 .0;
-
-        let format_map = FORMAT_MAP
-            .iter()
-            .find(|&map| map.va_fourcc == fourcc)
-            .ok_or_else(|| StatelessBackendError::UnsupportedFormat)?;
-
-        log::debug!("Creating new surface for meta={meta:#?}");
-        let mut surfaces = self.context.display().create_surfaces(
-            format_map.rt_format,
-            Some(format_map.va_fourcc),
-            meta.layout.size.width,
-            meta.layout.size.height,
-            Some(UsageHint::USAGE_HINT_ENCODER),
-            vec![handle],
-        )?;
-
-        surfaces.pop().ok_or(StatelessBackendError::OutOfResources)
+        _metadata: &FrameMetadata,
+        handle: V,
+    ) -> StatelessBackendResult<Surface<V::MemDescriptor>> {
+        Ok(handle.to_native_handle(self.context.display()).map_err(|err| anyhow!(err))?.into())
     }
 }
 

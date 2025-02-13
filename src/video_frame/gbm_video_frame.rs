@@ -372,6 +372,7 @@ impl VideoFrame for GbmVideoFrame {
 
     #[cfg(feature = "v4l2")]
     fn fill_v4l2_plane(&self, index: usize, plane: &mut v4l2_plane) {
+        // TODO: Support |data_offset| here.
         self.export_handles[index].fill_v4l2_plane(plane)
     }
 
@@ -435,6 +436,12 @@ impl Drop for GbmVideoFrame {
 unsafe impl Send for GbmVideoFrame {}
 unsafe impl Sync for GbmVideoFrame {}
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum GbmUsage {
+    Decode,
+    Encode,
+}
+
 #[derive(Debug)]
 pub struct GbmDevice {
     device: *mut gbm_device,
@@ -462,6 +469,7 @@ impl GbmDevice {
         fourcc: Fourcc,
         visible_resolution: Resolution,
         coded_resolution: Resolution,
+        usage: GbmUsage,
     ) -> Result<GbmVideoFrame, String> {
         let mut ret = GbmVideoFrame {
             fourcc: fourcc,
@@ -494,8 +502,9 @@ impl GbmDevice {
 
             ret.bo.push(bo);
         } else if ret.is_contiguous() {
-            // gbm_sys is missing this use flag for some reason.
+            // These flags are not present in every system's GBM headers.
             const GBM_BO_USE_HW_VIDEO_DECODER: u32 = 1 << 13;
+            const GBM_BO_USE_HW_VIDEO_ENCODER: u32 = 1 << 14;
             // It's important that we use the correct use flag for platforms that support directly
             // importing GBM allocated frame buffers to the video decoding hardware because the
             // video decoding hardware sometimes makes assumptions about the modifier flags. If we
@@ -507,7 +516,11 @@ impl GbmDevice {
                     coded_resolution.width,
                     coded_resolution.height,
                     u32::from(fourcc),
-                    GBM_BO_USE_HW_VIDEO_DECODER,
+                    if usage == GbmUsage::Decode {
+                        GBM_BO_USE_HW_VIDEO_DECODER
+                    } else {
+                        GBM_BO_USE_HW_VIDEO_ENCODER
+                    },
                 )
             };
             if bo.is_null() {
@@ -521,9 +534,10 @@ impl GbmDevice {
 
             ret.bo.push(bo);
         } else {
-            // We hack multiplanar formats into GBM by making a bunch of separate BO's. We use
-            // either R8 or RG88 depending on the bytes per element. So NM12 for example would be
-            // an R8 BO and then an RG88 BO of 1/4th the size.
+            // We hack multiplanar formats into GBM by making a bunch of separate BO's.
+            // The usage flag is ignored here because R8 are generally not supported
+            // decoder and encoder formats, so we just have to accept we're on our own for figuring
+            // out alignment, modifier, fourcc, etc.
             let horizontal_subsampling = ret.get_horizontal_subsampling();
             let vertical_subsampling = ret.get_vertical_subsampling();
             let bytes_per_element = ret.get_bytes_per_element();

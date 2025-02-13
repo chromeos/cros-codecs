@@ -449,10 +449,11 @@ impl VideoFrame for GenericDmaVideoFrame {
     fn fill_v4l2_plane(&self, index: usize, plane: &mut v4l2_plane) {
         if self.dma_handles.len() == 1 {
             plane.m.fd = self.dma_handles[0].as_raw_fd();
+            plane.length = self.dma_handles[0].metadata().unwrap().len() as u32;
         } else {
             plane.m.fd = self.dma_handles[index].as_raw_fd();
+            plane.length = self.get_single_plane_size(index) as u32;
         }
-        plane.length = self.get_single_plane_size(index) as u32;
         // WARNING: Importing DMA buffers with an offset is not officially supported by V4L2, but
         // several drivers (including MTK venc) will respect the data_offset field.
         plane.data_offset = self.layout.planes[index].offset as u32;
