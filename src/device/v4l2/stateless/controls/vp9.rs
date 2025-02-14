@@ -104,7 +104,13 @@ impl V4l2CtrlVp9FrameParams {
         self
     }
 
-    pub fn set_frame_params(&mut self, hdr: &Header) -> &mut Self {
+    pub fn set_frame_params(
+        &mut self,
+        hdr: &Header,
+        last_frame_ts: u64,
+        golden_frame_ts: u64,
+        alt_frame_ts: u64,
+    ) -> &mut Self {
         self.handle.compressed_header_size = hdr.header_size_in_bytes;
         self.handle.uncompressed_header_size = hdr.uncompressed_header_size_in_bytes;
         self.handle.frame_width_minus_1 = (hdr.width - 1) as u16;
@@ -158,6 +164,10 @@ impl V4l2CtrlVp9FrameParams {
         if hdr.color_range == ColorRange::FullSwing {
             self.handle.flags |= V4L2_VP9_FRAME_FLAG_COLOR_RANGE_FULL_SWING;
         }
+
+        self.handle.last_frame_ts = last_frame_ts * 1000;
+        self.handle.golden_frame_ts = golden_frame_ts * 1000;
+        self.handle.alt_frame_ts = alt_frame_ts * 1000;
 
         self
     }

@@ -14,6 +14,9 @@ use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
 use crate::backend::v4l2::decoder::V4l2StreamInfo;
 use crate::codec::vp9::parser::Header;
 use crate::codec::vp9::parser::Segmentation;
+use crate::codec::vp9::parser::ALTREF_FRAME;
+use crate::codec::vp9::parser::GOLDEN_FRAME;
+use crate::codec::vp9::parser::LAST_FRAME;
 use crate::codec::vp9::parser::MAX_SEGMENTS;
 use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
@@ -24,6 +27,7 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::decoder::DecodedHandle;
 use crate::device::v4l2::stateless::controls::vp9::V4l2CtrlVp9FrameParams;
 use crate::device::v4l2::stateless::controls::vp9::Vp9V4l2Control;
 use crate::Fourcc;
@@ -82,11 +86,30 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
     ) -> StatelessBackendResult<Self::Handle> {
         let mut vp9_frame_params = V4l2CtrlVp9FrameParams::new();
 
+        let last_frame_idx = hdr.ref_frame_idx[LAST_FRAME - 1];
+        let golden_frame_idx = hdr.ref_frame_idx[GOLDEN_FRAME - 1];
+        let alt_frame_idx = hdr.ref_frame_idx[ALTREF_FRAME - 1];
+
+        let last_frame_ts = match &reference_frames[last_frame_idx as usize] {
+            Some(handle) => handle.timestamp(),
+            None => 0,
+        };
+
+        let golden_frame_ts = match &reference_frames[golden_frame_idx as usize] {
+            Some(handle) => handle.timestamp(),
+            None => 0,
+        };
+
+        let alt_frame_ts = match &reference_frames[alt_frame_idx as usize] {
+            Some(handle) => handle.timestamp(),
+            None => 0,
+        };
+
         vp9_frame_params
             .set_loop_filter_params(hdr)
             .set_quantization_params(hdr)
             .set_segmentation_params(hdr)
-            .set_frame_params(hdr);
+            .set_frame_params(hdr, last_frame_ts, golden_frame_ts, alt_frame_ts);
 
         let mut ctrl = Vp9V4l2Control::from(&vp9_frame_params);
 
