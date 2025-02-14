@@ -78,6 +78,13 @@ impl<V: VideoFrame> PendingRequestHandle<V> {
             capture_buffer: Rc::new(RefCell::new(self.device.sync(self.timestamp))),
         }
     }
+    fn associate_dequeued_buffer(
+        &mut self,
+        capture_buffer: V4l2CaptureBuffer<V>,
+    ) -> DoneRequestHandle<V> {
+        self.picture.upgrade().unwrap().as_ref().try_borrow_mut().unwrap().drop_references();
+        DoneRequestHandle { capture_buffer: Rc::new(RefCell::new(capture_buffer)) }
+    }
 }
 
 struct DoneRequestHandle<V: VideoFrame> {
@@ -174,6 +181,14 @@ impl<V: VideoFrame> RequestHandle<V> {
             _ => panic!("ERROR"),
         }
     }
+    fn associate_dequeued_buffer(&mut self, capture_buffer: V4l2CaptureBuffer<V>) {
+        match self {
+            Self::Pending(handle) => {
+                *self = Self::Done(handle.associate_dequeued_buffer(capture_buffer))
+            }
+            _ => panic!("ERROR"),
+        }
+    }
 }
 
 pub struct V4l2Request<V: VideoFrame>(RequestHandle<V>);
@@ -219,6 +234,9 @@ impl<V: VideoFrame> V4l2Request<V> {
     }
     pub fn picture(&mut self) -> Weak<RefCell<V4l2Picture<V>>> {
         self.0.picture()
+    }
+    pub fn associate_dequeued_buffer(&mut self, capture_buffer: V4l2CaptureBuffer<V>) {
+        self.0.associate_dequeued_buffer(capture_buffer)
     }
 }
 

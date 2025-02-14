@@ -38,7 +38,6 @@ struct DeviceHandle<V: VideoFrame> {
     media_device: RawFd,
     output_queue: V4l2OutputQueue,
     capture_queue: V4l2CaptureQueue<V>,
-    capture_buffers: HashMap<u64, V4l2CaptureBuffer<V>>,
     requests: HashMap<u64, Weak<RefCell<V4l2Request<V>>>>,
 }
 
@@ -62,7 +61,6 @@ impl<V: VideoFrame> DeviceHandle<V> {
             media_device,
             output_queue,
             capture_queue,
-            capture_buffers: HashMap::<u64, V4l2CaptureBuffer<V>>::new(),
             requests: HashMap::<u64, Weak<RefCell<V4l2Request<V>>>>::new(),
         }
     }
@@ -94,13 +92,10 @@ impl<V: VideoFrame> DeviceHandle<V> {
             match self.capture_queue.dequeue_buffer() {
                 Ok(Some(buffer)) => {
                     let timestamp = buffer.timestamp();
-                    self.capture_buffers.insert(timestamp, buffer);
                     let request = self.requests.remove(&timestamp).unwrap();
                     match request.upgrade().unwrap().as_ref().try_borrow_mut() {
                         Ok(mut request) => {
-                            if let Some(pic) = request.picture().upgrade() {
-                                pic.as_ref().borrow_mut().drop_references();
-                            }
+                            request.associate_dequeued_buffer(buffer);
                         }
                         _ => (),
                     }
@@ -111,21 +106,31 @@ impl<V: VideoFrame> DeviceHandle<V> {
         }
     }
     fn sync(&mut self, timestamp: u64) -> V4l2CaptureBuffer<V> {
-        // TODO: handle synced buffers internally by capture queue
         let mut back_off_duration = Duration::from_millis(1);
         let time_out = Duration::from_millis(120);
         loop {
-            match self.capture_buffers.remove(&timestamp) {
-                Some(buffer) => return buffer,
-                _ => {
-                    sleep(back_off_duration);
-                    back_off_duration = back_off_duration + back_off_duration;
-                    self.try_dequeue_capture_buffers();
-                    if back_off_duration > time_out {
-                        panic!("unable to dequeue frame");
+            match self.capture_queue.dequeue_buffer() {
+                Ok(Some(buffer)) => {
+                    let dequeued_timestamp = buffer.timestamp();
+                    let request = self.requests.remove(&dequeued_timestamp).unwrap();
+                    if dequeued_timestamp == timestamp {
+                        return buffer;
+                    } else {
+                        match request.upgrade().unwrap().as_ref().try_borrow_mut() {
+                            Ok(mut request) => {
+                                request.associate_dequeued_buffer(buffer);
+                            }
+                            _ => (),
+                        }
                     }
                 }
+                _ => (),
             }
+            back_off_duration = back_off_duration + back_off_duration;
+            if back_off_duration > time_out {
+                panic!("there should not be a scenario where a queued frame is not returned.");
+            }
+            sleep(back_off_duration);
         }
     }
 }
