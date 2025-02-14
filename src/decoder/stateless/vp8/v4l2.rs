@@ -70,7 +70,7 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
             .as_ref()
             .borrow_mut()
             .set_picture_ref(Rc::<RefCell<V4l2Picture>>::downgrade(&picture));
-        Ok(Rc::new(RefCell::new(V4l2Picture::new(request_buffer))))
+        Ok(picture)
     }
 
     fn submit_picture(
