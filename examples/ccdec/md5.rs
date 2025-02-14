@@ -66,16 +66,16 @@ fn process_chunk(byte_chunk: &[u8], a0: u32, b0: u32, c0: u32, d0: u32) -> (u32,
     for i in 0..64 {
         let mut F: u32 = 0;
         let mut g: usize = 0;
-        if 0 <= i && i <= 15 {
+        if (0..=15).contains(&i) {
             F = (B & C) | ((!B) & D);
             g = i
-        } else if 16 <= i && i <= 31 {
+        } else if (16..=31).contains(&i) {
             F = (D & B) | ((!D) & C);
             g = (5 * i + 1) % 16;
-        } else if 32 <= i && i <= 47 {
+        } else if (32..=47).contains(&i) {
             F = B ^ C ^ D;
             g = (3 * i + 5) % 16;
-        } else if 48 <= i && i <= 63 {
+        } else if (48..=63).contains(&i) {
             F = C ^ (B | (!D));
             g = (7 * i) % 16;
         }
@@ -165,7 +165,7 @@ impl MD5Context {
         }
     }
 
-    pub fn consume(&mut self, input: &[u8]) -> () {
+    pub fn consume(&mut self, input: &[u8]) {
         self.buffer.append(&mut input.to_vec());
         while self.buffer.len() >= 64 {
             (self.A, self.B, self.C, self.D) =

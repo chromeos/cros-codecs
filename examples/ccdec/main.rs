@@ -54,9 +54,12 @@ fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Cow<[u8]>>
     Box::new(IvfIterator::new(input).map(Cow::Borrowed))
 }
 
+/// Object holds the necessary data for a single decode operation during testing.
 #[derive(Debug, Clone, Default)]
 pub struct TestDecodeWorkObject {
+    /// Input data for decode
     pub input: Vec<u8>,
+    /// Output data after decode
     pub output: Vec<u8>,
 }
 

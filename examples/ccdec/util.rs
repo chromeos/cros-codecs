@@ -103,7 +103,7 @@ pub fn golden_md5s(path: &Option<PathBuf>) -> Vec<String> {
         None => vec![],
         Some(ref path) => {
             let mut golden_file_content = String::new();
-            File::open(&path)
+            File::open(path)
                 .expect("error opening golden file")
                 .read_to_string(&mut golden_file_content)
                 .expect("error reading golden file");
