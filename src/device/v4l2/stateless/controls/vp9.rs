@@ -37,6 +37,8 @@ use crate::codec::vp9::parser::Header;
 use crate::codec::vp9::parser::LoopFilterParams;
 use crate::codec::vp9::parser::QuantizationParams;
 use crate::codec::vp9::parser::SegmentationParams;
+use crate::codec::vp9::parser::LAST_FRAME;
+use crate::codec::vp9::parser::MAX_REF_FRAMES;
 use crate::codec::vp9::parser::MAX_SEGMENTS;
 use crate::codec::vp9::parser::SEG_LVL_MAX;
 
@@ -133,8 +135,8 @@ impl From<&Header> for v4l2_ctrl_vp9_frame {
         // TODO: Implement this properly for future drivers?
         ret.reference_mode = V4L2_VP9_REFERENCE_MODE_SINGLE_REFERENCE as u8;
 
-        for i in 0..4 {
-            ret.ref_frame_sign_bias |= ((hdr.ref_frame_sign_bias[i] != 0) as u8) << i;
+        for i in 0..(MAX_REF_FRAMES - LAST_FRAME) {
+            ret.ref_frame_sign_bias |= ((hdr.ref_frame_sign_bias[i + LAST_FRAME] != 0) as u8) << i;
         }
 
         if hdr.frame_type == FrameType::KeyFrame {
