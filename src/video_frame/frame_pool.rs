@@ -21,6 +21,8 @@ use crate::v4l2r::device::Device;
 #[cfg(feature = "vaapi")]
 use libva::Display;
 #[cfg(feature = "v4l2")]
+use v4l2r::bindings::v4l2_plane;
+#[cfg(feature = "v4l2")]
 use v4l2r::ioctl::V4l2Buffer;
 #[cfg(feature = "v4l2")]
 use v4l2r::Format;
@@ -62,8 +64,8 @@ impl<V: VideoFrame> VideoFrame for PooledVideoFrame<V> {
     }
 
     #[cfg(feature = "v4l2")]
-    fn to_native_handle(&self, plane: usize) -> Result<&Self::NativeHandle, String> {
-        self.inner.as_ref().unwrap().to_native_handle(plane)
+    fn fill_v4l2_plane(&self, index: usize, plane: &mut v4l2_plane) {
+        self.inner.as_ref().unwrap().fill_v4l2_plane(index, plane)
     }
 
     #[cfg(feature = "v4l2")]
