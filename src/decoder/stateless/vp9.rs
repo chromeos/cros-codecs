@@ -277,7 +277,11 @@ where
             // Skip input until we get information from the stream.
             DecodingState::AwaitingStreamInfo | DecodingState::Reset => (),
             // Ask the client to confirm the format before we can process this.
-            DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
+            DecodingState::FlushingForDRC | DecodingState::AwaitingFormat(_) => {
+                // Start signaling the awaiting format event to process a format change.
+                self.awaiting_format_event.write(1).unwrap();
+                return Err(DecodeError::CheckEvents);
+            }
             DecodingState::Decoding => {
                 // First allocate all the pictures we need for this superframe.
                 let num_required_pictures =

@@ -53,8 +53,6 @@ use crate::Resolution;
 
 //TODO: handle memory backends other than mmap
 //TODO: handle video formats other than h264
-//TODO: handle queue start/stop at runtime
-//TODO: handle DRC at runtime
 //TODO: handle synced buffers in Streaming state
 #[derive(Default)]
 enum V4l2OutputQueueHandle<T: v4l2r::device::queue::direction::Direction> {
@@ -94,6 +92,16 @@ pub enum QueueError {
     BufferQueue,
     #[error("requested {0} buffers, only {1} allocated")]
     NotEnoughRequestedBuffers(usize, usize),
+    #[error("failed to stream off.")]
+    StreamOff,
+    #[error("failed to get queue handle.")]
+    QueueHandle,
+    #[error("failed to free buffers.")]
+    FreeBuffer,
+    #[error("failed to reset OUTPUT queue.")]
+    ResetOutputQueue,
+    #[error("failed to reset CAPTURE queue.")]
+    ResetCaptureQueue,
 }
 
 impl From<QueueError> for DecodeError {
@@ -226,6 +234,26 @@ impl V4l2OutputQueue {
         Ok(Self { handle })
     }
 
+    pub fn reset(&mut self, device: Arc<Device>) -> Result<(), QueueError> {
+        let handle = self.handle.take();
+        let (ret, handle) = match handle {
+            V4l2OutputQueueHandle::Streaming(handle) => {
+                handle.stream_off().map_err(|err| QueueError::StreamOff);
+                (Rc::into_inner(handle).ok_or(QueueError::QueueHandle)?)
+                    .free_buffers()
+                    .map_err(|err| QueueError::FreeBuffer);
+
+                let queue_handle = Queue::get_output_mplane_queue(device.clone())
+                    .map_err(|err| QueueError::QueueHandle);
+
+                (Ok(()), V4l2OutputQueueHandle::Init(queue_handle?))
+            }
+            _ => (Err(QueueError::State), handle),
+        };
+        self.handle.replace(handle);
+        ret
+    }
+
     pub fn initialize(
         &mut self,
         fourcc: Fourcc,
@@ -260,9 +288,7 @@ impl V4l2OutputQueue {
 
                 V4l2OutputQueueHandle::Streaming(handle.into())
             }
-            _ => {
-                todo!("DRC is not supported")
-            }
+            _ => return Err(QueueError::State),
         });
         Ok(self)
     }
@@ -330,6 +356,26 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
         Ok(Self { handle, num_buffers: 0, format: Default::default(), device: device })
     }
 
+    pub fn reset(&mut self, device: Arc<Device>) -> Result<(), QueueError> {
+        let handle = self.handle.take();
+        let (ret, handle) = match handle {
+            V4l2CaptureQueueHandle::Streaming(handle) => {
+                handle.stream_off().map_err(|err| QueueError::StreamOff);
+                (Rc::into_inner(handle).ok_or(QueueError::QueueHandle)?)
+                    .free_buffers()
+                    .map_err(|err| QueueError::FreeBuffer);
+
+                let queue_handle = Queue::get_capture_mplane_queue(device.clone())
+                    .map_err(|err| QueueError::QueueHandle);
+
+                (Ok(()), V4l2CaptureQueueHandle::Init(queue_handle?))
+            }
+            _ => (Err(QueueError::State), handle),
+        };
+        self.handle.replace(handle);
+        ret
+    }
+
     pub fn initialize(&mut self, requested_num_buffers: u32) -> Result<&mut Self, QueueError> {
         // +2 due to HCMP1_HHI_A.h264 needing more
         let requested_num_buffers = requested_num_buffers + 2;
@@ -352,7 +398,7 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
 
                 V4l2CaptureQueueHandle::Streaming(handle.into())
             }
-            _ => todo!("DRC is not supported"),
+            _ => return Err(QueueError::State),
         });
 
         Ok(self)
