@@ -36,6 +36,8 @@ use crate::decoder::StreamInfo;
 use crate::image_processing::convert_video_frame;
 use crate::image_processing::i4xx_copy;
 use crate::utils::align_up;
+use crate::video_frame::frame_pool::FramePool;
+use crate::video_frame::frame_pool::PooledVideoFrame;
 use crate::video_frame::gbm_video_frame::GbmDevice;
 use crate::video_frame::gbm_video_frame::GbmVideoFrame;
 use crate::video_frame::VideoFrame;
@@ -76,7 +78,7 @@ enum C2Decoder<V: VideoFrame> {
     ImportingDecoder(DynStatelessVideoDecoder<V>),
     // TODO: Swap this for MMAP buffers in V4L2 since they are non-coherent, which makes them
     // faster for the CPU to read for image processing.
-    ConvertingDecoder(DynStatelessVideoDecoder<GbmVideoFrame>),
+    ConvertingDecoder(DynStatelessVideoDecoder<PooledVideoFrame<GbmVideoFrame>>),
 }
 
 pub struct C2DecoderWorker<V, B>
@@ -89,7 +91,7 @@ where
     output_fourcc: Fourcc,
     epoll_fd: Epoll,
     awaiting_job_event: Arc<EventFd>,
-    auxiliary_stream_info: Option<StreamInfo>,
+    auxiliary_frame_pool: Option<FramePool<GbmVideoFrame>>,
     error_cb: Arc<Mutex<dyn FnMut(C2Status) + Send + 'static>>,
     work_done_cb: Arc<Mutex<dyn FnMut(C2DecodeJob<V>) + Send + 'static>>,
     framepool_hint_cb: Arc<Mutex<dyn FnMut(StreamInfo) + Send + 'static>>,
@@ -99,8 +101,6 @@ where
     in_flight_queue: VecDeque<C2DecodeJob<V>>,
     frame_num: u64,
     state: Arc<Mutex<C2State>>,
-    // TODO: Delete this once we swap for MMAP buffers.
-    gbm_device: Arc<GbmDevice>,
 }
 
 impl<V, B> C2DecoderWorker<V, B>
@@ -153,7 +153,7 @@ where
                     Some(DecoderEvent::FormatChanged) => match stream_info {
                         Some(stream_info) => {
                             (*self.framepool_hint_cb.lock().unwrap())(stream_info.clone());
-                            self.auxiliary_stream_info = Some(stream_info);
+                            self.auxiliary_frame_pool.as_mut().unwrap().resize(&stream_info);
                         }
                         None => {
                             log::debug!("Could not get stream info after format change!");
@@ -189,16 +189,43 @@ where
     ) -> Result<Self, String> {
         let mut backend = B::new(options)?;
         let backend_fourccs = backend.supported_output_formats();
-        let decoder = if backend_fourccs.contains(&output_fourcc) {
-            C2Decoder::ImportingDecoder(backend.get_decoder(EncodedFormat::from(input_fourcc))?)
+        let (auxiliary_frame_pool, decoder) = if backend_fourccs.contains(&output_fourcc) {
+            (
+                None,
+                C2Decoder::ImportingDecoder(
+                    backend.get_decoder(EncodedFormat::from(input_fourcc))?,
+                ),
+            )
         } else {
-            C2Decoder::ConvertingDecoder(backend.get_decoder(EncodedFormat::from(input_fourcc))?)
+            let gbm_device = Arc::new(
+                GbmDevice::open(PathBuf::from("/dev/dri/renderD128"))
+                    .expect("Could not open GBM device!"),
+            );
+            let framepool = FramePool::new(move |stream_info: &StreamInfo| {
+                // TODO: Query the driver for these alignment params.
+                <Arc<GbmDevice> as Clone>::clone(&gbm_device)
+                    .new_frame(
+                        Fourcc::from(stream_info.format),
+                        stream_info.display_resolution.clone(),
+                        Resolution {
+                            width: align_up(stream_info.coded_resolution.width, 64),
+                            height: align_up(stream_info.coded_resolution.height, 64),
+                        },
+                    )
+                    .expect("Could not allocate frame for auxiliary frame pool!")
+            });
+            (
+                Some(framepool),
+                C2Decoder::ConvertingDecoder(
+                    backend.get_decoder(EncodedFormat::from(input_fourcc))?,
+                ),
+            )
         };
         Ok(Self {
             backend: backend,
             decoder: decoder,
             output_fourcc: output_fourcc,
-            auxiliary_stream_info: None,
+            auxiliary_frame_pool: auxiliary_frame_pool,
             epoll_fd: Epoll::new(EpollCreateFlags::empty())
                 .map_err(C2DecoderPollErrorWrapper::Epoll)
                 .unwrap(),
@@ -212,8 +239,6 @@ where
             in_flight_queue: VecDeque::new(),
             frame_num: 0,
             state: state,
-            gbm_device: GbmDevice::open(PathBuf::from("/dev/dri/renderD128"))
-                .expect("Could not open GBM device!"),
         })
     }
 
@@ -272,26 +297,8 @@ where
                             &mut *self.alloc_cb.lock().unwrap(),
                         ),
                         C2Decoder::ConvertingDecoder(decoder) => {
-                            // TODO: Pool these frames
                             decoder.decode(self.frame_num, bitstream, &mut || {
-                                let stream_info = self.auxiliary_stream_info.as_ref().unwrap();
-                                // TODO: Query alignment info from the driver.
-                                match self.gbm_device.clone().new_frame(
-                                    Fourcc::from(stream_info.format),
-                                    stream_info.display_resolution.clone(),
-                                    Resolution {
-                                        width: align_up(stream_info.coded_resolution.width, 64),
-                                        height: align_up(stream_info.coded_resolution.height, 64),
-                                    },
-                                ) {
-                                    Err(err) => {
-                                        log::debug!("Could not create new auxiliary frame! {err}");
-                                        *self.state.lock().unwrap() = C2State::C2Error;
-                                        (*self.error_cb.lock().unwrap())(C2Status::C2BadValue);
-                                        None
-                                    }
-                                    Ok(new_frame) => Some(new_frame),
-                                }
+                                self.auxiliary_frame_pool.as_mut().unwrap().alloc()
                             })
                         }
                     };

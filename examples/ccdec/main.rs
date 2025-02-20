@@ -38,6 +38,8 @@ use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
 use cros_codecs::decoder::StreamInfo;
 use cros_codecs::image_processing::nv12_to_i420;
 use cros_codecs::utils::align_up;
+use cros_codecs::video_frame::frame_pool::FramePool;
+use cros_codecs::video_frame::frame_pool::PooledVideoFrame;
 use cros_codecs::video_frame::gbm_video_frame::GbmDevice;
 use cros_codecs::video_frame::gbm_video_frame::GbmVideoFrame;
 use cros_codecs::video_frame::VideoFrame;
@@ -113,34 +115,24 @@ fn main() {
     let gbm_device = Arc::new(
         GbmDevice::open(PathBuf::from("/dev/dri/renderD128")).expect("Could not open GBM device!"),
     );
+    let framepool = Arc::new(Mutex::new(FramePool::new(move |stream_info: &StreamInfo| {
+        <Arc<GbmDevice> as Clone>::clone(&gbm_device)
+            .new_frame(
+                Fourcc::from(b"NV12"),
+                stream_info.display_resolution.clone(),
+                stream_info.coded_resolution.clone(),
+            )
+            .expect("Could not allocate frame for frame pool!")
+    })));
     // This is a workaround to get "copy by clone" semantics for closure variable capture since
     // Rust lacks the appropriate syntax to express this concept.
-    let _gbm_device = gbm_device.clone();
-    let mut framepool_info = Arc::new(Mutex::new(StreamInfo {
-        format: DecodedFormat::NV12,
-        coded_resolution: Resolution { width: 0, height: 0 },
-        display_resolution: Resolution { width: 0, height: 0 },
-        min_num_frames: 0,
-    }));
-    let mut _framepool_info = framepool_info.clone();
+    let _framepool = framepool.clone();
     let framepool_hint_cb = move |stream_info: StreamInfo| {
-        (*_framepool_info.lock().unwrap()) = stream_info.clone();
+        (*_framepool.lock().unwrap()).resize(&stream_info);
     };
-    // TODO: Pool these allocations
-    let alloc_cb = move || {
-        let stream_info = (*framepool_info.lock().unwrap()).clone();
-        Some(
-            <Arc<GbmDevice> as Clone>::clone(&gbm_device)
-                .new_frame(
-                    Fourcc::from(b"NV12"),
-                    stream_info.display_resolution.clone(),
-                    stream_info.coded_resolution.clone(),
-                )
-                .expect("Could not allocate frame for frame pool!"),
-        )
-    };
+    let alloc_cb = move || (*framepool.lock().unwrap()).alloc();
 
-    let on_new_frame = move |job: C2DecodeJob<GbmVideoFrame>| {
+    let on_new_frame = move |job: C2DecodeJob<PooledVideoFrame<GbmVideoFrame>>| {
         if !args.output.is_some() && !args.compute_md5.is_some() && !args.golden.is_some() {
             return;
         }
