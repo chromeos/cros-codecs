@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use std::borrow::BorrowMut;
 use std::collections::VecDeque;
+#[cfg(feature = "vaapi")]
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -18,14 +18,8 @@ use crate::Resolution;
 
 #[cfg(feature = "v4l2")]
 use crate::v4l2r::device::Device;
-#[cfg(feature = "v4l2")]
-use crate::video_frame::V4l2VideoFrame;
 #[cfg(feature = "vaapi")]
 use libva::Display;
-#[cfg(feature = "v4l2")]
-use v4l2r::device::queue::direction::Capture;
-#[cfg(feature = "v4l2")]
-use v4l2r::device::queue::dqbuf::DqBuffer;
 #[cfg(feature = "v4l2")]
 use v4l2r::ioctl::V4l2Buffer;
 #[cfg(feature = "v4l2")]

@@ -43,11 +43,7 @@ pub trait StatelessAV1DecoderBackend:
     /// `highest_spatial_layer` argument refers to the maximum layer selected by
     /// the client through `set_operating_point()` and the scalability
     /// information present in the stream, if any.
-    fn change_stream_info(
-        &mut self,
-        stream_info: &StreamInfo,
-        highest_spatial_layer: Option<u32>,
-    ) -> StatelessBackendResult<()>;
+    fn change_stream_info(&mut self, stream_info: &StreamInfo) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a new picture was found. The backend allocates all
     /// the resources it needs to process that picture.
@@ -426,8 +422,7 @@ where
                             render_height: sequence.max_frame_height_minus_1 as u32 + 1,
                         },
                     };
-                    self.backend
-                        .change_stream_info(&stream_info, self.codec.highest_spatial_layer)?;
+                    self.backend.change_stream_info(&stream_info)?;
                     self.await_format_change(stream_info);
                 }
             }
@@ -456,8 +451,7 @@ where
                         render_width: frame.header.render_width,
                         render_height: frame.header.render_height,
                     };
-                    self.backend
-                        .change_stream_info(&new_stream_info, self.codec.highest_spatial_layer)?;
+                    self.backend.change_stream_info(&new_stream_info)?;
                 }
                 if self.codec.current_pic.is_some() {
                     /* submit this frame immediately, as we need to update the

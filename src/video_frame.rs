@@ -4,7 +4,9 @@
 
 use std::cell::RefCell;
 use std::fmt::Debug;
+#[cfg(feature = "vaapi")]
 use std::rc::Rc;
+#[cfg(feature = "v4l2")]
 use std::sync::Arc;
 
 use crate::utils::align_up;
@@ -23,10 +25,6 @@ pub mod v4l2_mmap_video_frame;
 use libva::{Display, Surface, SurfaceMemoryDescriptor};
 #[cfg(feature = "v4l2")]
 use v4l2r::bindings::v4l2_plane;
-#[cfg(feature = "v4l2")]
-use v4l2r::device::queue::direction::Capture;
-#[cfg(feature = "v4l2")]
-use v4l2r::device::queue::dqbuf::DqBuffer;
 #[cfg(feature = "v4l2")]
 use v4l2r::device::Device;
 #[cfg(feature = "v4l2")]

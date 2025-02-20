@@ -41,7 +41,6 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
-use crate::video_frame::VideoFrame;
 use crate::Resolution;
 
 const MAX_DPB_SIZE: usize = 16;
@@ -55,7 +54,6 @@ pub trait StatelessH265DecoderBackend:
     /// Called when the decoder determines that a frame or field was found.
     fn new_picture(
         &mut self,
-        coded_resolution: Resolution,
         timestamp: u64,
         alloc_cb: &mut dyn FnMut() -> Option<
             <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
@@ -844,8 +842,7 @@ where
             return Err(DecodeError::CheckEvents);
         }
 
-        let mut backend_pic =
-            self.backend.new_picture(self.coded_resolution, timestamp, alloc_cb)?;
+        let mut backend_pic = self.backend.new_picture(timestamp, alloc_cb)?;
 
         let pic = PictureData::new_from_slice(
             slice,

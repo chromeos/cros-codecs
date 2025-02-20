@@ -6,7 +6,6 @@
 //! input and writing the raw decoded frames to a file.
 
 use std::borrow::Cow;
-use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
@@ -15,9 +14,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-
-#[cfg(feature = "vaapi")]
-use libva::Surface;
 
 use cros_codecs::bitstream_utils::IvfIterator;
 use cros_codecs::bitstream_utils::NalIterator;
@@ -48,9 +44,6 @@ use cros_codecs::video_frame::Y_PLANE;
 use cros_codecs::DecodedFormat;
 use cros_codecs::EncodedFormat;
 use cros_codecs::Fourcc;
-use cros_codecs::FrameLayout;
-use cros_codecs::PlaneLayout;
-use cros_codecs::Resolution;
 
 use crate::md5::md5_digest;
 use crate::md5::MD5Context;

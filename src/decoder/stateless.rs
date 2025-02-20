@@ -36,8 +36,6 @@ use crate::decoder::DecoderEvent;
 use crate::decoder::DynDecodedHandle;
 use crate::decoder::ReadyFramesQueue;
 use crate::decoder::StreamInfo;
-use crate::video_frame::VideoFrame;
-use crate::DecodedFormat;
 use crate::Resolution;
 
 /// Error returned by `new_picture` methods of the backend, usually to indicate which kind of

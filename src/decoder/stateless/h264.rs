@@ -54,7 +54,6 @@ use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
-use crate::video_frame::VideoFrame;
 use crate::Resolution;
 
 pub fn get_raster_from_zigzag_8x8(src: [u8; 64], dst: &mut [u8; 64]) {

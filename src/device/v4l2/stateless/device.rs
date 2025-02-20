@@ -4,9 +4,8 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fs::File;
 use std::os::fd::{AsRawFd, RawFd};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::thread::sleep;
@@ -15,8 +14,6 @@ use std::time::Duration;
 use v4l2r::device::Device as VideoDevice;
 use v4l2r::device::DeviceConfig;
 use v4l2r::ioctl;
-use v4l2r::memory::DmaBufHandle;
-use v4l2r::memory::PlaneHandle;
 use v4l2r::nix::fcntl::open;
 use v4l2r::nix::fcntl::OFlag;
 use v4l2r::nix::sys::stat::Mode;

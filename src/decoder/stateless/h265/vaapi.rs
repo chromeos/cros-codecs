@@ -6,11 +6,10 @@ use std::rc::Rc;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use libva::Picture as VaPicture;
 use libva::{
     BufferType, Display, HevcSliceExtFlags, IQMatrix, IQMatrixBufferHEVC, PictureHEVC,
-    PictureParameter, PictureParameterBufferHEVC, SliceParameter, SliceParameterBufferHEVC,
-    SliceParameterBufferHEVCRext, Surface, SurfaceMemoryDescriptor,
+    PictureParameterBufferHEVC, SliceParameter, SliceParameterBufferHEVC,
+    SliceParameterBufferHEVCRext,
 };
 
 use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
@@ -616,7 +615,6 @@ impl<V: VideoFrame> StatelessH265DecoderBackend for VaapiBackend<V> {
 
     fn new_picture(
         &mut self,
-        coded_resolution: Resolution,
         timestamp: u64,
         alloc_cb: &mut dyn FnMut() -> Option<
             <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,

@@ -7,9 +7,6 @@ use std::rc::Rc;
 use anyhow::anyhow;
 use anyhow::Context;
 use libva::Display;
-use libva::Picture as VaPicture;
-use libva::Surface;
-use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
@@ -34,10 +31,8 @@ use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
-use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
-use crate::decoder::DecodedHandle;
 use crate::video_frame::VideoFrame;
 use crate::Rect;
 use crate::Resolution;
@@ -497,17 +492,13 @@ impl<V: VideoFrame> StatelessDecoderBackendPicture<Av1> for VaapiBackend<V> {
 }
 
 impl<V: VideoFrame> StatelessAV1DecoderBackend for VaapiBackend<V> {
-    fn change_stream_info(
-        &mut self,
-        stream_info: &StreamInfo,
-        highest_spatial_layer: Option<u32>,
-    ) -> StatelessBackendResult<()> {
+    fn change_stream_info(&mut self, stream_info: &StreamInfo) -> StatelessBackendResult<()> {
         self.new_sequence(stream_info)
     }
 
     fn new_picture(
         &mut self,
-        hdr: &FrameHeaderObu,
+        _hdr: &FrameHeaderObu,
         timestamp: u64,
         alloc_cb: &mut dyn FnMut() -> Option<V>,
     ) -> NewPictureResult<Self::Picture> {

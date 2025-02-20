@@ -6,10 +6,12 @@ use std::cell::RefCell;
 use std::fs::File;
 use std::iter::zip;
 use std::os::fd::AsRawFd;
+#[cfg(feature = "v4l2")]
 use std::os::fd::BorrowedFd;
 use std::os::fd::FromRawFd;
 use std::path::Path;
 use std::ptr;
+#[cfg(feature = "vaapi")]
 use std::rc::Rc;
 use std::slice;
 use std::sync::Arc;
@@ -19,32 +21,31 @@ use crate::utils::buffer_size_for_area;
 use crate::video_frame::ReadMapping;
 use crate::video_frame::VideoFrame;
 use crate::video_frame::WriteMapping;
+#[cfg(feature = "vaapi")]
 use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Resolution;
 
 use drm_fourcc::DrmFourcc;
+#[cfg(feature = "v4l2")]
+use gbm_sys::gbm_import_fd_data;
+#[cfg(feature = "vaapi")]
+use gbm_sys::gbm_import_fd_modifier_data;
 use gbm_sys::{
     gbm_bo, gbm_bo_create, gbm_bo_destroy, gbm_bo_flags, gbm_bo_get_fd, gbm_bo_get_height,
     gbm_bo_get_modifier, gbm_bo_get_offset, gbm_bo_get_stride_for_plane, gbm_bo_get_width,
     gbm_bo_import, gbm_bo_map, gbm_bo_transfer_flags, gbm_bo_unmap, gbm_create_device, gbm_device,
-    gbm_device_destroy, gbm_import_fd_data, gbm_import_fd_modifier_data,
+    gbm_device_destroy,
 };
 use nix::libc;
 
 #[cfg(feature = "v4l2")]
 use crate::v4l2r::device::Device;
-#[cfg(feature = "v4l2")]
-use crate::video_frame::V4l2VideoFrame;
 #[cfg(feature = "vaapi")]
 use libva::{
     Display, ExternalBufferDescriptor, MemoryType, Surface, UsageHint, VADRMPRIMESurfaceDescriptor,
     VADRMPRIMESurfaceDescriptorLayer, VADRMPRIMESurfaceDescriptorObject,
 };
-#[cfg(feature = "v4l2")]
-use v4l2r::device::queue::direction::Capture;
-#[cfg(feature = "v4l2")]
-use v4l2r::device::queue::dqbuf::DqBuffer;
 #[cfg(feature = "v4l2")]
 use v4l2r::ioctl::V4l2Buffer;
 #[cfg(feature = "v4l2")]
@@ -96,6 +97,7 @@ fn map_bo(
     }
 }
 
+#[cfg(feature = "v4l2")]
 fn import_bo_from_dmabuf_fd(
     device: *mut gbm_device,
     dma: BorrowedFd<'_>,
@@ -197,6 +199,7 @@ impl GbmVideoFrame {
         ret
     }
 
+    #[allow(dead_code)]
     fn get_modifier(&self) -> u64 {
         unsafe { gbm_bo_get_modifier(self.bo[0]) }
     }
@@ -357,7 +360,7 @@ impl VideoFrame for GbmVideoFrame {
 
     // No-op for GBM buffers since the backing FD already disambiguates them.
     #[cfg(feature = "v4l2")]
-    fn process_dqbuf(&mut self, device: Arc<Device>, format: &Format, buf: &V4l2Buffer) {}
+    fn process_dqbuf(&mut self, _device: Arc<Device>, _format: &Format, _buf: &V4l2Buffer) {}
 
     #[cfg(feature = "vaapi")]
     fn to_native_handle(&self, display: &Rc<Display>) -> Result<Self::NativeHandle, String> {
@@ -451,8 +454,6 @@ impl GbmDevice {
             #[cfg(feature = "v4l2")]
             export_handles: vec![],
         };
-
-        let usage = gbm_bo_flags::GBM_BO_USE_LINEAR as u32;
 
         if ret.is_compressed() {
             let buffer_size = buffer_size_for_area(coded_resolution.width, coded_resolution.height);

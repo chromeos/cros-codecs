@@ -11,10 +11,7 @@ use libva::BufferType;
 use libva::Display;
 use libva::IQMatrix;
 use libva::IQMatrixBufferVP8;
-use libva::Picture as VaPicture;
 use libva::ProbabilityDataBufferVP8;
-use libva::Surface;
-use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::VaStreamInfo;

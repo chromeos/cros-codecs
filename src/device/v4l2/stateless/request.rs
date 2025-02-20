@@ -3,14 +3,12 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
-use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::rc::{Rc, Weak};
 
 use v4l2r::controls::ExtControlTrait;
 use v4l2r::controls::SafeExtControl;
 use v4l2r::ioctl;
-use v4l2r::memory::DmaBufHandle;
 
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::device::v4l2::stateless::device::V4l2Device;
