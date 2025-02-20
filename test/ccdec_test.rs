@@ -6,30 +6,60 @@
 mod tests {
     const CCDEC_BINARY: &str = "ccdec";
     use std::env::current_exe;
+    use std::fs;
     use std::path::Path;
     use std::path::PathBuf;
-    use std::process::Command;
+    use std::process::{Command, ExitStatus};
 
-    fn cros_codecs_decode(codec_path: &str, file_name: &str, input_format: &str) {
+    fn cros_codecs_decode(codec_path: &str, input_format: &str) {
         let (test_binary_path, test_file_path) = get_test_paths(codec_path);
-        let ccdec_args = get_cros_codecs_decode_args(&test_file_path, file_name, input_format);
+        assert!(Path::new(codec_path).is_dir(), "{} is not a valid path", codec_path);
 
-        let ccdec_args_str = ccdec_args.iter().map(String::as_str).collect::<Vec<_>>();
-        execute(&test_binary_path, &ccdec_args_str);
+        let mut all_execute_success = true;
+        for entry in fs::read_dir(codec_path).unwrap().flatten() {
+            let path = entry.path();
+            // Only run the test on bitstreams with available json file containing its md5 checksum.
+            let test_file_name = path.file_name().unwrap().to_str().unwrap();
+            let json_file_path = test_file_path.join(format!("{}.json", test_file_name));
+
+            if path.is_file() && json_file_path.exists() {
+                let ccdec_args =
+                    get_cros_codecs_decode_args(&test_file_path, test_file_name, input_format);
+                let ccdec_args_str = ccdec_args.iter().map(String::as_str).collect::<Vec<_>>();
+
+                match execute(&test_binary_path, &ccdec_args_str) {
+                    Ok(_) => log::info!("Cros-codecs decode test succeeded: {}", test_file_name),
+                    Err(err) => {
+                        log::error!(
+                            "Cros-codecs decode test failed: {} with error: {}",
+                            test_file_name,
+                            err
+                        );
+                        all_execute_success = false;
+                    }
+                }
+            }
+        }
+        assert!(all_execute_success, "One or more cros-codecs decode tests failed.");
     }
 
-    fn execute(test_binary_path: &PathBuf, args: &[&str]) {
+    type ExecuteResult = Result<ExitStatus, String>;
+    fn execute(test_binary_path: &PathBuf, args: &[&str]) -> ExecuteResult {
         let mut command = Command::new(test_binary_path);
         command.args(args);
         let output = command.status();
 
         match output {
             Ok(status) => {
-                assert!(status.success(), "Command failed: {:?}", command);
+                if status.success() {
+                    log::info!("Command succeeded: {:?}", command);
+                    Ok(status)
+                } else {
+                    log::error!("Command failed: {:?} with status: {:?}", command, status);
+                    Err(format!("Command failed with status: {:?}", status))
+                }
             }
-            Err(e) => {
-                panic!("Error executing command: {}", e);
-            }
+            Err(err) => Err(format!("Error executing command: {}", err)),
         }
     }
 
@@ -61,37 +91,34 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn av1_decode() {
         const AV1_DATA_PATH: &str = "src/codec/av1/test_data";
-        const FILE_NAME: &str = "test-25fps.av1.ivf";
-        cros_codecs_decode(AV1_DATA_PATH, FILE_NAME, "av1");
+        cros_codecs_decode(AV1_DATA_PATH, "av1");
     }
 
     #[test]
     fn h264_decode() {
         const H264_DATA_PATH: &str = "src/codec/h264/test_data";
-        const FILE_NAME: &str = "test-25fps.h264";
-        cros_codecs_decode(H264_DATA_PATH, FILE_NAME, "h264");
+        cros_codecs_decode(H264_DATA_PATH, "h264");
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn h265_decode() {
         const H265_DATA_PATH: &str = "src/codec/h265/test_data";
-        const FILE_NAME: &str = "test-25fps.h265";
-        cros_codecs_decode(H265_DATA_PATH, FILE_NAME, "h265");
+        cros_codecs_decode(H265_DATA_PATH, "h265");
     }
 
     #[test]
     fn vp8_decode() {
         const VP8_DATA_PATH: &str = "src/codec/vp8/test_data";
-        const FILE_NAME: &str = "test-25fps.vp8";
-        cros_codecs_decode(VP8_DATA_PATH, FILE_NAME, "vp8");
+        cros_codecs_decode(VP8_DATA_PATH, "vp8");
     }
 
     #[test]
     fn vp9_decode() {
         const VP9_DATA_PATH: &str = "src/codec/vp9/test_data";
-        const FILE_NAME: &str = "test-25fps.vp9";
-        cros_codecs_decode(VP9_DATA_PATH, FILE_NAME, "vp9");
+        cros_codecs_decode(VP9_DATA_PATH, "vp9");
     }
 }
