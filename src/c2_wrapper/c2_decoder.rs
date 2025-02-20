@@ -38,8 +38,12 @@ use crate::image_processing::i4xx_copy;
 use crate::utils::align_up;
 use crate::video_frame::frame_pool::FramePool;
 use crate::video_frame::frame_pool::PooledVideoFrame;
+#[cfg(feature = "vaapi")]
 use crate::video_frame::gbm_video_frame::GbmDevice;
+#[cfg(feature = "vaapi")]
 use crate::video_frame::gbm_video_frame::GbmVideoFrame;
+#[cfg(feature = "v4l2")]
+use crate::video_frame::v4l2_mmap_video_frame::V4l2MmapVideoFrame;
 use crate::video_frame::VideoFrame;
 use crate::DecodedFormat;
 use crate::EncodedFormat;
@@ -70,15 +74,18 @@ pub trait C2DecoderBackend {
     ) -> Result<DynStatelessVideoDecoder<V>, String>;
 }
 
+#[cfg(feature = "vaapi")]
+type AuxiliaryVideoFrame = GbmVideoFrame;
+#[cfg(feature = "v4l2")]
+type AuxiliaryVideoFrame = V4l2MmapVideoFrame;
+
 // An "importing decoder" can directly import the DMA bufs we are getting, while a "converting
 // decoder" is used for performing image processing routines to convert between the video hardware
 // output and a pixel format that can be consumed by the GPU and display controller.
 // TODO: Come up with a better name for these?
 enum C2Decoder<V: VideoFrame> {
     ImportingDecoder(DynStatelessVideoDecoder<V>),
-    // TODO: Swap this for MMAP buffers in V4L2 since they are non-coherent, which makes them
-    // faster for the CPU to read for image processing.
-    ConvertingDecoder(DynStatelessVideoDecoder<PooledVideoFrame<GbmVideoFrame>>),
+    ConvertingDecoder(DynStatelessVideoDecoder<PooledVideoFrame<AuxiliaryVideoFrame>>),
 }
 
 pub struct C2DecoderWorker<V, B>
@@ -91,7 +98,7 @@ where
     output_fourcc: Fourcc,
     epoll_fd: Epoll,
     awaiting_job_event: Arc<EventFd>,
-    auxiliary_frame_pool: Option<FramePool<GbmVideoFrame>>,
+    auxiliary_frame_pool: Option<FramePool<AuxiliaryVideoFrame>>,
     error_cb: Arc<Mutex<dyn FnMut(C2Status) + Send + 'static>>,
     work_done_cb: Arc<Mutex<dyn FnMut(C2DecodeJob<V>) + Send + 'static>>,
     framepool_hint_cb: Arc<Mutex<dyn FnMut(StreamInfo) + Send + 'static>>,
@@ -197,29 +204,44 @@ where
                 ),
             )
         } else {
-            let gbm_device = Arc::new(
-                GbmDevice::open(PathBuf::from("/dev/dri/renderD128"))
-                    .expect("Could not open GBM device!"),
-            );
-            let framepool = FramePool::new(move |stream_info: &StreamInfo| {
-                // TODO: Query the driver for these alignment params.
-                <Arc<GbmDevice> as Clone>::clone(&gbm_device)
-                    .new_frame(
+            #[cfg(feature = "vaapi")]
+            {
+                let gbm_device = Arc::new(
+                    GbmDevice::open(PathBuf::from("/dev/dri/renderD128"))
+                        .expect("Could not open GBM device!"),
+                );
+                let framepool = FramePool::new(move |stream_info: &StreamInfo| {
+                    // TODO: Query the driver for these alignment params.
+                    <Arc<GbmDevice> as Clone>::clone(&gbm_device)
+                        .new_frame(
+                            Fourcc::from(stream_info.format),
+                            stream_info.display_resolution.clone(),
+                            stream_info.coded_resolution.clone(),
+                        )
+                        .expect("Could not allocate frame for auxiliary frame pool!")
+                });
+                (
+                    Some(framepool),
+                    C2Decoder::ConvertingDecoder(
+                        backend.get_decoder(EncodedFormat::from(input_fourcc))?,
+                    ),
+                )
+            }
+            #[cfg(feature = "v4l2")]
+            {
+                let framepool = FramePool::new(move |stream_info: &StreamInfo| {
+                    V4l2MmapVideoFrame::new(
                         Fourcc::from(stream_info.format),
                         stream_info.display_resolution.clone(),
-                        Resolution {
-                            width: align_up(stream_info.coded_resolution.width, 64),
-                            height: align_up(stream_info.coded_resolution.height, 64),
-                        },
                     )
-                    .expect("Could not allocate frame for auxiliary frame pool!")
-            });
-            (
-                Some(framepool),
-                C2Decoder::ConvertingDecoder(
-                    backend.get_decoder(EncodedFormat::from(input_fourcc))?,
-                ),
-            )
+                });
+                (
+                    Some(framepool),
+                    C2Decoder::ConvertingDecoder(
+                        backend.get_decoder(EncodedFormat::from(input_fourcc))?,
+                    ),
+                )
+            }
         };
         Ok(Self {
             backend: backend,

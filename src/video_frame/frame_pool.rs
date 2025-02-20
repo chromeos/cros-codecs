@@ -16,8 +16,20 @@ use crate::video_frame::WriteMapping;
 use crate::Fourcc;
 use crate::Resolution;
 
+#[cfg(feature = "v4l2")]
+use crate::v4l2r::device::Device;
+#[cfg(feature = "v4l2")]
+use crate::video_frame::V4l2VideoFrame;
 #[cfg(feature = "vaapi")]
 use libva::Display;
+#[cfg(feature = "v4l2")]
+use v4l2r::device::queue::direction::Capture;
+#[cfg(feature = "v4l2")]
+use v4l2r::device::queue::dqbuf::DqBuffer;
+#[cfg(feature = "v4l2")]
+use v4l2r::ioctl::V4l2Buffer;
+#[cfg(feature = "v4l2")]
+use v4l2r::Format;
 
 #[derive(Debug)]
 pub struct PooledVideoFrame<V: VideoFrame> {
@@ -58,6 +70,11 @@ impl<V: VideoFrame> VideoFrame for PooledVideoFrame<V> {
     #[cfg(feature = "v4l2")]
     fn to_native_handle(&self, plane: usize) -> Result<&Self::NativeHandle, String> {
         self.inner.as_ref().unwrap().to_native_handle(plane)
+    }
+
+    #[cfg(feature = "v4l2")]
+    fn process_dqbuf(&mut self, device: Arc<Device>, format: &Format, buf: &V4l2Buffer) {
+        self.inner.as_mut().unwrap().process_dqbuf(device, format, buf)
     }
 
     #[cfg(feature = "vaapi")]
