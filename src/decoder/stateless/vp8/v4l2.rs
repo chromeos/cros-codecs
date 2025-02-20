@@ -5,7 +5,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::backend::v4l2::decoder::stateless::BackendHandle;
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
@@ -19,10 +18,13 @@ use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::device::v4l2::stateless::controls::vp8::V4l2CtrlVp8FrameParams;
+use crate::video_frame::VideoFrame;
+use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
@@ -44,24 +46,36 @@ impl V4l2StreamInfo for &Header {
     }
 }
 
-impl StatelessDecoderBackendPicture<Vp8> for V4l2StatelessDecoderBackend {
-    type Picture = Rc<RefCell<V4l2Picture>>;
+impl<V: VideoFrame> StatelessDecoderBackendPicture<Vp8> for V4l2StatelessDecoderBackend<V> {
+    type Picture = Rc<RefCell<V4l2Picture<V>>>;
 }
 
-impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
+impl<V: VideoFrame> StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend<V> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
-        let coded_size = Resolution::from((header.width as u32, header.height as u32));
+        // TODO: Query the driver for the format
+        self.stream_info.format = DecodedFormat::MM21;
+        self.stream_info.display_resolution = Resolution::from(header.visible_rect());
+        self.stream_info.coded_resolution = header.coded_size().clone();
+        self.stream_info.min_num_frames = header.min_num_frames();
+
         self.device.initialize_queues(
             Fourcc::from(b"VP8F"),
-            coded_size,
-            Rect::from(coded_size),
+            self.stream_info.coded_resolution,
+            Rect::from(self.stream_info.coded_resolution),
             NUM_FRAMES as u32,
         )?;
         Ok(())
     }
 
-    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
-        let request_buffer = match self.device.alloc_request(timestamp) {
+    fn new_picture(
+        &mut self,
+        timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> NewPictureResult<Self::Picture> {
+        let frame = alloc_cb().ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let request_buffer = match self.device.alloc_request(timestamp, frame) {
             Ok(buffer) => buffer,
             _ => return Err(NewPictureError::OutOfOutputBuffers),
         };
@@ -69,7 +83,7 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
         request_buffer
             .as_ref()
             .borrow_mut()
-            .set_picture_ref(Rc::<RefCell<V4l2Picture>>::downgrade(&picture));
+            .set_picture_ref(Rc::<RefCell<V4l2Picture<V>>>::downgrade(&picture));
         Ok(picture)
     }
 
@@ -90,7 +104,7 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
         let mut request = request.as_ref().borrow_mut();
         request.write(bitstream);
 
-        let mut ref_pictures = Vec::<Rc<RefCell<V4l2Picture>>>::new();
+        let mut ref_pictures = Vec::<Rc<RefCell<V4l2Picture<V>>>>::new();
 
         let mut last_frame_ts: u64 = 0;
         let mut golden_frame_ts: u64 = 0;
@@ -98,7 +112,7 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
 
         match &last_ref {
             Some(handle) => {
-                ref_pictures.push(handle.handle.borrow().picture.clone());
+                ref_pictures.push(handle.picture.clone());
                 last_frame_ts = handle.timestamp();
             }
             None => (),
@@ -106,7 +120,7 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
 
         match &golden_ref {
             Some(handle) => {
-                ref_pictures.push(handle.handle.borrow().picture.clone());
+                ref_pictures.push(handle.picture.clone());
                 golden_frame_ts = handle.timestamp();
             }
             None => (),
@@ -114,7 +128,7 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
 
         match &alt_ref {
             Some(handle) => {
-                ref_pictures.push(handle.handle.borrow().picture.clone());
+                ref_pictures.push(handle.picture.clone());
                 alt_frame_ts = handle.timestamp();
             }
             None => (),
@@ -134,13 +148,15 @@ impl StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend {
 
         request.ioctl(&vp8_frame_params);
 
-        let handle = Rc::new(RefCell::new(BackendHandle { picture: picture.clone() }));
         request.submit();
-        Ok(V4l2StatelessDecoderHandle { handle: handle, stream_info: self.stream_info.clone() })
+        Ok(V4l2StatelessDecoderHandle {
+            picture: picture.clone(),
+            stream_info: self.stream_info.clone(),
+        })
     }
 }
 
-impl StatelessDecoder<Vp8, V4l2StatelessDecoderBackend> {
+impl<V: VideoFrame> StatelessDecoder<Vp8, V4l2StatelessDecoderBackend<V>> {
     // Creates a new instance of the decoder using the v4l2 backend.
     pub fn new_v4l2(blocking_mode: BlockingMode) -> Self {
         Self::new(V4l2StatelessDecoderBackend::new(), blocking_mode)

@@ -7,7 +7,6 @@ use std::rc::Rc;
 
 use v4l2r::ioctl;
 
-use crate::backend::v4l2::decoder::stateless::BackendHandle;
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
@@ -25,11 +24,14 @@ use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::device::v4l2::stateless::controls::vp9::V4l2CtrlVp9FrameParams;
 use crate::device::v4l2::stateless::controls::vp9::Vp9V4l2Control;
+use crate::video_frame::VideoFrame;
+use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
@@ -48,12 +50,18 @@ impl V4l2StreamInfo for &Header {
     }
 }
 
-impl StatelessDecoderBackendPicture<Vp9> for V4l2StatelessDecoderBackend {
-    type Picture = Rc<RefCell<V4l2Picture>>;
+impl<V: VideoFrame> StatelessDecoderBackendPicture<Vp9> for V4l2StatelessDecoderBackend<V> {
+    type Picture = Rc<RefCell<V4l2Picture<V>>>;
 }
 
-impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
+impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
+        // TODO: Query the driver for the format
+        self.stream_info.format = DecodedFormat::MM21;
+        self.stream_info.display_resolution = Resolution::from(header.visible_rect());
+        self.stream_info.coded_resolution = header.coded_size().clone();
+        self.stream_info.min_num_frames = header.min_num_frames();
+
         self.device.initialize_queues(
             Fourcc::from(b"VP9F"),
             header.coded_size(),
@@ -63,8 +71,15 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
         Ok(())
     }
 
-    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
-        let request_buffer = match self.device.alloc_request(timestamp) {
+    fn new_picture(
+        &mut self,
+        timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> NewPictureResult<Self::Picture> {
+        let frame = alloc_cb().ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let request_buffer = match self.device.alloc_request(timestamp, frame) {
             Ok(buffer) => buffer,
             _ => return Err(NewPictureError::OutOfOutputBuffers),
         };
@@ -72,7 +87,7 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
         request_buffer
             .as_ref()
             .borrow_mut()
-            .set_picture_ref(Rc::<RefCell<V4l2Picture>>::downgrade(&picture));
+            .set_picture_ref(Rc::<RefCell<V4l2Picture<V>>>::downgrade(&picture));
         Ok(picture)
     }
 
@@ -120,13 +135,11 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
         let which = request.which();
         ioctl::s_ext_ctrls(&self.device, which, &mut ctrl).expect("Failed to set output control");
 
-        let handle = Rc::new(RefCell::new(BackendHandle { picture: picture.clone() }));
-
-        let mut reference_pictures = Vec::<Rc<RefCell<V4l2Picture>>>::new();
+        let mut reference_pictures = Vec::<Rc<RefCell<V4l2Picture<V>>>>::new();
         for frame in reference_frames {
             if frame.is_some() {
                 // TODO: I don't think this is right?
-                reference_pictures.push(frame.as_ref().unwrap().handle.borrow().picture.clone());
+                reference_pictures.push(frame.as_ref().unwrap().picture.clone());
             }
         }
         picture.borrow_mut().set_ref_pictures(reference_pictures);
@@ -134,11 +147,14 @@ impl StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend {
         request.write(bitstream);
         request.submit();
 
-        Ok(V4l2StatelessDecoderHandle { handle: handle, stream_info: self.stream_info.clone() })
+        Ok(V4l2StatelessDecoderHandle {
+            picture: picture.clone(),
+            stream_info: self.stream_info.clone(),
+        })
     }
 }
 
-impl StatelessDecoder<Vp9, V4l2StatelessDecoderBackend> {
+impl<V: VideoFrame> StatelessDecoder<Vp9, V4l2StatelessDecoderBackend<V>> {
     pub fn new_v4l2(blocking_mode: BlockingMode) -> Self {
         Self::new(V4l2StatelessDecoderBackend::new(), blocking_mode)
             .expect("Failed to create v4l2 stateless decoder backend")

@@ -26,11 +26,11 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessVideoDecoder;
-use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
+use crate::video_frame::VideoFrame;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP8.
@@ -41,7 +41,13 @@ pub trait StatelessVp8DecoderBackend:
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
     /// Called when the decoder determines that a frame or field was found.
-    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture>;
+    fn new_picture(
+        &mut self,
+        timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> NewPictureResult<Self::Picture>;
 
     /// Called when the decoder wants the backend to finish the decoding
     /// operations for `picture`.
@@ -175,13 +181,20 @@ where
 impl<B> StatelessDecoder<Vp8, B>
 where
     B: StatelessVp8DecoderBackend,
-    B::Handle: Clone,
+    B::Handle: Clone + DecodedHandle,
 {
     /// Handle a single frame.
-    fn handle_frame(&mut self, frame: Frame, timestamp: u64) -> Result<(), DecodeError> {
+    fn handle_frame(
+        &mut self,
+        frame: Frame,
+        timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<B as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> Result<(), DecodeError> {
         let show_frame = frame.header.show_frame;
 
-        let picture = self.backend.new_picture(timestamp)?;
+        let picture = self.backend.new_picture(timestamp, alloc_cb)?;
         let decoded_handle = self.backend.submit_picture(
             picture,
             &frame.header,
@@ -219,12 +232,19 @@ where
 
 impl<B> StatelessVideoDecoder for StatelessDecoder<Vp8, B>
 where
-    B: StatelessVp8DecoderBackend + TryFormat<Vp8>,
+    B: StatelessVp8DecoderBackend,
     B::Handle: Clone + 'static,
 {
     type Handle = B::Handle;
 
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
+    fn decode(
+        &mut self,
+        timestamp: u64,
+        bitstream: &[u8],
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<B as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> Result<usize, DecodeError> {
         let frame = self
             .codec
             .parser
@@ -248,7 +268,7 @@ where
             DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
             DecodingState::Decoding => {
                 let len = frame.header.frame_len();
-                self.handle_frame(frame, timestamp)?;
+                self.handle_frame(frame, timestamp, alloc_cb)?;
                 Ok(len)
             }
         }

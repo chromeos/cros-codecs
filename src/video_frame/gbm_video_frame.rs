@@ -155,14 +155,19 @@ impl<'a> Drop for GbmMapping<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct GbmVideoFrame {
     fourcc: Fourcc,
     resolution: Resolution,
     bo: Vec<*mut gbm_bo>,
     // This reference is just to create a lifetime constraint. We don't want someone to close the
-    // device before free'ing up all allocated VideoFrames.
-    _device: Arc<GbmDevice>,
-    export_file: Vec<File>,
+    // device before free'ing up all allocated VideoFrames. We keep it optional just so that we can
+    // create default video frames for the purpose of signaling a drain event.
+    _device: Option<Arc<GbmDevice>>,
+    // This ties the lifetime of the DRM FDs to the lifetime of this object so that we can export
+    // to V4L2.
+    #[cfg(feature = "v4l2")]
+    export_handles: Vec<DmaBufHandle<File>>,
 }
 
 impl GbmVideoFrame {
@@ -204,39 +209,41 @@ impl GbmVideoFrame {
 }
 
 #[cfg(feature = "vaapi")]
-impl ExternalBufferDescriptor for GbmVideoFrame {
+pub struct GbmExternalBufferDescriptor {
+    fourcc: Fourcc,
+    modifier: u64,
+    resolution: Resolution,
+    pitches: Vec<usize>,
+    offsets: Vec<usize>,
+    // We use a proper File object here to correctly manage the lifetimes of the exported FDs.
+    // Otherwise we risk exhausting the FD limit on the machine for certain test vectors.
+    export_file: File,
+}
+
+#[cfg(feature = "vaapi")]
+impl ExternalBufferDescriptor for GbmExternalBufferDescriptor {
     const MEMORY_TYPE: MemoryType = MemoryType::DrmPrime2;
     type DescriptorAttribute = VADRMPRIMESurfaceDescriptor;
 
     fn va_surface_attribute(&mut self) -> Self::DescriptorAttribute {
-        self.export_file =
-            self.bo.iter().map(|bo| unsafe { File::from_raw_fd(gbm_bo_get_fd(*bo)) }).collect();
+        let objects = [
+            VADRMPRIMESurfaceDescriptorObject {
+                fd: self.export_file.as_raw_fd(),
+                size: self.export_file.metadata().unwrap().len() as u32,
+                drm_format_modifier: self.modifier,
+            },
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        ];
 
-        if self.export_file.len() > 1 {
-            todo!("Exporting non-contiguous formats not yet supported!");
-        }
-
-        let objects = self
-            .export_file
-            .iter()
-            .map(|file| VADRMPRIMESurfaceDescriptorObject {
-                fd: file.as_raw_fd(),
-                size: file.metadata().unwrap().len() as u32,
-                drm_format_modifier: self.get_modifier(),
-            })
-            .chain(std::iter::repeat(Default::default()))
-            .take(4)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
-        let pitches = self.get_plane_pitch();
-        let offsets = self.get_plane_offset();
         let layers = [
             VADRMPRIMESurfaceDescriptorLayer {
                 drm_format: u32::from(self.fourcc),
-                num_planes: self.num_planes() as u32,
+                num_planes: self.pitches.len() as u32,
                 object_index: [0, 0, 0, 0],
-                offset: offsets
+                offset: self
+                    .offsets
                     .iter()
                     .map(|x| *x as u32)
                     .chain(std::iter::repeat(0))
@@ -244,7 +251,8 @@ impl ExternalBufferDescriptor for GbmVideoFrame {
                     .collect::<Vec<_>>()
                     .try_into()
                     .unwrap(),
-                pitch: pitches
+                pitch: self
+                    .pitches
                     .iter()
                     .map(|x| *x as u32)
                     .chain(std::iter::repeat(0))
@@ -257,7 +265,7 @@ impl ExternalBufferDescriptor for GbmVideoFrame {
             Default::default(),
             Default::default(),
         ];
-        let resolution = self.resolution();
+        let resolution = self.resolution;
         let ret = VADRMPRIMESurfaceDescriptor {
             fourcc: u32::from(self.fourcc),
             width: resolution.width,
@@ -273,12 +281,12 @@ impl ExternalBufferDescriptor for GbmVideoFrame {
 
 impl VideoFrame for GbmVideoFrame {
     #[cfg(feature = "v4l2")]
-    type NativeHandle = Vec<DmaBufHandle<File>>;
+    type NativeHandle = DmaBufHandle<File>;
 
-    // We implement the ExternalBufferDescriptor trait, so technically GbmVideoFrame is the
-    // NativeHandle for VA-API.
     #[cfg(feature = "vaapi")]
-    type NativeHandle = Surface<GbmVideoFrame>;
+    type MemDescriptor = GbmExternalBufferDescriptor;
+    #[cfg(feature = "vaapi")]
+    type NativeHandle = Surface<GbmExternalBufferDescriptor>;
 
     fn fourcc(&self) -> Fourcc {
         self.fourcc.clone()
@@ -327,27 +335,41 @@ impl VideoFrame for GbmVideoFrame {
     }
 
     #[cfg(feature = "v4l2")]
-    fn to_native_handle(self: Box<Self>) -> Result<Self::NativeHandle, String> {
-        Ok(self
-            .bo
-            .iter()
-            .map(|bo| DmaBufHandle::from(unsafe { File::from_raw_fd(gbm_bo_get_fd(*bo)) }))
-            .collect())
+    fn to_native_handle(&self, plane: usize) -> Result<&Self::NativeHandle, String> {
+        if plane >= self.export_handles.len() {
+            Err("No such plane {plane}".to_string())
+        } else {
+            Ok(&self.export_handles[plane])
+        }
     }
 
     #[cfg(feature = "vaapi")]
-    fn to_native_handle(
-        self: Box<Self>,
-        display: &Rc<Display>,
-    ) -> Result<Self::NativeHandle, String> {
+    fn to_native_handle(&self, display: &Rc<Display>) -> Result<Self::NativeHandle, String> {
         if self.is_compressed() {
             return Err("Compressed buffer export to VA-API is not currently supported".to_string());
         }
+        if !self.is_contiguous() {
+            return Err(
+                "Exporting non-contiguous GBM buffers to VA-API is not currently supported"
+                    .to_string(),
+            );
+        }
+
         // TODO: Add more supported formats
         let rt_format = match self.decoded_format().unwrap() {
             DecodedFormat::I420 | DecodedFormat::NV12 => libva::VA_RT_FORMAT_YUV420,
             _ => return Err("Format unsupported for VA-API export".to_string()),
         };
+
+        let export_descriptor = vec![GbmExternalBufferDescriptor {
+            fourcc: self.fourcc.clone(),
+            modifier: self.get_modifier(),
+            resolution: self.resolution(),
+            pitches: self.get_plane_pitch(),
+            offsets: self.get_plane_offset(),
+            // SAFETY: gbm_bo_get_fd() gives us a fresh, owned fd on every call.
+            export_file: unsafe { File::from_raw_fd(gbm_bo_get_fd(self.bo[0])) },
+        }];
 
         let mut ret = display
             .create_surfaces(
@@ -356,7 +378,7 @@ impl VideoFrame for GbmVideoFrame {
                 self.resolution().width,
                 self.resolution().height,
                 Some(UsageHint::USAGE_HINT_DECODER),
-                vec![*self],
+                export_descriptor,
             )
             .map_err(|_| "Error importing GbmVideoFrame to VA-API".to_string())?;
 
@@ -372,6 +394,12 @@ impl Drop for GbmVideoFrame {
     }
 }
 
+// UNSAFE: We will only access the raw BOs from the worker thread, and there are no other copies of
+// these pointers.
+unsafe impl Send for GbmVideoFrame {}
+unsafe impl Sync for GbmVideoFrame {}
+
+#[derive(Debug)]
 pub struct GbmDevice {
     device: *mut gbm_device,
     // Keeps device file descriptors valid as long as the GbmDevice is alive.
@@ -403,8 +431,9 @@ impl GbmDevice {
             fourcc: fourcc,
             resolution: visible_resolution,
             bo: vec![],
-            _device: Arc::clone(&self),
-            export_file: vec![],
+            _device: Some(Arc::clone(&self)),
+            #[cfg(feature = "v4l2")]
+            export_handles: vec![],
         };
 
         let usage = gbm_bo_flags::GBM_BO_USE_LINEAR as u32;
@@ -426,11 +455,10 @@ impl GbmDevice {
                 )
             };
             if bo.is_null() {
-                Err("Error allocating compressed buffer!".to_string())
-            } else {
-                ret.bo.push(bo);
-                Ok(ret)
+                return Err("Error allocating compressed buffer!".to_string());
             }
+
+            ret.bo.push(bo);
         } else if ret.is_contiguous() {
             // gbm_sys is missing this use flag for some reason.
             const GBM_BO_USE_HW_VIDEO_DECODER: u32 = 1 << 13;
@@ -449,16 +477,15 @@ impl GbmDevice {
                 )
             };
             if bo.is_null() {
-                Err(format!(
+                return Err(format!(
                     "Error allocating contiguous buffer! Fourcc: {} width: {} height: {}",
                     fourcc.to_string(),
                     coded_resolution.width,
                     coded_resolution.height
-                ))
-            } else {
-                ret.bo.push(bo);
-                Ok(ret)
+                ));
             }
+
+            ret.bo.push(bo);
         } else {
             // We hack multiplanar formats into GBM by making a bunch of separate BO's. We use
             // either R8 or RG88 depending on the bytes per element. So NM12 for example would be
@@ -490,10 +517,23 @@ impl GbmDevice {
                         fourcc.to_string()
                     ));
                 }
+
                 ret.bo.push(bo);
             }
-            Ok(ret)
         }
+
+        #[cfg(feature = "v4l2")]
+        {
+            ret.export_handles = ret
+                .bo
+                .iter()
+                .map(|bo| unsafe {
+                    DmaBufHandle::from(File::from_raw_fd(gbm_bo_get_fd(bo.clone())))
+                })
+                .collect::<_>();
+        }
+
+        Ok(ret)
     }
 
     #[cfg(feature = "v4l2")]
@@ -508,8 +548,8 @@ impl GbmDevice {
             fourcc: fourcc,
             resolution: resolution,
             bo: vec![],
-            _device: Arc::clone(&self),
-            export_file: vec![],
+            export_handles: vec![],
+            _device: Some(Arc::clone(&self)),
         };
 
         if strides.is_empty() || native_handle.is_empty() {
@@ -563,13 +603,19 @@ impl GbmDevice {
             }
         }
 
+        ret.export_handles = ret
+            .bo
+            .iter()
+            .map(|bo| unsafe { DmaBufHandle::from(File::from_raw_fd(gbm_bo_get_fd(bo.clone()))) })
+            .collect::<_>();
+
         Ok(ret)
     }
 
     #[cfg(feature = "vaapi")]
     pub fn import_from_vaapi(
         self: Arc<Self>,
-        surface: &Surface<GbmVideoFrame>,
+        surface: &Surface<GbmExternalBufferDescriptor>,
     ) -> Result<GbmVideoFrame, String> {
         let descriptor = surface
             .export_prime()
@@ -586,11 +632,10 @@ impl GbmDevice {
         }
 
         let mut ret = GbmVideoFrame {
-            _device: Arc::clone(&self),
+            _device: Some(Arc::clone(&self)),
             fourcc: Fourcc::from(descriptor.fourcc),
             resolution: Resolution { width: descriptor.width, height: descriptor.height },
             bo: vec![],
-            export_file: vec![],
         };
 
         let buffers = [
@@ -649,5 +694,10 @@ impl Drop for GbmDevice {
         unsafe { gbm_device_destroy(self.device) }
     }
 }
+
+// UNSAFE: We will only access the raw GBM device from the worker thread, and there are no other
+// copies of the raw pointer available.
+unsafe impl Send for GbmDevice {}
+unsafe impl Sync for GbmDevice {}
 
 // TODO: Add unit tests

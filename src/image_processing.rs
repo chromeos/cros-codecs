@@ -336,7 +336,9 @@ pub fn i420_to_nv12(src_y: &[u8], dst_y: &mut [u8], src_u: &[u8], src_v: &[u8], 
 }
 
 // TODO: Add more conversions. All supported conversion functions need to take stride parameters.
-pub const SUPPORTED_CONVERSION: [(DecodedFormat, DecodedFormat); 4] = [
+pub const SUPPORTED_CONVERSION: &'static [(DecodedFormat, DecodedFormat)] = &[
+    #[cfg(feature = "v4l2")]
+    (DecodedFormat::MM21, DecodedFormat::NV12),
     (DecodedFormat::NV12, DecodedFormat::NV12),
     (DecodedFormat::I420, DecodedFormat::I420),
     (DecodedFormat::I422, DecodedFormat::I422),
@@ -355,6 +357,19 @@ pub fn convert_video_frame(src: &impl VideoFrame, dst: &mut impl VideoFrame) -> 
     let dst_mapping = dst.map_mut().expect("Image processor dst mapping failed!");
     let dst_planes = dst_mapping.get();
     match conversion {
+        #[cfg(feature = "v4l2")]
+        (DecodedFormat::MM21, DecodedFormat::NV12) => mm21_to_nv12(
+            src_planes[Y_PLANE],
+            src_pitches[Y_PLANE],
+            *dst_planes[Y_PLANE].borrow_mut(),
+            dst_pitches[Y_PLANE],
+            src_planes[UV_PLANE],
+            src_pitches[UV_PLANE],
+            *dst_planes[UV_PLANE].borrow_mut(),
+            dst_pitches[UV_PLANE],
+            width,
+            height as isize,
+        ),
         (DecodedFormat::NV12, DecodedFormat::NV12) => {
             nv12_copy(
                 src_planes[Y_PLANE],

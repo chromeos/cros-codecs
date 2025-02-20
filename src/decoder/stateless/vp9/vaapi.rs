@@ -9,6 +9,8 @@ use anyhow::Context;
 use libva::Display;
 use libva::Picture as VaPicture;
 use libva::SegmentParameterVP9;
+use libva::Surface;
+use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::VaStreamInfo;
@@ -25,13 +27,16 @@ use crate::codec::vp9::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::vp9::Segmentation;
 use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::vp9::Vp9;
+use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
-use crate::video_frame::gbm_video_frame::GbmVideoFrame;
+use crate::decoder::DecodedHandle;
+use crate::video_frame::VideoFrame;
 use crate::Rect;
 use crate::Resolution;
 
@@ -226,20 +231,29 @@ fn build_slice_param(
     )))
 }
 
-impl StatelessDecoderBackendPicture<Vp9> for VaapiBackend {
-    type Picture = VaapiPicture<GbmVideoFrame>;
+impl<V: VideoFrame> StatelessDecoderBackendPicture<Vp9> for VaapiBackend<V> {
+    type Picture = VaapiPicture<V>;
 }
 
-impl StatelessVp9DecoderBackend for VaapiBackend {
+impl<V: VideoFrame> StatelessVp9DecoderBackend for VaapiBackend<V> {
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()> {
         self.new_sequence(header)
     }
 
-    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
-        let surface = self.new_surface();
+    fn new_picture(
+        &mut self,
+        timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> NewPictureResult<Self::Picture> {
         let context = &self.context;
 
-        Ok(VaPicture::new(timestamp, Rc::clone(context), surface))
+        Ok(VaapiPicture::new(
+            timestamp,
+            Rc::clone(context),
+            alloc_cb().ok_or(NewPictureError::OutOfOutputBuffers)?,
+        ))
     }
 
     fn submit_picture(
@@ -276,7 +290,7 @@ impl StatelessVp9DecoderBackend for VaapiBackend {
     }
 }
 
-impl StatelessDecoder<Vp9, VaapiBackend> {
+impl<V: VideoFrame> StatelessDecoder<Vp9, VaapiBackend<V>> {
     // Creates a new instance of the decoder using the VAAPI backend.
     pub fn new_vaapi(
         display: Rc<Display>,

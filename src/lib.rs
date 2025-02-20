@@ -149,7 +149,7 @@ impl From<((u32, u32), (u32, u32))> for Rect {
 /// Wrapper around u32 when they are meant to be a fourcc.
 ///
 /// Provides conversion and display/debug implementations useful when dealing with fourcc codes.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub struct Fourcc(u32);
 
 impl From<u32> for Fourcc {
@@ -261,6 +261,7 @@ impl From<DecodedFormat> for Fourcc {
         match format {
             DecodedFormat::I420 => Fourcc::from(b"I420"),
             DecodedFormat::NV12 => Fourcc::from(b"NV12"),
+            DecodedFormat::MM21 => Fourcc::from(b"MM21"),
             _ => todo!(),
         }
     }

@@ -16,18 +16,19 @@ use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::device::v4l2::stateless::device::V4l2Device;
 use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
 use crate::device::v4l2::stateless::queue::V4l2OutputBuffer;
+use crate::video_frame::VideoFrame;
 
-struct InitRequestHandle {
-    device: V4l2Device,
+struct InitRequestHandle<V: VideoFrame> {
+    device: V4l2Device<V>,
     timestamp: u64,
     handle: ioctl::Request,
     output_buffer: V4l2OutputBuffer,
-    picture: Weak<RefCell<V4l2Picture>>,
+    picture: Weak<RefCell<V4l2Picture<V>>>,
 }
 
-impl InitRequestHandle {
+impl<V: VideoFrame> InitRequestHandle<V> {
     fn new(
-        device: V4l2Device,
+        device: V4l2Device<V>,
         timestamp: u64,
         handle: ioctl::Request,
         output_buffer: V4l2OutputBuffer,
@@ -51,7 +52,7 @@ impl InitRequestHandle {
         self.output_buffer.write(data);
         self
     }
-    fn submit(self) -> PendingRequestHandle {
+    fn submit(self) -> PendingRequestHandle<V> {
         self.output_buffer
             .submit(self.timestamp, self.handle.as_raw_fd())
             .expect("error needs handling");
@@ -62,47 +63,47 @@ impl InitRequestHandle {
             picture: self.picture,
         }
     }
-    fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture>>) {
+    fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture<V>>>) {
         self.picture = picture;
     }
 }
 
-struct PendingRequestHandle {
-    device: V4l2Device,
+struct PendingRequestHandle<V: VideoFrame> {
+    device: V4l2Device<V>,
     timestamp: u64,
-    picture: Weak<RefCell<V4l2Picture>>,
+    picture: Weak<RefCell<V4l2Picture<V>>>,
 }
 
-impl PendingRequestHandle {
-    fn sync(self) -> DoneRequestHandle {
+impl<V: VideoFrame> PendingRequestHandle<V> {
+    fn sync(self) -> DoneRequestHandle<V> {
         DoneRequestHandle {
             capture_buffer: Rc::new(RefCell::new(self.device.sync(self.timestamp))),
         }
     }
 }
 
-struct DoneRequestHandle {
-    capture_buffer: Rc<RefCell<V4l2CaptureBuffer<DmaBufHandle<File>>>>,
+struct DoneRequestHandle<V: VideoFrame> {
+    capture_buffer: Rc<RefCell<V4l2CaptureBuffer<V>>>,
 }
 
-impl DoneRequestHandle {
-    fn result(&self) -> V4l2Result {
+impl<V: VideoFrame> DoneRequestHandle<V> {
+    fn result(&self) -> V4l2Result<V> {
         V4l2Result { capture_buffer: self.capture_buffer.clone() }
     }
 }
 
 #[derive(Default)]
-enum RequestHandle {
-    Init(InitRequestHandle),
-    Pending(PendingRequestHandle),
-    Done(DoneRequestHandle),
+enum RequestHandle<V: VideoFrame> {
+    Init(InitRequestHandle<V>),
+    Pending(PendingRequestHandle<V>),
+    Done(DoneRequestHandle<V>),
     #[default]
     Unknown,
 }
 
-impl RequestHandle {
+impl<V: VideoFrame> RequestHandle<V> {
     fn new(
-        device: V4l2Device,
+        device: V4l2Device<V>,
         timestamp: u64,
         handle: ioctl::Request,
         output_buffer: V4l2OutputBuffer,
@@ -157,19 +158,19 @@ impl RequestHandle {
             _ => panic!("ERROR"),
         }
     }
-    fn result(&self) -> V4l2Result {
+    fn result(&self) -> V4l2Result<V> {
         match self {
             Self::Done(handle) => handle.result(),
             _ => panic!("ERROR"),
         }
     }
-    fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture>>) {
+    fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture<V>>>) {
         match self {
             Self::Init(handle) => handle.set_picture_ref(picture),
             _ => panic!("ERROR"),
         }
     }
-    fn picture(&mut self) -> Weak<RefCell<V4l2Picture>> {
+    fn picture(&mut self) -> Weak<RefCell<V4l2Picture<V>>> {
         match self {
             Self::Pending(handle) => handle.picture.clone(),
             _ => panic!("ERROR"),
@@ -177,11 +178,11 @@ impl RequestHandle {
     }
 }
 
-pub struct V4l2Request(RequestHandle);
+pub struct V4l2Request<V: VideoFrame>(RequestHandle<V>);
 
-impl V4l2Request {
+impl<V: VideoFrame> V4l2Request<V> {
     pub fn new(
-        device: V4l2Device,
+        device: V4l2Device<V>,
         timestamp: u64,
         handle: ioctl::Request,
         output_buffer: V4l2OutputBuffer,
@@ -212,27 +213,17 @@ impl V4l2Request {
     pub fn sync(&mut self) {
         self.0.sync();
     }
-    pub fn result(&self) -> V4l2Result {
+    pub fn result(&self) -> V4l2Result<V> {
         self.0.result()
     }
-    pub fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture>>) {
+    pub fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture<V>>>) {
         self.0.set_picture_ref(picture);
     }
-    pub fn picture(&mut self) -> Weak<RefCell<V4l2Picture>> {
+    pub fn picture(&mut self) -> Weak<RefCell<V4l2Picture<V>>> {
         self.0.picture()
     }
 }
 
-pub struct V4l2Result {
-    capture_buffer: Rc<RefCell<V4l2CaptureBuffer<DmaBufHandle<File>>>>,
-}
-
-impl V4l2Result {
-    pub fn length(&self) -> usize {
-        self.capture_buffer.borrow().length()
-    }
-
-    pub fn read(&mut self, data: &mut [u8]) {
-        self.capture_buffer.borrow_mut().read(data)
-    }
+pub struct V4l2Result<V: VideoFrame> {
+    pub capture_buffer: Rc<RefCell<V4l2CaptureBuffer<V>>>,
 }

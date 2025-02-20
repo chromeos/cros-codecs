@@ -6,13 +6,18 @@
 //! input and writing the raw decoded frames to a file.
 
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+
+#[cfg(feature = "vaapi")]
+use libva::Surface;
 
 use cros_codecs::bitstream_utils::IvfIterator;
 use cros_codecs::bitstream_utils::NalIterator;
@@ -26,12 +31,18 @@ use cros_codecs::c2_wrapper::c2_vaapi_decoder::C2VaapiDecoder;
 #[cfg(feature = "vaapi")]
 use cros_codecs::c2_wrapper::c2_vaapi_decoder::C2VaapiDecoderOptions;
 use cros_codecs::c2_wrapper::C2DecodeJob;
-use cros_codecs::c2_wrapper::C2DecodeWorkObject;
 use cros_codecs::c2_wrapper::C2Status;
-use cros_codecs::c2_wrapper::C2VideoFrame;
 use cros_codecs::c2_wrapper::C2Wrapper;
 use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
 use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
+use cros_codecs::decoder::StreamInfo;
+use cros_codecs::image_processing::nv12_to_i420;
+use cros_codecs::utils::align_up;
+use cros_codecs::video_frame::gbm_video_frame::GbmDevice;
+use cros_codecs::video_frame::gbm_video_frame::GbmVideoFrame;
+use cros_codecs::video_frame::VideoFrame;
+use cros_codecs::video_frame::UV_PLANE;
+use cros_codecs::video_frame::Y_PLANE;
 use cros_codecs::DecodedFormat;
 use cros_codecs::EncodedFormat;
 use cros_codecs::Fourcc;
@@ -52,49 +63,6 @@ mod util;
 // Returns the frame iterator for IVF file.
 fn create_vpx_frame_iterator(input: &[u8]) -> Box<dyn Iterator<Item = Cow<[u8]>> + '_> {
     Box::new(IvfIterator::new(input).map(Cow::Borrowed))
-}
-
-/// Object holds the necessary data for a single decode operation during testing.
-#[derive(Debug, Clone, Default)]
-pub struct TestDecodeWorkObject {
-    /// Input data for decode
-    pub input: Vec<u8>,
-    /// Output data after decode
-    pub output: Vec<u8>,
-}
-
-impl C2DecodeWorkObject for TestDecodeWorkObject {
-    fn input(&mut self) -> &[u8] {
-        self.input.as_slice()
-    }
-
-    fn output(
-        &mut self,
-        fourcc: Fourcc,
-        visible_width: usize,
-        visible_height: usize,
-    ) -> Result<C2VideoFrame, String> {
-        if fourcc.to_string() != "I420" {
-            return Err("Unsupported pixel format!".to_string());
-        }
-
-        let aligned_width = (visible_width + 1) & (!1);
-        let aligned_height = (visible_height + 1) & (!1);
-        self.output = vec![0; aligned_width * aligned_height * 3 / 2];
-        let (y, uv) = self.output.as_mut_slice().split_at_mut(visible_width * visible_height);
-        let y_layout = PlaneLayout { buffer_index: 0, offset: 0, stride: aligned_width };
-        let (u, v) = uv.split_at_mut(aligned_width * aligned_height / 4);
-        let u_layout = PlaneLayout { buffer_index: 1, offset: 0, stride: aligned_width / 2 };
-        let v_layout = PlaneLayout { buffer_index: 2, offset: 0, stride: aligned_width / 2 };
-        Ok(C2VideoFrame {
-            planes: vec![y, u, v],
-            layout: FrameLayout {
-                format: (fourcc, 0),
-                size: Resolution::from((visible_width as u32, visible_height as u32)),
-                planes: vec![y_layout, u_layout, v_layout],
-            },
-        })
-    }
 }
 
 fn main() {
@@ -142,35 +110,91 @@ fn main() {
     };
     let stream_mode = Some(Md5Computation::Stream) == args.compute_md5;
 
-    let on_new_frame = move |job: C2DecodeJob<TestDecodeWorkObject>| {
-        if args.output.is_some() || args.compute_md5.is_some() || args.golden.is_some() {
-            let frame_data = job.work_object.output.as_slice();
+    let gbm_device = Arc::new(
+        GbmDevice::open(PathBuf::from("/dev/dri/renderD128")).expect("Could not open GBM device!"),
+    );
+    // This is a workaround to get "copy by clone" semantics for closure variable capture since
+    // Rust lacks the appropriate syntax to express this concept.
+    let _gbm_device = gbm_device.clone();
+    let mut framepool_info = Arc::new(Mutex::new(StreamInfo {
+        format: DecodedFormat::NV12,
+        coded_resolution: Resolution { width: 0, height: 0 },
+        display_resolution: Resolution { width: 0, height: 0 },
+        min_num_frames: 0,
+    }));
+    let mut _framepool_info = framepool_info.clone();
+    let framepool_hint_cb = move |stream_info: StreamInfo| {
+        (*_framepool_info.lock().unwrap()) = stream_info.clone();
+    };
+    // TODO: Pool these allocations
+    let alloc_cb = move || {
+        let stream_info = (*framepool_info.lock().unwrap()).clone();
+        Some(
+            <Arc<GbmDevice> as Clone>::clone(&gbm_device)
+                .new_frame(
+                    Fourcc::from(b"NV12"),
+                    stream_info.display_resolution.clone(),
+                    stream_info.coded_resolution.clone(),
+                )
+                .expect("Could not allocate frame for frame pool!"),
+        )
+    };
 
-            if args.multiple_output_files {
-                let file_name = decide_output_file_name(
-                    args.output.as_ref().expect("multiple_output_files need output to be set"),
-                    output_filename_idx,
-                );
+    let on_new_frame = move |job: C2DecodeJob<GbmVideoFrame>| {
+        if !args.output.is_some() && !args.compute_md5.is_some() && !args.golden.is_some() {
+            return;
+        }
+        let width = job.output[0].resolution().width as usize;
+        let height = job.output[0].resolution().height as usize;
+        let luma_size = job.output[0].resolution().get_area();
+        let chroma_size = align_up(width, 2) / 2 * align_up(height, 2) / 2;
+        let mut frame_data: Vec<u8> = vec![0; luma_size + 2 * chroma_size];
+        let (dst_y, dst_uv) = frame_data.split_at_mut(luma_size);
+        let (dst_u, dst_v) = dst_uv.split_at_mut(chroma_size);
+        {
+            let src_pitches = job.output[0].get_plane_pitch();
+            let src_mapping = job.output[0].map().expect("Failed to map output frame!");
+            let src_planes = src_mapping.get();
+            nv12_to_i420(
+                src_planes[Y_PLANE],
+                src_pitches[Y_PLANE],
+                dst_y,
+                width,
+                src_planes[UV_PLANE],
+                src_pitches[UV_PLANE],
+                dst_u,
+                align_up(width, 2) / 2,
+                dst_v,
+                align_up(width, 2) / 2,
+                width,
+                height,
+            );
+        }
 
-                let mut output = File::create(file_name).expect("error creating output file");
-                output_filename_idx += 1;
-                output.write_all(&frame_data).expect("failed to write to output file");
-            } else if let Some(output) = &mut output {
-                output.write_all(&frame_data).expect("failed to write to output file");
-            }
+        if args.multiple_output_files {
+            let file_name = decide_output_file_name(
+                args.output.as_ref().expect("multiple_output_files need output to be set"),
+                output_filename_idx,
+            );
 
-            let frame_md5: String =
-                if need_per_frame_md5 { md5_digest(&frame_data) } else { "".to_string() };
+            let mut output = File::create(file_name).expect("error creating output file");
+            output_filename_idx += 1;
+            output.write_all(&frame_data).expect("failed to write to output file");
+        } else if let Some(output) = &mut output {
+            output.write_all(&frame_data).expect("failed to write to output file");
+        }
 
-            match args.compute_md5 {
-                None => (),
-                Some(Md5Computation::Frame) => println!("{}", frame_md5),
-                Some(Md5Computation::Stream) => (*md5_context.lock().unwrap()).consume(&frame_data),
-            }
+        let frame_md5: String =
+            if need_per_frame_md5 { md5_digest(&frame_data) } else { "".to_string() };
 
-            if args.golden.is_some() {
-                assert_eq!(frame_md5, (*golden_iter.lock().unwrap()).next().unwrap());
-            }
+        match args.compute_md5 {
+            None => (),
+            Some(Md5Computation::Frame) => println!("{}", frame_md5),
+            Some(Md5Computation::Stream) => (*md5_context.lock().unwrap()).consume(&frame_data),
+        }
+
+        if args.golden.is_some() {
+            assert_eq!(frame_md5, (*golden_iter.lock().unwrap()).next().unwrap());
         }
     };
 
@@ -179,30 +203,33 @@ fn main() {
     };
 
     #[cfg(feature = "vaapi")]
-    let mut decoder: C2Wrapper<_, _, _, C2DecoderWorker<C2VaapiDecoder, _, _, _>> = C2Wrapper::new(
+    let mut decoder: C2Wrapper<_, C2DecoderWorker<_, C2VaapiDecoder>> = C2Wrapper::new(
         Fourcc::from(args.input_format),
+        // TODO: Support other pixel formats
+        Fourcc::from(b"NV12"),
         error_cb,
         on_new_frame,
-        C2VaapiDecoderOptions {
-            libva_device_path: args.libva_device,
-            frame_memory_type: args.frame_memory,
-        },
+        framepool_hint_cb,
+        alloc_cb,
+        C2VaapiDecoderOptions { libva_device_path: args.libva_device },
     );
     #[cfg(feature = "v4l2")]
-    let mut decoder: C2Wrapper<_, _, _, C2DecoderWorker<C2V4L2Decoder, _, _, _>> = C2Wrapper::new(
+    let mut decoder: C2Wrapper<_, C2DecoderWorker<_, C2V4L2Decoder>> = C2Wrapper::new(
         Fourcc::from(args.input_format),
+        // TODO: Support other pixel formats
+        Fourcc::from(b"NV12"),
         error_cb,
         on_new_frame,
+        framepool_hint_cb,
+        alloc_cb,
         C2V4L2DecoderOptions { video_device_path: None },
     );
     let _ = decoder.start();
 
     for input_frame in frame_iter {
         decoder.queue(vec![C2DecodeJob {
-            work_object: TestDecodeWorkObject {
-                input: input_frame.as_ref().to_vec(),
-                output: Vec::new(),
-            },
+            input: input_frame.as_ref().to_vec(),
+            output: vec![],
             drain: false,
         }]);
     }

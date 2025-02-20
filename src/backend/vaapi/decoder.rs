@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use anyhow::Context as AnyhowContext;
 use libva::{
-    Context, Display, Picture, PictureEnd, PictureNew, PictureSync, Surface,
+    Buffer, Context, Display, Picture, PictureEnd, PictureNew, PictureSync, Surface,
     SurfaceMemoryDescriptor, VaError,
 };
 
@@ -18,15 +19,13 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
-use crate::decoder::stateless::TryFormat;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
-use crate::decoder::DynHandle;
-use crate::decoder::MappableHandle;
 use crate::decoder::StreamInfo;
 use crate::image_processing::nv12_to_i420;
 use crate::utils::align_up;
 use crate::video_frame::gbm_video_frame::GbmDevice;
 use crate::video_frame::gbm_video_frame::GbmVideoFrame;
+use crate::video_frame::Equivalent;
 use crate::video_frame::{VideoFrame, UV_PLANE, Y_PLANE};
 use crate::DecodedFormat;
 use crate::Fourcc;
@@ -34,11 +33,11 @@ use crate::Rect;
 use crate::Resolution;
 
 /// A decoded frame handle.
-pub(crate) type DecodedHandle<M> = Rc<RefCell<VaapiDecodedHandle<M>>>;
+pub(crate) type DecodedHandle<V: VideoFrame> = Rc<RefCell<VaapiDecodedHandle<V>>>;
 
 /// Gets the VASurfaceID for the given `picture`.
-pub(crate) fn va_surface_id<M: SurfaceMemoryDescriptor>(
-    handle: &Option<DecodedHandle<M>>,
+pub(crate) fn va_surface_id<V: VideoFrame>(
+    handle: &Option<DecodedHandle<V>>,
 ) -> libva::VASurfaceID {
     match handle {
         None => libva::VA_INVALID_SURFACE,
@@ -46,8 +45,12 @@ pub(crate) fn va_surface_id<M: SurfaceMemoryDescriptor>(
     }
 }
 
-impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
-    type Descriptor = M;
+impl<V: VideoFrame> DecodedHandleTrait for DecodedHandle<V> {
+    type Frame = V;
+
+    fn video_frame(&self) -> Arc<Self::Frame> {
+        self.borrow().backing_frame.clone()
+    }
 
     fn coded_resolution(&self) -> Resolution {
         self.borrow().surface().size().into()
@@ -61,10 +64,6 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
         self.borrow().timestamp()
     }
 
-    fn dyn_picture<'a>(&'a mut self) -> Box<dyn DynHandle + 'a> {
-        Box::new(self.borrow_mut())
-    }
-
     fn is_ready(&self) -> bool {
         self.borrow().state.is_ready().unwrap_or(true)
     }
@@ -73,14 +72,6 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
         self.borrow_mut().sync().context("while syncing picture")?;
 
         Ok(())
-    }
-
-    fn resource(&self) -> std::cell::Ref<M> {
-        std::cell::Ref::map(self.borrow(), |r| match &r.state {
-            PictureState::Ready(p) => p.surface().as_ref(),
-            PictureState::Pending(p) => p.surface().as_ref(),
-            PictureState::Invalid => unreachable!(),
-        })
     }
 }
 
@@ -163,31 +154,22 @@ impl<M: SurfaceMemoryDescriptor> PictureState<M> {
 ///
 /// This includes the VA picture which can be pending rendering or complete, as well as useful
 /// meta-information.
-pub struct VaapiDecodedHandle<M>
-where
-    M: SurfaceMemoryDescriptor,
-{
-    state: PictureState<M>,
+pub struct VaapiDecodedHandle<V: VideoFrame> {
+    backing_frame: Arc<V>,
+    state: PictureState<<V as VideoFrame>::MemDescriptor>,
     /// Actual resolution of the visible rectangle in the decoded buffer.
     display_resolution: Resolution,
-    frame_import_cb: Box<dyn Fn(&Surface<M>) -> Box<dyn MappableHandle>>,
 }
 
-impl<M> VaapiDecodedHandle<M>
-where
-    M: SurfaceMemoryDescriptor,
-{
+impl<V: VideoFrame> VaapiDecodedHandle<V> {
     /// Creates a new pending handle on `surface_id`.
-    fn new(
-        picture: Picture<PictureNew, Surface<M>>,
-        display_resolution: Resolution,
-        frame_import_cb: Box<dyn Fn(&Surface<M>) -> Box<dyn MappableHandle>>,
-    ) -> anyhow::Result<Self> {
-        let picture = picture.begin()?.render()?.end()?;
+    fn new(picture: VaapiPicture<V>, display_resolution: Resolution) -> anyhow::Result<Self> {
+        let backing_frame = picture.backing_frame;
+        let picture = picture.picture.begin()?.render()?.end()?;
         Ok(Self {
+            backing_frame: backing_frame,
             state: PictureState::Pending(picture),
             display_resolution: display_resolution,
-            frame_import_cb: frame_import_cb,
         })
     }
 
@@ -196,15 +178,15 @@ where
     }
 
     /// Creates a new picture from the surface backing the current one. Useful for interlaced
-    /// decoding.
-    pub(crate) fn new_picture_from_same_surface(
-        &self,
-        timestamp: u64,
-    ) -> Picture<PictureNew, Surface<M>> {
-        self.state.new_from_same_surface(timestamp)
+    /// decoding. TODO: Do we need this for other purposes? We don't intend to support interlaced.
+    pub(crate) fn new_picture_from_same_surface(&self, timestamp: u64) -> VaapiPicture<V> {
+        VaapiPicture {
+            picture: self.state.new_from_same_surface(timestamp),
+            backing_frame: self.backing_frame.clone(),
+        }
     }
 
-    pub(crate) fn surface(&self) -> &Surface<M> {
+    pub(crate) fn surface(&self) -> &Surface<<V as VideoFrame>::MemDescriptor> {
         self.state.surface()
     }
 
@@ -214,74 +196,15 @@ where
     }
 }
 
-impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::RefMut<'a, VaapiDecodedHandle<M>> {
-    fn dyn_mappable_handle<'b>(&'b mut self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
-        Ok((self.frame_import_cb)(self.surface()))
-    }
-}
-
-// TODO: Directly expose VideoFrame through StatelessDecoder interface and delete MappableHandle
-impl<V, M> MappableHandle for V
-where
-    M: SurfaceMemoryDescriptor,
-    V: VideoFrame<NativeHandle = Surface<M>>,
-{
-    fn read(&mut self, buffer: &mut [u8]) -> anyhow::Result<()> {
-        let (dst_y, dst_uv) = buffer.split_at_mut(self.resolution().get_area());
-        let (dst_u, dst_v) = dst_uv.split_at_mut(
-            Resolution {
-                width: align_up(self.resolution().width, 2),
-                height: align_up(self.resolution().height, 2),
-            }
-            .get_area()
-                / 4,
-        );
-
-        let src_strides = self.get_plane_pitch();
-        let src_mapping = self.map().expect("Mapping failed!");
-        let src_planes = src_mapping.get();
-
-        nv12_to_i420(
-            src_planes[Y_PLANE],
-            src_strides[Y_PLANE],
-            dst_y,
-            self.resolution().width as usize,
-            src_planes[UV_PLANE],
-            src_strides[UV_PLANE],
-            dst_u,
-            align_up(self.resolution().width as usize, 2) / 2,
-            dst_v,
-            align_up(self.resolution().width as usize, 2) / 2,
-            self.resolution().width as usize,
-            self.resolution().height as usize,
-        );
-
-        Ok(())
-    }
-
-    fn image_size(&mut self) -> usize {
-        let y_size = self.resolution().get_area();
-        let uv_size = Resolution {
-            width: align_up(self.resolution().width, 2),
-            height: align_up(self.resolution().height, 2),
-        }
-        .get_area()
-            / 2;
-
-        y_size + uv_size
-    }
-}
-
-pub struct VaapiBackend {
+pub struct VaapiBackend<V: VideoFrame> {
+    pub display: Rc<Display>,
     pub context: Rc<Context>,
-    pub stream_info: StreamInfo,
-
-    display: Rc<Display>,
+    stream_info: StreamInfo,
     supports_context_reuse: bool,
-    gbm_device: Arc<GbmDevice>,
+    _phantom_data: PhantomData<V>,
 }
 
-impl VaapiBackend {
+impl<V: VideoFrame> VaapiBackend<V> {
     pub(crate) fn new(display: Rc<libva::Display>, supports_context_reuse: bool) -> Self {
         let init_stream_info = StreamInfo {
             format: DecodedFormat::NV12,
@@ -300,7 +223,7 @@ impl VaapiBackend {
             )
             .expect("Could not create initial VAConfig!");
         let context = display
-            .create_context::<GbmVideoFrame>(
+            .create_context::<<V as VideoFrame>::MemDescriptor>(
                 &config,
                 init_stream_info.coded_resolution.width,
                 init_stream_info.coded_resolution.height,
@@ -312,10 +235,8 @@ impl VaapiBackend {
             display: display,
             context: context,
             supports_context_reuse: supports_context_reuse,
-            // This will go away once we properly plumb Gralloc frames
-            gbm_device: GbmDevice::open(PathBuf::from("/dev/dri/renderD128"))
-                .expect("Could not open GBM Device"),
             stream_info: init_stream_info,
+            _phantom_data: Default::default(),
         }
     }
 
@@ -326,8 +247,6 @@ impl VaapiBackend {
     where
         for<'a> &'a StreamData: VaStreamInfo,
     {
-        // TODO: Plumb frame pool reallocation event to gralloc
-
         self.stream_info.display_resolution = Resolution::from(stream_params.visible_rect());
         self.stream_info.coded_resolution = stream_params.coded_size().clone();
         self.stream_info.min_num_frames = stream_params.min_num_surfaces();
@@ -347,7 +266,7 @@ impl VaapiBackend {
             .map_err(|_| anyhow!("Could not create VAConfig!"))?;
         let context = self
             .display
-            .create_context::<GbmVideoFrame>(
+            .create_context::<<V as VideoFrame>::MemDescriptor>(
                 &config,
                 self.stream_info.coded_resolution.width,
                 self.stream_info.coded_resolution.height,
@@ -362,68 +281,51 @@ impl VaapiBackend {
 
     pub(crate) fn process_picture<Codec: StatelessCodec>(
         &mut self,
-        picture: Picture<PictureNew, Surface<GbmVideoFrame>>,
+        picture: VaapiPicture<V>,
     ) -> StatelessBackendResult<<Self as StatelessDecoderBackend>::Handle>
     where
         Self: StatelessDecoderBackendPicture<Codec>,
         for<'a> &'a Codec::FormatInfo: VaStreamInfo,
     {
-        let gbm_device = Arc::clone(&self.gbm_device);
         Ok(Rc::new(RefCell::new(VaapiDecodedHandle::new(
             picture,
             self.stream_info.display_resolution.clone(),
-            Box::new(move |surface| {
-                Box::new(
-                    <Arc<GbmDevice> as Clone>::clone(&gbm_device)
-                        .import_from_vaapi(surface)
-                        .expect("Failed to import VA-API handle!"),
-                )
-            }),
         )?)))
-    }
-
-    // TODO: Plumb from Gralloc instead.
-    pub(crate) fn new_surface(&mut self) -> Surface<GbmVideoFrame> {
-        // TODO: Implement actual format negotiation.
-        let frame = Box::new(
-            self.gbm_device
-                .clone()
-                .new_frame(
-                    Fourcc::from(b"NV12"),
-                    self.stream_info.display_resolution.clone(),
-                    self.stream_info.coded_resolution.clone(),
-                )
-                .expect("Failed to allocate VaSurface!"),
-        );
-        frame.to_native_handle(&self.display).expect("Failed to export frame to VA-API surface!")
     }
 }
 
 /// Shortcut for pictures used for the VAAPI backend.
-pub type VaapiPicture<M> = Picture<PictureNew, Surface<M>>;
+pub struct VaapiPicture<V: VideoFrame> {
+    picture: Picture<PictureNew, Surface<V::MemDescriptor>>,
+    backing_frame: Arc<V>,
+}
 
-impl StatelessDecoderBackend for VaapiBackend {
-    type Handle = DecodedHandle<GbmVideoFrame>;
+impl<V: VideoFrame> VaapiPicture<V> {
+    pub fn new(timestamp: u64, context: Rc<Context>, mut backing_frame: V) -> Self {
+        let display = context.display();
+        let surface = backing_frame
+            .to_native_handle(display)
+            .expect("Failed to export video frame to vaapi picture!")
+            .into();
+        Self {
+            backing_frame: Arc::new(backing_frame),
+            picture: Picture::new(timestamp, context, surface),
+        }
+    }
 
-    fn stream_info(&self) -> Option<&StreamInfo> {
-        Some(&self.stream_info)
+    pub fn surface(&self) -> &Surface<V::MemDescriptor> {
+        self.picture.surface()
+    }
+
+    pub fn add_buffer(&mut self, buffer: Buffer) {
+        self.picture.add_buffer(buffer)
     }
 }
 
-impl<Codec: StatelessCodec> TryFormat<Codec> for VaapiBackend
-where
-    for<'a> &'a Codec::FormatInfo: VaStreamInfo,
-{
-    // TODO: Replace with format negotiation with Gralloc pool
-    fn try_format(
-        &mut self,
-        format_info: &Codec::FormatInfo,
-        format: DecodedFormat,
-    ) -> anyhow::Result<()> {
-        if format == DecodedFormat::I420 {
-            Ok(())
-        } else {
-            Err(anyhow!("Format {format:?} not yet support"))
-        }
+impl<V: VideoFrame> StatelessDecoderBackend for VaapiBackend<V> {
+    type Handle = DecodedHandle<V>;
+
+    fn stream_info(&self) -> Option<&StreamInfo> {
+        Some(&self.stream_info)
     }
 }

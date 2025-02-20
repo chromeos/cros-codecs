@@ -32,11 +32,11 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::StatelessVideoDecoder;
-use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
+use crate::video_frame::VideoFrame;
 use crate::Resolution;
 
 /// Stateless backend methods specific to VP9.
@@ -47,7 +47,13 @@ pub trait StatelessVp9DecoderBackend:
     fn new_sequence(&mut self, header: &Header) -> StatelessBackendResult<()>;
 
     /// Allocate all resources required to process a new picture.
-    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture>;
+    fn new_picture(
+        &mut self,
+        timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> NewPictureResult<Self::Picture>;
 
     /// Called when the decoder wants the backend to finish the decoding
     /// operations for `picture`.
@@ -218,12 +224,19 @@ where
 
 impl<B> StatelessVideoDecoder for StatelessDecoder<Vp9, B>
 where
-    B: StatelessVp9DecoderBackend + TryFormat<Vp9>,
+    B: StatelessVp9DecoderBackend,
     B::Handle: Clone + 'static,
 {
     type Handle = B::Handle;
 
-    fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
+    fn decode(
+        &mut self,
+        timestamp: u64,
+        bitstream: &[u8],
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<B as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> Result<usize, DecodeError> {
         let frames = self
             .codec
             .parser
@@ -278,7 +291,7 @@ where
                             Ok((frame, None))
                         } else {
                             self.backend
-                                .new_picture(timestamp)
+                                .new_picture(timestamp, alloc_cb)
                                 .map_err(|e| match e {
                                     NewPictureError::OutOfOutputBuffers => {
                                         DecodeError::NotEnoughOutputBuffers(

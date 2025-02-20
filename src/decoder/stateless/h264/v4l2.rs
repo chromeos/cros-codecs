@@ -13,7 +13,6 @@ use v4l2r::controls::codec::H264ScalingMatrix;
 use v4l2r::controls::codec::H264Sps;
 use v4l2r::controls::SafeExtControl;
 
-use crate::backend::v4l2::decoder::stateless::BackendHandle;
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
@@ -31,12 +30,16 @@ use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
+use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::decoder::DecodedHandle;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeMode;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeParams;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DpbEntry;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264StartCode;
+use crate::video_frame::VideoFrame;
+use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
@@ -57,34 +60,49 @@ impl V4l2StreamInfo for &Rc<Sps> {
     }
 }
 
-impl StatelessDecoderBackendPicture<H264> for V4l2StatelessDecoderBackend {
-    type Picture = Rc<RefCell<V4l2Picture>>;
+impl<V: VideoFrame> StatelessDecoderBackendPicture<H264> for V4l2StatelessDecoderBackend<V> {
+    type Picture = Rc<RefCell<V4l2Picture<V>>>;
 }
 
-impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
+impl<V: VideoFrame> StatelessH264DecoderBackend for V4l2StatelessDecoderBackend<V> {
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()> {
-        let mb_unit = 16;
-        let map_unit = 16;
+        const MB_UNIT: u32 = 16;
+        const MAP_UNIT: u32 = 16;
+        const MAX_FRAMES_IN_PIPELINE: usize = 4;
+
         let resolution = Resolution::from((
-            (sps.pic_width_in_mbs_minus1 + 1) as u32 * mb_unit,
-            (sps.pic_height_in_map_units_minus1 + 1) as u32 * map_unit,
+            (sps.pic_width_in_mbs_minus1 + 1) as u32 * MB_UNIT,
+            (sps.pic_height_in_map_units_minus1 + 1) as u32 * MAP_UNIT,
         ));
 
         let visible_rect = Rect::from((
             (sps.visible_rectangle().min.x, sps.visible_rectangle().min.y),
             (sps.visible_rectangle().max.x, sps.visible_rectangle().max.y),
         ));
+
+        self.stream_info.format = DecodedFormat::MM21;
+        self.stream_info.display_resolution = Resolution::from(visible_rect);
+        self.stream_info.coded_resolution = resolution.clone();
+        self.stream_info.min_num_frames = sps.max_dpb_frames() + MAX_FRAMES_IN_PIPELINE;
+
         self.device.initialize_queues(
             Fourcc::from(b"S264"),
             resolution,
             visible_rect,
-            sps.max_dpb_frames() as u32 + 4,
+            self.stream_info.min_num_frames as u32,
         )?;
         Ok(())
     }
 
-    fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
-        let request_buffer = match self.device.alloc_request(timestamp) {
+    fn new_picture(
+        &mut self,
+        timestamp: u64,
+        alloc_cb: &mut dyn FnMut() -> Option<
+            <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
+        >,
+    ) -> NewPictureResult<Self::Picture> {
+        let frame = alloc_cb().ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let request_buffer = match self.device.alloc_request(timestamp, frame) {
             Ok(buffer) => buffer,
             _ => return Err(NewPictureError::OutOfOutputBuffers),
         };
@@ -93,7 +111,7 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         request_buffer
             .as_ref()
             .borrow_mut()
-            .set_picture_ref(Rc::<RefCell<V4l2Picture>>::downgrade(&picture));
+            .set_picture_ref(Rc::<RefCell<V4l2Picture<V>>>::downgrade(&picture));
         Ok(picture)
     }
 
@@ -111,10 +129,10 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         slice_header: &SliceHeader,
     ) -> StatelessBackendResult<()> {
         let mut dpb_entries = Vec::<V4l2CtrlH264DpbEntry>::new();
-        let mut ref_pictures = Vec::<Rc<RefCell<V4l2Picture>>>::new();
+        let mut ref_pictures = Vec::<Rc<RefCell<V4l2Picture<V>>>>::new();
         for entry in dpb.entries() {
             let ref_picture = match &entry.reference {
-                Some(handle) => handle.handle.borrow().picture.clone(),
+                Some(handle) => handle.picture.clone(),
                 None => todo!(),
             };
             dpb_entries.push(V4l2CtrlH264DpbEntry {
@@ -169,15 +187,17 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
     }
 
     fn submit_picture(&mut self, picture: Self::Picture) -> StatelessBackendResult<Self::Handle> {
-        let handle = Rc::new(RefCell::new(BackendHandle { picture: picture.clone() }));
         let request = picture.borrow_mut().request();
         let mut request = request.as_ref().borrow_mut();
         request.submit();
-        Ok(V4l2StatelessDecoderHandle { handle: handle, stream_info: self.stream_info.clone() })
+        Ok(V4l2StatelessDecoderHandle {
+            picture: picture.clone(),
+            stream_info: self.stream_info.clone(),
+        })
     }
 }
 
-impl StatelessDecoder<H264, V4l2StatelessDecoderBackend> {
+impl<V: VideoFrame> StatelessDecoder<H264, V4l2StatelessDecoderBackend<V>> {
     // Creates a new instance of the decoder using the v4l2 backend.
     pub fn new_v4l2(blocking_mode: BlockingMode) -> Self {
         Self::new(V4l2StatelessDecoderBackend::new(), blocking_mode)
