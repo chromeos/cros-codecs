@@ -19,6 +19,7 @@ use v4l2r::nix::fcntl::OFlag;
 use v4l2r::nix::sys::stat::Mode;
 
 use crate::decoder::stateless::DecodeError;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::device::v4l2::stateless::queue::QueueError;
 use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
 use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
@@ -41,27 +42,27 @@ struct DeviceHandle<V: VideoFrame> {
 }
 
 impl<V: VideoFrame> DeviceHandle<V> {
-    fn new() -> Self {
+    fn new() -> Result<Self, NewStatelessDecoderError> {
         // TODO: pass video device path and config via function arguments
         let video_device_path = Path::new("/dev/video-dec0");
         let video_device_config = DeviceConfig::new().non_blocking_dqbuf();
         let video_device = Arc::new(
             VideoDevice::open(video_device_path, video_device_config)
-                .expect("Failed to open video device"),
+                .map_err(|_| NewStatelessDecoderError::DriverInitialization)?,
         );
-        // TODO: probe capabilties to find releted media device path
+        // TODO: probe capabilities to find related media device path
         let media_device_path = Path::new("/dev/media-dec0");
         let media_device = open(media_device_path, OFlag::O_RDWR | OFlag::O_CLOEXEC, Mode::empty())
-            .unwrap_or_else(|_| panic!("Cannot open {}", media_device_path.display()));
-        let output_queue = V4l2OutputQueue::new(video_device.clone());
-        let capture_queue = V4l2CaptureQueue::new(video_device.clone());
-        Self {
+            .map_err(|_| NewStatelessDecoderError::DriverInitialization)?;
+        let output_queue = V4l2OutputQueue::new(video_device.clone())?;
+        let capture_queue = V4l2CaptureQueue::new(video_device.clone())?;
+        Ok(Self {
             video_device,
             media_device,
             output_queue,
             capture_queue,
             requests: HashMap::<u64, Weak<RefCell<V4l2Request<V>>>>::new(),
-        }
+        })
     }
     fn alloc_request(&self) -> ioctl::Request {
         ioctl::Request::alloc(&self.media_device).expect("Failed to alloc request handle")
@@ -139,8 +140,8 @@ pub struct V4l2Device<V: VideoFrame> {
 }
 
 impl<V: VideoFrame> V4l2Device<V> {
-    pub fn new() -> Self {
-        Self { handle: Rc::new(RefCell::new(DeviceHandle::new())) }
+    pub fn new() -> Result<Self, NewStatelessDecoderError> {
+        Ok(Self { handle: Rc::new(RefCell::new(DeviceHandle::new()?)) })
     }
     pub fn initialize_queues(
         &mut self,

@@ -29,6 +29,7 @@ use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::H264;
 use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -198,9 +199,7 @@ impl<V: VideoFrame> StatelessH264DecoderBackend for V4l2StatelessDecoderBackend<
 }
 
 impl<V: VideoFrame> StatelessDecoder<H264, V4l2StatelessDecoderBackend<V>> {
-    // Creates a new instance of the decoder using the v4l2 backend.
-    pub fn new_v4l2(blocking_mode: BlockingMode) -> Self {
-        Self::new(V4l2StatelessDecoderBackend::new(), blocking_mode)
-            .expect("Failed to create v4l2 stateless decoder backend")
+    pub fn new_v4l2(blocking_mode: BlockingMode) -> Result<Self, NewStatelessDecoderError> {
+        Self::new(V4l2StatelessDecoderBackend::new()?, blocking_mode)
     }
 }

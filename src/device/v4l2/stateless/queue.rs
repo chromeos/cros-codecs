@@ -43,6 +43,7 @@ use v4l2r::Format;
 use v4l2r::PlaneLayout;
 
 use crate::decoder::stateless::DecodeError;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendError;
 use crate::utils::buffer_size_for_area;
 use crate::video_frame::V4l2VideoFrame;
@@ -217,11 +218,12 @@ pub struct V4l2OutputQueue {
 
 const NUM_OUTPUT_BUFFERS: u32 = 2;
 impl V4l2OutputQueue {
-    pub fn new(device: Arc<Device>) -> Self {
-        let handle = Queue::get_output_mplane_queue(device).expect("Failed to get output queue");
+    pub fn new(device: Arc<Device>) -> Result<Self, NewStatelessDecoderError> {
+        let handle = Queue::get_output_mplane_queue(device)
+            .map_err(|_| NewStatelessDecoderError::DriverInitialization)?;
         log::debug!("output queue created");
         let handle = Rc::new(RefCell::new(V4l2OutputQueueHandle::Init(handle)));
-        Self { handle }
+        Ok(Self { handle })
     }
 
     pub fn initialize(
@@ -320,12 +322,12 @@ pub struct V4l2CaptureQueue<V: VideoFrame> {
 }
 
 impl<V: VideoFrame> V4l2CaptureQueue<V> {
-    pub fn new(device: Arc<Device>) -> Self {
-        let handle =
-            Queue::get_capture_mplane_queue(device.clone()).expect("Failed to get capture queue");
+    pub fn new(device: Arc<Device>) -> Result<Self, NewStatelessDecoderError> {
+        let handle = Queue::get_capture_mplane_queue(device.clone())
+            .map_err(|_| NewStatelessDecoderError::DriverInitialization)?;
         log::debug!("capture queue created");
         let handle = RefCell::new(V4l2CaptureQueueHandle::Init(handle));
-        Self { handle, num_buffers: 0, format: Default::default(), device: device }
+        Ok(Self { handle, num_buffers: 0, format: Default::default(), device: device })
     }
 
     pub fn initialize(&mut self, requested_num_buffers: u32) -> Result<&mut Self, QueueError> {

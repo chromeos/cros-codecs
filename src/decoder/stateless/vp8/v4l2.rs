@@ -17,6 +17,7 @@ use crate::decoder::stateless::vp8::StatelessVp8DecoderBackend;
 use crate::decoder::stateless::vp8::Vp8;
 use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -156,9 +157,7 @@ impl<V: VideoFrame> StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend<V
 }
 
 impl<V: VideoFrame> StatelessDecoder<Vp8, V4l2StatelessDecoderBackend<V>> {
-    // Creates a new instance of the decoder using the v4l2 backend.
-    pub fn new_v4l2(blocking_mode: BlockingMode) -> Self {
-        Self::new(V4l2StatelessDecoderBackend::new(), blocking_mode)
-            .expect("Failed to create v4l2 stateless decoder backend")
+    pub fn new_v4l2(blocking_mode: BlockingMode) -> Result<Self, NewStatelessDecoderError> {
+        Self::new(V4l2StatelessDecoderBackend::new()?, blocking_mode)
     }
 }
