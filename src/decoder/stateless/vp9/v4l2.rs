@@ -11,6 +11,7 @@ use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
 use crate::backend::v4l2::decoder::V4l2StreamInfo;
+use crate::backend::v4l2::decoder::ADDITIONAL_REFERENCE_FRAME_BUFFER;
 use crate::codec::vp9::parser::Header;
 use crate::codec::vp9::parser::Segmentation;
 use crate::codec::vp9::parser::ALTREF_FRAME;
@@ -38,7 +39,7 @@ use crate::Resolution;
 
 impl V4l2StreamInfo for &Header {
     fn min_num_frames(&self) -> usize {
-        NUM_REF_FRAMES + 1
+        NUM_REF_FRAMES + ADDITIONAL_REFERENCE_FRAME_BUFFER
     }
 
     fn coded_size(&self) -> Resolution {

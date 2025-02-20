@@ -6,6 +6,8 @@
 use crate::Rect;
 use crate::Resolution;
 
+pub const ADDITIONAL_REFERENCE_FRAME_BUFFER: usize = 4;
+
 pub mod stateless;
 
 pub trait V4l2StreamInfo {
