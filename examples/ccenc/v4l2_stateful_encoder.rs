@@ -67,9 +67,7 @@ impl OutputBufferHandle for MmapNM12Frame<'_> {
         // and we can only mutably borrow once. We could get around this with an Rc RefCell or an
         // Arc if we decide we need to use |read()| because we want to support non-POSIX platforms.
         assert_eq!(
-            self.file
-                .read_at(input_y.as_mut_slice(), self.pos)
-                .expect("Unexpected EOF!"),
+            self.file.read_at(input_y.as_mut_slice(), self.pos).expect("Unexpected EOF!"),
             self.input_coded_resolution.get_area()
         );
 
@@ -251,11 +249,7 @@ where
         &input,
         args.fourcc,
         (args.width, args.height).into(),
-        (
-            args.coded_width.unwrap_or(args.width),
-            args.coded_height.unwrap_or(args.height),
-        )
-            .into(),
+        (args.coded_width.unwrap_or(args.width), args.coded_height.unwrap_or(args.height)).into(),
         layout,
         args.count,
     );
@@ -272,8 +266,7 @@ where
                 args.framerate,
                 args.count as u32,
             );
-            hdr.writo_into(&mut output)
-                .expect("Error writing IVF file header!");
+            hdr.writo_into(&mut output).expect("Error writing IVF file header!");
         }
 
         output
@@ -289,8 +282,7 @@ where
                         timestamp: coded_chunk.metadata.timestamp,
                         frame_size: coded_chunk.bitstream.len() as u32,
                     };
-                    hdr.writo_into(&mut output_file)
-                        .expect("Error writing IVF frame header!");
+                    hdr.writo_into(&mut output_file).expect("Error writing IVF frame header!");
                 }
 
                 let _ = output_file
@@ -313,10 +305,7 @@ pub fn do_encode(input: File, args: Args) -> () {
     let device = Device::open(&device, DeviceConfig::new().non_blocking_dqbuf()).expect("open");
     let device = Arc::new(device);
 
-    let resolution = Resolution {
-        width: args.width,
-        height: args.height,
-    };
+    let resolution = Resolution { width: args.width, height: args.height };
     let queue_fourcc = Fourcc::from(b"NM12");
     let tunings: Tunings = Tunings {
         rate_control: RateControl::ConstantBitrate(args.bitrate),

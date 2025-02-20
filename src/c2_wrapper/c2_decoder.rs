@@ -26,7 +26,7 @@ use crate::c2_wrapper::C2Worker;
 use crate::c2_wrapper::Job;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DynStatelessVideoDecoder;
-use crate::decoder::stateless::PoolLayer;
+use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::DecodedHandle;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
@@ -55,11 +55,6 @@ pub trait C2DecoderBackend {
         &mut self,
         format: EncodedFormat,
     ) -> Result<DynStatelessVideoDecoder<Self::DecodedHandle>, String>;
-    fn allocate_new_frames(
-        &mut self,
-        stream_info: &StreamInfo,
-        num_frames: usize,
-    ) -> Result<Vec<Self::DecodedHandle>, String>;
 }
 
 pub struct C2DecoderWorker<B, T, E, W>
@@ -95,7 +90,7 @@ where
         while let Some(event) = self.decoder.next_event() {
             ret = true;
             match event {
-                DecoderEvent::FrameReady(frame) => {
+                DecoderEvent::FrameReady(mut frame) => {
                     frame.sync().unwrap();
 
                     // TODO: This should never fail if the queue logic is
@@ -130,7 +125,7 @@ where
 
                     // TODO: This is several unnecessary memcpy's. We're going to need to rework
                     // everything about frame management in order to achieve zero copy.
-                    let picture = frame.dyn_picture();
+                    let mut picture = frame.dyn_picture();
                     let mut handle = picture.dyn_mappable_handle().unwrap();
                     let buffer_size = handle.image_size();
                     let mut tmp_buffer = vec![0; buffer_size];
@@ -174,29 +169,8 @@ where
                 }
                 DecoderEvent::FormatChanged(mut format_setter) => {
                     //TODO: Support more formats. Also, don't panic.
+                    //TODO: Re-allocate Gralloc frame pool.
                     format_setter.try_format(DecodedFormat::I420).unwrap();
-                    let stream_info = format_setter.stream_info().clone();
-                    let min_num_frames = stream_info.min_num_frames;
-                    let pools = format_setter.frame_pool(PoolLayer::All);
-                    let num_pools = pools.len();
-                    for pool in pools {
-                        let pool_num_frames = pool.num_managed_frames();
-                        if pool_num_frames < (min_num_frames / num_pools) {
-                            let frames = match self
-                                .backend
-                                .allocate_new_frames(&stream_info, min_num_frames - pool_num_frames)
-                            {
-                                Ok(frames) => frames,
-                                Err(msg) => {
-                                    log::debug!("Failed to allocate pool frames! {}", msg);
-                                    *self.state.lock().unwrap() = C2State::C2Error;
-                                    (*self.error_cb.lock().unwrap())(C2Status::C2BadValue);
-                                    return true;
-                                }
-                            };
-                            pool.add_frames(frames).unwrap();
-                        }
-                    }
                 }
             };
         }

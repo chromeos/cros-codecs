@@ -34,8 +34,8 @@ impl MappableHandle for BackendHandle {
     }
 }
 
-impl<'a> DynHandle for std::cell::Ref<'a, BackendHandle> {
-    fn dyn_mappable_handle<'b>(&'b self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
+impl<'a> DynHandle for std::cell::RefMut<'a, BackendHandle> {
+    fn dyn_mappable_handle<'b>(&'b mut self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
         Ok(Box::<BackendHandle>::default())
     }
 }

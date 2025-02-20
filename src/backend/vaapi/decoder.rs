@@ -3,30 +3,17 @@
 // found in the LICENSE file.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Context as AnyhowContext;
-use libva::Config;
-use libva::Context;
-use libva::Display;
-use libva::Image;
-use libva::Picture;
-use libva::PictureEnd;
-use libva::PictureNew;
-use libva::PictureSync;
-use libva::SurfaceMemoryDescriptor;
-use libva::VaError;
+use libva::{
+    Context, Display, Picture, PictureEnd, PictureNew, PictureSync, Surface,
+    SurfaceMemoryDescriptor, VaError,
+};
 
-use crate::backend::vaapi::p01x_to_i01x;
-use crate::backend::vaapi::surface_pool::PooledVaSurface;
-use crate::backend::vaapi::surface_pool::VaSurfacePool;
-use crate::backend::vaapi::va_rt_format_to_string;
-use crate::backend::vaapi::y21x_to_i21x;
-use crate::backend::vaapi::FormatMap;
-use crate::backend::vaapi::FORMAT_MAP;
-use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -34,19 +21,17 @@ use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::DecodedHandle as DecodedHandleTrait;
 use crate::decoder::DynHandle;
-use crate::decoder::FramePool;
 use crate::decoder::MappableHandle;
 use crate::decoder::StreamInfo;
-use crate::image_processing::i4xx_copy;
-use crate::image_processing::nv12_copy;
-use crate::image_processing::y410_to_i410;
+use crate::image_processing::nv12_to_i420;
+use crate::utils::align_up;
+use crate::video_frame::gbm_video_frame::GbmDevice;
+use crate::video_frame::gbm_video_frame::GbmVideoFrame;
+use crate::video_frame::{VideoFrame, UV_PLANE, Y_PLANE};
 use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
-
-use super::supported_formats_for_rt_format;
-use super::y412_to_i412;
 
 /// A decoded frame handle.
 pub(crate) type DecodedHandle<M> = Rc<RefCell<VaapiDecodedHandle<M>>>;
@@ -76,8 +61,8 @@ impl<M: SurfaceMemoryDescriptor> DecodedHandleTrait for DecodedHandle<M> {
         self.borrow().timestamp()
     }
 
-    fn dyn_picture<'a>(&'a self) -> Box<dyn DynHandle + 'a> {
-        Box::new(self.borrow())
+    fn dyn_picture<'a>(&'a mut self) -> Box<dyn DynHandle + 'a> {
+        Box::new(self.borrow_mut())
     }
 
     fn is_ready(&self) -> bool {
@@ -113,207 +98,10 @@ pub(crate) trait VaStreamInfo {
     fn visible_rect(&self) -> Rect;
 }
 
-pub(crate) struct ParsedStreamMetadata {
-    /// A VAContext from which we can decode from.
-    pub(crate) context: Rc<Context>,
-    /// The VAConfig that created the context. It must kept here so that
-    /// it does not get dropped while it is in use.
-    #[allow(dead_code)]
-    config: Config,
-    /// Information about the current stream, directly extracted from it.
-    stream_info: StreamInfo,
-    /// The image format we will use to map the surfaces. This is usually the
-    /// same as the surface's internal format, but occasionally we can try
-    /// mapping in a different format if requested and if the VA-API driver can
-    /// do it.
-    map_format: Rc<libva::VAImageFormat>,
-    /// The rt_format parsed from the stream.
-    rt_format: u32,
-    /// The profile parsed from the stream.
-    profile: i32,
-}
-
-/// Controls how the decoder should create its surface pool.
-#[derive(Clone, Debug)]
-pub(crate) enum PoolCreationMode {
-    /// Create a single pool and assume a single spatial layer. Used for non-SVC
-    /// content.
-    Highest,
-    /// Create a pool for each spatial layer. Used for SVC content.
-    Layers(Vec<Resolution>),
-}
-
-/// State of the input stream, which can be either unparsed (we don't know the stream properties
-/// yet) or parsed (we know the stream properties and are ready to decode).
-pub(crate) enum StreamMetadataState {
-    /// The metadata for the current stream has not yet been parsed.
-    Unparsed,
-    /// The metadata for the current stream has been parsed and a suitable
-    /// VAContext has been created to accomodate it.
-    Parsed(ParsedStreamMetadata),
-}
-
-type StreamStateWithPool<M> = (StreamMetadataState, Vec<VaSurfacePool<M>>);
-
-impl StreamMetadataState {
-    /// Returns a reference to the parsed metadata state or an error if we haven't reached that
-    /// state yet.
-    pub(crate) fn get_parsed(&self) -> anyhow::Result<&ParsedStreamMetadata> {
-        match self {
-            StreamMetadataState::Unparsed { .. } => Err(anyhow!("Stream metadata not parsed yet")),
-            StreamMetadataState::Parsed(parsed_metadata) => Ok(parsed_metadata),
-        }
-    }
-
-    /// Initializes or reinitializes the codec state.
-    fn open<S: VaStreamInfo, M: SurfaceMemoryDescriptor>(
-        display: &Rc<Display>,
-        hdr: S,
-        format_map: Option<&FormatMap>,
-        old_metadata_state: StreamMetadataState,
-        old_surface_pools: Vec<VaSurfacePool<M>>,
-        supports_context_reuse: bool,
-        pool_creation_mode: PoolCreationMode,
-    ) -> anyhow::Result<StreamStateWithPool<M>> {
-        let va_profile = hdr.va_profile()?;
-        let rt_format = hdr.rt_format()?;
-
-        let coded_resolution = hdr.coded_size().round(crate::ResolutionRoundMode::Even);
-
-        let format_map = if let Some(format_map) = format_map {
-            format_map
-        } else {
-            // Pick the first one that fits
-            FORMAT_MAP
-                .iter()
-                .find(|&map| map.rt_format == rt_format)
-                .ok_or(anyhow!(
-                    "format {} is not supported by your hardware or by the implementation for the current codec",
-                    va_rt_format_to_string(rt_format)
-                ))?
-        };
-
-        let map_format = display
-            .query_image_formats()?
-            .iter()
-            .find(|f| f.fourcc == format_map.va_fourcc)
-            .cloned()
-            .ok_or_else(|| {
-                anyhow!(
-                    "fourcc {} is not supported by your hardware or by the implementation for the current codec",
-                    Fourcc::from(format_map.va_fourcc)
-                )
-            })?;
-
-        let min_num_surfaces = hdr.min_num_surfaces();
-
-        let display_resolution = Resolution::from(hdr.visible_rect());
-
-        let layers = match pool_creation_mode {
-            PoolCreationMode::Highest => vec![coded_resolution],
-            PoolCreationMode::Layers(layers) => layers,
-        };
-
-        let (config, context, mut surface_pools) = match old_metadata_state {
-            // Nothing has changed for VAAPI, reuse current context.
-            //
-            // This can happen as the decoder cannot possibly know whether a
-            // given backend will really need to renegotiate on a given change
-            // of stream parameters.
-            StreamMetadataState::Parsed(old_state)
-                if old_state.stream_info.coded_resolution == coded_resolution
-                    && old_state.rt_format == rt_format
-                    && old_state.profile == va_profile =>
-            {
-                (old_state.config, old_state.context, old_surface_pools)
-            }
-            // The resolution has changed, but we support context reuse. Reuse
-            // current context.
-            StreamMetadataState::Parsed(old_state)
-                if supports_context_reuse
-                    && old_state.rt_format == rt_format
-                    && old_state.profile == va_profile =>
-            {
-                (old_state.config, old_state.context, old_surface_pools)
-            }
-            // Create new context.
-            _ => {
-                let config = display.create_config(
-                    vec![libva::VAConfigAttrib {
-                        type_: libva::VAConfigAttribType::VAConfigAttribRTFormat,
-                        value: rt_format,
-                    }],
-                    va_profile,
-                    libva::VAEntrypoint::VAEntrypointVLD,
-                )?;
-
-                let context = display.create_context::<M>(
-                    &config,
-                    coded_resolution.width,
-                    coded_resolution.height,
-                    None,
-                    true,
-                )?;
-
-                let surface_pools = layers
-                    .iter()
-                    .map(|layer| {
-                        VaSurfacePool::new(
-                            Rc::clone(display),
-                            rt_format,
-                            Some(libva::UsageHint::USAGE_HINT_DECODER),
-                            *layer,
-                        )
-                    })
-                    .collect();
-
-                (config, context, surface_pools)
-            }
-        };
-
-        /* sanity check */
-        assert!(surface_pools.len() == layers.len());
-        for (pool, layer) in surface_pools.iter_mut().zip(layers.iter()) {
-            if !pool.coded_resolution().can_contain(*layer) {
-                /* this will purge the old surfaces by not reclaiming them */
-                pool.set_coded_resolution(*layer);
-            }
-        }
-
-        Ok((
-            StreamMetadataState::Parsed(ParsedStreamMetadata {
-                context,
-                config,
-                stream_info: StreamInfo {
-                    format: match rt_format {
-                        libva::VA_RT_FORMAT_YUV420 => DecodedFormat::I420,
-                        libva::VA_RT_FORMAT_YUV422 => DecodedFormat::I422,
-                        libva::VA_RT_FORMAT_YUV444 => DecodedFormat::I444,
-                        libva::VA_RT_FORMAT_YUV420_10 => DecodedFormat::I010,
-                        libva::VA_RT_FORMAT_YUV420_12 => DecodedFormat::I012,
-                        libva::VA_RT_FORMAT_YUV422_10 => DecodedFormat::I210,
-                        libva::VA_RT_FORMAT_YUV422_12 => DecodedFormat::I212,
-                        libva::VA_RT_FORMAT_YUV444_10 => DecodedFormat::I410,
-                        libva::VA_RT_FORMAT_YUV444_12 => DecodedFormat::I412,
-                        _ => panic!("unrecognized RT format {}", rt_format),
-                    },
-                    coded_resolution,
-                    display_resolution,
-                    min_num_frames: min_num_surfaces,
-                },
-                map_format: Rc::new(map_format),
-                rt_format,
-                profile: va_profile,
-            }),
-            surface_pools,
-        ))
-    }
-}
-
 /// Rendering state of a VA picture.
 enum PictureState<M: SurfaceMemoryDescriptor> {
-    Ready(Picture<PictureSync, PooledVaSurface<M>>),
-    Pending(Picture<PictureEnd, PooledVaSurface<M>>),
+    Ready(Picture<PictureSync, Surface<M>>),
+    Pending(Picture<PictureEnd, Surface<M>>),
     // Only set in sync when we take ownership of the VA picture.
     Invalid,
 }
@@ -335,7 +123,7 @@ impl<M: SurfaceMemoryDescriptor> PictureState<M> {
         res
     }
 
-    fn surface(&self) -> &libva::Surface<M> {
+    fn surface(&self) -> &Surface<M> {
         match self {
             PictureState::Ready(picture) => picture.surface(),
             PictureState::Pending(picture) => picture.surface(),
@@ -362,7 +150,7 @@ impl<M: SurfaceMemoryDescriptor> PictureState<M> {
         }
     }
 
-    fn new_from_same_surface(&self, timestamp: u64) -> Picture<PictureNew, PooledVaSurface<M>> {
+    fn new_from_same_surface(&self, timestamp: u64) -> Picture<PictureNew, Surface<M>> {
         match &self {
             PictureState::Ready(picture) => Picture::new_from_same_surface(timestamp, picture),
             PictureState::Pending(picture) => Picture::new_from_same_surface(timestamp, picture),
@@ -375,25 +163,31 @@ impl<M: SurfaceMemoryDescriptor> PictureState<M> {
 ///
 /// This includes the VA picture which can be pending rendering or complete, as well as useful
 /// meta-information.
-pub struct VaapiDecodedHandle<M: SurfaceMemoryDescriptor> {
+pub struct VaapiDecodedHandle<M>
+where
+    M: SurfaceMemoryDescriptor,
+{
     state: PictureState<M>,
     /// Actual resolution of the visible rectangle in the decoded buffer.
     display_resolution: Resolution,
-    /// Image format for this surface, taken from the pool it originates from.
-    map_format: Rc<libva::VAImageFormat>,
+    frame_import_cb: Box<dyn Fn(&Surface<M>) -> Box<dyn MappableHandle>>,
 }
 
-impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
+impl<M> VaapiDecodedHandle<M>
+where
+    M: SurfaceMemoryDescriptor,
+{
     /// Creates a new pending handle on `surface_id`.
     fn new(
-        picture: Picture<PictureNew, PooledVaSurface<M>>,
-        metadata: &ParsedStreamMetadata,
+        picture: Picture<PictureNew, Surface<M>>,
+        display_resolution: Resolution,
+        frame_import_cb: Box<dyn Fn(&Surface<M>) -> Box<dyn MappableHandle>>,
     ) -> anyhow::Result<Self> {
         let picture = picture.begin()?.render()?.end()?;
         Ok(Self {
             state: PictureState::Pending(picture),
-            display_resolution: metadata.stream_info.display_resolution,
-            map_format: Rc::clone(&metadata.map_format),
+            display_resolution: display_resolution,
+            frame_import_cb: frame_import_cb,
         })
     }
 
@@ -401,40 +195,16 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
         self.state.sync()
     }
 
-    /// Returns a mapped VAImage. this maps the VASurface onto our address space.
-    /// This can be used in place of "DynMappableHandle::map()" if the client
-    /// wants to access the backend mapping directly for any reason.
-    ///
-    /// Note that DynMappableHandle is downcastable.
-    fn image(&self) -> anyhow::Result<Image> {
-        match &self.state {
-            PictureState::Ready(picture) => {
-                // Map the VASurface onto our address space.
-                let image = picture.create_image(
-                    *self.map_format,
-                    self.surface().size(),
-                    self.display_resolution.into(),
-                )?;
-
-                Ok(image)
-            }
-            // Either we are in `Ready` state or we didn't call `sync()`.
-            PictureState::Pending(_) | PictureState::Invalid => {
-                Err(anyhow::anyhow!("picture is not in Ready state"))
-            }
-        }
-    }
-
     /// Creates a new picture from the surface backing the current one. Useful for interlaced
     /// decoding.
     pub(crate) fn new_picture_from_same_surface(
         &self,
         timestamp: u64,
-    ) -> Picture<PictureNew, PooledVaSurface<M>> {
+    ) -> Picture<PictureNew, Surface<M>> {
         self.state.new_from_same_surface(timestamp)
     }
 
-    pub(crate) fn surface(&self) -> &libva::Surface<M> {
+    pub(crate) fn surface(&self) -> &Surface<M> {
         self.state.surface()
     }
 
@@ -444,342 +214,216 @@ impl<M: SurfaceMemoryDescriptor> VaapiDecodedHandle<M> {
     }
 }
 
-impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::Ref<'a, VaapiDecodedHandle<M>> {
-    fn dyn_mappable_handle<'b>(&'b self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
-        self.image().map(|i| Box::new(i) as Box<dyn MappableHandle>)
+impl<'a, M: SurfaceMemoryDescriptor> DynHandle for std::cell::RefMut<'a, VaapiDecodedHandle<M>> {
+    fn dyn_mappable_handle<'b>(&'b mut self) -> anyhow::Result<Box<dyn MappableHandle + 'b>> {
+        Ok((self.frame_import_cb)(self.surface()))
     }
 }
 
-impl<'a> MappableHandle for Image<'a> {
+// TODO: Directly expose VideoFrame through StatelessDecoder interface and delete MappableHandle
+impl<V, M> MappableHandle for V
+where
+    M: SurfaceMemoryDescriptor,
+    V: VideoFrame<NativeHandle = Surface<M>>,
+{
     fn read(&mut self, buffer: &mut [u8]) -> anyhow::Result<()> {
-        let image_size = self.image_size();
-        let image_inner = self.image();
+        let (dst_y, dst_uv) = buffer.split_at_mut(self.resolution().get_area());
+        let (dst_u, dst_v) = dst_uv.split_at_mut(
+            Resolution {
+                width: align_up(self.resolution().width, 2),
+                height: align_up(self.resolution().height, 2),
+            }
+            .get_area()
+                / 4,
+        );
 
-        let display_resolution = self.display_resolution();
-        let width = display_resolution.0 as usize;
-        let height = display_resolution.1 as usize;
+        let src_strides = self.get_plane_pitch();
+        let src_mapping = self.map().expect("Mapping failed!");
+        let src_planes = src_mapping.get();
 
-        if buffer.len() != image_size {
-            return Err(anyhow!(
-                "buffer size is {} while image size is {}",
-                buffer.len(),
-                image_size
-            ));
-        }
-
-        let pitches = image_inner.pitches.map(|x| x as usize);
-        let offsets = image_inner.offsets.map(|x| x as usize);
-
-        match image_inner.format.fourcc {
-            libva::VA_FOURCC_NV12 => {
-                let (src_y, src_uv) = self.as_ref().split_at(offsets[1]);
-                let (dst_y, dst_uv) = buffer.split_at_mut(width * height);
-                nv12_copy(
-                    src_y, pitches[0], dst_y, width, src_uv, pitches[1], dst_uv, width, width,
-                    height,
-                );
-            }
-            libva::VA_FOURCC_I420 => {
-                let (src_y, src_uv) = self.as_ref().split_at(offsets[1]);
-                let (src_u, src_v) = src_uv.split_at(offsets[2] - offsets[1]);
-                let (dst_y, dst_uv) = buffer.split_at_mut(width * height);
-                let (dst_u, dst_v) = dst_uv.split_at_mut(((width + 1) / 2) * ((height + 1) / 2));
-                i4xx_copy(
-                    src_y,
-                    pitches[0],
-                    dst_y,
-                    width,
-                    src_u,
-                    pitches[1],
-                    dst_u,
-                    (width + 1) / 2,
-                    src_v,
-                    pitches[2],
-                    dst_v,
-                    (width + 1) / 2,
-                    width,
-                    height,
-                    (true, true),
-                );
-            }
-            libva::VA_FOURCC_422H => {
-                let (src_y, src_uv) = self.as_ref().split_at(offsets[1]);
-                let (src_u, src_v) = src_uv.split_at(offsets[2] - offsets[1]);
-                let (dst_y, dst_uv) = buffer.split_at_mut(width * height);
-                let (dst_u, dst_v) = dst_uv.split_at_mut(((width + 1) / 2) * height);
-                i4xx_copy(
-                    src_y,
-                    pitches[0],
-                    dst_y,
-                    width,
-                    src_u,
-                    pitches[1],
-                    dst_u,
-                    (width + 1) / 2,
-                    src_v,
-                    pitches[2],
-                    dst_v,
-                    (width + 1) / 2,
-                    width,
-                    height,
-                    (true, false),
-                );
-            }
-            libva::VA_FOURCC_444P => {
-                let (src_y, src_uv) = self.as_ref().split_at(offsets[1]);
-                let (src_u, src_v) = src_uv.split_at(offsets[2] - offsets[1]);
-                let (dst_y, dst_uv) = buffer.split_at_mut(width * height);
-                let (dst_u, dst_v) = dst_uv.split_at_mut(width * height);
-                i4xx_copy(
-                    src_y,
-                    pitches[0],
-                    dst_y,
-                    width,
-                    src_u,
-                    pitches[1],
-                    dst_u,
-                    width,
-                    src_v,
-                    pitches[2],
-                    dst_v,
-                    width,
-                    width,
-                    height,
-                    (false, false),
-                );
-            }
-            libva::VA_FOURCC_P010 => {
-                p01x_to_i01x(self.as_ref(), buffer, 10, width, height, pitches, offsets);
-            }
-            libva::VA_FOURCC_P012 => {
-                p01x_to_i01x(self.as_ref(), buffer, 12, width, height, pitches, offsets);
-            }
-            libva::VA_FOURCC_Y210 => {
-                y21x_to_i21x(self.as_ref(), buffer, 10, width, height, pitches, offsets);
-            }
-            libva::VA_FOURCC_Y212 => {
-                y21x_to_i21x(self.as_ref(), buffer, 12, width, height, pitches, offsets);
-            }
-            libva::VA_FOURCC_Y410 => {
-                y410_to_i410(self.as_ref(), buffer, width, height, pitches, offsets);
-            }
-            libva::VA_FOURCC_Y412 => {
-                y412_to_i412(self.as_ref(), buffer, width, height, pitches, offsets);
-            }
-            _ => return Err(anyhow!("unsupported format 0x{:x}", image_inner.format.fourcc)),
-        }
+        nv12_to_i420(
+            src_planes[Y_PLANE],
+            src_strides[Y_PLANE],
+            dst_y,
+            self.resolution().width as usize,
+            src_planes[UV_PLANE],
+            src_strides[UV_PLANE],
+            dst_u,
+            align_up(self.resolution().width as usize, 2) / 2,
+            dst_v,
+            align_up(self.resolution().width as usize, 2) / 2,
+            self.resolution().width as usize,
+            self.resolution().height as usize,
+        );
 
         Ok(())
     }
 
     fn image_size(&mut self) -> usize {
-        let image = self.image();
-        let display_resolution = self.display_resolution();
-        crate::decoded_frame_size(
-            (&image.format).try_into().unwrap(),
-            display_resolution.0 as usize,
-            display_resolution.1 as usize,
-        )
+        let y_size = self.resolution().get_area();
+        let uv_size = Resolution {
+            width: align_up(self.resolution().width, 2),
+            height: align_up(self.resolution().height, 2),
+        }
+        .get_area()
+            / 2;
+
+        y_size + uv_size
     }
 }
 
-pub struct VaapiBackend<M>
-where
-    M: SurfaceMemoryDescriptor,
-{
-    /// VA display in use for this stream.
+pub struct VaapiBackend {
+    pub context: Rc<Context>,
+    pub stream_info: StreamInfo,
+
     display: Rc<Display>,
-    /// Pools of surfaces. We reuse surfaces as they are expensive to allocate.
-    /// We allow for multiple pools so as to support one spatial layer per pool
-    /// when needed.
-    pub(crate) surface_pools: Vec<VaSurfacePool<M>>,
-    /// The metadata state. Updated whenever the decoder reads new data from the stream.
-    pub(crate) metadata_state: StreamMetadataState,
-    /// Whether the codec supports context reuse on DRC. This is only supported
-    /// by VP9 and AV1.
     supports_context_reuse: bool,
-    /// Controls the creation of surface pools.
-    pool_creation_mode: PoolCreationMode,
+    gbm_device: Arc<GbmDevice>,
 }
 
-impl<M> VaapiBackend<M>
-where
-    M: SurfaceMemoryDescriptor + 'static,
-{
+impl VaapiBackend {
     pub(crate) fn new(display: Rc<libva::Display>, supports_context_reuse: bool) -> Self {
-        // Create a pool with reasonable defaults, as we don't know the format of the stream yet.
-        let surface_pools = vec![VaSurfacePool::new(
-            Rc::clone(&display),
-            libva::VA_RT_FORMAT_YUV420,
-            Some(libva::UsageHint::USAGE_HINT_DECODER),
-            Resolution::from((16, 16)),
-        )];
-
+        let init_stream_info = StreamInfo {
+            format: DecodedFormat::NV12,
+            coded_resolution: Resolution::from((16, 16)),
+            display_resolution: Resolution::from((16, 16)),
+            min_num_frames: 1,
+        };
+        let config = display
+            .create_config(
+                vec![libva::VAConfigAttrib {
+                    type_: libva::VAConfigAttribType::VAConfigAttribRTFormat,
+                    value: libva::VA_RT_FORMAT_YUV420,
+                }],
+                libva::VAProfile::VAProfileH264Main,
+                libva::VAEntrypoint::VAEntrypointVLD,
+            )
+            .expect("Could not create initial VAConfig!");
+        let context = display
+            .create_context::<GbmVideoFrame>(
+                &config,
+                init_stream_info.coded_resolution.width,
+                init_stream_info.coded_resolution.height,
+                None,
+                true,
+            )
+            .expect("Could not create initial VAContext!");
         Self {
-            display,
-            surface_pools,
-            metadata_state: StreamMetadataState::Unparsed,
-            supports_context_reuse,
-            pool_creation_mode: PoolCreationMode::Highest,
+            display: display,
+            context: context,
+            supports_context_reuse: supports_context_reuse,
+            // This will go away once we properly plumb Gralloc frames
+            gbm_device: GbmDevice::open(PathBuf::from("/dev/dri/renderD128"))
+                .expect("Could not open GBM Device"),
+            stream_info: init_stream_info,
         }
     }
 
     pub(crate) fn new_sequence<StreamData>(
         &mut self,
         stream_params: &StreamData,
-        pool_creation_mode: PoolCreationMode,
     ) -> StatelessBackendResult<()>
     where
         for<'a> &'a StreamData: VaStreamInfo,
     {
-        let old_metadata_state =
-            std::mem::replace(&mut self.metadata_state, StreamMetadataState::Unparsed);
+        // TODO: Plumb frame pool reallocation event to gralloc
 
-        let old_surface_pools = self.surface_pools.drain(..).collect();
-        (self.metadata_state, self.surface_pools) = StreamMetadataState::open(
-            &self.display,
-            stream_params,
-            None,
-            old_metadata_state,
-            old_surface_pools,
-            self.supports_context_reuse,
-            pool_creation_mode.clone(),
-        )?;
+        self.stream_info.display_resolution = Resolution::from(stream_params.visible_rect());
+        self.stream_info.coded_resolution = stream_params.coded_size().clone();
+        self.stream_info.min_num_frames = stream_params.min_num_surfaces();
 
-        self.pool_creation_mode = pool_creation_mode;
+        // TODO: Handle context re-use
+        // TODO: We should obtain RT_FORMAT from stream_info
+        let config = self
+            .display
+            .create_config(
+                vec![libva::VAConfigAttrib {
+                    type_: libva::VAConfigAttribType::VAConfigAttribRTFormat,
+                    value: libva::VA_RT_FORMAT_YUV420,
+                }],
+                stream_params.va_profile().map_err(|_| anyhow!("Could not get VAProfile!"))?,
+                libva::VAEntrypoint::VAEntrypointVLD,
+            )
+            .map_err(|_| anyhow!("Could not create VAConfig!"))?;
+        let context = self
+            .display
+            .create_context::<GbmVideoFrame>(
+                &config,
+                self.stream_info.coded_resolution.width,
+                self.stream_info.coded_resolution.height,
+                None,
+                true,
+            )
+            .map_err(|_| anyhow!("Could not create VAContext!"))?;
+        self.context = context;
 
         Ok(())
     }
 
     pub(crate) fn process_picture<Codec: StatelessCodec>(
         &mut self,
-        picture: Picture<PictureNew, PooledVaSurface<M>>,
+        picture: Picture<PictureNew, Surface<GbmVideoFrame>>,
     ) -> StatelessBackendResult<<Self as StatelessDecoderBackend>::Handle>
     where
         Self: StatelessDecoderBackendPicture<Codec>,
         for<'a> &'a Codec::FormatInfo: VaStreamInfo,
     {
-        let metadata = self.metadata_state.get_parsed()?;
-
-        Ok(Rc::new(RefCell::new(VaapiDecodedHandle::new(picture, metadata)?)))
+        let gbm_device = Arc::clone(&self.gbm_device);
+        Ok(Rc::new(RefCell::new(VaapiDecodedHandle::new(
+            picture,
+            self.stream_info.display_resolution.clone(),
+            Box::new(move |surface| {
+                Box::new(
+                    <Arc<GbmDevice> as Clone>::clone(&gbm_device)
+                        .import_from_vaapi(surface)
+                        .expect("Failed to import VA-API handle!"),
+                )
+            }),
+        )?)))
     }
 
-    /// Gets a set of supported formats for the particular stream being
-    /// processed. This requires that some buffers be processed before this call
-    /// is made. Only formats that are compatible with the current color space,
-    /// bit depth, and chroma format are returned such that no conversion is
-    /// needed.
-    fn supported_formats_for_stream(&self) -> anyhow::Result<HashSet<DecodedFormat>> {
-        let metadata = self.metadata_state.get_parsed()?;
-        let image_formats = self.display.query_image_formats()?;
-
-        let formats = supported_formats_for_rt_format(
-            &self.display,
-            metadata.rt_format,
-            metadata.profile,
-            libva::VAEntrypoint::VAEntrypointVLD,
-            &image_formats,
-        )?;
-
-        Ok(formats.into_iter().map(|f| f.decoded_format).collect())
-    }
-
-    pub(crate) fn highest_pool(&mut self) -> &mut VaSurfacePool<M> {
-        /* we guarantee that there is at least one pool, at minimum */
-        self.surface_pools.iter_mut().max_by_key(|p| p.coded_resolution().height).unwrap()
-    }
-
-    pub(crate) fn pool(&mut self, layer: Resolution) -> Option<&mut VaSurfacePool<M>> {
-        self.surface_pools.iter_mut().find(|p| p.coded_resolution() == layer)
+    // TODO: Plumb from Gralloc instead.
+    pub(crate) fn new_surface(&mut self) -> Surface<GbmVideoFrame> {
+        // TODO: Implement actual format negotiation.
+        let frame = Box::new(
+            self.gbm_device
+                .clone()
+                .new_frame(
+                    Fourcc::from(b"NV12"),
+                    self.stream_info.display_resolution.clone(),
+                    self.stream_info.coded_resolution.clone(),
+                )
+                .expect("Failed to allocate VaSurface!"),
+        );
+        frame.to_native_handle(&self.display).expect("Failed to export frame to VA-API surface!")
     }
 }
 
 /// Shortcut for pictures used for the VAAPI backend.
-pub type VaapiPicture<M> = Picture<PictureNew, PooledVaSurface<M>>;
+pub type VaapiPicture<M> = Picture<PictureNew, Surface<M>>;
 
-impl<M> StatelessDecoderBackend for VaapiBackend<M>
-where
-    M: SurfaceMemoryDescriptor,
-{
-    type Handle = DecodedHandle<M>;
-
-    type FramePool = VaSurfacePool<M>;
-
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut Self::FramePool> {
-        if let PoolLayer::Highest = layer {
-            return vec![self
-                .surface_pools
-                .iter_mut()
-                .max_by_key(|other| other.coded_resolution().height)
-                .unwrap()];
-        }
-
-        self.surface_pools
-            .iter_mut()
-            .filter(|pool| {
-                match layer {
-                    PoolLayer::Highest => unreachable!(),
-                    PoolLayer::Layer(resolution) => pool.coded_resolution() == resolution,
-                    PoolLayer::All => {
-                        /* let all through */
-                        true
-                    }
-                }
-            })
-            .collect()
-    }
+impl StatelessDecoderBackend for VaapiBackend {
+    type Handle = DecodedHandle<GbmVideoFrame>;
 
     fn stream_info(&self) -> Option<&StreamInfo> {
-        self.metadata_state.get_parsed().ok().map(|m| &m.stream_info)
+        Some(&self.stream_info)
     }
 }
 
-impl<Codec: StatelessCodec, M> TryFormat<Codec> for VaapiBackend<M>
+impl<Codec: StatelessCodec> TryFormat<Codec> for VaapiBackend
 where
-    //VaapiBackend<M>: StatelessDecoderBackendPicture<Codec>,
     for<'a> &'a Codec::FormatInfo: VaStreamInfo,
-    M: SurfaceMemoryDescriptor + 'static,
 {
+    // TODO: Replace with format negotiation with Gralloc pool
     fn try_format(
         &mut self,
         format_info: &Codec::FormatInfo,
-        format: crate::DecodedFormat,
+        format: DecodedFormat,
     ) -> anyhow::Result<()> {
-        let supported_formats_for_stream = self.supported_formats_for_stream()?;
-
-        if supported_formats_for_stream.contains(&format) {
-            let map_format =
-                FORMAT_MAP.iter().find(|&map| map.decoded_format == format).ok_or_else(|| {
-                    anyhow!("cannot find corresponding VA format for decoded format {:?}", format)
-                })?;
-
-            let old_metadata_state =
-                std::mem::replace(&mut self.metadata_state, StreamMetadataState::Unparsed);
-
-            // TODO: since we have established that it's best to let the VA
-            // driver choose the surface's internal (tiled) format, and map to
-            // the fourcc we want on-the-fly, this call to open() becomes
-            // redundant.
-            //
-            // Let's fix it at a later commit, because it involves other,
-            // non-related, cleanups.
-            //
-            // This does not apply to other (future) backends, like V4L2, which
-            // need to reallocate on format change.
-            let old_surface_pools = self.surface_pools.drain(..).collect();
-            (self.metadata_state, self.surface_pools) = StreamMetadataState::open(
-                &self.display,
-                format_info,
-                Some(map_format),
-                old_metadata_state,
-                old_surface_pools,
-                self.supports_context_reuse,
-                self.pool_creation_mode.clone(),
-            )?;
-
+        if format == DecodedFormat::I420 {
             Ok(())
         } else {
-            Err(anyhow!("Format {:?} is unsupported.", format))
+            Err(anyhow!("Format {format:?} not yet support"))
         }
     }
 }

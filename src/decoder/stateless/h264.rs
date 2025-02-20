@@ -44,7 +44,6 @@ use crate::codec::h264::picture::Reference;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DecodingState;
 use crate::decoder::stateless::NewPictureResult;
-use crate::decoder::stateless::PoolLayer;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessCodec;
 use crate::decoder::stateless::StatelessDecoder;
@@ -1232,7 +1231,6 @@ where
     B::Handle: Clone + 'static,
 {
     type Handle = B::Handle;
-    type FramePool = B::FramePool;
 
     fn decode(&mut self, timestamp: u64, bitstream: &[u8]) -> Result<usize, DecodeError> {
         let mut cursor = Cursor::new(bitstream);
@@ -1297,10 +1295,6 @@ where
             // on the next decode() call.
             decoder.apply_sps(sps);
         })
-    }
-
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool> {
-        self.backend.frame_pool(layer)
     }
 
     fn stream_info(&self) -> Option<&StreamInfo> {

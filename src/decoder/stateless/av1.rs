@@ -29,7 +29,6 @@ use crate::decoder::stateless::StatelessVideoDecoder;
 use crate::decoder::stateless::TryFormat;
 use crate::decoder::BlockingMode;
 use crate::decoder::DecodedHandle;
-use crate::decoder::PoolLayer;
 use crate::Resolution;
 
 #[cfg(test)]
@@ -300,7 +299,6 @@ where
     B::Handle: Clone + 'static,
 {
     type Handle = B::Handle;
-    type FramePool = B::FramePool;
 
     /// Decode an AV1 stream.
     ///
@@ -482,10 +480,6 @@ where
         self.decoding_state = DecodingState::Reset;
 
         Ok(())
-    }
-
-    fn frame_pool(&mut self, layer: PoolLayer) -> Vec<&mut B::FramePool> {
-        self.backend.frame_pool(layer)
     }
 
     fn stream_info(&self) -> Option<&crate::decoder::StreamInfo> {

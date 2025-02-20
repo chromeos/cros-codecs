@@ -13,17 +13,7 @@ use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Sub;
 use std::os::fd::OwnedFd;
-use std::time::Duration;
 
-use crate::decoder::stateless::DecodeError;
-use crate::decoder::stateless::PoolLayer;
-use crate::decoder::stateless::StatelessVideoDecoder;
-use crate::decoder::BlockingMode;
-use crate::decoder::DecodedHandle;
-use crate::decoder::DecoderEvent;
-use crate::decoder::FramePool;
-use crate::decoder::StreamInfo;
-use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::FrameLayout;
 use crate::PlaneLayout;
@@ -48,108 +38,6 @@ pub fn buffer_size_for_area(width: u32, height: u32) -> u32 {
         buffer_size *= 2;
     }
     buffer_size
-}
-
-/// Simple decoding loop that plays the stream once from start to finish.
-#[allow(clippy::type_complexity)]
-pub fn simple_playback_loop<D, R, I, H, FP>(
-    decoder: &mut D,
-    stream_iter: I,
-    on_new_frame: &mut dyn FnMut(H),
-    allocate_new_frames: &mut dyn FnMut(&StreamInfo, usize) -> anyhow::Result<Vec<H::Descriptor>>,
-    output_format: DecodedFormat,
-    blocking_mode: BlockingMode,
-) -> anyhow::Result<()>
-where
-    H: DecodedHandle,
-    FP: FramePool<Descriptor = H::Descriptor> + ?Sized,
-    D: StatelessVideoDecoder<Handle = H, FramePool = FP> + ?Sized,
-    R: AsRef<[u8]>,
-    I: Iterator<Item = R>,
-{
-    // Closure that drains all pending decoder events and calls `on_new_frame` on each
-    // completed frame.
-    let mut check_events = |decoder: &mut D| -> anyhow::Result<()> {
-        while let Some(event) = decoder.next_event() {
-            match event {
-                DecoderEvent::FrameReady(frame) => {
-                    on_new_frame(frame);
-                }
-                DecoderEvent::FormatChanged(mut format_setter) => {
-                    format_setter.try_format(output_format).unwrap();
-                    let stream_info = format_setter.stream_info().clone();
-                    let min_num_frames = stream_info.min_num_frames;
-                    /* we need to account for multiple layers if applicable for
-                     * the stream */
-                    let pools = format_setter.frame_pool(PoolLayer::All);
-                    let nb_pools = pools.len();
-                    for pool in pools {
-                        // Allocate the missing number of buffers in our pool for decoding to succeed.
-                        let pool_num_frames = pool.num_managed_frames();
-                        if pool_num_frames < (min_num_frames / nb_pools) {
-                            let frames = allocate_new_frames(
-                                &stream_info,
-                                min_num_frames - pool_num_frames,
-                            )?;
-                            pool.add_frames(frames).unwrap();
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    };
-
-    for (frame_num, packet) in stream_iter.enumerate() {
-        let mut bitstream = packet.as_ref();
-        loop {
-            match decoder.decode(frame_num as u64, bitstream) {
-                Ok(bytes_decoded) => {
-                    bitstream = &bitstream[bytes_decoded..];
-
-                    if blocking_mode == BlockingMode::Blocking {
-                        check_events(decoder)?;
-                    }
-
-                    if bitstream.is_empty() {
-                        // Break the loop so we can process the next NAL if we sent the current one
-                        // successfully.
-                        break;
-                    }
-                }
-                Err(DecodeError::CheckEvents) | Err(DecodeError::NotEnoughOutputBuffers(_)) => {
-                    decoder.wait_for_next_event(Duration::from_secs(3))?;
-                    check_events(decoder)?
-                }
-                Err(e) => anyhow::bail!(e),
-            }
-        }
-    }
-
-    decoder.flush()?;
-    check_events(decoder)
-}
-
-/// Frame allocation callback that results in self-allocated memory.
-pub fn simple_playback_loop_owned_frames(
-    _: &StreamInfo,
-    nb_frames: usize,
-) -> anyhow::Result<Vec<()>> {
-    Ok(vec![(); nb_frames])
-}
-
-/// Frame allocation callback that returns user-allocated memory for the frames.
-pub fn simple_playback_loop_userptr_frames(
-    stream_info: &StreamInfo,
-    nb_frames: usize,
-) -> anyhow::Result<Vec<UserPtrFrame>> {
-    let alloc_function = match stream_info.format {
-        DecodedFormat::I420 | DecodedFormat::NV12 => &UserPtrFrame::new_nv12,
-        _ => anyhow::bail!("{:?} format is unsupported with user memory", stream_info.format),
-    };
-
-    Ok((0..nb_frames).map(|_| alloc_function(stream_info.coded_resolution)).collect::<Vec<_>>())
 }
 
 /// A structure that holds user-allocated memory for a frame as well as its layout.

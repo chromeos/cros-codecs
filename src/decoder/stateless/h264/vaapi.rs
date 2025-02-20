@@ -18,7 +18,6 @@ use libva::SurfaceMemoryDescriptor;
 
 use crate::backend::vaapi::decoder::va_surface_id;
 use crate::backend::vaapi::decoder::DecodedHandle as VADecodedHandle;
-use crate::backend::vaapi::decoder::PoolCreationMode;
 use crate::backend::vaapi::decoder::VaStreamInfo;
 use crate::backend::vaapi::decoder::VaapiBackend;
 use crate::backend::vaapi::decoder::VaapiPicture;
@@ -35,13 +34,13 @@ use crate::codec::h264::picture::PictureData;
 use crate::codec::h264::picture::Reference;
 use crate::decoder::stateless::h264::StatelessH264DecoderBackend;
 use crate::decoder::stateless::h264::H264;
-use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::video_frame::gbm_video_frame::GbmVideoFrame;
 use crate::Rect;
 use crate::Resolution;
 
@@ -449,15 +448,13 @@ fn build_slice_param<M: SurfaceMemoryDescriptor>(
     Ok(BufferType::SliceParameter(SliceParameter::H264(slice_param)))
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoderBackendPicture<H264>
-    for VaapiBackend<M>
-{
-    type Picture = VaapiPicture<M>;
+impl StatelessDecoderBackendPicture<H264> for VaapiBackend {
+    type Picture = VaapiPicture<GbmVideoFrame>;
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for VaapiBackend<M> {
+impl StatelessH264DecoderBackend for VaapiBackend {
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()> {
-        self.new_sequence(sps, PoolCreationMode::Highest)
+        self.new_sequence(sps)
     }
 
     fn start_picture(
@@ -469,8 +466,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         dpb: &Dpb<Self::Handle>,
         hdr: &SliceHeader,
     ) -> StatelessBackendResult<()> {
-        let metadata = self.metadata_state.get_parsed()?;
-        let context = &metadata.context;
+        let context = &self.context;
 
         let surface_id = picture.surface().id();
 
@@ -497,8 +493,7 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
         ref_pic_list0: &[&DpbEntry<Self::Handle>],
         ref_pic_list1: &[&DpbEntry<Self::Handle>],
     ) -> StatelessBackendResult<()> {
-        let metadata = self.metadata_state.get_parsed()?;
-        let context = &metadata.context;
+        let context = &self.context;
 
         let slice_param = context
             .create_buffer(build_slice_param(
@@ -527,12 +522,9 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     }
 
     fn new_picture(&mut self, timestamp: u64) -> NewPictureResult<Self::Picture> {
-        let highest_pool = self.highest_pool();
-        let surface = highest_pool.get_surface().ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let surface = self.new_surface();
 
-        let metadata = self.metadata_state.get_parsed()?;
-
-        Ok(VaPicture::new(timestamp, Rc::clone(&metadata.context), surface))
+        Ok(VaPicture::new(timestamp, Rc::clone(&self.context), surface))
     }
 
     fn new_field_picture(
@@ -545,16 +537,12 @@ impl<M: SurfaceMemoryDescriptor + 'static> StatelessH264DecoderBackend for Vaapi
     }
 }
 
-impl<M: SurfaceMemoryDescriptor + 'static> StatelessDecoder<H264, VaapiBackend<M>> {
+impl StatelessDecoder<H264, VaapiBackend> {
     // Creates a new instance of the decoder using the VAAPI backend.
-    pub fn new_vaapi<S>(
+    pub fn new_vaapi(
         display: Rc<Display>,
         blocking_mode: BlockingMode,
-    ) -> Result<Self, NewStatelessDecoderError>
-    where
-        M: From<S>,
-        S: From<M>,
-    {
+    ) -> Result<Self, NewStatelessDecoderError> {
         Self::new(VaapiBackend::new(display, false), blocking_mode)
     }
 }

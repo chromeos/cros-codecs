@@ -81,26 +81,11 @@ impl C2DecodeWorkObject for TestDecodeWorkObject {
         let aligned_width = (visible_width + 1) & (!1);
         let aligned_height = (visible_height + 1) & (!1);
         self.output = vec![0; aligned_width * aligned_height * 3 / 2];
-        let (y, uv) = self
-            .output
-            .as_mut_slice()
-            .split_at_mut(visible_width * visible_height);
-        let y_layout = PlaneLayout {
-            buffer_index: 0,
-            offset: 0,
-            stride: aligned_width,
-        };
+        let (y, uv) = self.output.as_mut_slice().split_at_mut(visible_width * visible_height);
+        let y_layout = PlaneLayout { buffer_index: 0, offset: 0, stride: aligned_width };
         let (u, v) = uv.split_at_mut(aligned_width * aligned_height / 4);
-        let u_layout = PlaneLayout {
-            buffer_index: 1,
-            offset: 0,
-            stride: aligned_width / 2,
-        };
-        let v_layout = PlaneLayout {
-            buffer_index: 2,
-            offset: 0,
-            stride: aligned_width / 2,
-        };
+        let u_layout = PlaneLayout { buffer_index: 1, offset: 0, stride: aligned_width / 2 };
+        let v_layout = PlaneLayout { buffer_index: 2, offset: 0, stride: aligned_width / 2 };
         Ok(C2VideoFrame {
             planes: vec![y, u, v],
             layout: FrameLayout {
@@ -126,16 +111,12 @@ fn main() {
 
     let input = {
         let mut buf = Vec::new();
-        input
-            .read_to_end(&mut buf)
-            .expect("error reading input file");
+        input.read_to_end(&mut buf).expect("error reading input file");
         buf
     };
 
     let mut output = if !args.multiple_output_files {
-        args.output
-            .as_ref()
-            .map(|p| File::create(p).expect("error creating output file"))
+        args.output.as_ref().map(|p| File::create(p).expect("error creating output file"))
     } else {
         None
     };
@@ -167,28 +148,19 @@ fn main() {
 
             if args.multiple_output_files {
                 let file_name = decide_output_file_name(
-                    args.output
-                        .as_ref()
-                        .expect("multiple_output_files need output to be set"),
+                    args.output.as_ref().expect("multiple_output_files need output to be set"),
                     output_filename_idx,
                 );
 
                 let mut output = File::create(file_name).expect("error creating output file");
                 output_filename_idx += 1;
-                output
-                    .write_all(&frame_data)
-                    .expect("failed to write to output file");
+                output.write_all(&frame_data).expect("failed to write to output file");
             } else if let Some(output) = &mut output {
-                output
-                    .write_all(&frame_data)
-                    .expect("failed to write to output file");
+                output.write_all(&frame_data).expect("failed to write to output file");
             }
 
-            let frame_md5: String = if need_per_frame_md5 {
-                md5_digest(&frame_data)
-            } else {
-                "".to_string()
-            };
+            let frame_md5: String =
+                if need_per_frame_md5 { md5_digest(&frame_data) } else { "".to_string() };
 
             match args.compute_md5 {
                 None => (),
@@ -213,7 +185,6 @@ fn main() {
         on_new_frame,
         C2VaapiDecoderOptions {
             libva_device_path: args.libva_device,
-            gbm_device_path: args.gbm_device,
             frame_memory_type: args.frame_memory,
         },
     );
@@ -222,9 +193,7 @@ fn main() {
         Fourcc::from(args.input_format),
         error_cb,
         on_new_frame,
-        C2V4L2DecoderOptions {
-            video_device_path: None,
-        },
+        C2V4L2DecoderOptions { video_device_path: None },
     );
     let _ = decoder.start();
 

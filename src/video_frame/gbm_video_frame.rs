@@ -10,6 +10,7 @@ use std::os::fd::BorrowedFd;
 use std::os::fd::FromRawFd;
 use std::path::Path;
 use std::ptr;
+use std::rc::Rc;
 use std::slice;
 use std::sync::Arc;
 
@@ -18,26 +19,26 @@ use crate::utils::buffer_size_for_area;
 use crate::video_frame::ReadMapping;
 use crate::video_frame::VideoFrame;
 use crate::video_frame::WriteMapping;
+use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Resolution;
 
 use drm_fourcc::DrmFourcc;
 use gbm_sys::{
     gbm_bo, gbm_bo_create, gbm_bo_destroy, gbm_bo_flags, gbm_bo_get_fd, gbm_bo_get_height,
-    gbm_bo_get_offset, gbm_bo_get_stride_for_plane, gbm_bo_get_width, gbm_bo_import, gbm_bo_map,
-    gbm_bo_transfer_flags, gbm_bo_unmap, gbm_create_device, gbm_device, gbm_device_destroy,
-    gbm_import_fd_data,
+    gbm_bo_get_modifier, gbm_bo_get_offset, gbm_bo_get_stride_for_plane, gbm_bo_get_width,
+    gbm_bo_import, gbm_bo_map, gbm_bo_transfer_flags, gbm_bo_unmap, gbm_create_device, gbm_device,
+    gbm_device_destroy, gbm_import_fd_data, gbm_import_fd_modifier_data,
 };
 use nix::libc;
 
 #[cfg(feature = "vaapi")]
-use libva::Surface;
-#[cfg(feature = "vaapi")]
-use libva::SurfaceMemoryDescriptor;
+use libva::{
+    Display, ExternalBufferDescriptor, MemoryType, Surface, UsageHint, VADRMPRIMESurfaceDescriptor,
+    VADRMPRIMESurfaceDescriptorLayer, VADRMPRIMESurfaceDescriptorObject,
+};
 #[cfg(feature = "v4l2")]
-use v4l2r::memory::DmaBufHandle;
-#[cfg(feature = "v4l2")]
-use v4l2r::memory::DmaBufSource;
+use v4l2r::memory::{DmaBufHandle, DmaBufSource};
 
 // The gbm crate's wrapper for map() doesn't have the lifetime semantics that we want, so we need
 // to implement our own.
@@ -161,10 +162,30 @@ pub struct GbmVideoFrame {
     // This reference is just to create a lifetime constraint. We don't want someone to close the
     // device before free'ing up all allocated VideoFrames.
     _device: Arc<GbmDevice>,
+    export_file: Vec<File>,
 }
 
 impl GbmVideoFrame {
+    fn get_plane_offset(&self) -> Vec<usize> {
+        let mut ret: Vec<usize> = vec![];
+        for plane_idx in 0..self.num_planes() {
+            if self.bo.len() > 1 {
+                ret.push(unsafe { gbm_bo_get_offset(self.bo[plane_idx], 0) as usize });
+            } else {
+                ret.push(unsafe {
+                    gbm_bo_get_offset(self.bo[0], plane_idx as libc::c_int) as usize
+                });
+            }
+        }
+        ret
+    }
+
+    fn get_modifier(&self) -> u64 {
+        unsafe { gbm_bo_get_modifier(self.bo[0]) }
+    }
+
     fn map_helper(&self, is_writable: bool) -> Result<GbmMapping, String> {
+        let offsets = self.get_plane_offset();
         let mut ret = GbmMapping {
             map_datas: vec![],
             raw_mems: vec![],
@@ -173,18 +194,80 @@ impl GbmVideoFrame {
             frame: self,
         };
         for plane_idx in 0..self.num_planes() {
-            let (bo, offset) = if self.bo.len() == 1 {
-                (self.bo[0], unsafe {
-                    gbm_bo_get_offset(self.bo[0], plane_idx as libc::c_int) as isize
-                })
-            } else {
-                (self.bo[plane_idx], unsafe { gbm_bo_get_offset(self.bo[plane_idx], 0) as isize })
-            };
+            let bo = if self.bo.len() == 1 { self.bo[0] } else { self.bo[plane_idx] };
             let (raw_mem, map_data) = map_bo(bo, is_writable)?;
             ret.map_datas.push(map_data);
-            ret.raw_mems.push(unsafe { raw_mem.offset(offset) });
+            ret.raw_mems.push(unsafe { raw_mem.offset(offsets[plane_idx] as isize) });
         }
         Ok(ret)
+    }
+}
+
+#[cfg(feature = "vaapi")]
+impl ExternalBufferDescriptor for GbmVideoFrame {
+    const MEMORY_TYPE: MemoryType = MemoryType::DrmPrime2;
+    type DescriptorAttribute = VADRMPRIMESurfaceDescriptor;
+
+    fn va_surface_attribute(&mut self) -> Self::DescriptorAttribute {
+        self.export_file =
+            self.bo.iter().map(|bo| unsafe { File::from_raw_fd(gbm_bo_get_fd(*bo)) }).collect();
+
+        if self.export_file.len() > 1 {
+            todo!("Exporting non-contiguous formats not yet supported!");
+        }
+
+        let objects = self
+            .export_file
+            .iter()
+            .map(|file| VADRMPRIMESurfaceDescriptorObject {
+                fd: file.as_raw_fd(),
+                size: file.metadata().unwrap().len() as u32,
+                drm_format_modifier: self.get_modifier(),
+            })
+            .chain(std::iter::repeat(Default::default()))
+            .take(4)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        let pitches = self.get_plane_pitch();
+        let offsets = self.get_plane_offset();
+        let layers = [
+            VADRMPRIMESurfaceDescriptorLayer {
+                drm_format: u32::from(self.fourcc),
+                num_planes: self.num_planes() as u32,
+                object_index: [0, 0, 0, 0],
+                offset: offsets
+                    .iter()
+                    .map(|x| *x as u32)
+                    .chain(std::iter::repeat(0))
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
+                pitch: pitches
+                    .iter()
+                    .map(|x| *x as u32)
+                    .chain(std::iter::repeat(0))
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
+            },
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        ];
+        let resolution = self.resolution();
+        let ret = VADRMPRIMESurfaceDescriptor {
+            fourcc: u32::from(self.fourcc),
+            width: resolution.width,
+            height: resolution.height,
+            num_objects: 1,
+            objects,
+            num_layers: 1,
+            layers,
+        };
+        ret
     }
 }
 
@@ -192,9 +275,10 @@ impl VideoFrame for GbmVideoFrame {
     #[cfg(feature = "v4l2")]
     type NativeHandle = Vec<DmaBufHandle<File>>;
 
-    // TODO
+    // We implement the ExternalBufferDescriptor trait, so technically GbmVideoFrame is the
+    // NativeHandle for VA-API.
     #[cfg(feature = "vaapi")]
-    type NativeHandle = ();
+    type NativeHandle = Surface<GbmVideoFrame>;
 
     fn fourcc(&self) -> Fourcc {
         self.fourcc.clone()
@@ -252,8 +336,31 @@ impl VideoFrame for GbmVideoFrame {
     }
 
     #[cfg(feature = "vaapi")]
-    fn to_native_handle(self: Box<Self>) -> Result<Self::NativeHandle, String> {
-        todo!("VA-API native handles not implemented yet!");
+    fn to_native_handle(
+        self: Box<Self>,
+        display: &Rc<Display>,
+    ) -> Result<Self::NativeHandle, String> {
+        if self.is_compressed() {
+            return Err("Compressed buffer export to VA-API is not currently supported".to_string());
+        }
+        // TODO: Add more supported formats
+        let rt_format = match self.decoded_format().unwrap() {
+            DecodedFormat::I420 | DecodedFormat::NV12 => libva::VA_RT_FORMAT_YUV420,
+            _ => return Err("Format unsupported for VA-API export".to_string()),
+        };
+
+        let mut ret = display
+            .create_surfaces(
+                rt_format,
+                Some(u32::from(self.fourcc)),
+                self.resolution().width,
+                self.resolution().height,
+                Some(UsageHint::USAGE_HINT_DECODER),
+                vec![*self],
+            )
+            .map_err(|_| "Error importing GbmVideoFrame to VA-API".to_string())?;
+
+        Ok(ret.pop().unwrap())
     }
 }
 
@@ -289,28 +396,34 @@ impl GbmDevice {
     pub fn new_frame(
         self: Arc<Self>,
         fourcc: Fourcc,
-        resolution: Resolution,
+        visible_resolution: Resolution,
+        coded_resolution: Resolution,
     ) -> Result<GbmVideoFrame, String> {
         let mut ret = GbmVideoFrame {
-            _device: Arc::clone(&self),
             fourcc: fourcc,
-            resolution: resolution,
+            resolution: visible_resolution,
             bo: vec![],
+            _device: Arc::clone(&self),
+            export_file: vec![],
         };
 
-        // TODO: Pass in a parameter that determines this usage rather than just OR'ing everything
-        // together.
         let usage = gbm_bo_flags::GBM_BO_USE_LINEAR as u32;
 
         if ret.is_compressed() {
-            let buffer_size = buffer_size_for_area(resolution.width, resolution.height);
+            let buffer_size = buffer_size_for_area(coded_resolution.width, coded_resolution.height);
             // The width and height values are ultimately arbitrary, but we should try to pick some
             // that won't trigger the GEM driver to add padding, so we only allocate what we need.
             // 32 pixels is a common enough alignment that this provides us with a decent guess.
             let fake_width = align_up((buffer_size as f64).sqrt() as u32, 32);
             let fake_height = align_up(buffer_size as u32, fake_width) / fake_width;
             let bo = unsafe {
-                gbm_bo_create(self.device, fake_width, fake_height, DrmFourcc::R8 as u32, usage)
+                gbm_bo_create(
+                    self.device,
+                    fake_width,
+                    fake_height,
+                    DrmFourcc::R8 as u32,
+                    gbm_bo_flags::GBM_BO_USE_LINEAR as u32,
+                )
             };
             if bo.is_null() {
                 Err("Error allocating compressed buffer!".to_string())
@@ -319,21 +432,28 @@ impl GbmDevice {
                 Ok(ret)
             }
         } else if ret.is_contiguous() {
+            // gbm_sys is missing this use flag for some reason.
+            const GBM_BO_USE_HW_VIDEO_DECODER: u32 = 1 << 13;
+            // It's important that we use the correct use flag for platforms that support directly
+            // importing GBM allocated frame buffers to the video decoding hardware because the
+            // video decoding hardware sometimes makes assumptions about the modifier flags. If we
+            // try to force everything to be linear, we can end up getting a tiled frame when we
+            // try to map it.
             let bo = unsafe {
                 gbm_bo_create(
                     self.device,
-                    resolution.width,
-                    resolution.height,
+                    coded_resolution.width,
+                    coded_resolution.height,
                     u32::from(fourcc),
-                    usage,
+                    GBM_BO_USE_HW_VIDEO_DECODER,
                 )
             };
             if bo.is_null() {
                 Err(format!(
                     "Error allocating contiguous buffer! Fourcc: {} width: {} height: {}",
                     fourcc.to_string(),
-                    resolution.width,
-                    resolution.height
+                    coded_resolution.width,
+                    coded_resolution.height
                 ))
             } else {
                 ret.bo.push(bo);
@@ -350,13 +470,17 @@ impl GbmDevice {
                 let bo = unsafe {
                     gbm_bo_create(
                         self.device,
-                        (align_up(resolution.width as usize, horizontal_subsampling[plane_idx])
-                            / horizontal_subsampling[plane_idx]
+                        (align_up(
+                            coded_resolution.width as usize,
+                            horizontal_subsampling[plane_idx],
+                        ) / horizontal_subsampling[plane_idx]
                             * bytes_per_element[plane_idx]) as u32,
-                        (align_up(resolution.height as usize, vertical_subsampling[plane_idx])
-                            / vertical_subsampling[plane_idx]) as u32,
+                        (align_up(
+                            coded_resolution.height as usize,
+                            vertical_subsampling[plane_idx],
+                        ) / vertical_subsampling[plane_idx]) as u32,
                         DrmFourcc::R8 as u32,
-                        usage,
+                        gbm_bo_flags::GBM_BO_USE_LINEAR as u32,
                     )
                 };
                 if bo.is_null() {
@@ -381,10 +505,11 @@ impl GbmDevice {
         native_handle: Vec<DmaBufHandle<S>>,
     ) -> Result<GbmVideoFrame, String> {
         let mut ret = GbmVideoFrame {
-            _device: Arc::clone(&self),
             fourcc: fourcc,
             resolution: resolution,
             bo: vec![],
+            _device: Arc::clone(&self),
+            export_file: vec![],
         };
 
         if strides.is_empty() || native_handle.is_empty() {
@@ -439,6 +564,83 @@ impl GbmDevice {
         }
 
         Ok(ret)
+    }
+
+    #[cfg(feature = "vaapi")]
+    pub fn import_from_vaapi(
+        self: Arc<Self>,
+        surface: &Surface<GbmVideoFrame>,
+    ) -> Result<GbmVideoFrame, String> {
+        let descriptor = surface
+            .export_prime()
+            .map_err(|err| format!("Could not export VA-API surface! {err:?}"))?;
+
+        if descriptor.layers.len() != 1 {
+            return Err("Cannot import more than 1 layers as a single GBM buffer".to_string());
+        }
+
+        for idx in descriptor.layers[0].object_index {
+            if idx as usize >= descriptor.objects.len() {
+                return Err("Object index {idx} out of bounds".to_string());
+            }
+        }
+
+        let mut ret = GbmVideoFrame {
+            _device: Arc::clone(&self),
+            fourcc: Fourcc::from(descriptor.fourcc),
+            resolution: Resolution { width: descriptor.width, height: descriptor.height },
+            bo: vec![],
+            export_file: vec![],
+        };
+
+        let buffers = [
+            descriptor.objects[descriptor.layers[0].object_index[0] as usize].fd.as_raw_fd()
+                as libc::c_int,
+            -1,
+            -1,
+            -1,
+        ];
+        let mut import_data = gbm_import_fd_modifier_data {
+            width: descriptor.width,
+            height: descriptor.height,
+            format: descriptor.fourcc,
+            num_fds: 1,
+            fds: buffers,
+            strides: [
+                descriptor.layers[0].pitch[0] as libc::c_int,
+                descriptor.layers[0].pitch[1] as libc::c_int,
+                descriptor.layers[0].pitch[2] as libc::c_int,
+                descriptor.layers[0].pitch[3] as libc::c_int,
+            ],
+            offsets: [
+                descriptor.layers[0].offset[0] as libc::c_int,
+                descriptor.layers[0].offset[1] as libc::c_int,
+                descriptor.layers[0].offset[2] as libc::c_int,
+                descriptor.layers[0].offset[3] as libc::c_int,
+            ],
+            modifier: descriptor.objects[0].drm_format_modifier,
+        };
+
+        // TODO: Plumb real usage flags in here.
+        let usage = gbm_bo_flags::GBM_BO_USE_SCANOUT as u32;
+
+        // The constant in gbm_sys is wrong for some reason
+        const GBM_BO_IMPORT_FD_MODIFIER: u32 = 0x5505;
+        let bo = unsafe {
+            gbm_bo_import(
+                self.device,
+                GBM_BO_IMPORT_FD_MODIFIER,
+                &mut import_data as *mut gbm_import_fd_modifier_data as *mut libc::c_void,
+                usage,
+            )
+        };
+
+        if bo.is_null() {
+            Err("Error importing VA-API surface!".to_string())
+        } else {
+            ret.bo.push(bo);
+            Ok(ret)
+        }
     }
 }
 

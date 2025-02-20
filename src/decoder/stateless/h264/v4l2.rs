@@ -173,7 +173,6 @@ impl StatelessH264DecoderBackend for V4l2StatelessDecoderBackend {
         let request = picture.borrow_mut().request();
         let mut request = request.as_ref().borrow_mut();
         request.submit();
-
         Ok(V4l2StatelessDecoderHandle { handle: handle, stream_info: self.stream_info.clone() })
     }
 }

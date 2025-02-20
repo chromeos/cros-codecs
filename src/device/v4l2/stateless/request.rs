@@ -231,7 +231,8 @@ impl V4l2Result {
     pub fn length(&self) -> usize {
         self.capture_buffer.borrow().length()
     }
-    pub fn read(&self, data: &mut [u8]) {
-        self.capture_buffer.borrow().read(data)
+
+    pub fn read(&mut self, data: &mut [u8]) {
+        self.capture_buffer.borrow_mut().read(data)
     }
 }
