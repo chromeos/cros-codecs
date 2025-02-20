@@ -112,8 +112,8 @@ fn main() {
         <Arc<GbmDevice> as Clone>::clone(&gbm_device)
             .new_frame(
                 Fourcc::from(b"NV12"),
-                stream_info.display_resolution.clone(),
-                stream_info.coded_resolution.clone(),
+                stream_info.display_resolution,
+                stream_info.coded_resolution,
             )
             .expect("Could not allocate frame for frame pool!")
             .to_generic_dma_video_frame()
@@ -128,7 +128,7 @@ fn main() {
     let alloc_cb = move || (*framepool.lock().unwrap()).alloc();
 
     let on_new_frame = move |job: C2DecodeJob<PooledVideoFrame<GenericDmaVideoFrame>>| {
-        if !args.output.is_some() && !args.compute_md5.is_some() && !args.golden.is_some() {
+        if args.output.is_none() && args.compute_md5.is_none() && args.golden.is_none() {
             return;
         }
         let width = job.output[0].resolution().width as usize;
