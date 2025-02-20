@@ -66,7 +66,6 @@ impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V
         self.device.initialize_queues(
             Fourcc::from(b"VP9F"),
             header.coded_size(),
-            header.visible_rect(),
             header.min_num_frames() as u32,
         )?;
         Ok(())

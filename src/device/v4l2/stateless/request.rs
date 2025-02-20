@@ -175,12 +175,6 @@ impl<V: VideoFrame> RequestHandle<V> {
             _ => panic!("ERROR"),
         }
     }
-    fn picture(&mut self) -> Weak<RefCell<V4l2Picture<V>>> {
-        match self {
-            Self::Pending(handle) => handle.picture.clone(),
-            _ => panic!("ERROR"),
-        }
-    }
     fn associate_dequeued_buffer(&mut self, capture_buffer: V4l2CaptureBuffer<V>) {
         match self {
             Self::Pending(handle) => {
@@ -231,9 +225,6 @@ impl<V: VideoFrame> V4l2Request<V> {
     }
     pub fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture<V>>>) {
         self.0.set_picture_ref(picture);
-    }
-    pub fn picture(&mut self) -> Weak<RefCell<V4l2Picture<V>>> {
-        self.0.picture()
     }
     pub fn associate_dequeued_buffer(&mut self, capture_buffer: V4l2CaptureBuffer<V>) {
         self.0.associate_dequeued_buffer(capture_buffer)

@@ -26,7 +26,6 @@ use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
 use crate::device::v4l2::stateless::request::V4l2Request;
 use crate::video_frame::VideoFrame;
 use crate::Fourcc;
-use crate::Rect;
 use crate::Resolution;
 
 //TODO: handle other memory backends for OUTPUT queue
@@ -143,21 +142,14 @@ impl<V: VideoFrame> V4l2Device<V> {
     pub fn new() -> Self {
         Self { handle: Rc::new(RefCell::new(DeviceHandle::new())) }
     }
-    pub fn num_free_buffers(&self) -> usize {
-        self.handle.borrow().output_queue.num_free_buffers()
-    }
-    pub fn num_buffers(&self) -> usize {
-        self.handle.borrow().capture_queue.num_buffers()
-    }
     pub fn initialize_queues(
         &mut self,
         format: Fourcc,
         coded_size: Resolution,
-        visible_rect: Rect,
         num_buffers: u32,
     ) -> Result<(), anyhow::Error> {
         self.handle.borrow_mut().output_queue.initialize(format, coded_size)?;
-        self.handle.borrow_mut().capture_queue.initialize(visible_rect, num_buffers)?;
+        self.handle.borrow_mut().capture_queue.initialize(num_buffers)?;
         Ok(())
     }
     pub fn alloc_request(

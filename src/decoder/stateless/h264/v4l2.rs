@@ -89,7 +89,6 @@ impl<V: VideoFrame> StatelessH264DecoderBackend for V4l2StatelessDecoderBackend<
         self.device.initialize_queues(
             Fourcc::from(b"S264"),
             resolution,
-            visible_rect,
             self.stream_info.min_num_frames as u32,
         )?;
         Ok(())

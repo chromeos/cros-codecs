@@ -61,7 +61,6 @@ impl<V: VideoFrame> StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend<V
         self.device.initialize_queues(
             Fourcc::from(b"VP8F"),
             self.stream_info.coded_resolution,
-            Rect::from(self.stream_info.coded_resolution),
             self.stream_info.min_num_frames as u32,
         )?;
         Ok(())

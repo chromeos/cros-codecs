@@ -48,7 +48,6 @@ use crate::utils::buffer_size_for_area;
 use crate::video_frame::V4l2VideoFrame;
 use crate::video_frame::VideoFrame;
 use crate::Fourcc;
-use crate::Rect;
 use crate::Resolution;
 
 //TODO: handle memory backends other than mmap
@@ -298,19 +297,11 @@ impl V4l2OutputQueue {
 pub struct V4l2CaptureBuffer<V: VideoFrame> {
     pub frame: Arc<V>,
     handle: DqBuffer<Capture, V4l2VideoFrame<V>>,
-    visible_rect: Rect,
 }
 
 impl<V: VideoFrame> V4l2CaptureBuffer<V> {
-    fn new(
-        frame: Arc<V>,
-        handle: DqBuffer<Capture, V4l2VideoFrame<V>>,
-        visible_rect: Rect,
-    ) -> Self {
-        Self { frame, handle, visible_rect }
-    }
-    pub fn index(&self) -> usize {
-        self.handle.data.index() as usize
+    fn new(frame: Arc<V>, handle: DqBuffer<Capture, V4l2VideoFrame<V>>) -> Self {
+        Self { frame, handle }
     }
     pub fn timestamp(&self) -> u64 {
         self.handle.data.timestamp().tv_usec as u64
@@ -319,15 +310,9 @@ impl<V: VideoFrame> V4l2CaptureBuffer<V> {
     //    pub fn has_error(&self) -> bool {
     //        self.handle.data.has_error() as u64
     //    }
-
-    //TODO make this work for formats other then 420
-    pub fn length(&self) -> usize {
-        (Resolution::from(self.visible_rect).get_area() * 3) / 2
-    }
 }
 
 pub struct V4l2CaptureQueue<V: VideoFrame> {
-    visible_rect: Rect,
     format: Format,
     handle: RefCell<V4l2CaptureQueueHandle<direction::Capture, V>>,
     num_buffers: u32,
@@ -340,20 +325,10 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
             Queue::get_capture_mplane_queue(device.clone()).expect("Failed to get capture queue");
         log::debug!("capture queue created");
         let handle = RefCell::new(V4l2CaptureQueueHandle::Init(handle));
-        Self {
-            handle,
-            num_buffers: 0,
-            visible_rect: Default::default(),
-            format: Default::default(),
-            device: device,
-        }
+        Self { handle, num_buffers: 0, format: Default::default(), device: device }
     }
 
-    pub fn initialize(
-        &mut self,
-        visible_rect: Rect,
-        requested_num_buffers: u32,
-    ) -> Result<&mut Self, QueueError> {
+    pub fn initialize(&mut self, requested_num_buffers: u32) -> Result<&mut Self, QueueError> {
         // +2 due to HCMP1_HHI_A.h264 needing more
         let requested_num_buffers = requested_num_buffers + 2;
 
@@ -369,7 +344,6 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
 
                 check_requested_buffer_count(requested_num_buffers, handle.num_free_buffers())?;
 
-                self.visible_rect = visible_rect;
                 self.num_buffers = requested_num_buffers;
 
                 handle.stream_on()?;
@@ -392,7 +366,7 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
                     // buffer.data.has_error();
                     let mut frame = buffer.take_handles().expect("Missing handle on dequeue!").0;
                     frame.process_dqbuf(self.device.clone(), &self.format, &buffer.data);
-                    Ok(Some(V4l2CaptureBuffer::new(Arc::new(frame), buffer, self.visible_rect)))
+                    Ok(Some(V4l2CaptureBuffer::new(Arc::new(frame), buffer)))
                 }
                 _ => Ok(None),
             },
@@ -414,13 +388,7 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
         }
         Ok(())
     }
-    pub fn num_buffers(&self) -> usize {
-        let handle = &*self.handle.borrow();
-        match handle {
-            V4l2CaptureQueueHandle::Streaming(handle) => handle.num_buffers(),
-            _ => 0,
-        }
-    }
+
     pub fn num_free_buffers(&self) -> usize {
         let handle = &*self.handle.borrow();
         match handle {
