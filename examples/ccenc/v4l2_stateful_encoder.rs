@@ -3,128 +3,58 @@
 // found in the LICENSE file.
 
 use std::fs::File;
+use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
-use cros_codecs::backend::v4l2::encoder::find_device_with_capture;
-use cros_codecs::backend::v4l2::encoder::EncoderCodec;
-use cros_codecs::backend::v4l2::encoder::MmapingCapture;
-use cros_codecs::backend::v4l2::encoder::V4L2Backend;
 use cros_codecs::bitstream_utils::IvfFileHeader;
 use cros_codecs::bitstream_utils::IvfFrameHeader;
-use cros_codecs::encoder::simple_encode_loop;
-use cros_codecs::encoder::stateful::h264::v4l2::V4L2StatefulH264Encoder;
-use cros_codecs::encoder::stateful::h265::v4l2::V4L2StatefulH265Encoder;
-use cros_codecs::encoder::stateful::vp8::v4l2::V4L2StatefulVP8Encoder;
-use cros_codecs::encoder::stateful::vp9::v4l2::V4L2StatefulVP9Encoder;
-use cros_codecs::encoder::stateful::StatefulEncoder;
-use cros_codecs::encoder::CodedBitstreamBuffer;
-use cros_codecs::encoder::FrameMetadata;
-use cros_codecs::encoder::RateControl;
-use cros_codecs::encoder::Tunings;
+use cros_codecs::c2_wrapper::c2_encoder::C2EncoderWorker;
+use cros_codecs::c2_wrapper::c2_v4l2_encoder::C2V4L2Encoder;
+use cros_codecs::c2_wrapper::c2_v4l2_encoder::C2V4L2EncoderOptions;
+use cros_codecs::c2_wrapper::C2EncodeJob;
+use cros_codecs::c2_wrapper::C2Status;
+use cros_codecs::c2_wrapper::C2Worker;
+use cros_codecs::c2_wrapper::C2Wrapper;
+use cros_codecs::decoder::StreamInfo;
+use cros_codecs::image_processing::extend_border_nv12;
+use cros_codecs::image_processing::i420_to_nv12_chroma;
+use cros_codecs::image_processing::nv12_copy;
+use cros_codecs::video_frame::frame_pool::FramePool;
+use cros_codecs::video_frame::frame_pool::PooledVideoFrame;
 use cros_codecs::video_frame::gbm_video_frame::GbmDevice;
+use cros_codecs::video_frame::gbm_video_frame::GbmUsage;
 use cros_codecs::video_frame::generic_dma_video_frame::GenericDmaVideoFrame;
-use cros_codecs::video_frame::V4l2VideoFrame;
+use cros_codecs::video_frame::VideoFrame;
+use cros_codecs::video_frame::UV_PLANE;
+use cros_codecs::video_frame::Y_PLANE;
 use cros_codecs::DecodedFormat;
 use cros_codecs::Fourcc;
 use cros_codecs::Resolution;
 
-use v4l2r::device::Device;
-use v4l2r::device::DeviceConfig;
-
-use crate::util::upload_img;
 use crate::util::Args;
 use crate::util::Codec;
 
-struct DiskFrameReader<'a> {
-    file: &'a File,
-    gbm_device: Arc<GbmDevice>,
-    input_fourcc: DecodedFormat,
-    visible_size: Resolution,
-    input_coded_size: Resolution,
-    queue_format: v4l2r::Format,
-    frame_num: usize,
-    total_frames: usize,
-}
+// We use pooled video frames here because it prevents us from exhausting the FD limit on the
+// machine. Unfortunately this does require us to cap the pipeline depth to the frame pool size.
+const PIPELINE_DEPTH: usize = 64;
 
-impl<'a> Iterator for DiskFrameReader<'a> {
-    type Item = (FrameMetadata, V4l2VideoFrame<GenericDmaVideoFrame>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.frame_num >= self.total_frames {
-            return None;
-        }
-        let timestamp = self.frame_num as u64;
-        self.frame_num += 1;
-
-        // TODO: Support formats that aren't 4:2:0
-        let mut buf = vec![0u8; self.input_coded_size.get_area() * 3 / 2];
-        self.file.read_exact(buf.as_mut_slice()).unwrap();
-
-        Some((
-            FrameMetadata {
-                timestamp: timestamp,
-                layout: Default::default(),
-                force_keyframe: false,
-            },
-            V4l2VideoFrame(upload_img(
-                &self.gbm_device,
-                self.visible_size.clone(),
-                self.input_coded_size.clone(),
-                // TODO: This isn't guaranteed to be right. Sometimes, especially when we don't use
-                // minigbm, we will frames that are improperly aligned for DMA import. So, we query
-                // the V4L2 queue directly to figure out what the alignment should be. This
-                // workaround assumes that all planes have similar alignment requirements, though.
-                Resolution {
-                    width: self.queue_format.plane_fmt[0].bytesperline as u32,
-                    height: (self.queue_format.plane_fmt[0].sizeimage
-                        / self.queue_format.plane_fmt[0].bytesperline)
-                        as u32,
-                },
-                buf.as_slice(),
-                self.input_fourcc.clone(),
-                Fourcc::from(b"NV12"),
-            )),
-        ))
-    }
-}
-
-impl<'a> DiskFrameReader<'_> {
-    pub fn new(
-        file: &'a File,
-        input_fourcc: DecodedFormat,
-        visible_size: Resolution,
-        input_coded_size: Resolution,
-        queue_format: v4l2r::Format,
-        total_frames: usize,
-    ) -> DiskFrameReader<'a> {
-        DiskFrameReader {
-            file: file,
-            gbm_device: GbmDevice::open(PathBuf::from("/dev/dri/renderD128"))
-                .expect("Could not open GBM device!"),
-            input_fourcc: input_fourcc,
-            visible_size: visible_size,
-            input_coded_size: input_coded_size,
-            queue_format: queue_format,
-            frame_num: 0,
-            total_frames: total_frames,
-        }
-    }
-}
-
-fn codec_to_pixelformat(codec: Codec) -> v4l2r::PixelFormat {
+fn codec_to_fourcc(codec: &Codec) -> Fourcc {
     match codec {
-        Codec::H264 => v4l2r::PixelFormat::from_fourcc(b"H264"),
-        Codec::H265 => v4l2r::PixelFormat::from_fourcc(b"HEVC"),
-        Codec::VP9 => v4l2r::PixelFormat::from_fourcc(b"VP90"),
-        Codec::VP8 => v4l2r::PixelFormat::from_fourcc(b"VP80"),
+        Codec::H264 => Fourcc::from(b"H264"),
+        Codec::VP8 => Fourcc::from(b"VP80"),
+        Codec::VP9 => Fourcc::from(b"VP90"),
         _ => panic!("Unsupported format!"),
     }
 }
 
-fn codec_to_ivf_magic(codec: Codec) -> [u8; 4] {
+fn codec_to_ivf_magic(codec: &Codec) -> [u8; 4] {
     match codec {
         // Note that H264 does not generally use IVF containers.
         Codec::VP8 => IvfFileHeader::CODEC_VP8,
@@ -133,152 +63,221 @@ fn codec_to_ivf_magic(codec: Codec) -> [u8; 4] {
     }
 }
 
-fn do_encode_loop<'a, Codecz>(
-    mut encoder: StatefulEncoder<
-        V4l2VideoFrame<GenericDmaVideoFrame>,
-        V4L2Backend<V4l2VideoFrame<GenericDmaVideoFrame>, MmapingCapture, Codecz>,
-    >,
-    input: &'a File,
-    args: Args,
-) -> ()
+fn enqueue_work<W>(
+    encoder: &mut C2Wrapper<C2EncodeJob<PooledVideoFrame<GenericDmaVideoFrame>>, W>,
+    file: &mut File,
+    framepool: Arc<Mutex<FramePool<GenericDmaVideoFrame>>>,
+    input_format: DecodedFormat,
+    input_coded_resolution: Resolution,
+    num_frames: u64,
+    bitrate: u64,
+    framerate: u32,
+    timestamp: &mut u64,
+) -> bool
 where
-    V4L2Backend<V4l2VideoFrame<GenericDmaVideoFrame>, MmapingCapture, Codecz>: EncoderCodec,
+    W: C2Worker<C2EncodeJob<PooledVideoFrame<GenericDmaVideoFrame>>>,
 {
-    let mut frame_reader = DiskFrameReader::new(
-        &input,
-        args.fourcc,
-        (args.width, args.height).into(),
-        (args.coded_width.unwrap_or(args.width), args.coded_height.unwrap_or(args.height)).into(),
-        encoder.backend().output_format().unwrap(),
-        args.count,
-    );
+    assert!(input_coded_resolution.width % 2 == 0);
+    assert!(input_coded_resolution.height % 2 == 0);
 
-    let codec = args.codec.unwrap_or_default();
-    let output_file = args.output.map(|path| {
-        let mut output = File::create(path).expect("Error opening output file!");
-
-        if codec != Codec::H264 {
-            let hdr = IvfFileHeader::new(
-                codec_to_ivf_magic(codec),
-                args.width as u16,
-                args.height as u16,
-                args.framerate,
-                args.count as u32,
-            );
-            hdr.writo_into(&mut output).expect("Error writing IVF file header!");
+    if *timestamp >= num_frames {
+        if *timestamp == num_frames {
+            encoder.drain();
+            *timestamp += 1;
         }
+        return false;
+    }
 
-        output
-    });
-
-    // Unwrapping an optional takes ownership of it, so we do that outside of the lambda so we
-    // don't violate FnMut's lifetime requirements.
-    match output_file {
-        Some(mut output_file) => {
-            let frame_consumer = |coded_chunk: CodedBitstreamBuffer| {
-                if codec != Codec::H264 {
-                    let hdr = IvfFrameHeader {
-                        timestamp: coded_chunk.metadata.timestamp,
-                        frame_size: coded_chunk.bitstream.len() as u32,
-                    };
-                    hdr.writo_into(&mut output_file).expect("Error writing IVF frame header!");
-                }
-
-                let _ = output_file
-                    .write(&coded_chunk.bitstream[..])
-                    .expect("Error writing output file!");
-            };
-            simple_encode_loop(&mut encoder, &mut frame_reader, frame_consumer)
-                .expect("Failed to encode!");
-        }
-        None => {
-            simple_encode_loop(&mut encoder, &mut frame_reader, |_| ()).expect("Failed to encode!")
-        }
+    let mut new_frame = match (*framepool.lock().unwrap()).alloc() {
+        Some(frame) => frame,
+        // We've exhausted the pipeline depth
+        None => return false,
     };
+
+    let mut buf = vec![0u8; input_coded_resolution.get_area() * 3 / 2];
+    match file.read_exact(buf.as_mut_slice()) {
+        Ok(_) => (),
+        Err(e) => {
+            if e.kind() == ErrorKind::UnexpectedEof {
+                // We've reached the end of the input file, start draining.
+                encoder.drain();
+                *timestamp = u64::MAX;
+                return false;
+            } else {
+                panic!("Error reading input file! {:?}", e);
+            }
+        }
+    }
+
+    let input_y = &buf[0..input_coded_resolution.get_area()];
+    let mut tmp_input_uv: Vec<u8> = Vec::new();
+    let input_uv = match input_format {
+        DecodedFormat::NV12 => {
+            &buf[input_coded_resolution.get_area()..(input_coded_resolution.get_area() * 3 / 2)]
+        }
+        DecodedFormat::I420 => {
+            tmp_input_uv.resize(input_coded_resolution.get_area() / 2, 0);
+            let input_u = &buf
+                [input_coded_resolution.get_area()..(input_coded_resolution.get_area() * 5 / 4)];
+            let input_v = &buf[(input_coded_resolution.get_area() * 5 / 4)
+                ..(input_coded_resolution.get_area() * 3 / 2)];
+            i420_to_nv12_chroma(input_u, input_v, tmp_input_uv.as_mut_slice());
+            tmp_input_uv.as_slice()
+        }
+        _ => panic!("Unsupported input format!"),
+    };
+
+    {
+        let visible_resolution = new_frame.resolution();
+        let dst_pitches = new_frame.get_plane_pitch();
+        let dst_sizes = new_frame.get_plane_size();
+        let coded_resolution = Resolution {
+            width: dst_pitches[0] as u32,
+            height: (dst_sizes[0] / dst_pitches[0]) as u32,
+        };
+        let dst_mapping = new_frame.map_mut().expect("Failed to map input frame!");
+        let dst_planes = dst_mapping.get();
+        nv12_copy(
+            input_y,
+            input_coded_resolution.width as usize,
+            *dst_planes[Y_PLANE].borrow_mut(),
+            dst_pitches[Y_PLANE],
+            input_uv,
+            input_coded_resolution.width as usize,
+            *dst_planes[UV_PLANE].borrow_mut(),
+            dst_pitches[UV_PLANE],
+            visible_resolution.width as usize,
+            visible_resolution.height as usize,
+        );
+        extend_border_nv12(
+            *dst_planes[Y_PLANE].borrow_mut(),
+            *dst_planes[UV_PLANE].borrow_mut(),
+            visible_resolution.width as usize,
+            visible_resolution.height as usize,
+            coded_resolution.width as usize,
+            coded_resolution.height as usize,
+        );
+    }
+
+    let job = C2EncodeJob {
+        input: Some(new_frame),
+        output: vec![],
+        timestamp: *timestamp,
+        bitrate: bitrate,
+        framerate: Arc::new(AtomicU32::new(framerate)),
+        drain: false,
+    };
+    encoder.queue(vec![job]);
+
+    *timestamp += 1;
+
+    true
 }
 
-pub fn do_encode(input: File, args: Args) -> () {
+pub fn do_encode(mut input: File, args: Args) -> () {
+    let input_fourcc = Fourcc::from(b"NV12");
     let codec = args.codec.unwrap_or_default();
-    let device = find_device_with_capture(codec_to_pixelformat(codec))
-        .expect("Could not find an encoder for codec");
-    let device = Device::open(&device, DeviceConfig::new().non_blocking_dqbuf()).expect("open");
-    let device = Arc::new(device);
+    let output_fourcc = codec_to_fourcc(&codec);
 
-    let resolution = Resolution { width: args.width, height: args.height };
-    let queue_fourcc = Fourcc::from(b"NV12");
-    let tunings: Tunings = Tunings {
-        rate_control: RateControl::ConstantBitrate(args.bitrate),
-        framerate: args.framerate,
-        ..Default::default()
+    let gbm_device = Arc::new(
+        GbmDevice::open(PathBuf::from("/dev/dri/renderD128")).expect("Could not open GBM device!"),
+    );
+    let framepool = Arc::new(Mutex::new(FramePool::new(move |stream_info: &StreamInfo| {
+        <Arc<GbmDevice> as Clone>::clone(&gbm_device)
+            .new_frame(
+                Fourcc::from(b"NV12"),
+                stream_info.display_resolution,
+                stream_info.coded_resolution,
+                GbmUsage::Encode,
+            )
+            .expect("Could not allocate frame for frame pool!")
+            .to_generic_dma_video_frame()
+            .expect("Could not export GBM frame to DMA frame!")
+    })));
+    let framepool_ = framepool.clone();
+    let framepool_hint_cb = move |stream_info: StreamInfo| {
+        (*framepool_.lock().unwrap()).resize(&StreamInfo {
+            format: stream_info.format,
+            coded_resolution: stream_info.coded_resolution,
+            display_resolution: stream_info.display_resolution,
+            min_num_frames: PIPELINE_DEPTH,
+        });
     };
 
-    match codec {
-        Codec::H264 => do_encode_loop(
-            V4L2StatefulH264Encoder::new(
-                device,
-                MmapingCapture,
-                cros_codecs::encoder::h264::EncoderConfig {
-                    resolution: resolution.clone(),
-                    initial_tunings: tunings.clone(),
-                    ..Default::default()
-                },
-                queue_fourcc,
-                resolution,
-                tunings,
-            )
-            .expect("Failed to create encoder"),
-            &input,
-            args,
-        ),
-        Codec::H265 => do_encode_loop(
-            V4L2StatefulH265Encoder::new(
-                device,
-                MmapingCapture,
-                cros_codecs::encoder::h265::EncoderConfig {
-                    resolution: resolution.clone(),
-                    ..Default::default()
-                },
-                queue_fourcc,
-                resolution,
-                tunings,
-            )
-            .expect("Failed to create encoder"),
-            &input,
-            args,
-        ),
-        Codec::VP8 => do_encode_loop(
-            V4L2StatefulVP8Encoder::new(
-                device,
-                MmapingCapture,
-                cros_codecs::encoder::vp8::EncoderConfig {
-                    resolution: resolution.clone(),
-                    ..Default::default()
-                },
-                queue_fourcc,
-                resolution,
-                tunings,
-            )
-            .expect("Failed to create encoder"),
-            &input,
-            args,
-        ),
-        Codec::VP9 => do_encode_loop(
-            V4L2StatefulVP9Encoder::new(
-                device,
-                MmapingCapture,
-                cros_codecs::encoder::vp9::EncoderConfig {
-                    resolution: resolution.clone(),
-                    initial_tunings: tunings.clone(),
-                    ..Default::default()
-                },
-                queue_fourcc,
-                resolution,
-                tunings,
-            )
-            .expect("Failed to create encoder"),
-            &input,
-            args,
-        ),
-        _ => panic!("Unsupported format!"),
+    // We shouldn't need temp frames for GBM.
+    let alloc_cb = move || None;
+
+    let error_cb = move |_status: C2Status| {
+        panic!("Unrecoverable encoding error!");
     };
+
+    let output_file = Arc::new(Mutex::new(
+        File::create(args.output.unwrap()).expect("Error creating output file"),
+    ));
+    if codec != Codec::H264 {
+        let hdr = IvfFileHeader::new(
+            codec_to_ivf_magic(&codec),
+            args.width as u16,
+            args.height as u16,
+            args.framerate,
+            args.count as u32,
+        );
+        hdr.writo_into(&mut *output_file.lock().unwrap()).expect("Error writing IVF file header!");
+    }
+    let codec_ = codec.clone();
+    let work_done_cb = move |job: C2EncodeJob<PooledVideoFrame<GenericDmaVideoFrame>>| {
+        if codec_ != Codec::H264 {
+            let hdr =
+                IvfFrameHeader { timestamp: job.timestamp, frame_size: job.output.len() as u32 };
+            hdr.writo_into(&mut *output_file.lock().unwrap())
+                .expect("Error writing IVF frame header!");
+        }
+        let _ = (*output_file.lock().unwrap())
+            .write(job.output.as_slice())
+            .expect("Error writing output file!");
+    };
+
+    let mut encoder: C2Wrapper<_, C2EncoderWorker<_, C2V4L2Encoder>> = C2Wrapper::new(
+        input_fourcc,
+        output_fourcc.clone(),
+        error_cb,
+        work_done_cb,
+        framepool_hint_cb,
+        alloc_cb,
+        C2V4L2EncoderOptions {
+            output_fourcc: output_fourcc,
+            visible_resolution: Resolution { width: args.width, height: args.height },
+        },
+    );
+    let input_coded_resolution = Resolution {
+        width: args.coded_width.unwrap_or(args.width),
+        height: args.coded_height.unwrap_or(args.height),
+    };
+    assert!(input_coded_resolution.width >= args.width);
+    assert!(input_coded_resolution.height >= args.height);
+    let mut timestamp: u64 = 0;
+
+    // Start the encoder
+    encoder.start();
+
+    // Run the encode job
+    while encoder.is_alive() {
+        // Enqueue as much as we can until the framepool is exhausted
+        while enqueue_work(
+            &mut encoder,
+            &mut input,
+            framepool.clone(),
+            args.fourcc,
+            input_coded_resolution.clone(),
+            args.count as u64,
+            args.bitrate,
+            args.framerate,
+            &mut timestamp,
+        ) {}
+
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    // Shut down the encoder
+    encoder.stop();
 }

@@ -284,7 +284,7 @@ where
             // woke us up, because we either have new work, or we might more output buffers
             // available.
             let mut possible_job = (*self.work_queue.lock().unwrap()).pop_front();
-            while let Some(mut job) = possible_job {
+            while let Some(job) = possible_job {
                 if job.is_drain() {
                     let flush_result = match &mut self.decoder {
                         C2Decoder::ImportingDecoder(decoder) => decoder.flush(),
@@ -295,6 +295,8 @@ where
                         *self.state.lock().unwrap() = C2State::C2Error;
                         (*self.error_cb.lock().unwrap())(C2Status::C2BadValue);
                     } else {
+                        // TODO: This isn' actually right, we should be able to accept new inputs
+                        // immediately after the drain.
                         *self.state.lock().unwrap() = C2State::C2Stopped;
                         self.check_events();
                     }

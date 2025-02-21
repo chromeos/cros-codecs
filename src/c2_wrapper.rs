@@ -22,8 +22,11 @@ use crate::video_frame::VideoFrame;
 use crate::Fourcc;
 
 pub mod c2_decoder;
+pub mod c2_encoder;
 #[cfg(feature = "v4l2")]
 pub mod c2_v4l2_decoder;
+#[cfg(feature = "v4l2")]
+pub mod c2_v4l2_encoder;
 #[cfg(feature = "vaapi")]
 pub mod c2_vaapi_decoder;
 
@@ -46,7 +49,7 @@ where
         self.drain = true;
     }
 
-    fn is_drain(&mut self) -> bool {
+    fn is_drain(&self) -> bool {
         return self.drain;
     }
 }
@@ -61,18 +64,18 @@ pub trait Job: Send + 'static {
     type Frame: VideoFrame;
 
     fn set_drain(&mut self) -> ();
-    fn is_drain(&mut self) -> bool;
+    fn is_drain(&self) -> bool;
 }
 
 #[derive(Debug)]
 pub struct C2EncodeJob<V: VideoFrame> {
-    pub input: Vec<V>,
+    pub input: Option<V>,
     // TODO: Use VideoFrame for output too
     pub output: Vec<u8>,
     // In microseconds.
     pub timestamp: u64,
     // TODO: only support CBR right now, follow up with VBR support.
-    pub bitrate: u32,
+    pub bitrate: u64,
     // Framerate is actually negotiated, so the encoder can change this value
     // based on the timestamps of the frames it receives.
     pub framerate: Arc<AtomicU32>,
@@ -83,7 +86,7 @@ pub struct C2EncodeJob<V: VideoFrame> {
 impl<V: VideoFrame> Default for C2EncodeJob<V> {
     fn default() -> Self {
         Self {
-            input: vec![],
+            input: None,
             output: vec![],
             timestamp: 0,
             bitrate: 0,
@@ -103,7 +106,7 @@ where
         self.drain = true;
     }
 
-    fn is_drain(&mut self) -> bool {
+    fn is_drain(&self) -> bool {
         return self.drain;
     }
 }

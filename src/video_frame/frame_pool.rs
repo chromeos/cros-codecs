@@ -106,7 +106,7 @@ impl<V: VideoFrame> FramePool<V> {
     }
 
     pub fn alloc(&mut self) -> Option<PooledVideoFrame<V>> {
-        let frame = (*self.pool.as_mut().unwrap().lock().unwrap()).pop_front()?;
+        let frame = (*self.pool.as_mut()?.lock().unwrap()).pop_front()?;
         Some(PooledVideoFrame {
             inner: Some(frame),
             pool: Arc::downgrade(self.pool.as_ref().unwrap()),
