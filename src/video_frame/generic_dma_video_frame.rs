@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::_mm_clflush;
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::_mm_mfence;
 use std::cell::RefCell;
 use std::fs::File;
 use std::iter::zip;
@@ -11,6 +15,7 @@ use std::ptr::NonNull;
 #[cfg(feature = "vaapi")]
 use std::rc::Rc;
 use std::slice;
+use std::sync::atomic::{fence, Ordering};
 #[cfg(feature = "v4l2")]
 use std::sync::Arc;
 
@@ -290,7 +295,7 @@ impl<'a> Drop for DmaMapping<'a> {
         // SAFETY: This should be safe because we would not instantiate a DmaMapping object if the
         // first call to dma_buf_ioctl_sync or the mmap call failed.
         unsafe {
-            let _ = zip(self.addrs.iter(), self.lens.iter()).map(|x| munmap(*x.0, *x.1).unwrap());
+            fence(Ordering::SeqCst);
 
             // Flush all cache lines back to main memory.
             let sync_struct =
@@ -298,6 +303,30 @@ impl<'a> Drop for DmaMapping<'a> {
             for fd in self.dma_handles.iter() {
                 let _ = handle_eintr(&mut || dma_buf_ioctl_sync(fd.as_raw_fd(), &sync_struct));
             }
+
+            // For some reason, DMA_BUF_IOCTL_SYNC is insufficient on Intel machines, and we have
+            // to manually flush the cache lines. This is probably a violation of the DMA API spec?
+            #[cfg(target_arch = "x86_64")]
+            {
+                // Note that fence() only guarantees that the compiler won't reorder memory
+                // operations, and we need to call _mm_mfence() to guarantee the CPU won't do it.
+                _mm_mfence();
+
+                for (addr, len) in zip(self.addrs.iter(), self.lens.iter()) {
+                    // TODO: We shouldn't actually have to flush every address, we should just
+                    // flush the address at the beginning of each cache line. But, during testing
+                    // this caused a race condition.
+                    for offset in 0..*len {
+                        _mm_clflush((addr.as_ptr() as *const u8).offset(offset as isize));
+                    }
+                }
+
+                _mm_mfence();
+            }
+
+            fence(Ordering::SeqCst);
+
+            let _ = zip(self.addrs.iter(), self.lens.iter()).map(|x| munmap(*x.0, *x.1).unwrap());
         }
     }
 }

@@ -29,8 +29,6 @@ use crate::decoder::stateless::DynStatelessVideoDecoder;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
 use crate::image_processing::convert_video_frame;
-#[cfg(feature = "vaapi")]
-use crate::utils::align_up;
 use crate::video_frame::frame_pool::FramePool;
 use crate::video_frame::frame_pool::PooledVideoFrame;
 #[cfg(feature = "vaapi")]
@@ -40,8 +38,6 @@ use crate::video_frame::v4l2_mmap_video_frame::V4l2MmapVideoFrame;
 use crate::video_frame::VideoFrame;
 use crate::EncodedFormat;
 use crate::Fourcc;
-#[cfg(feature = "vaapi")]
-use crate::Resolution;
 
 #[derive(Debug, Error)]
 pub enum C2DecoderPollErrorWrapper {

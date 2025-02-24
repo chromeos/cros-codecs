@@ -12,8 +12,6 @@ use nix::sys::eventfd::EventFd;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::os::fd::AsFd;
-#[cfg(feature = "vaapi")]
-use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -80,7 +78,6 @@ where
     alloc_cb: Arc<Mutex<dyn FnMut() -> Option<V> + Send + 'static>>,
     work_queue: Arc<Mutex<VecDeque<C2EncodeJob<V>>>>,
     in_flight_queue: VecDeque<C2EncodeJob<V>>,
-    frame_num: u64,
     state: Arc<Mutex<C2State>>,
     current_tunings: Tunings,
     visible_resolution: Resolution,
@@ -151,7 +148,6 @@ where
             work_done_cb: work_done_cb,
             work_queue: work_queue,
             in_flight_queue: VecDeque::new(),
-            frame_num: 0,
             state: state,
             alloc_cb: alloc_cb,
             current_tunings: Default::default(),

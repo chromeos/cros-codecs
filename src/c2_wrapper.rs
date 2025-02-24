@@ -29,6 +29,8 @@ pub mod c2_v4l2_decoder;
 pub mod c2_v4l2_encoder;
 #[cfg(feature = "vaapi")]
 pub mod c2_vaapi_decoder;
+#[cfg(feature = "vaapi")]
+pub mod c2_vaapi_encoder;
 
 #[derive(Debug)]
 pub struct C2DecodeJob<V: VideoFrame> {
