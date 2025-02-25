@@ -21,6 +21,7 @@ use crate::c2_wrapper::C2EncodeJob;
 use crate::c2_wrapper::C2State;
 use crate::c2_wrapper::C2Status;
 use crate::c2_wrapper::C2Worker;
+use crate::c2_wrapper::DrainMode;
 use crate::c2_wrapper::Job;
 use crate::decoder::StreamInfo;
 use crate::encoder::FrameMetadata;
@@ -182,16 +183,16 @@ where
             let mut job = (*self.work_queue.lock().unwrap())
                 .pop_front()
                 .expect("Missing job from work queue!");
-            if job.is_drain() {
+            if job.get_drain() != DrainMode::NoDrain {
                 if let Err(err) = self.encoder.drain() {
                     log::debug!("Error draining encoder! {:?}", err);
                     *self.state.lock().unwrap() = C2State::C2Error;
                     (*self.error_cb.lock().unwrap())(C2Status::C2BadValue);
                     break;
                 }
-                // TODO: This isn't actually right, we should be able to accept new inputs
-                // immediately after the drain.
-                *self.state.lock().unwrap() = C2State::C2Stopped;
+                if job.get_drain() == DrainMode::EOSDrain {
+                    *self.state.lock().unwrap() = C2State::C2Stopped;
+                }
             } else {
                 let frame_y_stride = job.input.as_ref().unwrap().get_plane_pitch()[0];
                 let frame_y_size = job.input.as_ref().unwrap().get_plane_size()[0];

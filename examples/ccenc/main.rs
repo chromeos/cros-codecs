@@ -28,11 +28,11 @@ use cros_codecs::c2_wrapper::C2EncodeJob;
 use cros_codecs::c2_wrapper::C2Status;
 use cros_codecs::c2_wrapper::C2Worker;
 use cros_codecs::c2_wrapper::C2Wrapper;
+use cros_codecs::c2_wrapper::DrainMode;
 use cros_codecs::decoder::StreamInfo;
 use cros_codecs::image_processing::extend_border_nv12;
 use cros_codecs::image_processing::i420_to_nv12_chroma;
 use cros_codecs::image_processing::nv12_copy;
-use cros_codecs::utils::align_up;
 use cros_codecs::video_frame::frame_pool::FramePool;
 use cros_codecs::video_frame::frame_pool::PooledVideoFrame;
 use cros_codecs::video_frame::gbm_video_frame::GbmDevice;
@@ -91,7 +91,7 @@ where
 
     if *timestamp >= num_frames {
         if *timestamp == num_frames {
-            encoder.drain();
+            encoder.drain(DrainMode::EOSDrain);
             *timestamp += 1;
         }
         return false;
@@ -109,7 +109,7 @@ where
         Err(e) => {
             if e.kind() == ErrorKind::UnexpectedEof {
                 // We've reached the end of the input file, start draining.
-                encoder.drain();
+                encoder.drain(DrainMode::EOSDrain);
                 *timestamp = u64::MAX;
                 return false;
             } else {
@@ -174,7 +174,7 @@ where
         timestamp: *timestamp,
         bitrate: bitrate,
         framerate: Arc::new(AtomicU32::new(framerate)),
-        drain: false,
+        drain: DrainMode::NoDrain,
     };
     encoder.queue(vec![job]);
 
