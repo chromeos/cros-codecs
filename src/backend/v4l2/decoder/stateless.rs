@@ -126,7 +126,6 @@ impl<V: VideoFrame> StatelessDecoderBackend for V4l2StatelessDecoderBackend<V> {
     }
 
     fn reset_backend(&mut self) -> anyhow::Result<()> {
-        self.device.reset_queues().map_err(|_| "failed to reset queues.");
-        Ok(())
+        Ok(self.device.reset_queues()?)
     }
 }

@@ -68,12 +68,10 @@ impl<V: VideoFrame> DeviceHandle<V> {
     pub fn reset_queues(&mut self) -> Result<(), QueueError> {
         self.output_queue
             .reset(self.video_device.clone())
-            .map_err(|err| QueueError::ResetOutputQueue);
+            .map_err(|_| QueueError::ResetOutputQueue)?;
         self.capture_queue
             .reset(self.video_device.clone())
-            .map_err(|err| QueueError::ResetCaptureQueue);
-
-        Ok(())
+            .map_err(|_| QueueError::ResetCaptureQueue)
     }
 
     fn alloc_request(&self) -> ioctl::Request {

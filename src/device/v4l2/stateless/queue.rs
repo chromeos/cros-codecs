@@ -238,13 +238,13 @@ impl V4l2OutputQueue {
         let handle = self.handle.take();
         let (ret, handle) = match handle {
             V4l2OutputQueueHandle::Streaming(handle) => {
-                handle.stream_off().map_err(|err| QueueError::StreamOff);
+                handle.stream_off().map_err(|_| QueueError::StreamOff)?;
                 (Rc::into_inner(handle).ok_or(QueueError::QueueHandle)?)
                     .free_buffers()
-                    .map_err(|err| QueueError::FreeBuffer);
+                    .map_err(|_| QueueError::FreeBuffer)?;
 
                 let queue_handle = Queue::get_output_mplane_queue(device.clone())
-                    .map_err(|err| QueueError::QueueHandle);
+                    .map_err(|_| QueueError::QueueHandle);
 
                 (Ok(()), V4l2OutputQueueHandle::Init(queue_handle?))
             }
@@ -360,13 +360,13 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
         let handle = self.handle.take();
         let (ret, handle) = match handle {
             V4l2CaptureQueueHandle::Streaming(handle) => {
-                handle.stream_off().map_err(|err| QueueError::StreamOff);
+                handle.stream_off().map_err(|_| QueueError::StreamOff)?;
                 (Rc::into_inner(handle).ok_or(QueueError::QueueHandle)?)
                     .free_buffers()
-                    .map_err(|err| QueueError::FreeBuffer);
+                    .map_err(|_| QueueError::FreeBuffer)?;
 
                 let queue_handle = Queue::get_capture_mplane_queue(device.clone())
-                    .map_err(|err| QueueError::QueueHandle);
+                    .map_err(|_| QueueError::QueueHandle);
 
                 (Ok(()), V4l2CaptureQueueHandle::Init(queue_handle?))
             }
