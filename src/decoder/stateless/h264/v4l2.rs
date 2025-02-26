@@ -133,12 +133,12 @@ impl<V: VideoFrame> StatelessH264DecoderBackend for V4l2StatelessDecoderBackend<
         let request = picture.request();
         let mut request = request.as_ref().borrow_mut();
         request
-            .ioctl(h264_sps)
-            .ioctl(h264_pps)
-            .ioctl(h264_scaling_matrix)
-            .ioctl(&h264_decode_params)
-            .ioctl(V4l2CtrlH264DecodeMode::FrameBased)
-            .ioctl(V4l2CtrlH264StartCode::AnnexB);
+            .ioctl(h264_sps)?
+            .ioctl(h264_pps)?
+            .ioctl(h264_scaling_matrix)?
+            .ioctl(&h264_decode_params)?
+            .ioctl(V4l2CtrlH264DecodeMode::FrameBased)?
+            .ioctl(V4l2CtrlH264StartCode::AnnexB)?;
         picture.set_ref_pictures(ref_pictures);
         Ok(())
     }
