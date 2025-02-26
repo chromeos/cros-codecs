@@ -9,6 +9,7 @@ use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
 use crate::backend::v4l2::decoder::V4l2StreamInfo;
+use crate::backend::v4l2::decoder::ADDITIONAL_REFERENCE_FRAME_BUFFER;
 use crate::codec::vp8::parser::Header;
 use crate::codec::vp8::parser::MbLfAdjustments;
 use crate::codec::vp8::parser::Segmentation;
@@ -29,12 +30,11 @@ use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
 
-/// The number of frames to allocate for this codec. Same as GStreamer's vavp8dec.
-const NUM_FRAMES: usize = 7;
+const NUM_REF_FRAMES: usize = 3;
 
 impl V4l2StreamInfo for &Header {
     fn min_num_frames(&self) -> usize {
-        NUM_FRAMES
+        NUM_REF_FRAMES + ADDITIONAL_REFERENCE_FRAME_BUFFER
     }
 
     fn coded_size(&self) -> Resolution {
@@ -62,7 +62,7 @@ impl<V: VideoFrame> StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend<V
             Fourcc::from(b"VP8F"),
             self.stream_info.coded_resolution,
             Rect::from(self.stream_info.coded_resolution),
-            NUM_FRAMES as u32,
+            self.stream_info.min_num_frames as u32,
         )?;
         Ok(())
     }

@@ -17,6 +17,7 @@ use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderHandle;
 use crate::backend::v4l2::decoder::V4l2StreamInfo;
+use crate::backend::v4l2::decoder::ADDITIONAL_REFERENCE_FRAME_BUFFER;
 use crate::codec::h264::dpb::Dpb;
 use crate::codec::h264::dpb::DpbEntry;
 use crate::codec::h264::parser::Pps;
@@ -46,7 +47,7 @@ use crate::Resolution;
 
 impl V4l2StreamInfo for &Rc<Sps> {
     fn min_num_frames(&self) -> usize {
-        self.max_dpb_frames() + 4
+        self.max_dpb_frames() + ADDITIONAL_REFERENCE_FRAME_BUFFER
     }
 
     fn coded_size(&self) -> Resolution {
