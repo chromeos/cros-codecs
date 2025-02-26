@@ -98,6 +98,7 @@ impl<V: VideoFrame> DecodedHandle for V4l2StatelessDecoderHandle<V> {
 pub struct V4l2StatelessDecoderBackend<V: VideoFrame> {
     pub device: V4l2Device<V>,
     pub stream_info: StreamInfo,
+    pub frame_counter: u64,
 }
 
 impl<V: VideoFrame> V4l2StatelessDecoderBackend<V> {
@@ -110,6 +111,7 @@ impl<V: VideoFrame> V4l2StatelessDecoderBackend<V> {
                 coded_resolution: Resolution::from((0, 0)),
                 display_resolution: Resolution::from((0, 0)),
             },
+            frame_counter: 0,
         }
     }
 }

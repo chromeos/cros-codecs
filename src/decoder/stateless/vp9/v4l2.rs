@@ -73,11 +73,12 @@ impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V
 
     fn new_picture(
         &mut self,
-        timestamp: u64,
+        _timestamp: u64,
         alloc_cb: &mut dyn FnMut() -> Option<
             <<Self as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
         >,
     ) -> NewPictureResult<Self::Picture> {
+        let timestamp = self.frame_counter;
         let frame = alloc_cb().ok_or(NewPictureError::OutOfOutputBuffers)?;
         let request_buffer = match self.device.alloc_request(timestamp, frame) {
             Ok(buffer) => buffer,
@@ -88,6 +89,8 @@ impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V
             .as_ref()
             .borrow_mut()
             .set_picture_ref(Rc::<RefCell<V4l2Picture<V>>>::downgrade(&picture));
+
+        self.frame_counter = self.frame_counter + 1;
         Ok(picture)
     }
 
