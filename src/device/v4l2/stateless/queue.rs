@@ -92,6 +92,8 @@ pub enum QueueError {
     BufferDequeue,
     #[error("failed to queue buffer.")]
     BufferQueue,
+    #[error("requested {0} buffers, only {1} allocated")]
+    NotEnoughRequestedBuffers(usize, usize),
 }
 
 impl From<QueueError> for DecodeError {
@@ -146,6 +148,13 @@ impl From<IoctlConvertError<QBufIoctlError, Infallible>> for QueueError {
     fn from(_err: IoctlConvertError<QBufIoctlError, Infallible>) -> Self {
         QueueError::BufferQueue
     }
+}
+
+fn check_requested_buffer_count(requested: u32, received: usize) -> Result<(), QueueError> {
+    if received < requested as usize {
+        return Err(QueueError::NotEnoughRequestedBuffers(requested as usize, received));
+    }
+    Ok(())
 }
 
 //TODO: handle memory backends other than mmap
@@ -244,6 +253,8 @@ impl V4l2OutputQueue {
                     NUM_OUTPUT_BUFFERS,
                 )?;
 
+                check_requested_buffer_count(NUM_OUTPUT_BUFFERS, handle.num_free_buffers())?;
+
                 handle.stream_on()?;
 
                 V4l2OutputQueueHandle::Streaming(handle.into())
@@ -341,11 +352,11 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
     pub fn initialize(
         &mut self,
         visible_rect: Rect,
-        num_buffers: u32,
+        requested_num_buffers: u32,
     ) -> Result<&mut Self, QueueError> {
-        self.visible_rect = visible_rect;
         // +2 due to HCMP1_HHI_A.h264 needing more
-        self.num_buffers = num_buffers + 2;
+        let requested_num_buffers = requested_num_buffers + 2;
+
         self.handle.replace(match self.handle.take() {
             V4l2CaptureQueueHandle::Init(handle) => {
                 // TODO: check if decoded format is supported.
@@ -353,8 +364,13 @@ impl<V: VideoFrame> V4l2CaptureQueue<V> {
                 // TODO: handle 10 bit format negotiation.
                 let handle = handle.request_buffers_generic::<V4l2VideoFrame<V>>(
                     <V::NativeHandle as PlaneHandle>::Memory::MEMORY_TYPE,
-                    self.num_buffers,
+                    requested_num_buffers,
                 )?;
+
+                check_requested_buffer_count(requested_num_buffers, handle.num_free_buffers())?;
+
+                self.visible_rect = visible_rect;
+                self.num_buffers = requested_num_buffers;
 
                 handle.stream_on()?;
 
