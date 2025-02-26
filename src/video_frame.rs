@@ -18,6 +18,8 @@ use crate::Resolution;
 pub mod frame_pool;
 #[cfg(feature = "backend")]
 pub mod gbm_video_frame;
+#[cfg(feature = "backend")]
+pub mod generic_dma_video_frame;
 #[cfg(feature = "v4l2")]
 pub mod v4l2_mmap_video_frame;
 
@@ -266,7 +268,7 @@ pub trait VideoFrame: Send + Sync + Sized + Debug + 'static {
     fn map_mut<'a>(&'a mut self) -> Result<Box<dyn WriteMapping<'a> + 'a>, String>;
 
     #[cfg(feature = "v4l2")]
-    fn to_native_handle(&self, plane: usize) -> Result<&Self::NativeHandle, String>;
+    fn fill_v4l2_plane(&self, index: usize, plane: &mut v4l2_plane);
 
     #[cfg(feature = "v4l2")]
     fn process_dqbuf(&mut self, device: Arc<Device>, format: &Format, buf: &V4l2Buffer);
@@ -297,10 +299,7 @@ impl<V: VideoFrame> BufferHandles for V4l2VideoFrame<V> {
     }
 
     fn fill_v4l2_plane(&self, index: usize, plane: &mut v4l2_plane) {
-        self.0
-            .to_native_handle(index)
-            .expect("Failed to export handle for fill_v4l2_plane")
-            .fill_v4l2_plane(plane);
+        self.0.fill_v4l2_plane(index, plane)
     }
 }
 

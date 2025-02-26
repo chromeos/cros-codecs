@@ -18,12 +18,15 @@ use std::sync::Arc;
 
 use crate::utils::align_up;
 use crate::utils::buffer_size_for_area;
+use crate::video_frame::generic_dma_video_frame::GenericDmaVideoFrame;
 use crate::video_frame::ReadMapping;
 use crate::video_frame::VideoFrame;
 use crate::video_frame::WriteMapping;
 #[cfg(feature = "vaapi")]
 use crate::DecodedFormat;
 use crate::Fourcc;
+use crate::FrameLayout;
+use crate::PlaneLayout;
 use crate::Resolution;
 
 use drm_fourcc::DrmFourcc;
@@ -37,19 +40,20 @@ use gbm_sys::{
     gbm_bo_import, gbm_bo_map, gbm_bo_transfer_flags, gbm_bo_unmap, gbm_create_device, gbm_device,
     gbm_device_destroy,
 };
-use nix::libc;
-
-#[cfg(feature = "v4l2")]
-use crate::v4l2r::device::Device;
 #[cfg(feature = "vaapi")]
 use libva::{
     Display, ExternalBufferDescriptor, MemoryType, Surface, UsageHint, VADRMPRIMESurfaceDescriptor,
     VADRMPRIMESurfaceDescriptorLayer, VADRMPRIMESurfaceDescriptorObject,
 };
+use nix::libc;
+#[cfg(feature = "v4l2")]
+use v4l2r::bindings::v4l2_plane;
+#[cfg(feature = "v4l2")]
+use v4l2r::device::Device;
 #[cfg(feature = "v4l2")]
 use v4l2r::ioctl::V4l2Buffer;
 #[cfg(feature = "v4l2")]
-use v4l2r::memory::{DmaBufHandle, DmaBufSource};
+use v4l2r::memory::{DmaBufHandle, DmaBufSource, PlaneHandle};
 #[cfg(feature = "v4l2")]
 use v4l2r::Format;
 
@@ -221,6 +225,23 @@ impl GbmVideoFrame {
         }
         Ok(ret)
     }
+
+    pub fn to_generic_dma_video_frame(self) -> Result<GenericDmaVideoFrame, String> {
+        let planes: Vec<PlaneLayout> = zip(self.get_plane_offset(), self.get_plane_pitch())
+            .enumerate()
+            .map(|x| PlaneLayout { buffer_index: x.0, offset: x.1 .0, stride: x.1 .1 })
+            .collect();
+        let dma_handles: Vec<File> =
+            self.bo.iter().map(|bo| unsafe { File::from_raw_fd(gbm_bo_get_fd(*bo)) }).collect();
+        GenericDmaVideoFrame::new(
+            dma_handles,
+            FrameLayout {
+                format: (self.fourcc, self.get_modifier()),
+                size: self.resolution(),
+                planes: planes,
+            },
+        )
+    }
 }
 
 #[cfg(feature = "vaapi")]
@@ -350,12 +371,8 @@ impl VideoFrame for GbmVideoFrame {
     }
 
     #[cfg(feature = "v4l2")]
-    fn to_native_handle(&self, plane: usize) -> Result<&Self::NativeHandle, String> {
-        if plane >= self.export_handles.len() {
-            Err("No such plane {plane}".to_string())
-        } else {
-            Ok(&self.export_handles[plane])
-        }
+    fn fill_v4l2_plane(&self, index: usize, plane: &mut v4l2_plane) {
+        self.export_handles[index].fill_v4l2_plane(plane)
     }
 
     // No-op for GBM buffers since the backing FD already disambiguates them.
