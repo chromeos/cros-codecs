@@ -11,6 +11,8 @@ use v4l2r::controls::SafeExtControl;
 use v4l2r::ioctl;
 
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
+use crate::decoder::stateless::StatelessBackendError;
+use crate::decoder::stateless::StatelessBackendResult;
 use crate::device::v4l2::stateless::device::V4l2Device;
 use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
 use crate::device::v4l2::stateless::queue::V4l2OutputBuffer;
@@ -50,16 +52,16 @@ impl<V: VideoFrame> InitRequestHandle<V> {
         self.output_buffer.write(data);
         self
     }
-    fn submit(self) -> PendingRequestHandle<V> {
+    fn submit(self) -> StatelessBackendResult<PendingRequestHandle<V>> {
         self.output_buffer
             .submit(self.timestamp, self.handle.as_raw_fd())
-            .expect("error needs handling");
-        self.handle.queue().expect("Failed to queue request handle");
-        PendingRequestHandle {
+            .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
+        self.handle.queue().map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
+        Ok(PendingRequestHandle {
             device: self.device.clone(),
             timestamp: self.timestamp,
             picture: self.picture,
-        }
+        })
     }
     fn set_picture_ref(&mut self, picture: Weak<RefCell<V4l2Picture<V>>>) {
         self.picture = picture;
@@ -150,10 +152,10 @@ impl<V: VideoFrame> RequestHandle<V> {
 
     // This method can modify in-place instead of returning a new value. This removes the need for
     // a RefCell in V4l2Request.
-    fn submit(&mut self) {
+    fn submit(&mut self) -> StatelessBackendResult<()> {
         match std::mem::take(self) {
-            Self::Init(handle) => *self = Self::Pending(handle.submit()),
-            _ => panic!("ERROR"),
+            Self::Init(handle) => Ok(*self = Self::Pending(handle.submit()?)),
+            _ => Err(StatelessBackendError::Other(anyhow::anyhow!("incorrect request state"))),
         }
     }
     fn sync(&mut self) {
@@ -214,8 +216,8 @@ impl<V: VideoFrame> V4l2Request<V> {
         self.0.write(data);
         self
     }
-    pub fn submit(&mut self) {
-        self.0.submit();
+    pub fn submit(&mut self) -> StatelessBackendResult<()> {
+        self.0.submit()
     }
     pub fn sync(&mut self) {
         self.0.sync();
