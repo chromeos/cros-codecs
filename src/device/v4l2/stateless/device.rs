@@ -190,7 +190,6 @@ impl<V: VideoFrame> V4l2Device<V> {
             }
             Err(error) => return Err(error),
         };
-        self.handle.borrow().capture_queue.queue_buffer(frame)?;
         self.handle.borrow_mut().try_dequeue_capture_buffers();
 
         let request = Rc::new(RefCell::new(V4l2Request::new(
@@ -198,12 +197,16 @@ impl<V: VideoFrame> V4l2Device<V> {
             timestamp,
             self.handle.borrow().alloc_request(),
             output_buffer,
+            frame,
         )));
         self.handle.borrow_mut().insert_request_into_hash(Rc::downgrade(&request.clone()));
         Ok(request)
     }
     pub fn sync(&self, timestamp: u64) -> V4l2CaptureBuffer<V> {
         self.handle.borrow_mut().sync(timestamp)
+    }
+    pub fn queue_capture_buffer(&self, frame: V) -> Result<(), QueueError> {
+        self.handle.borrow().capture_queue.queue_buffer(frame)
     }
 }
 

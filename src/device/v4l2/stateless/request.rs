@@ -24,6 +24,7 @@ struct InitRequestHandle<V: VideoFrame> {
     handle: ioctl::Request,
     output_buffer: V4l2OutputBuffer,
     picture: Weak<RefCell<V4l2Picture<V>>>,
+    frame: V,
 }
 
 impl<V: VideoFrame> InitRequestHandle<V> {
@@ -32,8 +33,9 @@ impl<V: VideoFrame> InitRequestHandle<V> {
         timestamp: u64,
         handle: ioctl::Request,
         output_buffer: V4l2OutputBuffer,
+        frame: V,
     ) -> Self {
-        Self { device, timestamp, handle, output_buffer, picture: Weak::new() }
+        Self { device, timestamp, handle, output_buffer, picture: Weak::new(), frame }
     }
     fn which(&self) -> ioctl::CtrlWhich {
         ioctl::CtrlWhich::Request(self.handle.as_raw_fd())
@@ -53,6 +55,9 @@ impl<V: VideoFrame> InitRequestHandle<V> {
         self
     }
     fn submit(self) -> StatelessBackendResult<PendingRequestHandle<V>> {
+        self.device
+            .queue_capture_buffer(self.frame)
+            .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
         self.output_buffer
             .submit(self.timestamp, self.handle.as_raw_fd())
             .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
@@ -114,8 +119,9 @@ impl<V: VideoFrame> RequestHandle<V> {
         timestamp: u64,
         handle: ioctl::Request,
         output_buffer: V4l2OutputBuffer,
+        frame: V,
     ) -> Self {
-        Self::Init(InitRequestHandle::new(device, timestamp, handle, output_buffer))
+        Self::Init(InitRequestHandle::new(device, timestamp, handle, output_buffer, frame))
     }
     fn timestamp(&self) -> u64 {
         match self {
@@ -195,8 +201,9 @@ impl<V: VideoFrame> V4l2Request<V> {
         timestamp: u64,
         handle: ioctl::Request,
         output_buffer: V4l2OutputBuffer,
+        frame: V,
     ) -> Self {
-        Self(RequestHandle::new(device, timestamp, handle, output_buffer))
+        Self(RequestHandle::new(device, timestamp, handle, output_buffer, frame))
     }
     pub fn timestamp(&self) -> u64 {
         self.0.timestamp()
