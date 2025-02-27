@@ -242,6 +242,8 @@ where
             .parse_chunk(bitstream)
             .map_err(|err| DecodeError::ParseFrameError(err))?;
 
+        self.wait_for_drc_flush()?;
+
         // With SVC, the first frame will usually be a key-frame, with
         // inter-frames carrying the other layers.
         //
@@ -265,6 +267,15 @@ where
 
         if let Some(frame) = largest_in_superframe {
             if self.negotiation_possible(&frame.header, &self.codec.negotiation_info) {
+                if matches!(self.decoding_state, DecodingState::Decoding) {
+                    // DRC occurs when a key frame is seen, the format is different,
+                    // and the decoder is already decoding frames.
+                    self.flush()?;
+                    self.decoding_state = DecodingState::FlushingForDRC;
+                    // Start signaling the awaiting format event to process a format change.
+                    self.awaiting_format_event.write(1).unwrap();
+                    return Err(DecodeError::CheckEvents);
+                }
                 self.backend.new_sequence(&frame.header)?;
                 self.await_format_change(frame.header.clone());
             } else if matches!(self.decoding_state, DecodingState::Reset) {
