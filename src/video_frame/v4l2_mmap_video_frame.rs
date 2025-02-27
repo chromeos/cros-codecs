@@ -77,7 +77,7 @@ impl V4l2MmapVideoFrame {
 
     fn map_helper(&self) -> Result<V4l2MmapMapping, String> {
         let device = self.device.as_ref().ok_or("No V4L2 device!".to_string())?;
-        // UNSAFE: The unsafe block is just because we're accessing a union, which is guaranteed
+        // SAFETY: The unsafe block is just because we're accessing a union, which is guaranteed
         // to be initialized in this circumstance because the handle is of type MmapHandle.
         // TODO: This will not work for single planar video formats such as NV12.
         Ok(V4l2MmapMapping {
