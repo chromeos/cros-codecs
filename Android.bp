@@ -18,7 +18,19 @@ rust_defaults {
     cargo_pkg_version: "0.0.5",
     crate_root: "src/lib.rs",
     edition: "2021",
-    rustlibs: ["liblog_rust"],
+    rustlibs: [
+        "libanyhow",
+        "libcrc32fast",
+        "libbyteorder",
+        "libthiserror",
+        "liblog_rust",
+        "libgbm_rust",
+        "libdrm_rust",
+        "libdrm_fourcc",
+        "libgbm_sys",
+        "libnix",
+    ],
+    aliases: ["cros_libva:libva"],
     apex_available: [
         "//apex_available:platform",
         "//apex_available:anyapex",
@@ -33,35 +45,23 @@ rust_defaults {
 rust_library {
     name: "libcros_codecs",
     defaults: ["libcros_codecs_defaults"],
-    aliases: ["cros_libva:libva"],
-
+    enabled: false,
     arch: {
         x86_64: {
-            features: ["vaapi"],
-            rustlibs: [
-                "libanyhow",
-                "libbyteorder",
-                "libthiserror",
-                "libcrc32fast",
-                "libnix",
-                "libcros_libva",
+            enabled: true,
+            features: [
+                "vaapi",
+                "backend",
             ],
+            rustlibs: ["libcros_libva"],
         },
         arm64: {
-            rustlibs: [
-                "libanyhow",
-                "libbyteorder",
-                "libthiserror",
-                "libcrc32fast",
-                "libdrm_fourcc",
-                "libgbm_sys",
-                "libnix",
-                "libv4l2r",
-            ],
+            enabled: true,
             features: [
                 "v4l2",
                 "backend",
             ],
+            rustlibs: ["libv4l2r"],
         },
     },
 }
@@ -70,4 +70,85 @@ rust_test_host {
     name: "libcros_codecs_test",
     defaults: ["libcros_codecs_defaults"],
     rustlibs: ["libenv_logger"],
+}
+
+rust_test {
+    name: "ccdec_test",
+    srcs: ["test/ccdec_test.rs"],
+    test_suites: ["general-tests"],
+    test_config: "test/AndroidTest.xml",
+    rustlibs: [
+        "libenv_logger",
+        "libcros_codecs",
+        "libargh",
+        "libserde_json",
+    ],
+    data: [
+        ":test_data",
+    ],
+    data_bins: ["ccdec"],
+    // TODO(b/394365384): Group shared dependencies with rust_defaults
+    enabled: false,
+    arch: {
+        x86_64: {
+            enabled: true,
+            features: [
+                "vaapi",
+                "backend",
+            ],
+        },
+        arm64: {
+            enabled: true,
+            features: [
+                "v4l2",
+                "backend",
+            ],
+        },
+    },
+}
+
+rust_test {
+    name: "ccdec",
+    srcs: ["examples/ccdec/main.rs"],
+    test_suites: ["general-tests"],
+    rustlibs: [
+        "libenv_logger",
+        "libcros_codecs",
+        "libargh",
+        "libserde_json",
+    ],
+    // TODO(b/394365384): Group shared dependencies with rust_defaults
+    enabled: false,
+    arch: {
+        x86_64: {
+            enabled: true,
+            features: [
+                "vaapi",
+                "backend",
+            ],
+        },
+        arm64: {
+            enabled: true,
+            features: [
+                "v4l2",
+                "backend",
+            ],
+        },
+    },
+    test_harness: false,
+}
+
+filegroup {
+    name: "test_data",
+    srcs: [
+        "src/codec/av1/test_data/*",
+        "src/codec/h264/test_data/*",
+        "src/codec/h265/test_data/*",
+        "src/codec/vp8/test_data/*",
+        "src/codec/vp9/test_data/*",
+    ],
+    exclude_srcs: [
+        "src/codec/**/gen_crcs.sh",
+        "src/codec/**/README.md",
+    ],
 }
