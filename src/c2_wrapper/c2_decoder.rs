@@ -279,7 +279,7 @@ where
             // woke us up, because we either have new work, or we might more output buffers
             // available.
             let mut possible_job = (*self.work_queue.lock().unwrap()).pop_front();
-            while let Some(job) = possible_job {
+            while let Some(mut job) = possible_job {
                 if job.get_drain() != DrainMode::NoDrain {
                     let flush_result = match &mut self.decoder {
                         C2Decoder::ImportingDecoder(decoder) => decoder.flush(),
@@ -311,8 +311,12 @@ where
                         }
                     };
                     match decode_result {
-                        Ok(_) => {
+                        Ok(num_bytes) => {
                             self.frame_num += 1;
+                            if num_bytes != job.input.len() {
+                                job.input = (&job.input[num_bytes..]).to_vec();
+                                (*self.work_queue.lock().unwrap()).push_front(job);
+                            }
                         }
                         Err(DecodeError::NotEnoughOutputBuffers(_) | DecodeError::CheckEvents) => {
                             (*self.work_queue.lock().unwrap()).push_front(job);
