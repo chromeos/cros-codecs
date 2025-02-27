@@ -7,6 +7,8 @@ use std::rc::Rc;
 
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
+use crate::backend::v4l2::decoder::V4l2StreamInfo;
+use crate::backend::v4l2::decoder::ADDITIONAL_REFERENCE_FRAME_BUFFER;
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::StreamInfo;
 use crate::codec::av1::parser::TileGroupObu;
@@ -20,14 +22,34 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 use crate::video_frame::VideoFrame;
+use crate::Fourcc;
+use crate::Rect;
+use crate::Resolution;
+
+impl V4l2StreamInfo for &StreamInfo {
+    fn min_num_frames(&self) -> usize {
+        NUM_REF_FRAMES + ADDITIONAL_REFERENCE_FRAME_BUFFER
+    }
+
+    fn coded_size(&self) -> Resolution {
+        Resolution::from((
+            self.seq_header.max_frame_width_minus_1 as u32 + 1,
+            self.seq_header.max_frame_height_minus_1 as u32 + 1,
+        ))
+    }
+
+    fn visible_rect(&self) -> Rect {
+        Rect::from(((0, 0), (self.render_width, self.render_height)))
+    }
+}
 
 impl<V: VideoFrame> StatelessDecoderBackendPicture<Av1> for V4l2StatelessDecoderBackend<V> {
     type Picture = Rc<RefCell<V4l2Picture<V>>>;
 }
 
 impl<V: VideoFrame> StatelessAV1DecoderBackend for V4l2StatelessDecoderBackend<V> {
-    fn change_stream_info(&mut self, _stream_info: &StreamInfo) -> StatelessBackendResult<()> {
-        todo!()
+    fn change_stream_info(&mut self, stream_info: &StreamInfo) -> StatelessBackendResult<()> {
+        self.new_sequence(stream_info, Fourcc::from(b"AV1F"))
     }
 
     fn new_picture(
