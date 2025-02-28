@@ -52,6 +52,9 @@ use v4l2r::bindings::V4L2_AV1_MAX_NUM_Y_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_OPERATING_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_SEGMENTS;
 use v4l2r::bindings::V4L2_AV1_NUM_PLANES_MAX;
+use v4l2r::bindings::V4L2_AV1_QUANTIZATION_FLAG_DELTA_Q_PRESENT;
+use v4l2r::bindings::V4L2_AV1_QUANTIZATION_FLAG_DIFF_UV_DELTA;
+use v4l2r::bindings::V4L2_AV1_QUANTIZATION_FLAG_USING_QMATRIX;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_ENABLED;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_SEG_ID_PRE_SKIP;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_TEMPORAL_UPDATE;
@@ -67,6 +70,7 @@ use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::GlobalMotionParams;
 use crate::codec::av1::parser::LoopFilterParams;
 use crate::codec::av1::parser::LoopRestorationParams;
+use crate::codec::av1::parser::QuantizationParams;
 use crate::codec::av1::parser::SegmentationParams;
 
 // v4l2r does not have V4L2_AV1_SEG_LVL_MAX
@@ -165,6 +169,29 @@ pub struct V4l2CtrlAv1FrameParams {
 impl V4l2CtrlAv1FrameParams {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn set_quantization_params(&mut self, quant: &QuantizationParams) -> &mut Self {
+        if quant.diff_uv_delta {
+            self.handle.quantization.flags |= V4L2_AV1_QUANTIZATION_FLAG_DIFF_UV_DELTA as u8;
+        }
+        if quant.using_qmatrix {
+            self.handle.quantization.flags |= V4L2_AV1_QUANTIZATION_FLAG_USING_QMATRIX as u8;
+        }
+        if quant.delta_q_present {
+            self.handle.quantization.flags |= V4L2_AV1_QUANTIZATION_FLAG_DELTA_Q_PRESENT as u8;
+        }
+        self.handle.quantization.base_q_idx = quant.base_q_idx as u8;
+        self.handle.quantization.delta_q_y_dc = quant.delta_q_y_dc as i8;
+        self.handle.quantization.delta_q_u_dc = quant.delta_q_u_dc as i8;
+        self.handle.quantization.delta_q_v_dc = quant.delta_q_v_dc as i8;
+        self.handle.quantization.delta_q_u_ac = quant.delta_q_u_ac as i8;
+        self.handle.quantization.delta_q_v_ac = quant.delta_q_v_ac as i8;
+        self.handle.quantization.qm_y = quant.qm_y as u8;
+        self.handle.quantization.qm_u = quant.qm_u as u8;
+        self.handle.quantization.qm_v = quant.qm_v as u8;
+        self.handle.quantization.delta_q_res = quant.delta_q_res as u8;
+        self
     }
 
     pub fn set_segmentation_params(&mut self, seg: &SegmentationParams) -> &mut Self {
