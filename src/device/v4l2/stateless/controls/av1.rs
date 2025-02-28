@@ -11,6 +11,7 @@ use v4l2r::bindings::v4l2_ctrl_av1_tile_group_entry;
 use v4l2r::bindings::v4l2_ext_control;
 use v4l2r::bindings::v4l2_ext_control__bindgen_ty_1;
 use v4l2r::bindings::V4L2_AV1_AR_COEFFS_SIZE;
+use v4l2r::bindings::V4L2_AV1_CDEF_MAX;
 use v4l2r::bindings::V4L2_AV1_FILM_GRAIN_FLAG_APPLY_GRAIN;
 use v4l2r::bindings::V4L2_AV1_FILM_GRAIN_FLAG_CHROMA_SCALING_FROM_LUMA;
 use v4l2r::bindings::V4L2_AV1_FILM_GRAIN_FLAG_CLIP_TO_RESTRICTED_RANGE;
@@ -51,6 +52,7 @@ use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FILM_GRAIN;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FRAME;
 use v4l2r::controls::AsV4l2ControlSlice;
 
+use crate::codec::av1::parser::CdefParams;
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::GlobalMotionParams;
 use crate::codec::av1::parser::LoopRestorationParams;
@@ -147,6 +149,18 @@ pub struct V4l2CtrlAv1FrameParams {
 impl V4l2CtrlAv1FrameParams {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn set_cdef_params(&mut self, cdef: &CdefParams) -> &mut Self {
+        self.handle.cdef.damping_minus_3 = cdef.cdef_damping as u8;
+        self.handle.cdef.bits = cdef.cdef_bits as u8;
+        for i in 0..V4L2_AV1_CDEF_MAX as usize {
+            self.handle.cdef.y_pri_strength[i] = cdef.cdef_y_pri_strength[i] as u8;
+            self.handle.cdef.y_sec_strength[i] = cdef.cdef_y_sec_strength[i] as u8;
+            self.handle.cdef.uv_pri_strength[i] = cdef.cdef_uv_pri_strength[i] as u8;
+            self.handle.cdef.uv_sec_strength[i] = cdef.cdef_uv_sec_strength[i] as u8;
+        }
+        self
     }
 
     pub fn set_loop_restoration_params(

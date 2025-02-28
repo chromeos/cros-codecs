@@ -109,7 +109,8 @@ impl<V: VideoFrame> StatelessAV1DecoderBackend for V4l2StatelessDecoderBackend<V
         frame_params
             .set_frame_params(&hdr)
             .set_global_motion_params(&hdr.global_motion_params)
-            .set_loop_restoration_params(&hdr.loop_restoration_params);
+            .set_loop_restoration_params(&hdr.loop_restoration_params)
+            .set_cdef_params(&hdr.cdef_params);
 
         let mut frame_params_ctrl = Av1V4l2FrameCtrl::from(&frame_params);
         let which = request.which();
