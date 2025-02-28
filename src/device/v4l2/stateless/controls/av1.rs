@@ -51,6 +51,8 @@ use v4l2r::bindings::V4L2_AV1_MAX_NUM_CR_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_Y_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_OPERATING_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_SEGMENTS;
+use v4l2r::bindings::V4L2_AV1_MAX_TILE_COLS;
+use v4l2r::bindings::V4L2_AV1_MAX_TILE_ROWS;
 use v4l2r::bindings::V4L2_AV1_NUM_PLANES_MAX;
 use v4l2r::bindings::V4L2_AV1_QUANTIZATION_FLAG_DELTA_Q_PRESENT;
 use v4l2r::bindings::V4L2_AV1_QUANTIZATION_FLAG_DIFF_UV_DELTA;
@@ -60,6 +62,7 @@ use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_SEG_ID_PRE_SKIP;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_TEMPORAL_UPDATE;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_UPDATE_DATA;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_UPDATE_MAP;
+use v4l2r::bindings::V4L2_AV1_TILE_INFO_FLAG_UNIFORM_TILE_SPACING;
 use v4l2r::bindings::V4L2_AV1_TOTAL_REFS_PER_FRAME;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FILM_GRAIN;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FRAME;
@@ -169,6 +172,38 @@ pub struct V4l2CtrlAv1FrameParams {
 impl V4l2CtrlAv1FrameParams {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn set_tile_info_params(&mut self, hdr: &FrameHeaderObu) -> &mut Self {
+        let tile_info = &hdr.tile_info;
+        if tile_info.uniform_tile_spacing_flag {
+            self.handle.tile_info.flags |= V4L2_AV1_TILE_INFO_FLAG_UNIFORM_TILE_SPACING as u8;
+        }
+        self.handle.tile_info.context_update_tile_id = tile_info.context_update_tile_id as u8;
+        self.handle.tile_info.tile_cols = tile_info.tile_cols as u8;
+        self.handle.tile_info.tile_rows = tile_info.tile_rows as u8;
+        self.handle
+            .tile_info
+            .mi_col_starts
+            .copy_from_slice(&tile_info.mi_col_starts[0..(V4L2_AV1_MAX_TILE_COLS + 1) as usize]);
+        self.handle
+            .tile_info
+            .mi_col_starts
+            .copy_from_slice(&tile_info.mi_col_starts[0..(V4L2_AV1_MAX_TILE_COLS + 1) as usize]);
+        self.handle
+            .tile_info
+            .mi_row_starts
+            .copy_from_slice(&tile_info.mi_row_starts[0..(V4L2_AV1_MAX_TILE_ROWS + 1) as usize]);
+        self.handle
+            .tile_info
+            .width_in_sbs_minus_1
+            .copy_from_slice(&tile_info.width_in_sbs_minus_1[0..V4L2_AV1_MAX_TILE_COLS as usize]);
+        self.handle
+            .tile_info
+            .height_in_sbs_minus_1
+            .copy_from_slice(&tile_info.height_in_sbs_minus_1[0..V4L2_AV1_MAX_TILE_ROWS as usize]);
+        self.handle.tile_info.tile_size_bytes = tile_info.tile_size_bytes as u8;
+        self
     }
 
     pub fn set_quantization_params(&mut self, quant: &QuantizationParams) -> &mut Self {
