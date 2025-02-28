@@ -26,6 +26,7 @@ use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
 use crate::device::v4l2::stateless::controls::av1::Av1V4l2FilmGrainCtrl;
+use crate::device::v4l2::stateless::controls::av1::Av1V4l2FrameCtrl;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1FilmGrainParams;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1FrameParams;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1SequenceParams;
@@ -104,7 +105,14 @@ impl<V: VideoFrame> StatelessAV1DecoderBackend for V4l2StatelessDecoderBackend<V
                 .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
         }
 
-        let _frame_params = V4l2CtrlAv1FrameParams::new();
+        let mut frame_params = V4l2CtrlAv1FrameParams::new();
+        frame_params.set_frame_params(&hdr);
+
+        let mut frame_params_ctrl = Av1V4l2FrameCtrl::from(&frame_params);
+        let which = request.which();
+        ioctl::s_ext_ctrls(&self.device, which, &mut frame_params_ctrl)
+            .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
+
         let _sequence_params = V4l2CtrlAv1SequenceParams::new();
 
         todo!()
