@@ -22,6 +22,10 @@ use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1FilmGrainParams;
+use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1FrameParams;
+use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1SequenceParams;
+use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1TileGroupEntryParams;
 use crate::video_frame::VideoFrame;
 use crate::Fourcc;
 use crate::Rect;
@@ -82,6 +86,10 @@ impl<V: VideoFrame> StatelessAV1DecoderBackend for V4l2StatelessDecoderBackend<V
         _hdr: &FrameHeaderObu,
         _reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
     ) -> StatelessBackendResult<()> {
+        let _film_grain_params = V4l2CtrlAv1FilmGrainParams::new();
+        let _frame_params = V4l2CtrlAv1FrameParams::new();
+        let _sequence_params = V4l2CtrlAv1SequenceParams::new();
+
         todo!()
     }
 
@@ -90,6 +98,8 @@ impl<V: VideoFrame> StatelessAV1DecoderBackend for V4l2StatelessDecoderBackend<V
         _picture: &mut Self::Picture,
         _tile_group: TileGroupObu,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
+        let _tile_group_params = V4l2CtrlAv1TileGroupEntryParams::new();
+
         todo!()
     }
 
