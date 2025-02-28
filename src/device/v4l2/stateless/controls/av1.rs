@@ -62,10 +62,31 @@ use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_SEG_ID_PRE_SKIP;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_TEMPORAL_UPDATE;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_UPDATE_DATA;
 use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_UPDATE_MAP;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_COLOR_RANGE;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_CDEF;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_DUAL_FILTER;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_FILTER_INTRA;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_INTERINTRA_COMPOUND;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_INTRA_EDGE_FILTER;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_JNT_COMP;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_MASKED_COMPOUND;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_ORDER_HINT;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_REF_FRAME_MVS;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_RESTORATION;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_SUPERRES;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_ENABLE_WARPED_MOTION;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_FILM_GRAIN_PARAMS_PRESENT;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_MONO_CHROME;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_SEPARATE_UV_DELTA_Q;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_STILL_PICTURE;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_SUBSAMPLING_X;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_SUBSAMPLING_Y;
+use v4l2r::bindings::V4L2_AV1_SEQUENCE_FLAG_USE_128X128_SUPERBLOCK;
 use v4l2r::bindings::V4L2_AV1_TILE_INFO_FLAG_UNIFORM_TILE_SPACING;
 use v4l2r::bindings::V4L2_AV1_TOTAL_REFS_PER_FRAME;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FILM_GRAIN;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FRAME;
+use v4l2r::bindings::V4L2_CID_STATELESS_AV1_SEQUENCE;
 use v4l2r::controls::AsV4l2ControlSlice;
 
 use crate::codec::av1::parser::CdefParams;
@@ -75,6 +96,7 @@ use crate::codec::av1::parser::LoopFilterParams;
 use crate::codec::av1::parser::LoopRestorationParams;
 use crate::codec::av1::parser::QuantizationParams;
 use crate::codec::av1::parser::SegmentationParams;
+use crate::codec::av1::parser::SequenceHeaderObu;
 
 // v4l2r does not have V4L2_AV1_SEG_LVL_MAX
 //use v4l2r::bindings::V4L2_AV1_SEG_LVL_MAX;
@@ -277,7 +299,7 @@ impl V4l2CtrlAv1FrameParams {
         self.handle
             .loop_filter
             .mode_deltas
-            .copy_from_slice(&loop_filter.loop_filter_mode_deltas[0..4]);
+            .copy_from_slice(&loop_filter.loop_filter_mode_deltas[0..2]);
         self.handle.loop_filter.delta_lf_res = loop_filter.delta_lf_res;
         self
     }
@@ -429,6 +451,74 @@ impl V4l2CtrlAv1SequenceParams {
     pub fn new() -> Self {
         Default::default()
     }
+    pub fn set_ctrl_sequence(&mut self, hdr: &SequenceHeaderObu) -> &mut Self {
+        if hdr.still_picture {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_STILL_PICTURE;
+        }
+        if hdr.use_128x128_superblock {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_USE_128X128_SUPERBLOCK;
+        }
+        if hdr.enable_filter_intra {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_FILTER_INTRA;
+        }
+        if hdr.enable_intra_edge_filter {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_INTRA_EDGE_FILTER;
+        }
+        if hdr.enable_interintra_compound {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_INTERINTRA_COMPOUND;
+        }
+        if hdr.enable_masked_compound {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_MASKED_COMPOUND;
+        }
+        if hdr.enable_warped_motion {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_WARPED_MOTION;
+        }
+        if hdr.enable_dual_filter {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_DUAL_FILTER;
+        }
+        if hdr.enable_order_hint {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_ORDER_HINT;
+        }
+        if hdr.enable_jnt_comp {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_JNT_COMP;
+        }
+        if hdr.enable_ref_frame_mvs {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_REF_FRAME_MVS;
+        }
+        if hdr.enable_superres {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_SUPERRES;
+        }
+        if hdr.enable_cdef {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_CDEF;
+        }
+        if hdr.enable_restoration {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_ENABLE_RESTORATION;
+        }
+        if hdr.color_config.mono_chrome {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_MONO_CHROME;
+        }
+        if hdr.color_config.color_range {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_COLOR_RANGE;
+        }
+        if hdr.color_config.subsampling_x {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_SUBSAMPLING_X;
+        }
+        if hdr.color_config.subsampling_y {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_SUBSAMPLING_Y;
+        }
+        if hdr.film_grain_params_present {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_FILM_GRAIN_PARAMS_PRESENT;
+        }
+        if hdr.color_config.separate_uv_delta_q {
+            self.handle.flags |= V4L2_AV1_SEQUENCE_FLAG_SEPARATE_UV_DELTA_Q;
+        }
+        self.handle.seq_profile = hdr.seq_profile as u8;
+        self.handle.order_hint_bits = hdr.order_hint_bits as u8;
+        self.handle.bit_depth = hdr.bit_depth as u8;
+        self.handle.max_frame_width_minus_1 = hdr.max_frame_width_minus_1;
+        self.handle.max_frame_height_minus_1 = hdr.max_frame_height_minus_1;
+        self
+    }
 }
 
 #[derive(Default)]
@@ -514,6 +604,41 @@ impl Drop for Av1V4l2FrameCtrl {
         // Invariant: p_av1_frame contains a pointer to a non-NULL v4l2_ctrl_av1_frame object.
         unsafe {
             let _ = Box::from_raw(self.0.__bindgen_anon_1.p_av1_frame);
+        }
+    }
+}
+
+pub struct Av1V4l2SequenceCtrl(v4l2_ext_control, PhantomData<v4l2_ctrl_av1_sequence>);
+
+impl From<&V4l2CtrlAv1SequenceParams> for Av1V4l2SequenceCtrl {
+    fn from(decode_params: &V4l2CtrlAv1SequenceParams) -> Self {
+        let payload = Box::new(decode_params.handle);
+
+        Self(
+            v4l2_ext_control {
+                id: V4L2_CID_STATELESS_AV1_SEQUENCE,
+                size: std::mem::size_of::<v4l2_ctrl_av1_sequence>() as u32,
+                __bindgen_anon_1: v4l2_ext_control__bindgen_ty_1 {
+                    p_av1_sequence: Box::into_raw(payload),
+                },
+                ..Default::default()
+            },
+            PhantomData,
+        )
+    }
+}
+
+impl AsV4l2ControlSlice for &mut Av1V4l2SequenceCtrl {
+    fn as_v4l2_control_slice(&mut self) -> &mut [v4l2_ext_control] {
+        std::slice::from_mut(&mut self.0)
+    }
+}
+
+impl Drop for Av1V4l2SequenceCtrl {
+    fn drop(&mut self) {
+        // Invariant: p_av1_sequence contains a pointer to a non-NULL v4l2_ctrl_av1_sequence object.
+        unsafe {
+            let _ = Box::from_raw(self.0.__bindgen_anon_1.p_av1_sequence);
         }
     }
 }
