@@ -6,7 +6,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::backend::v4l2::decoder::V4l2StreamInfo;
 use crate::decoder::stateless::NewStatelessDecoderError;
+use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoderBackend;
 use crate::decoder::DecodedHandle;
 use crate::decoder::StreamInfo;
@@ -14,6 +16,7 @@ use crate::device::v4l2::stateless::device::V4l2Device;
 use crate::device::v4l2::stateless::request::V4l2Request;
 use crate::video_frame::VideoFrame;
 use crate::DecodedFormat;
+use crate::Fourcc;
 use crate::Resolution;
 
 pub struct V4l2Picture<V: VideoFrame> {
@@ -114,6 +117,26 @@ impl<V: VideoFrame> V4l2StatelessDecoderBackend<V> {
             },
             frame_counter: 0,
         })
+    }
+
+    pub(crate) fn new_sequence<StreamData>(
+        &mut self,
+        stream_params: &StreamData,
+        fourcc: Fourcc,
+    ) -> StatelessBackendResult<()>
+    where
+        for<'a> &'a StreamData: V4l2StreamInfo,
+    {
+        let coded_resolution = stream_params.coded_size().clone();
+        let min_num_frames = stream_params.min_num_frames();
+
+        // TODO: Query the driver for the format
+        self.stream_info.format = DecodedFormat::MM21;
+        self.stream_info.display_resolution = Resolution::from(stream_params.visible_rect());
+        self.stream_info.coded_resolution = coded_resolution;
+        self.stream_info.min_num_frames = min_num_frames;
+
+        Ok(self.device.initialize_queues(fourcc, coded_resolution, min_num_frames as u32)?)
     }
 }
 
