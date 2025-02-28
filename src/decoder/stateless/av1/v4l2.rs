@@ -5,6 +5,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use v4l2r::ioctl;
+
 use crate::backend::v4l2::decoder::stateless::V4l2Picture;
 use crate::backend::v4l2::decoder::stateless::V4l2StatelessDecoderBackend;
 use crate::backend::v4l2::decoder::V4l2StreamInfo;
@@ -18,10 +20,12 @@ use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
 use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
+use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackendPicture;
 use crate::decoder::BlockingMode;
+use crate::device::v4l2::stateless::controls::av1::Av1V4l2FilmGrainCtrl;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1FilmGrainParams;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1FrameParams;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1SequenceParams;
@@ -81,12 +85,25 @@ impl<V: VideoFrame> StatelessAV1DecoderBackend for V4l2StatelessDecoderBackend<V
 
     fn begin_picture(
         &mut self,
-        _picture: &mut Self::Picture,
+        picture: &mut Self::Picture,
         _stream_info: &StreamInfo,
-        _hdr: &FrameHeaderObu,
+        hdr: &FrameHeaderObu,
         _reference_frames: &[Option<Self::Handle>; NUM_REF_FRAMES],
     ) -> StatelessBackendResult<()> {
-        let _film_grain_params = V4l2CtrlAv1FilmGrainParams::new();
+        let mut picture = picture.borrow_mut();
+        let request = picture.request();
+        let request = request.as_ref().borrow_mut();
+
+        if hdr.film_grain_params.apply_grain {
+            let mut film_grain_params = V4l2CtrlAv1FilmGrainParams::new();
+            film_grain_params.set_film_grain_params(&hdr);
+
+            let mut film_grain_params_ctrl = Av1V4l2FilmGrainCtrl::from(&film_grain_params);
+            let which = request.which();
+            ioctl::s_ext_ctrls(&self.device, which, &mut film_grain_params_ctrl)
+                .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
+        }
+
         let _frame_params = V4l2CtrlAv1FrameParams::new();
         let _sequence_params = V4l2CtrlAv1SequenceParams::new();
 
