@@ -87,6 +87,7 @@ use v4l2r::bindings::V4L2_AV1_TOTAL_REFS_PER_FRAME;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FILM_GRAIN;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FRAME;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_SEQUENCE;
+use v4l2r::bindings::V4L2_CID_STATELESS_AV1_TILE_GROUP_ENTRY;
 use v4l2r::controls::AsV4l2ControlSlice;
 
 use crate::codec::av1::parser::CdefParams;
@@ -97,6 +98,7 @@ use crate::codec::av1::parser::LoopRestorationParams;
 use crate::codec::av1::parser::QuantizationParams;
 use crate::codec::av1::parser::SegmentationParams;
 use crate::codec::av1::parser::SequenceHeaderObu;
+use crate::codec::av1::parser::Tile;
 
 // v4l2r does not have V4L2_AV1_SEG_LVL_MAX
 //use v4l2r::bindings::V4L2_AV1_SEG_LVL_MAX;
@@ -531,6 +533,13 @@ impl V4l2CtrlAv1TileGroupEntryParams {
     pub fn new() -> Self {
         Default::default()
     }
+    pub fn set_tile_group_entry(&mut self, tg: &Tile) -> &mut Self {
+        self.handle.tile_offset = tg.tile_offset;
+        self.handle.tile_size = tg.tile_size;
+        self.handle.tile_row = tg.tile_row;
+        self.handle.tile_col = tg.tile_col;
+        self
+    }
 }
 
 // Cargo-culted from v4l2r's control.rs file. v4l2r does not currently support
@@ -639,6 +648,42 @@ impl Drop for Av1V4l2SequenceCtrl {
         // Invariant: p_av1_sequence contains a pointer to a non-NULL v4l2_ctrl_av1_sequence object.
         unsafe {
             let _ = Box::from_raw(self.0.__bindgen_anon_1.p_av1_sequence);
+        }
+    }
+}
+
+pub struct Av1V4l2TileGroupEntryCtrl(v4l2_ext_control, PhantomData<v4l2_ctrl_av1_tile_group_entry>);
+
+impl From<&V4l2CtrlAv1TileGroupEntryParams> for Av1V4l2TileGroupEntryCtrl {
+    fn from(decode_params: &V4l2CtrlAv1TileGroupEntryParams) -> Self {
+        let payload = Box::new(decode_params.handle);
+
+        Self(
+            v4l2_ext_control {
+                id: V4L2_CID_STATELESS_AV1_TILE_GROUP_ENTRY,
+                size: std::mem::size_of::<v4l2_ctrl_av1_tile_group_entry>() as u32,
+                __bindgen_anon_1: v4l2_ext_control__bindgen_ty_1 {
+                    p_av1_tile_group_entry: Box::into_raw(payload),
+                },
+                ..Default::default()
+            },
+            PhantomData,
+        )
+    }
+}
+
+impl AsV4l2ControlSlice for &mut Av1V4l2TileGroupEntryCtrl {
+    fn as_v4l2_control_slice(&mut self) -> &mut [v4l2_ext_control] {
+        std::slice::from_mut(&mut self.0)
+    }
+}
+
+impl Drop for Av1V4l2TileGroupEntryCtrl {
+    fn drop(&mut self) {
+        // Invariant: p_av1_tile_group_entry contains a pointer to a non-NULL
+        // v4l2_ctrl_tile_group_entry object.
+        unsafe {
+            let _ = Box::from_raw(self.0.__bindgen_anon_1.p_av1_tile_group_entry);
         }
     }
 }

@@ -28,6 +28,7 @@ use crate::decoder::BlockingMode;
 use crate::device::v4l2::stateless::controls::av1::Av1V4l2FilmGrainCtrl;
 use crate::device::v4l2::stateless::controls::av1::Av1V4l2FrameCtrl;
 use crate::device::v4l2::stateless::controls::av1::Av1V4l2SequenceCtrl;
+use crate::device::v4l2::stateless::controls::av1::Av1V4l2TileGroupEntryCtrl;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1FilmGrainParams;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1FrameParams;
 use crate::device::v4l2::stateless::controls::av1::V4l2CtrlAv1SequenceParams;
@@ -135,10 +136,23 @@ impl<V: VideoFrame> StatelessAV1DecoderBackend for V4l2StatelessDecoderBackend<V
 
     fn decode_tile_group(
         &mut self,
-        _picture: &mut Self::Picture,
-        _tile_group: TileGroupObu,
+        picture: &mut Self::Picture,
+        tile_group: TileGroupObu,
     ) -> crate::decoder::stateless::StatelessBackendResult<()> {
-        let _tile_group_params = V4l2CtrlAv1TileGroupEntryParams::new();
+        let mut tile_group_params = V4l2CtrlAv1TileGroupEntryParams::new();
+
+        for tile in &tile_group.tiles {
+            tile_group_params.set_tile_group_entry(&tile);
+        }
+
+        let mut picture = picture.borrow_mut();
+        let request = picture.request();
+        let request = request.as_ref().borrow_mut();
+
+        let mut tile_group_params_ctrl = Av1V4l2TileGroupEntryCtrl::from(&tile_group_params);
+        let which = request.which();
+        ioctl::s_ext_ctrls(&self.device, which, &mut tile_group_params_ctrl)
+            .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
 
         todo!()
     }
