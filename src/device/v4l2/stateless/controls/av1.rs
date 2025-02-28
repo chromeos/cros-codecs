@@ -36,6 +36,9 @@ use v4l2r::bindings::V4L2_AV1_FRAME_FLAG_SKIP_MODE_ALLOWED;
 use v4l2r::bindings::V4L2_AV1_FRAME_FLAG_SKIP_MODE_PRESENT;
 use v4l2r::bindings::V4L2_AV1_FRAME_FLAG_USE_REF_FRAME_MVS;
 use v4l2r::bindings::V4L2_AV1_FRAME_FLAG_USE_SUPERRES;
+use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_GLOBAL;
+use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_ROT_ZOOM;
+use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_TRANSLATION;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_CB_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_CR_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_Y_POINTS;
@@ -46,6 +49,7 @@ use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FRAME;
 use v4l2r::controls::AsV4l2ControlSlice;
 
 use crate::codec::av1::parser::FrameHeaderObu;
+use crate::codec::av1::parser::GlobalMotionParams;
 
 #[derive(Default)]
 pub struct V4l2CtrlAv1FilmGrainParams {
@@ -139,6 +143,25 @@ pub struct V4l2CtrlAv1FrameParams {
 impl V4l2CtrlAv1FrameParams {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn set_global_motion_params(&mut self, global_motion: &GlobalMotionParams) -> &mut Self {
+        for i in 0..V4L2_AV1_TOTAL_REFS_PER_FRAME as usize {
+            if global_motion.is_global[i] {
+                self.handle.global_motion.flags[i] |= V4L2_AV1_GLOBAL_MOTION_FLAG_IS_GLOBAL as u8;
+            }
+            if global_motion.is_rot_zoom[i] {
+                self.handle.global_motion.flags[i] |= V4L2_AV1_GLOBAL_MOTION_FLAG_IS_ROT_ZOOM as u8;
+            }
+            if global_motion.is_translation[i] {
+                self.handle.global_motion.flags[i] |=
+                    V4L2_AV1_GLOBAL_MOTION_FLAG_IS_TRANSLATION as u8;
+            }
+            self.handle.global_motion.type_[i] = global_motion.gm_type[i] as u32;
+            self.handle.global_motion.params[i].copy_from_slice(&global_motion.gm_params[i][0..6]);
+            self.handle.global_motion.invalid |= (global_motion.warp_valid[i] as u8) << i;
+        }
+        self
     }
 
     pub fn set_frame_params(&mut self, hdr: &FrameHeaderObu) -> &mut Self {
