@@ -50,7 +50,13 @@ use v4l2r::bindings::V4L2_AV1_MAX_NUM_CB_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_CR_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_Y_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_OPERATING_POINTS;
+use v4l2r::bindings::V4L2_AV1_MAX_SEGMENTS;
 use v4l2r::bindings::V4L2_AV1_NUM_PLANES_MAX;
+use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_ENABLED;
+use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_SEG_ID_PRE_SKIP;
+use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_TEMPORAL_UPDATE;
+use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_UPDATE_DATA;
+use v4l2r::bindings::V4L2_AV1_SEGMENTATION_FLAG_UPDATE_MAP;
 use v4l2r::bindings::V4L2_AV1_TOTAL_REFS_PER_FRAME;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FILM_GRAIN;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FRAME;
@@ -61,6 +67,11 @@ use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::GlobalMotionParams;
 use crate::codec::av1::parser::LoopFilterParams;
 use crate::codec::av1::parser::LoopRestorationParams;
+use crate::codec::av1::parser::SegmentationParams;
+
+// v4l2r does not have V4L2_AV1_SEG_LVL_MAX
+//use v4l2r::bindings::V4L2_AV1_SEG_LVL_MAX;
+const V4L2_AV1_SEG_LVL_MAX: u32 = 8;
 
 #[derive(Default)]
 pub struct V4l2CtrlAv1FilmGrainParams {
@@ -154,6 +165,33 @@ pub struct V4l2CtrlAv1FrameParams {
 impl V4l2CtrlAv1FrameParams {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn set_segmentation_params(&mut self, seg: &SegmentationParams) -> &mut Self {
+        self.handle.segmentation.last_active_seg_id = seg.last_active_seg_id;
+        for i in 0..V4L2_AV1_MAX_SEGMENTS as usize {
+            for j in 0..V4L2_AV1_SEG_LVL_MAX as usize {
+                self.handle.segmentation.feature_enabled[i] |=
+                    (seg.feature_enabled[i][j] as u8) << j;
+                self.handle.segmentation.feature_data[i][j] |= seg.feature_data[i][j];
+            }
+        }
+        if seg.segmentation_enabled {
+            self.handle.segmentation.flags |= V4L2_AV1_SEGMENTATION_FLAG_ENABLED as u8;
+        }
+        if seg.segmentation_update_map {
+            self.handle.segmentation.flags |= V4L2_AV1_SEGMENTATION_FLAG_UPDATE_MAP as u8;
+        }
+        if seg.segmentation_temporal_update {
+            self.handle.segmentation.flags |= V4L2_AV1_SEGMENTATION_FLAG_TEMPORAL_UPDATE as u8;
+        }
+        if seg.segmentation_update_data {
+            self.handle.segmentation.flags |= V4L2_AV1_SEGMENTATION_FLAG_UPDATE_DATA as u8;
+        }
+        if seg.seg_id_pre_skip {
+            self.handle.segmentation.flags |= V4L2_AV1_SEGMENTATION_FLAG_SEG_ID_PRE_SKIP as u8;
+        }
+        self
     }
 
     pub fn set_loop_filter_params(&mut self, loop_filter: &LoopFilterParams) -> &mut Self {
