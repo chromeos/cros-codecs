@@ -40,6 +40,10 @@ use v4l2r::bindings::V4L2_AV1_FRAME_FLAG_USE_SUPERRES;
 use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_GLOBAL;
 use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_ROT_ZOOM;
 use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_TRANSLATION;
+use v4l2r::bindings::V4L2_AV1_LOOP_FILTER_FLAG_DELTA_ENABLED;
+use v4l2r::bindings::V4L2_AV1_LOOP_FILTER_FLAG_DELTA_LF_MULTI;
+use v4l2r::bindings::V4L2_AV1_LOOP_FILTER_FLAG_DELTA_LF_PRESENT;
+use v4l2r::bindings::V4L2_AV1_LOOP_FILTER_FLAG_DELTA_UPDATE;
 use v4l2r::bindings::V4L2_AV1_LOOP_RESTORATION_FLAG_USES_CHROMA_LR;
 use v4l2r::bindings::V4L2_AV1_LOOP_RESTORATION_FLAG_USES_LR;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_CB_POINTS;
@@ -55,6 +59,7 @@ use v4l2r::controls::AsV4l2ControlSlice;
 use crate::codec::av1::parser::CdefParams;
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::GlobalMotionParams;
+use crate::codec::av1::parser::LoopFilterParams;
 use crate::codec::av1::parser::LoopRestorationParams;
 
 #[derive(Default)]
@@ -149,6 +154,32 @@ pub struct V4l2CtrlAv1FrameParams {
 impl V4l2CtrlAv1FrameParams {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn set_loop_filter_params(&mut self, loop_filter: &LoopFilterParams) -> &mut Self {
+        if loop_filter.loop_filter_delta_enabled {
+            self.handle.loop_filter.flags |= V4L2_AV1_LOOP_FILTER_FLAG_DELTA_ENABLED as u8;
+        }
+        if loop_filter.loop_filter_delta_update {
+            self.handle.loop_filter.flags |= V4L2_AV1_LOOP_FILTER_FLAG_DELTA_UPDATE as u8;
+        }
+        if loop_filter.delta_lf_present {
+            self.handle.loop_filter.flags |= V4L2_AV1_LOOP_FILTER_FLAG_DELTA_LF_PRESENT as u8;
+        }
+        if loop_filter.delta_lf_multi {
+            self.handle.loop_filter.flags |= V4L2_AV1_LOOP_FILTER_FLAG_DELTA_LF_MULTI as u8;
+        }
+        self.handle.loop_filter.level.copy_from_slice(&loop_filter.loop_filter_level[0..4]);
+        self.handle.loop_filter.sharpness = loop_filter.loop_filter_sharpness;
+        self.handle.loop_filter.ref_deltas.copy_from_slice(
+            &loop_filter.loop_filter_ref_deltas[0..V4L2_AV1_TOTAL_REFS_PER_FRAME as usize],
+        );
+        self.handle
+            .loop_filter
+            .mode_deltas
+            .copy_from_slice(&loop_filter.loop_filter_mode_deltas[0..4]);
+        self.handle.loop_filter.delta_lf_res = loop_filter.delta_lf_res;
+        self
     }
 
     pub fn set_cdef_params(&mut self, cdef: &CdefParams) -> &mut Self {
