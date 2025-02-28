@@ -39,10 +39,13 @@ use v4l2r::bindings::V4L2_AV1_FRAME_FLAG_USE_SUPERRES;
 use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_GLOBAL;
 use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_ROT_ZOOM;
 use v4l2r::bindings::V4L2_AV1_GLOBAL_MOTION_FLAG_IS_TRANSLATION;
+use v4l2r::bindings::V4L2_AV1_LOOP_RESTORATION_FLAG_USES_CHROMA_LR;
+use v4l2r::bindings::V4L2_AV1_LOOP_RESTORATION_FLAG_USES_LR;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_CB_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_CR_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_NUM_Y_POINTS;
 use v4l2r::bindings::V4L2_AV1_MAX_OPERATING_POINTS;
+use v4l2r::bindings::V4L2_AV1_NUM_PLANES_MAX;
 use v4l2r::bindings::V4L2_AV1_TOTAL_REFS_PER_FRAME;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FILM_GRAIN;
 use v4l2r::bindings::V4L2_CID_STATELESS_AV1_FRAME;
@@ -50,6 +53,7 @@ use v4l2r::controls::AsV4l2ControlSlice;
 
 use crate::codec::av1::parser::FrameHeaderObu;
 use crate::codec::av1::parser::GlobalMotionParams;
+use crate::codec::av1::parser::LoopRestorationParams;
 
 #[derive(Default)]
 pub struct V4l2CtrlAv1FilmGrainParams {
@@ -143,6 +147,26 @@ pub struct V4l2CtrlAv1FrameParams {
 impl V4l2CtrlAv1FrameParams {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn set_loop_restoration_params(
+        &mut self,
+        loop_restoration: &LoopRestorationParams,
+    ) -> &mut Self {
+        if loop_restoration.uses_lr {
+            self.handle.loop_restoration.flags |= V4L2_AV1_LOOP_RESTORATION_FLAG_USES_LR as u8;
+        }
+        if loop_restoration.uses_chroma_lr {
+            self.handle.loop_restoration.flags |=
+                V4L2_AV1_LOOP_RESTORATION_FLAG_USES_CHROMA_LR as u8;
+        }
+        self.handle.loop_restoration.lr_unit_shift = loop_restoration.lr_unit_shift;
+        self.handle.loop_restoration.lr_uv_shift = loop_restoration.lr_uv_shift;
+        for i in 0..V4L2_AV1_NUM_PLANES_MAX as usize {
+            self.handle.loop_restoration.frame_restoration_type[i] = 1;
+            self.handle.loop_restoration.loop_restoration_size[i] = 1;
+        }
+        self
     }
 
     pub fn set_global_motion_params(&mut self, global_motion: &GlobalMotionParams) -> &mut Self {
