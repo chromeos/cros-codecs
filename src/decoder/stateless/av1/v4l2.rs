@@ -15,6 +15,7 @@ use crate::codec::av1::parser::TileGroupObu;
 use crate::codec::av1::parser::NUM_REF_FRAMES;
 use crate::decoder::stateless::av1::Av1;
 use crate::decoder::stateless::av1::StatelessAV1DecoderBackend;
+use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
@@ -56,9 +57,22 @@ impl<V: VideoFrame> StatelessAV1DecoderBackend for V4l2StatelessDecoderBackend<V
         &mut self,
         _hdr: &FrameHeaderObu,
         _timestamp: u64,
-        _alloc_cb: &mut dyn FnMut() -> Option<V>,
+        alloc_cb: &mut dyn FnMut() -> Option<V>,
     ) -> NewPictureResult<Self::Picture> {
-        todo!()
+        let timestamp = self.frame_counter;
+        let frame = alloc_cb().ok_or(NewPictureError::OutOfOutputBuffers)?;
+        let request_buffer = match self.device.alloc_request(timestamp, frame) {
+            Ok(buffer) => buffer,
+            _ => return Err(NewPictureError::OutOfOutputBuffers),
+        };
+        let picture = Rc::new(RefCell::new(V4l2Picture::new(request_buffer.clone())));
+        request_buffer
+            .as_ref()
+            .borrow_mut()
+            .set_picture_ref(Rc::<RefCell<V4l2Picture<V>>>::downgrade(&picture));
+
+        self.frame_counter = self.frame_counter + 1;
+        Ok(picture)
     }
 
     fn begin_picture(
