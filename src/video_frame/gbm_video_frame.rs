@@ -77,9 +77,9 @@ fn map_bo(
     };
     let mut stride: u32 = 0;
     let mut map_data: *mut libc::c_void = ptr::null_mut();
+    // SAFETY: This should be safe because we validate that bo is non-null on creation and we tie
+    // the lifetimes of the VideoFrames to the underlying GBM device.
     unsafe {
-        // This should be safe because we validate that bo is non-null on creation and we tie the
-        // lifetimes of the VideoFrames to the GBM device.
         let map_result = gbm_bo_map(
             bo,
             0,
@@ -118,6 +118,8 @@ fn import_bo_from_dmabuf_fd(
         stride: stride,
         format: format,
     };
+    // SAFETY: This assumes that gbm_device is valid and that the FD given points to a DRM Prime FD
+    // with the layout dictated by the other parameters to this function.
     unsafe {
         gbm_bo_import(
             device,
@@ -138,6 +140,8 @@ pub struct GbmMapping<'a> {
 
 impl<'a> ReadMapping<'a> for GbmMapping<'a> {
     fn get(&self) -> Vec<&[u8]> {
+        // SAFETY: This should be safe because we validate that gbm_bo_map returns a non-null
+        // pointer before instantiating a GbmMapping object.
         unsafe {
             zip(self.raw_mems.iter(), self.lens.iter())
                 .map(|x| slice::from_raw_parts(*x.0 as *const u8, *x.1))
@@ -152,8 +156,9 @@ impl<'a> WriteMapping<'a> for GbmMapping<'a> {
             panic!("Attempted to get writable slice to read only mapping!");
         }
 
-        // The above check prevents us from undefined behavior in the event that the user attempts
-        // to coerce a ReadMapping into a WriteMapping.
+        // SAFETY: This should be safe because we validate that gbm_bo_map returns a non-null
+        // pointer before instantiating a GbmMapping object. The above check prevents us from
+        // attempting to get a writable slice to a read-only mapping.
         unsafe {
             zip(self.raw_mems.iter(), self.lens.iter())
                 .map(|x| RefCell::new(slice::from_raw_parts_mut(*x.0 as *mut u8, *x.1)))
@@ -168,6 +173,8 @@ impl<'a> Drop for GbmMapping<'a> {
             let bo =
                 if self.frame.bo.len() == 1 { self.frame.bo[0] } else { self.frame.bo[plane_idx] };
             let map_data = self.map_datas[plane_idx];
+            // SAFETY: This should be safe because we validate that gbm_bo_map returns a non-null
+            // pointer before instantiating a GbmMapping object.
             unsafe { gbm_bo_unmap(bo, map_data) };
         }
     }
@@ -192,6 +199,7 @@ impl GbmVideoFrame {
     fn get_plane_offset(&self) -> Vec<usize> {
         let mut ret: Vec<usize> = vec![];
         for plane_idx in 0..self.num_planes() {
+            // SAFETY: This assumes self.bo contains valid GBM buffer objects.
             if self.bo.len() > 1 {
                 ret.push(unsafe { gbm_bo_get_offset(self.bo[plane_idx], 0) as usize });
             } else {
@@ -205,6 +213,7 @@ impl GbmVideoFrame {
 
     #[allow(dead_code)]
     fn get_modifier(&self) -> u64 {
+        // SAFETY: This assumes self.bo[0] contains a valid GBM buffer object.
         unsafe { gbm_bo_get_modifier(self.bo[0]) }
     }
 
@@ -221,6 +230,7 @@ impl GbmVideoFrame {
             let bo = if self.bo.len() == 1 { self.bo[0] } else { self.bo[plane_idx] };
             let (raw_mem, map_data) = map_bo(bo, is_writable)?;
             ret.map_datas.push(map_data);
+            // SAFETY: This assumes that GBM gave us a valid offset.
             ret.raw_mems.push(unsafe { raw_mem.offset(offsets[plane_idx] as isize) });
         }
         Ok(ret)
@@ -231,6 +241,8 @@ impl GbmVideoFrame {
             .enumerate()
             .map(|x| PlaneLayout { buffer_index: x.0, offset: x.1 .0, stride: x.1 .1 })
             .collect();
+        // SAFETY: gbm_bo_get_fd returns a new, owned FD every time it is called, so this should be
+        // safe as long as self.bo contains valid buffer objects.
         let dma_handles: Vec<File> =
             self.bo.iter().map(|bo| unsafe { File::from_raw_fd(gbm_bo_get_fd(*bo)) }).collect();
         GenericDmaVideoFrame::new(
@@ -351,6 +363,7 @@ impl VideoFrame for GbmVideoFrame {
     fn get_plane_pitch(&self) -> Vec<usize> {
         let mut ret: Vec<usize> = vec![];
         for plane_idx in 0..self.num_planes() {
+            // SAFETY: This assumes self.bo contains valid GBM buffer objects.
             if self.bo.len() > 1 {
                 ret.push(unsafe { gbm_bo_get_stride_for_plane(self.bo[plane_idx], 0) as usize });
             } else {
@@ -372,6 +385,7 @@ impl VideoFrame for GbmVideoFrame {
 
     #[cfg(feature = "v4l2")]
     fn fill_v4l2_plane(&self, index: usize, plane: &mut v4l2_plane) {
+        // TODO: Support |data_offset| here.
         self.export_handles[index].fill_v4l2_plane(plane)
     }
 
@@ -403,7 +417,8 @@ impl VideoFrame for GbmVideoFrame {
             resolution: self.resolution(),
             pitches: self.get_plane_pitch(),
             offsets: self.get_plane_offset(),
-            // SAFETY: gbm_bo_get_fd() gives us a fresh, owned fd on every call.
+            // SAFETY: gbm_bo_get_fd returns a new, owned FD every time it is called, so this should
+            // be safe as long as self.bo contains valid buffer objects.
             export_file: unsafe { File::from_raw_fd(gbm_bo_get_fd(self.bo[0])) },
         }];
 
@@ -425,15 +440,23 @@ impl VideoFrame for GbmVideoFrame {
 impl Drop for GbmVideoFrame {
     fn drop(&mut self) {
         for bo in self.bo.iter() {
+            // SAFETY: This should be safe because we would not instantiate a GbmVideoFrame if the
+            // buffer object creation failed.
             unsafe { gbm_bo_destroy(*bo) };
         }
     }
 }
 
-// UNSAFE: We will only access the raw BOs from the worker thread, and there are no other copies of
+// SAFETY: We will only access the raw BOs from the worker thread, and there are no other copies of
 // these pointers.
 unsafe impl Send for GbmVideoFrame {}
 unsafe impl Sync for GbmVideoFrame {}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GbmUsage {
+    Decode,
+    Encode,
+}
 
 #[derive(Debug)]
 pub struct GbmDevice {
@@ -449,6 +472,8 @@ impl GbmDevice {
             .write(true)
             .open(path)
             .map_err(|_| "Error opening GBM device!".to_string())?;
+        // SAFETY: We keep the GBM device File inside GbmDevice specifically for the purpose of
+        // making sure this FD is valid for the lifetime of the GbmDevice.
         let device = unsafe { gbm_create_device(device_file.as_raw_fd()) };
         if device.is_null() {
             Err("Could not create GBM device from file!".to_string())
@@ -462,6 +487,7 @@ impl GbmDevice {
         fourcc: Fourcc,
         visible_resolution: Resolution,
         coded_resolution: Resolution,
+        usage: GbmUsage,
     ) -> Result<GbmVideoFrame, String> {
         let mut ret = GbmVideoFrame {
             fourcc: fourcc,
@@ -479,6 +505,8 @@ impl GbmDevice {
             // 32 pixels is a common enough alignment that this provides us with a decent guess.
             let fake_width = align_up((buffer_size as f64).sqrt() as u32, 32);
             let fake_height = align_up(buffer_size as u32, fake_width) / fake_width;
+            // SAFETY: This should be safe because we would not instantiate a GbmDevice unless the
+            // call to gbm_create_device was successful.
             let bo = unsafe {
                 gbm_bo_create(
                     self.device,
@@ -494,20 +522,27 @@ impl GbmDevice {
 
             ret.bo.push(bo);
         } else if ret.is_contiguous() {
-            // gbm_sys is missing this use flag for some reason.
+            // These flags are not present in every system's GBM headers.
             const GBM_BO_USE_HW_VIDEO_DECODER: u32 = 1 << 13;
+            const GBM_BO_USE_HW_VIDEO_ENCODER: u32 = 1 << 14;
             // It's important that we use the correct use flag for platforms that support directly
             // importing GBM allocated frame buffers to the video decoding hardware because the
             // video decoding hardware sometimes makes assumptions about the modifier flags. If we
             // try to force everything to be linear, we can end up getting a tiled frame when we
             // try to map it.
+            // SAFETY: This should be safe because we would not instantiate a GbmDevice unless the
+            // call to gbm_create_device was successful.
             let bo = unsafe {
                 gbm_bo_create(
                     self.device,
                     coded_resolution.width,
                     coded_resolution.height,
                     u32::from(fourcc),
-                    GBM_BO_USE_HW_VIDEO_DECODER,
+                    if usage == GbmUsage::Decode {
+                        GBM_BO_USE_HW_VIDEO_DECODER
+                    } else {
+                        GBM_BO_USE_HW_VIDEO_ENCODER
+                    },
                 )
             };
             if bo.is_null() {
@@ -521,13 +556,16 @@ impl GbmDevice {
 
             ret.bo.push(bo);
         } else {
-            // We hack multiplanar formats into GBM by making a bunch of separate BO's. We use
-            // either R8 or RG88 depending on the bytes per element. So NM12 for example would be
-            // an R8 BO and then an RG88 BO of 1/4th the size.
+            // We hack multiplanar formats into GBM by making a bunch of separate BO's.
+            // The usage flag is ignored here because R8 are generally not supported
+            // decoder and encoder formats, so we just have to accept we're on our own for figuring
+            // out alignment, modifier, fourcc, etc.
             let horizontal_subsampling = ret.get_horizontal_subsampling();
             let vertical_subsampling = ret.get_vertical_subsampling();
             let bytes_per_element = ret.get_bytes_per_element();
             for plane_idx in 0..ret.num_planes() {
+                // SAFETY: This should be safe because we would not instantiate a GbmDevice unless
+                // the call to gbm_create_device was successful.
                 let bo = unsafe {
                     gbm_bo_create(
                         self.device,
@@ -558,6 +596,8 @@ impl GbmDevice {
 
         #[cfg(feature = "v4l2")]
         {
+            // SAFETY: gbm_bo_get_fd returns a new, owned FD every time it is called, so this
+            // should be safe as long as ret.bo contains valid buffer objects.
             ret.export_handles = ret
                 .bo
                 .iter()
@@ -637,6 +677,8 @@ impl GbmDevice {
             }
         }
 
+        // SAFETY: gbm_bo_get_fd returns a new, owned FD every time it is called, so this should be
+        // safe as long as self.bo contains valid buffer objects.
         ret.export_handles = ret
             .bo
             .iter()
@@ -705,6 +747,9 @@ impl GbmDevice {
 
         // The constant in gbm_sys is wrong for some reason
         const GBM_BO_IMPORT_FD_MODIFIER: u32 = 0x5505;
+        // SAFETY: This should be safe as long as VA-API correctly exports the DRM Prime FD. The
+        // GBM device is guaranteed to be valid or we wouldn't have instantiated the GbmDevice in
+        // the first place.
         let bo = unsafe {
             gbm_bo_import(
                 self.device,
@@ -725,6 +770,8 @@ impl GbmDevice {
 
 impl Drop for GbmDevice {
     fn drop(&mut self) {
+        // SAFETY: device should be valid because we wouldn't instantiate a GbmDevice if
+        // gbm_create_device failed.
         unsafe { gbm_device_destroy(self.device) }
     }
 }

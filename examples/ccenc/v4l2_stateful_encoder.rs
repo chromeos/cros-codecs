@@ -3,16 +3,14 @@
 // found in the LICENSE file.
 
 use std::fs::File;
+use std::io::Read;
 use std::io::Write;
-use std::os::unix::prelude::FileExt;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use cros_codecs::backend::v4l2::encoder::find_device_with_capture;
-use cros_codecs::backend::v4l2::encoder::v4l2_format_to_frame_layout;
 use cros_codecs::backend::v4l2::encoder::EncoderCodec;
 use cros_codecs::backend::v4l2::encoder::MmapingCapture;
-use cros_codecs::backend::v4l2::encoder::OutputBuffer;
-use cros_codecs::backend::v4l2::encoder::OutputBufferHandle;
 use cros_codecs::backend::v4l2::encoder::V4L2Backend;
 use cros_codecs::bitstream_utils::IvfFileHeader;
 use cros_codecs::bitstream_utils::IvfFrameHeader;
@@ -26,163 +24,70 @@ use cros_codecs::encoder::CodedBitstreamBuffer;
 use cros_codecs::encoder::FrameMetadata;
 use cros_codecs::encoder::RateControl;
 use cros_codecs::encoder::Tunings;
-use cros_codecs::image_processing::extend_border_nv12;
-use cros_codecs::image_processing::i420_to_nv12_chroma;
-use cros_codecs::image_processing::nv12_copy;
+use cros_codecs::video_frame::gbm_video_frame::GbmDevice;
+use cros_codecs::video_frame::generic_dma_video_frame::GenericDmaVideoFrame;
+use cros_codecs::video_frame::V4l2VideoFrame;
 use cros_codecs::DecodedFormat;
 use cros_codecs::Fourcc;
-use cros_codecs::FrameLayout;
 use cros_codecs::Resolution;
 
 use v4l2r::device::Device;
 use v4l2r::device::DeviceConfig;
-use v4l2r::memory::MmapHandle;
 
+use crate::util::upload_img;
 use crate::util::Args;
 use crate::util::Codec;
 
-// "Handle" abstraction for this particular use case. All Encoders take a "Handle" generic type
-// that implements the OutputBufferHandle trait, which basically just tells the Encoder how the
-// frame data is going to be loaded into the V4L2 output buffers. This is where we add the code to
-// load the frames from the disk. Technically we could do the disk load in DiskFrameReader and
-// then pass regular u8 buffers to |queue()|, but this way avoids a copy.
-struct MmapNM12Frame<'a> {
-    resolution: Resolution,
-    file: &'a File,
-    input_fourcc: DecodedFormat,
-    pos: u64,
-    input_coded_resolution: Resolution,
-    queue_layout: FrameLayout,
-}
-
-impl OutputBufferHandle for MmapNM12Frame<'_> {
-    type PrimitiveBufferHandles = Vec<MmapHandle>;
-
-    fn queue(self, buffer: OutputBuffer<'_, Self::PrimitiveBufferHandles>) -> anyhow::Result<()> {
-        let mut input_y = vec![0u8; self.input_coded_resolution.get_area()];
-        let mut input_uv = vec![0u8; self.input_coded_resolution.get_area() / 2];
-
-        // Use |read_at()| instead of |read()| so we don't need to take a mutable reference to the
-        // File. We don't know how many in flight OutputBufferHandles will be created in advance,
-        // and we can only mutably borrow once. We could get around this with an Rc RefCell or an
-        // Arc if we decide we need to use |read()| because we want to support non-POSIX platforms.
-        assert_eq!(
-            self.file.read_at(input_y.as_mut_slice(), self.pos).expect("Unexpected EOF!"),
-            self.input_coded_resolution.get_area()
-        );
-
-        match self.input_fourcc {
-            DecodedFormat::NV12 => {
-                assert_eq!(
-                    self.file
-                        .read_at(
-                            input_uv.as_mut_slice(),
-                            self.pos + self.input_coded_resolution.get_area() as u64
-                        )
-                        .expect("Unexpected EOF!"),
-                    self.input_coded_resolution.get_area() / 2
-                );
-            }
-            DecodedFormat::I420 => {
-                let mut input_u = vec![0u8; self.input_coded_resolution.get_area() / 4];
-                let mut input_v = vec![0u8; self.input_coded_resolution.get_area() / 4];
-                assert_eq!(
-                    self.file
-                        .read_at(
-                            input_u.as_mut_slice(),
-                            self.pos + self.input_coded_resolution.get_area() as u64
-                        )
-                        .expect("Unexpected EOF!"),
-                    self.input_coded_resolution.get_area() / 4
-                );
-                assert_eq!(
-                    self.file
-                        .read_at(
-                            input_v.as_mut_slice(),
-                            self.pos + self.input_coded_resolution.get_area() as u64 * 5 / 4
-                        )
-                        .expect("Unexpected EOF!"),
-                    self.input_coded_resolution.get_area() / 4
-                );
-                i420_to_nv12_chroma(
-                    input_u.as_slice(),
-                    input_v.as_slice(),
-                    input_uv.as_mut_slice(),
-                );
-            }
-            _ => panic!("Unsupported input format!"),
-        };
-
-        let mut y_plane = buffer.get_plane_mapping(0).unwrap();
-        let mut uv_plane = buffer.get_plane_mapping(1).unwrap();
-        nv12_copy(
-            input_y.as_slice(),
-            self.input_coded_resolution.width as usize,
-            y_plane.as_mut(),
-            self.queue_layout.planes[0].stride,
-            input_uv.as_slice(),
-            self.input_coded_resolution.width as usize,
-            uv_plane.as_mut(),
-            self.queue_layout.planes[1].stride,
-            self.resolution.width as usize,
-            self.resolution.height as usize,
-        );
-        extend_border_nv12(
-            y_plane.as_mut(),
-            uv_plane.as_mut(),
-            self.resolution.width as usize,
-            self.resolution.height as usize,
-            self.queue_layout.planes[0].stride as usize,
-            self.queue_layout.size.height as usize,
-        );
-
-        buffer.queue(&[y_plane.len(), uv_plane.len()])?;
-        Ok(())
-    }
-}
-
-// Generator for MmapNM12Frames. Note that we do the actual loading from disk in |queue()|, this
-// just basically just keeps track of offsets.
 struct DiskFrameReader<'a> {
     file: &'a File,
+    gbm_device: Arc<GbmDevice>,
     input_fourcc: DecodedFormat,
     visible_size: Resolution,
     input_coded_size: Resolution,
-    layout: FrameLayout,
-    pos: u64,
+    queue_format: v4l2r::Format,
     frame_num: usize,
     total_frames: usize,
 }
 
 impl<'a> Iterator for DiskFrameReader<'a> {
-    type Item = (FrameMetadata, MmapNM12Frame<'a>);
+    type Item = (FrameMetadata, V4l2VideoFrame<GenericDmaVideoFrame>);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.frame_num >= self.total_frames {
             return None;
         }
-
-        let meta = FrameMetadata {
-            timestamp: self.frame_num as u64,
-            layout: self.layout.clone(),
-            force_keyframe: false,
-        };
-
-        let handle = MmapNM12Frame {
-            resolution: self.visible_size,
-            file: &self.file,
-            input_fourcc: self.input_fourcc.clone(),
-            pos: self.pos,
-            input_coded_resolution: self.input_coded_size,
-            queue_layout: self.layout.clone(),
-        };
-
+        let timestamp = self.frame_num as u64;
         self.frame_num += 1;
-        // The 3/2 is an implicit assumption about 4:2:0 subsampling. We probably don't need to
-        // support other subsampling methods, but if we do, make sure to change this line!
-        self.pos += self.input_coded_size.get_area() as u64 * 3 / 2;
 
-        Some((meta, handle))
+        // TODO: Support formats that aren't 4:2:0
+        let mut buf = vec![0u8; self.input_coded_size.get_area() * 3 / 2];
+        self.file.read_exact(buf.as_mut_slice()).unwrap();
+
+        Some((
+            FrameMetadata {
+                timestamp: timestamp,
+                layout: Default::default(),
+                force_keyframe: false,
+            },
+            V4l2VideoFrame(upload_img(
+                &self.gbm_device,
+                self.visible_size.clone(),
+                self.input_coded_size.clone(),
+                // TODO: This isn't guaranteed to be right. Sometimes, especially when we don't use
+                // minigbm, we will frames that are improperly aligned for DMA import. So, we query
+                // the V4L2 queue directly to figure out what the alignment should be. This
+                // workaround assumes that all planes have similar alignment requirements, though.
+                Resolution {
+                    width: self.queue_format.plane_fmt[0].bytesperline as u32,
+                    height: (self.queue_format.plane_fmt[0].sizeimage
+                        / self.queue_format.plane_fmt[0].bytesperline)
+                        as u32,
+                },
+                buf.as_slice(),
+                self.input_fourcc.clone(),
+                Fourcc::from(b"NV12"),
+            )),
+        ))
     }
 }
 
@@ -192,28 +97,22 @@ impl<'a> DiskFrameReader<'_> {
         input_fourcc: DecodedFormat,
         visible_size: Resolution,
         input_coded_size: Resolution,
-        layout: FrameLayout,
+        queue_format: v4l2r::Format,
         total_frames: usize,
     ) -> DiskFrameReader<'a> {
         DiskFrameReader {
             file: file,
+            gbm_device: GbmDevice::open(PathBuf::from("/dev/dri/renderD128"))
+                .expect("Could not open GBM device!"),
             input_fourcc: input_fourcc,
             visible_size: visible_size,
             input_coded_size: input_coded_size,
-            layout: layout,
-            pos: 0,
+            queue_format: queue_format,
             frame_num: 0,
             total_frames: total_frames,
         }
     }
 }
-
-// V4L2 stateful decoders are all of the form "StatefulEncoder<Handle, V4L2Backend<Handle,
-// CaptureBufferz, Codec>>". Since we know that all the encoders in this file are going to be V4L2
-// stateful and we know the Handle type is going to be MmapNM12Frame, we can alias this type a
-// little bit to make the signature smaller.
-type MmapEncoder<'a, Codec> =
-    StatefulEncoder<MmapNM12Frame<'a>, V4L2Backend<MmapNM12Frame<'a>, MmapingCapture, Codec>>;
 
 fn codec_to_pixelformat(codec: Codec) -> v4l2r::PixelFormat {
     match codec {
@@ -235,22 +134,22 @@ fn codec_to_ivf_magic(codec: Codec) -> [u8; 4] {
 }
 
 fn do_encode_loop<'a, Codecz>(
-    mut encoder: MmapEncoder<'a, Codecz>,
+    mut encoder: StatefulEncoder<
+        V4l2VideoFrame<GenericDmaVideoFrame>,
+        V4L2Backend<V4l2VideoFrame<GenericDmaVideoFrame>, MmapingCapture, Codecz>,
+    >,
     input: &'a File,
     args: Args,
 ) -> ()
 where
-    V4L2Backend<MmapNM12Frame<'a>, MmapingCapture, Codecz>: EncoderCodec,
+    V4L2Backend<V4l2VideoFrame<GenericDmaVideoFrame>, MmapingCapture, Codecz>: EncoderCodec,
 {
-    // This is the part where we G_FMT to get the actual dimensions of the queue buffers.
-    let layout = v4l2_format_to_frame_layout(&encoder.backend().output_format().unwrap());
-
     let mut frame_reader = DiskFrameReader::new(
         &input,
         args.fourcc,
         (args.width, args.height).into(),
         (args.coded_width.unwrap_or(args.width), args.coded_height.unwrap_or(args.height)).into(),
-        layout,
+        encoder.backend().output_format().unwrap(),
         args.count,
     );
 
@@ -306,7 +205,7 @@ pub fn do_encode(input: File, args: Args) -> () {
     let device = Arc::new(device);
 
     let resolution = Resolution { width: args.width, height: args.height };
-    let queue_fourcc = Fourcc::from(b"NM12");
+    let queue_fourcc = Fourcc::from(b"NV12");
     let tunings: Tunings = Tunings {
         rate_control: RateControl::ConstantBitrate(args.bitrate),
         framerate: args.framerate,

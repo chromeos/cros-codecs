@@ -9,6 +9,7 @@ use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use nix::sys::stat::fstat;
 use thiserror::Error;
 use v4l2r::bindings::v4l2_streamparm;
@@ -71,6 +72,8 @@ use crate::encoder::RateControl;
 use crate::encoder::Tunings;
 use crate::utils::DmabufFrame;
 use crate::utils::UserPtrFrame;
+use crate::video_frame::V4l2VideoFrame;
+use crate::video_frame::VideoFrame;
 use crate::Fourcc;
 use crate::FrameLayout;
 use crate::Resolution;
@@ -227,6 +230,8 @@ pub trait AlwaysEntireBufferUsed {}
 impl AlwaysEntireBufferUsed for UserPtrFrame {}
 
 impl AlwaysEntireBufferUsed for DmabufFrame {}
+
+impl<V: VideoFrame> AlwaysEntireBufferUsed for V4l2VideoFrame<V> {}
 
 impl<T> OutputBufferHandle for T
 where

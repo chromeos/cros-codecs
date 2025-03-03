@@ -317,7 +317,7 @@ impl From<EncodedFormat> for Fourcc {
 }
 
 /// Describes the layout of a plane within a frame.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct PlaneLayout {
     /// Index of the memory buffer the plane belongs to.
     pub buffer_index: usize,
@@ -331,7 +331,7 @@ pub struct PlaneLayout {
 ///
 /// A frame can be made of one or several memory buffers, each containing one or several planes.
 /// For a given frame, this structure defines where each plane can be found.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct FrameLayout {
     /// `(Fourcc, modifier)` tuple describing the arrangement of the planes.
     ///

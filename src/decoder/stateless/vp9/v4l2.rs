@@ -23,6 +23,7 @@ use crate::decoder::stateless::vp9::StatelessVp9DecoderBackend;
 use crate::decoder::stateless::vp9::Vp9;
 use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
+use crate::decoder::stateless::NewStatelessDecoderError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -66,7 +67,6 @@ impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V
         self.device.initialize_queues(
             Fourcc::from(b"VP9F"),
             header.coded_size(),
-            header.visible_rect(),
             header.min_num_frames() as u32,
         )?;
         Ok(())
@@ -159,8 +159,7 @@ impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V
 }
 
 impl<V: VideoFrame> StatelessDecoder<Vp9, V4l2StatelessDecoderBackend<V>> {
-    pub fn new_v4l2(blocking_mode: BlockingMode) -> Self {
-        Self::new(V4l2StatelessDecoderBackend::new(), blocking_mode)
-            .expect("Failed to create v4l2 stateless decoder backend")
+    pub fn new_v4l2(blocking_mode: BlockingMode) -> Result<Self, NewStatelessDecoderError> {
+        Self::new(V4l2StatelessDecoderBackend::new()?, blocking_mode)
     }
 }
