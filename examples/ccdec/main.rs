@@ -15,6 +15,8 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use cros_codecs::bitstream_utils::IvfIterator;
 use cros_codecs::bitstream_utils::NalIterator;
 use cros_codecs::c2_wrapper::c2_decoder::C2DecoderWorker;
@@ -130,6 +132,9 @@ fn main() {
     };
     let alloc_cb = move || (*framepool.lock().unwrap()).alloc();
 
+    let frames_needed = Arc::new(AtomicU64::new((*golden_iter.lock().unwrap()).len() as u64));
+
+    let _frames_needed = frames_needed.clone();
     let on_new_frame = move |job: C2DecodeJob<PooledVideoFrame<GenericDmaVideoFrame>>| {
         if args.output.is_none() && args.compute_md5.is_none() && args.golden.is_none() {
             return;
@@ -186,6 +191,7 @@ fn main() {
 
         if args.golden.is_some() {
             assert_eq!(frame_md5, (*golden_iter.lock().unwrap()).next().unwrap());
+            (*_frames_needed).fetch_sub(1, Ordering::SeqCst);
         }
     };
 
@@ -229,6 +235,8 @@ fn main() {
         thread::sleep(Duration::from_millis(10));
     }
     decoder.stop();
+
+    assert!((*frames_needed).load(Ordering::SeqCst) == 0, "Not all frames were output.");
 
     if stream_mode {
         println!("{}", (*_md5_context.lock().unwrap()).flush());
