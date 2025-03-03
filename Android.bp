@@ -78,9 +78,10 @@ rust_test {
     test_suites: ["general-tests"],
     test_config: "test/AndroidTest.xml",
     rustlibs: [
-        "libenv_logger",
-        "libcros_codecs",
         "libargh",
+        "libcros_codecs",
+        "libenv_logger",
+        "liblog_rust",
         "libserde_json",
     ],
     data: [
