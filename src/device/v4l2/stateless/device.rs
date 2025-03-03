@@ -5,7 +5,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::os::fd::{AsRawFd, RawFd};
-use std::path::Path;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::thread::sleep;
@@ -25,6 +24,7 @@ use crate::device::v4l2::stateless::queue::V4l2CaptureBuffer;
 use crate::device::v4l2::stateless::queue::V4l2CaptureQueue;
 use crate::device::v4l2::stateless::queue::V4l2OutputQueue;
 use crate::device::v4l2::stateless::request::V4l2Request;
+use crate::device::v4l2::utils::enumerate_devices;
 use crate::video_frame::VideoFrame;
 use crate::Fourcc;
 use crate::Resolution;
@@ -43,17 +43,21 @@ struct DeviceHandle<V: VideoFrame> {
 
 impl<V: VideoFrame> DeviceHandle<V> {
     fn new() -> Result<Self, NewStatelessDecoderError> {
-        // TODO: pass video device path and config via function arguments
-        let video_device_path = Path::new("/dev/video-dec0");
+        let devices = enumerate_devices();
+        let (video_device_path, media_device_path) = match devices {
+            Some(paths) => paths,
+            None => return Err(NewStatelessDecoderError::DriverInitialization),
+        };
+
         let video_device_config = DeviceConfig::new().non_blocking_dqbuf();
         let video_device = Arc::new(
-            VideoDevice::open(video_device_path, video_device_config)
+            VideoDevice::open(&video_device_path, video_device_config)
                 .map_err(|_| NewStatelessDecoderError::DriverInitialization)?,
         );
-        // TODO: probe capabilities to find related media device path
-        let media_device_path = Path::new("/dev/media-dec0");
-        let media_device = open(media_device_path, OFlag::O_RDWR | OFlag::O_CLOEXEC, Mode::empty())
-            .map_err(|_| NewStatelessDecoderError::DriverInitialization)?;
+
+        let media_device =
+            open(&media_device_path, OFlag::O_RDWR | OFlag::O_CLOEXEC, Mode::empty())
+                .map_err(|_| NewStatelessDecoderError::DriverInitialization)?;
         let output_queue = V4l2OutputQueue::new(video_device.clone())?;
         let capture_queue = V4l2CaptureQueue::new(video_device.clone())?;
         Ok(Self {
