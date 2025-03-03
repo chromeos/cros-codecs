@@ -339,6 +339,8 @@ pub enum NewStatelessDecoderError {
     Epoll(Errno),
     #[error("failed to add poll FDs to decoder Epoll: {0}")]
     EpollAdd(Errno),
+    #[error("failed to initialize the driver")]
+    DriverInitialization,
 }
 
 impl<C, B> StatelessDecoder<C, B>

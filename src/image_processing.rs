@@ -161,12 +161,7 @@ pub fn y410_to_i410(
 #[cfg(feature = "v4l2")]
 // SAFETY: Verified by caller that |src| and |dst| is valid and not
 // a NULL-pointer or invalid memory.
-pub unsafe fn align_detile(
-    mut src: *const u8,
-    src_tile_stride: isize,
-    mut dst: *mut u8,
-    width: usize,
-) {
+pub unsafe fn align_detile(src: *const u8, src_tile_stride: isize, dst: *mut u8, width: usize) {
     let mut vin = [0u8; MM21_TILE_WIDTH];
     let mut vout = [0u8; MM21_TILE_WIDTH];
 
@@ -180,14 +175,14 @@ pub unsafe fn align_detile(
     }
 
     let index = (width_aligned_down / MM21_TILE_WIDTH * (src_tile_stride as usize)) as usize;
-    let mut input_slice =
+    let input_slice =
         std::slice::from_raw_parts(src.offset(index as isize), remainder * bytes_per_pixel);
     (&mut vin[0..remainder * bytes_per_pixel])
         .copy_from_slice(&input_slice[0..remainder * bytes_per_pixel]);
 
     detile_row(vin.as_ptr(), src_tile_stride, vout.as_mut_ptr(), MM21_TILE_WIDTH);
 
-    let mut output_slice = std::slice::from_raw_parts_mut(
+    let output_slice = std::slice::from_raw_parts_mut(
         dst.offset(width_aligned_down as isize),
         remainder * bytes_per_pixel,
     );

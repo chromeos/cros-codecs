@@ -52,6 +52,7 @@ use crate::encoder::stateless::StatelessVideoEncoderBackend;
 use crate::encoder::EncodeError;
 use crate::encoder::EncodeResult;
 use crate::encoder::RateControl;
+use crate::video_frame::VideoFrame;
 use crate::BlockingMode;
 use crate::Fourcc;
 use crate::Resolution;
@@ -541,10 +542,8 @@ where
     }
 }
 
-impl<M, H> StatelessEncoder<AV1, H, VaapiBackend<M, H>>
-where
-    M: SurfaceMemoryDescriptor,
-    H: std::borrow::Borrow<libva::Surface<M>> + 'static,
+impl<V: VideoFrame>
+    StatelessEncoder<AV1, V, VaapiBackend<V::MemDescriptor, Surface<V::MemDescriptor>>>
 {
     pub fn new_vaapi(
         display: Rc<libva::Display>,

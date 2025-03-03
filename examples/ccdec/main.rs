@@ -37,6 +37,7 @@ use cros_codecs::utils::align_up;
 use cros_codecs::video_frame::frame_pool::FramePool;
 use cros_codecs::video_frame::frame_pool::PooledVideoFrame;
 use cros_codecs::video_frame::gbm_video_frame::GbmDevice;
+use cros_codecs::video_frame::gbm_video_frame::GbmUsage;
 use cros_codecs::video_frame::generic_dma_video_frame::GenericDmaVideoFrame;
 use cros_codecs::video_frame::VideoFrame;
 use cros_codecs::video_frame::UV_PLANE;
@@ -114,6 +115,7 @@ fn main() {
                 Fourcc::from(b"NV12"),
                 stream_info.display_resolution,
                 stream_info.coded_resolution,
+                GbmUsage::Decode,
             )
             .expect("Could not allocate frame for frame pool!")
             .to_generic_dma_video_frame()

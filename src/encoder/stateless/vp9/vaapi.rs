@@ -46,6 +46,7 @@ use crate::encoder::vp9::EncoderConfig;
 use crate::encoder::vp9::VP9;
 use crate::encoder::EncodeResult;
 use crate::encoder::RateControl;
+use crate::video_frame::VideoFrame;
 use crate::BlockingMode;
 use crate::Fourcc;
 use crate::Resolution;
@@ -254,11 +255,7 @@ where
     }
 }
 
-impl<M, Handle> StatelessEncoder<Handle, VaapiBackend<M, Handle>>
-where
-    M: SurfaceMemoryDescriptor,
-    Handle: Borrow<Surface<M>>,
-{
+impl<V: VideoFrame> StatelessEncoder<V, VaapiBackend<V::MemDescriptor, Surface<V::MemDescriptor>>> {
     pub fn new_vaapi(
         display: Rc<Display>,
         config: EncoderConfig,

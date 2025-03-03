@@ -34,9 +34,7 @@ use crate::utils::align_up;
 use crate::video_frame::frame_pool::FramePool;
 use crate::video_frame::frame_pool::PooledVideoFrame;
 #[cfg(feature = "vaapi")]
-use crate::video_frame::gbm_video_frame::GbmDevice;
-#[cfg(feature = "vaapi")]
-use crate::video_frame::gbm_video_frame::GbmVideoFrame;
+use crate::video_frame::gbm_video_frame::{GbmDevice, GbmUsage, GbmVideoFrame};
 #[cfg(feature = "v4l2")]
 use crate::video_frame::v4l2_mmap_video_frame::V4l2MmapVideoFrame;
 use crate::video_frame::VideoFrame;
@@ -208,6 +206,7 @@ where
                             Fourcc::from(stream_info.format),
                             stream_info.display_resolution.clone(),
                             stream_info.coded_resolution.clone(),
+                            GbmUsage::Decode,
                         )
                         .expect("Could not allocate frame for auxiliary frame pool!")
                 });
