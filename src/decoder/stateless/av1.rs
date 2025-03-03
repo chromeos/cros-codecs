@@ -345,7 +345,12 @@ where
                     return Ok(obu_length);
                 }
                 /* Ask the client to confirm the format before we can process this. */
-                DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
+                DecodingState::FlushingForDRC | DecodingState::AwaitingFormat(_) => {
+                    // Start signaling the awaiting format event to process a format change.
+                    self.awaiting_format_event.write(1).unwrap();
+                    return Err(DecodeError::CheckEvents);
+                }
+
                 DecodingState::Reset => {
                     let mut parser = self.codec.parser.clone();
 

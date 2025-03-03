@@ -79,6 +79,9 @@ enum DecodingState<F> {
     /// Decoder has been reset after a flush, and can resume with the current parameters after
     /// seeing a key frame.
     Reset,
+    // Decoder has recently seen a DRC frame and is flushing and waiting for all frames to be
+    // output before performing the DRC operation.
+    FlushingForDRC,
 }
 
 /// Error returned by the [`StatelessVideoDecoder::decode`] method.
@@ -138,6 +141,9 @@ pub trait StatelessDecoderBackend {
 
     /// Returns the current decoding parameters, as parsed from the stream.
     fn stream_info(&self) -> Option<&StreamInfo>;
+
+    // Resets the backend decoder to accommodate for a format change event.
+    fn reset_backend(&mut self) -> anyhow::Result<()>;
 }
 
 /// Stateless video decoder interface.
@@ -380,6 +386,24 @@ where
     fn await_format_change(&mut self, format_info: C::FormatInfo) {
         self.decoding_state = DecodingState::AwaitingFormat(format_info);
         self.awaiting_format_event.write(1).unwrap();
+    }
+
+    // If the decoder is in a flushing state, the decoder will wait until the ready_queue is
+    // empty. Once the ready_queue is empty, the decoder will reset the backend.
+    fn wait_for_drc_flush(&mut self) -> Result<(), DecodeError> {
+        if matches!(self.decoding_state, DecodingState::FlushingForDRC) {
+            if self.ready_queue.queue.is_empty() {
+                // We can start the DRC operation since the ready queue is empty.
+                self.backend.reset_backend()?;
+                self.decoding_state = DecodingState::Reset;
+            } else {
+                // Since the ready queue is not empty yet, we can't start the DRC.
+                // Clear the awaiting format event as we cannot process this yet.
+                self.awaiting_format_event.read().unwrap();
+                return Err(DecodeError::CheckEvents);
+            }
+        }
+        Ok(())
     }
 
     /// Returns the next pending event, if any, using `on_format_changed` as the format change

@@ -23,14 +23,13 @@ use crate::c2_wrapper::C2DecodeJob;
 use crate::c2_wrapper::C2State;
 use crate::c2_wrapper::C2Status;
 use crate::c2_wrapper::C2Worker;
+use crate::c2_wrapper::DrainMode;
 use crate::c2_wrapper::Job;
 use crate::decoder::stateless::DecodeError;
 use crate::decoder::stateless::DynStatelessVideoDecoder;
 use crate::decoder::DecoderEvent;
 use crate::decoder::StreamInfo;
 use crate::image_processing::convert_video_frame;
-#[cfg(feature = "vaapi")]
-use crate::utils::align_up;
 use crate::video_frame::frame_pool::FramePool;
 use crate::video_frame::frame_pool::PooledVideoFrame;
 #[cfg(feature = "vaapi")]
@@ -40,8 +39,6 @@ use crate::video_frame::v4l2_mmap_video_frame::V4l2MmapVideoFrame;
 use crate::video_frame::VideoFrame;
 use crate::EncodedFormat;
 use crate::Fourcc;
-#[cfg(feature = "vaapi")]
-use crate::Resolution;
 
 #[derive(Debug, Error)]
 pub enum C2DecoderPollErrorWrapper {
@@ -93,7 +90,6 @@ where
     framepool_hint_cb: Arc<Mutex<dyn FnMut(StreamInfo) + Send + 'static>>,
     alloc_cb: Arc<Mutex<dyn FnMut() -> Option<V> + Send + 'static>>,
     work_queue: Arc<Mutex<VecDeque<C2DecodeJob<V>>>>,
-    in_flight_queue: VecDeque<C2DecodeJob<V>>,
     frame_num: u64,
     state: Arc<Mutex<C2State>>,
     _phantom: PhantomData<B>,
@@ -115,8 +111,8 @@ where
                 C2Decoder::ImportingDecoder(decoder) => match decoder.next_event() {
                     Some(DecoderEvent::FrameReady(frame)) => {
                         frame.sync().unwrap();
-                        let mut job = self.in_flight_queue.pop_front().unwrap();
-                        job.output.push(frame.video_frame());
+                        let mut job: C2DecodeJob<V> = Default::default();
+                        job.output = Some(frame.video_frame());
                         (*self.work_done_cb.lock().unwrap())(job);
                     }
                     Some(DecoderEvent::FormatChanged) => match stream_info {
@@ -134,7 +130,7 @@ where
                 C2Decoder::ConvertingDecoder(decoder) => match decoder.next_event() {
                     Some(DecoderEvent::FrameReady(frame)) => {
                         frame.sync().unwrap();
-                        let mut job = self.in_flight_queue.pop_front().unwrap();
+                        let mut job: C2DecodeJob<V> = Default::default();
                         let mut dst_frame =
                             (*self.alloc_cb.lock().unwrap())().expect("Allocation failed!");
                         let src_frame = &*frame.video_frame();
@@ -143,7 +139,7 @@ where
                             *self.state.lock().unwrap() = C2State::C2Error;
                             (*self.error_cb.lock().unwrap())(C2Status::C2BadValue);
                         }
-                        job.output.push(Arc::new(dst_frame));
+                        job.output = Some(Arc::new(dst_frame));
                         (*self.work_done_cb.lock().unwrap())(job);
                     }
                     Some(DecoderEvent::FormatChanged) => match stream_info {
@@ -245,7 +241,6 @@ where
             framepool_hint_cb: framepool_hint_cb,
             alloc_cb: alloc_cb,
             work_queue: work_queue,
-            in_flight_queue: VecDeque::new(),
             frame_num: 0,
             state: state,
             _phantom: Default::default(),
@@ -284,8 +279,8 @@ where
             // woke us up, because we either have new work, or we might more output buffers
             // available.
             let mut possible_job = (*self.work_queue.lock().unwrap()).pop_front();
-            while let Some(mut job) = possible_job {
-                if job.is_drain() {
+            while let Some(job) = possible_job {
+                if job.get_drain() != DrainMode::NoDrain {
                     let flush_result = match &mut self.decoder {
                         C2Decoder::ImportingDecoder(decoder) => decoder.flush(),
                         C2Decoder::ConvertingDecoder(decoder) => decoder.flush(),
@@ -295,7 +290,9 @@ where
                         *self.state.lock().unwrap() = C2State::C2Error;
                         (*self.error_cb.lock().unwrap())(C2Status::C2BadValue);
                     } else {
-                        *self.state.lock().unwrap() = C2State::C2Stopped;
+                        if job.get_drain() == DrainMode::EOSDrain {
+                            *self.state.lock().unwrap() = C2State::C2Stopped;
+                        }
                         self.check_events();
                     }
                     break;
@@ -316,7 +313,6 @@ where
                     match decode_result {
                         Ok(_) => {
                             self.frame_num += 1;
-                            self.in_flight_queue.push_back(job);
                         }
                         Err(DecodeError::NotEnoughOutputBuffers(_) | DecodeError::CheckEvents) => {
                             (*self.work_queue.lock().unwrap()).push_front(job);

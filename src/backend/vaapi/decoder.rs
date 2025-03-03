@@ -323,4 +323,9 @@ impl<V: VideoFrame> StatelessDecoderBackend for VaapiBackend<V> {
     fn stream_info(&self) -> Option<&StreamInfo> {
         Some(&self.stream_info)
     }
+
+    fn reset_backend(&mut self) -> anyhow::Result<()> {
+        //TODO(bchoobineh): Implement VAAPI DRC
+        Ok(())
+    }
 }

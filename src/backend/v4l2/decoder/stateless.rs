@@ -124,4 +124,8 @@ impl<V: VideoFrame> StatelessDecoderBackend for V4l2StatelessDecoderBackend<V> {
         // TODO
         Some(&self.stream_info)
     }
+
+    fn reset_backend(&mut self) -> anyhow::Result<()> {
+        Ok(self.device.reset_queues()?)
+    }
 }

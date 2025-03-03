@@ -64,6 +64,16 @@ impl<V: VideoFrame> DeviceHandle<V> {
             requests: HashMap::<u64, Weak<RefCell<V4l2Request<V>>>>::new(),
         })
     }
+
+    pub fn reset_queues(&mut self) -> Result<(), QueueError> {
+        self.output_queue
+            .reset(self.video_device.clone())
+            .map_err(|_| QueueError::ResetOutputQueue)?;
+        self.capture_queue
+            .reset(self.video_device.clone())
+            .map_err(|_| QueueError::ResetCaptureQueue)
+    }
+
     fn alloc_request(&self) -> ioctl::Request {
         ioctl::Request::alloc(&self.media_device).expect("Failed to alloc request handle")
     }
@@ -143,6 +153,11 @@ impl<V: VideoFrame> V4l2Device<V> {
     pub fn new() -> Result<Self, NewStatelessDecoderError> {
         Ok(Self { handle: Rc::new(RefCell::new(DeviceHandle::new()?)) })
     }
+
+    pub fn reset_queues(&mut self) -> Result<(), QueueError> {
+        self.handle.borrow_mut().reset_queues()
+    }
+
     pub fn initialize_queues(
         &mut self,
         format: Fourcc,
@@ -175,7 +190,6 @@ impl<V: VideoFrame> V4l2Device<V> {
             }
             Err(error) => return Err(error),
         };
-        self.handle.borrow().capture_queue.queue_buffer(frame)?;
         self.handle.borrow_mut().try_dequeue_capture_buffers();
 
         let request = Rc::new(RefCell::new(V4l2Request::new(
@@ -183,12 +197,16 @@ impl<V: VideoFrame> V4l2Device<V> {
             timestamp,
             self.handle.borrow().alloc_request(),
             output_buffer,
+            frame,
         )));
         self.handle.borrow_mut().insert_request_into_hash(Rc::downgrade(&request.clone()));
         Ok(request)
     }
     pub fn sync(&self, timestamp: u64) -> V4l2CaptureBuffer<V> {
         self.handle.borrow_mut().sync(timestamp)
+    }
+    pub fn queue_capture_buffer(&self, frame: V) -> Result<(), QueueError> {
+        self.handle.borrow().capture_queue.queue_buffer(frame)
     }
 }
 

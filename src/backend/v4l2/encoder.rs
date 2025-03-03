@@ -9,7 +9,6 @@ use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use nix::sys::stat::fstat;
 use thiserror::Error;
 use v4l2r::bindings::v4l2_streamparm;

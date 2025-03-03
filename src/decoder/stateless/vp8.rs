@@ -250,8 +250,19 @@ where
             .parse_frame(bitstream)
             .map_err(|err| DecodeError::ParseFrameError(err.to_string()))?;
 
+        self.wait_for_drc_flush()?;
+
         if frame.header.key_frame {
             if self.negotiation_possible(&frame) {
+                if matches!(self.decoding_state, DecodingState::Decoding) {
+                    // DRC occurs when a key frame is seen, the format is different,
+                    // and the decoder is already decoding frames.
+                    self.flush()?;
+                    self.decoding_state = DecodingState::FlushingForDRC;
+                    // Start signaling the awaiting format event to process a format change.
+                    self.awaiting_format_event.write(1).unwrap();
+                    return Err(DecodeError::CheckEvents);
+                }
                 self.backend.new_sequence(&frame.header)?;
                 self.await_format_change(frame.header.clone());
             } else if matches!(self.decoding_state, DecodingState::Reset) {
@@ -264,7 +275,9 @@ where
             // Skip input until we get information from the stream.
             DecodingState::AwaitingStreamInfo | DecodingState::Reset => Ok(bitstream.len()),
             // Ask the client to confirm the format before we can process this.
-            DecodingState::AwaitingFormat(_) => Err(DecodeError::CheckEvents),
+            DecodingState::FlushingForDRC | DecodingState::AwaitingFormat(_) => {
+                Err(DecodeError::CheckEvents)
+            }
             DecodingState::Decoding => {
                 let len = frame.header.frame_len();
                 self.handle_frame(frame, timestamp, alloc_cb)?;
