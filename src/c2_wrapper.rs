@@ -22,17 +22,36 @@ use crate::video_frame::VideoFrame;
 use crate::Fourcc;
 
 pub mod c2_decoder;
+pub mod c2_encoder;
 #[cfg(feature = "v4l2")]
 pub mod c2_v4l2_decoder;
+#[cfg(feature = "v4l2")]
+pub mod c2_v4l2_encoder;
 #[cfg(feature = "vaapi")]
 pub mod c2_vaapi_decoder;
+#[cfg(feature = "vaapi")]
+pub mod c2_vaapi_encoder;
+
+#[derive(Debug, Default, PartialEq, Eq, Copy, Clone)]
+pub enum DrainMode {
+    // Not draining
+    #[default]
+    NoDrain = -1,
+    // Drain the C2 component and signal an EOS. Currently we also change the state to stop.
+    EOSDrain = 0,
+    // Drain the C2 component, but keep accepting new jobs in the queue immediately after.
+    NoEOSDrain = 1,
+}
 
 #[derive(Debug)]
 pub struct C2DecodeJob<V: VideoFrame> {
+    // Compressed input data
     // TODO: Use VideoFrame for input too
     pub input: Vec<u8>,
-    pub output: Vec<Arc<V>>,
-    pub drain: bool,
+    // Decompressed output frame. Note that this needs to be reference counted because we may still
+    // use this frame as a reference frame even while we're displaying it.
+    pub output: Option<Arc<V>>,
+    pub drain: DrainMode,
     // TODO: Add output delay and color aspect support as needed.
 }
 
@@ -42,53 +61,52 @@ where
 {
     type Frame = V;
 
-    fn set_drain(&mut self) {
-        self.drain = true;
+    fn set_drain(&mut self, drain: DrainMode) {
+        self.drain = drain;
     }
 
-    fn is_drain(&mut self) -> bool {
-        return self.drain;
+    fn get_drain(&self) -> DrainMode {
+        self.drain
     }
 }
 
 impl<V: VideoFrame> Default for C2DecodeJob<V> {
     fn default() -> Self {
-        Self { input: vec![], output: vec![], drain: false }
+        Self { input: vec![], output: None, drain: DrainMode::NoDrain }
     }
 }
 
 pub trait Job: Send + 'static {
     type Frame: VideoFrame;
 
-    fn set_drain(&mut self) -> ();
-    fn is_drain(&mut self) -> bool;
+    fn set_drain(&mut self, drain: DrainMode) -> ();
+    fn get_drain(&self) -> DrainMode;
 }
 
 #[derive(Debug)]
 pub struct C2EncodeJob<V: VideoFrame> {
-    pub input: Vec<V>,
+    pub input: Option<V>,
     // TODO: Use VideoFrame for output too
     pub output: Vec<u8>,
     // In microseconds.
     pub timestamp: u64,
     // TODO: only support CBR right now, follow up with VBR support.
-    pub bitrate: u32,
+    pub bitrate: u64,
     // Framerate is actually negotiated, so the encoder can change this value
     // based on the timestamps of the frames it receives.
     pub framerate: Arc<AtomicU32>,
-
-    pub drain: bool,
+    pub drain: DrainMode,
 }
 
 impl<V: VideoFrame> Default for C2EncodeJob<V> {
     fn default() -> Self {
         Self {
-            input: vec![],
+            input: None,
             output: vec![],
             timestamp: 0,
             bitrate: 0,
             framerate: Arc::new(AtomicU32::new(0)),
-            drain: false,
+            drain: DrainMode::NoDrain,
         }
     }
 }
@@ -99,12 +117,12 @@ where
 {
     type Frame = V;
 
-    fn set_drain(&mut self) {
-        self.drain = true;
+    fn set_drain(&mut self, drain: DrainMode) {
+        self.drain = drain;
     }
 
-    fn is_drain(&mut self) -> bool {
-        return self.drain;
+    fn get_drain(&self) -> DrainMode {
+        self.drain
     }
 }
 
@@ -334,14 +352,14 @@ where
     // State will remain C2Running until the last frames drain, at which point
     // the state will change to C2Stopped.
     // TODO: Support different drain modes.
-    pub fn drain(&mut self) -> C2Status {
+    pub fn drain(&mut self, mode: DrainMode) -> C2Status {
         if *self.state.lock().unwrap() != C2State::C2Running {
             (*self.error_cb.lock().unwrap())(C2Status::C2BadState);
             return C2Status::C2BadState;
         }
 
         let mut drain_job: J = Default::default();
-        drain_job.set_drain();
+        drain_job.set_drain(mode);
         self.work_queue.lock().unwrap().push_back(drain_job);
 
         self.awaiting_job_event.write(1).unwrap();

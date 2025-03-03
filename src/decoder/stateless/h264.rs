@@ -1255,6 +1255,8 @@ where
             <<B as StatelessDecoderBackend>::Handle as DecodedHandle>::Frame,
         >,
     ) -> Result<usize, DecodeError> {
+        self.wait_for_drc_flush()?;
+
         let mut cursor = Cursor::new(bitstream);
         let nalu = Nalu::next(&mut cursor).map_err(|err| DecodeError::ParseFrameError(err))?;
 
@@ -1265,6 +1267,19 @@ where
                 .parse_sps(&nalu)
                 .map_err(|err| DecodeError::ParseFrameError(err))?
                 .clone();
+
+            if Self::negotiation_possible(&sps, &self.codec.negotiation_info)
+                && matches!(self.decoding_state, DecodingState::Decoding)
+            {
+                // DRC occurs when an SPS packet is received that indicates an IDR,
+                // the format is different, and the decoder is already decoding frames.
+                self.flush()?;
+                self.decoding_state = DecodingState::FlushingForDRC;
+                // Start signaling the awaiting format event to process a format change.
+                self.awaiting_format_event.write(1).unwrap();
+                return Err(DecodeError::CheckEvents);
+            }
+
             if matches!(self.decoding_state, DecodingState::AwaitingStreamInfo) {
                 // If more SPS come along we will renegotiate in begin_picture().
                 self.renegotiate_if_needed(&sps)?;
@@ -1295,7 +1310,9 @@ where
                 }
             }
             // Ask the client to confirm the format before we can process this.
-            DecodingState::AwaitingFormat(_) => return Err(DecodeError::CheckEvents),
+            DecodingState::FlushingForDRC | DecodingState::AwaitingFormat(_) => {
+                return Err(DecodeError::CheckEvents)
+            }
             DecodingState::Decoding => {
                 self.process_nalu(timestamp, nalu, alloc_cb)?;
             }

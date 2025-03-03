@@ -149,7 +149,7 @@ impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V
         picture.borrow_mut().set_ref_pictures(reference_pictures);
 
         request.write(bitstream);
-        request.submit();
+        request.submit()?;
 
         Ok(V4l2StatelessDecoderHandle {
             picture: picture.clone(),

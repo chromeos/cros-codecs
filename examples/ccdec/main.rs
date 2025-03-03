@@ -29,6 +29,7 @@ use cros_codecs::c2_wrapper::c2_vaapi_decoder::C2VaapiDecoderOptions;
 use cros_codecs::c2_wrapper::C2DecodeJob;
 use cros_codecs::c2_wrapper::C2Status;
 use cros_codecs::c2_wrapper::C2Wrapper;
+use cros_codecs::c2_wrapper::DrainMode;
 use cros_codecs::codec::h264::parser::Nalu as H264Nalu;
 use cros_codecs::codec::h265::parser::Nalu as H265Nalu;
 use cros_codecs::decoder::StreamInfo;
@@ -133,16 +134,17 @@ fn main() {
         if args.output.is_none() && args.compute_md5.is_none() && args.golden.is_none() {
             return;
         }
-        let width = job.output[0].resolution().width as usize;
-        let height = job.output[0].resolution().height as usize;
-        let luma_size = job.output[0].resolution().get_area();
+        let width = job.output.as_ref().unwrap().resolution().width as usize;
+        let height = job.output.as_ref().unwrap().resolution().height as usize;
+        let luma_size = job.output.as_ref().unwrap().resolution().get_area();
         let chroma_size = align_up(width, 2) / 2 * align_up(height, 2) / 2;
         let mut frame_data: Vec<u8> = vec![0; luma_size + 2 * chroma_size];
         let (dst_y, dst_uv) = frame_data.split_at_mut(luma_size);
         let (dst_u, dst_v) = dst_uv.split_at_mut(chroma_size);
         {
-            let src_pitches = job.output[0].get_plane_pitch();
-            let src_mapping = job.output[0].map().expect("Failed to map output frame!");
+            let src_pitches = job.output.as_ref().unwrap().get_plane_pitch();
+            let src_mapping =
+                job.output.as_ref().unwrap().map().expect("Failed to map output frame!");
             let src_planes = src_mapping.get();
             nv12_to_i420(
                 src_planes[Y_PLANE],
@@ -218,11 +220,10 @@ fn main() {
     for input_frame in frame_iter {
         decoder.queue(vec![C2DecodeJob {
             input: input_frame.as_ref().to_vec(),
-            output: vec![],
-            drain: false,
+            ..Default::default()
         }]);
     }
-    decoder.drain();
+    decoder.drain(DrainMode::EOSDrain);
 
     while decoder.is_alive() {
         thread::sleep(Duration::from_millis(10));

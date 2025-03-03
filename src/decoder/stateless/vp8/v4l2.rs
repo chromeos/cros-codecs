@@ -148,7 +148,7 @@ impl<V: VideoFrame> StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend<V
 
         request.ioctl(&vp8_frame_params);
 
-        request.submit();
+        request.submit()?;
         Ok(V4l2StatelessDecoderHandle {
             picture: picture.clone(),
             stream_info: self.stream_info.clone(),
