@@ -29,6 +29,7 @@ rust_defaults {
         "libdrm_fourcc",
         "libgbm_sys",
         "libnix",
+        "libzerocopy",
     ],
     aliases: ["cros_libva:libva"],
     apex_available: [

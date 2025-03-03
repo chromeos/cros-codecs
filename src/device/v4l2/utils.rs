@@ -11,6 +11,7 @@ use v4l2r::device::{Device as VideoDevice, DeviceConfig};
 use v4l2r::ioctl::Capability;
 use v4l2r::nix::fcntl::{open, OFlag};
 use v4l2r::nix::sys::stat::Mode;
+use zerocopy::FromZeros;
 
 const MAX_DEVICE_NO: usize = 128;
 
@@ -48,6 +49,7 @@ pub fn enumerate_devices() -> Option<(PathBuf, PathBuf)> {
 ///
 /// See: https://docs.kernel.org/userspace-api/media/mediactl/media-ioc-device-info.html
 #[repr(C)]
+#[derive(FromZeros)]
 pub struct MediaDeviceInfo {
     driver: [c_char; 16],
     model: [c_char; 32],
@@ -87,9 +89,9 @@ pub fn find_media_device(cap: &Capability) -> Option<PathBuf> {
             };
 
         let media_device_info = unsafe {
-            // SAFETY: This should be safe, as the MediaDeviceInfo struct does not read
-            // from uninitialized memory and only contains primitive data types.
-            let mut media_device_info = std::mem::zeroed::<MediaDeviceInfo>();
+            // MediaDeviceInfo is a struct which contains only fields for which 0 is a valid
+            // bit pattern.
+            let mut media_device_info = MediaDeviceInfo::new_zeroed();
             // SAFETY: This should be safe, as the `media_ioc_device_info` ioctl is called with
             //  `media_device` - a valid file descriptor  and `media_device_info` - a valid pointer
             //  to `MediaDeviceInfo` struct.
