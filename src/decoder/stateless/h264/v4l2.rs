@@ -41,7 +41,6 @@ use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DecodeParams;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264DpbEntry;
 use crate::device::v4l2::stateless::controls::h264::V4l2CtrlH264StartCode;
 use crate::video_frame::VideoFrame;
-use crate::DecodedFormat;
 use crate::Fourcc;
 use crate::Rect;
 use crate::Resolution;
@@ -68,31 +67,7 @@ impl<V: VideoFrame> StatelessDecoderBackendPicture<H264> for V4l2StatelessDecode
 
 impl<V: VideoFrame> StatelessH264DecoderBackend for V4l2StatelessDecoderBackend<V> {
     fn new_sequence(&mut self, sps: &Rc<Sps>) -> StatelessBackendResult<()> {
-        const MB_UNIT: u32 = 16;
-        const MAP_UNIT: u32 = 16;
-        const MAX_FRAMES_IN_PIPELINE: usize = 4;
-
-        let resolution = Resolution::from((
-            (sps.pic_width_in_mbs_minus1 + 1) as u32 * MB_UNIT,
-            (sps.pic_height_in_map_units_minus1 + 1) as u32 * MAP_UNIT,
-        ));
-
-        let visible_rect = Rect::from((
-            (sps.visible_rectangle().min.x, sps.visible_rectangle().min.y),
-            (sps.visible_rectangle().max.x, sps.visible_rectangle().max.y),
-        ));
-
-        self.stream_info.format = DecodedFormat::MM21;
-        self.stream_info.display_resolution = Resolution::from(visible_rect);
-        self.stream_info.coded_resolution = resolution.clone();
-        self.stream_info.min_num_frames = sps.max_dpb_frames() + MAX_FRAMES_IN_PIPELINE;
-
-        self.device.initialize_queues(
-            Fourcc::from(b"S264"),
-            resolution,
-            self.stream_info.min_num_frames as u32,
-        )?;
-        Ok(())
+        self.new_sequence(sps, Fourcc::from(b"S264"))
     }
 
     fn new_picture(
