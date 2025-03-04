@@ -88,10 +88,10 @@ pub fn find_media_device(cap: &Capability) -> Option<PathBuf> {
                 Err(_) => continue,
             };
 
+        // MediaDeviceInfo is a struct which contains only fields for which 0 is a valid
+        // bit pattern.
+        let mut media_device_info = MediaDeviceInfo::new_zeroed();
         let media_device_info = unsafe {
-            // MediaDeviceInfo is a struct which contains only fields for which 0 is a valid
-            // bit pattern.
-            let mut media_device_info = MediaDeviceInfo::new_zeroed();
             // SAFETY: This should be safe, as the `media_ioc_device_info` ioctl is called with
             //  `media_device` - a valid file descriptor  and `media_device_info` - a valid pointer
             //  to `MediaDeviceInfo` struct.
