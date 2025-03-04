@@ -130,7 +130,6 @@ impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V
         let mut reference_pictures = Vec::<Rc<RefCell<V4l2Picture<V>>>>::new();
         for frame in reference_frames {
             if frame.is_some() {
-                // TODO: I don't think this is right?
                 reference_pictures.push(frame.as_ref().unwrap().picture.clone());
             }
         }
