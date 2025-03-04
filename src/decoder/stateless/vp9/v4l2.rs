@@ -24,6 +24,7 @@ use crate::decoder::stateless::vp9::Vp9;
 use crate::decoder::stateless::NewPictureError;
 use crate::decoder::stateless::NewPictureResult;
 use crate::decoder::stateless::NewStatelessDecoderError;
+use crate::decoder::stateless::StatelessBackendError;
 use crate::decoder::stateless::StatelessBackendResult;
 use crate::decoder::stateless::StatelessDecoder;
 use crate::decoder::stateless::StatelessDecoderBackend;
@@ -125,7 +126,8 @@ impl<V: VideoFrame> StatelessVp9DecoderBackend for V4l2StatelessDecoderBackend<V
 
         // We have to do this manually since v4l2r does not directly support VP9
         let which = request.which();
-        ioctl::s_ext_ctrls(&self.device, which, &mut ctrl).expect("Failed to set output control");
+        ioctl::s_ext_ctrls(&self.device, which, &mut ctrl)
+            .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
 
         let mut reference_pictures = Vec::<Rc<RefCell<V4l2Picture<V>>>>::new();
         for frame in reference_frames {

@@ -134,7 +134,7 @@ impl<V: VideoFrame> StatelessVp8DecoderBackend for V4l2StatelessDecoderBackend<V
             .set_bool_ctx(hdr)
             .set_frame_params(hdr, last_frame_ts, golden_frame_ts, alt_frame_ts);
 
-        request.ioctl(&vp8_frame_params);
+        request.ioctl(&vp8_frame_params)?;
 
         request.submit()?;
         Ok(V4l2StatelessDecoderHandle {

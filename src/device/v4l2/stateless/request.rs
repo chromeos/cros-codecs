@@ -40,15 +40,15 @@ impl<V: VideoFrame> InitRequestHandle<V> {
     fn which(&self) -> ioctl::CtrlWhich {
         ioctl::CtrlWhich::Request(self.handle.as_raw_fd())
     }
-    fn ioctl<C, T>(&mut self, ctrl: C) -> &mut Self
+    fn ioctl<C, T>(&mut self, ctrl: C) -> StatelessBackendResult<&mut Self>
     where
         C: Into<SafeExtControl<T>>,
         T: ExtControlTrait,
     {
         let mut ctrl: SafeExtControl<T> = ctrl.into();
         ioctl::s_ext_ctrls(&self.device, self.which(), &mut ctrl)
-            .expect("Failed to set output control");
-        self
+            .map_err(|e| StatelessBackendError::Other(anyhow::anyhow!(e)))?;
+        Ok(self)
     }
     fn write(&mut self, data: &[u8]) -> &mut Self {
         self.output_buffer.write(data);
@@ -137,16 +137,20 @@ impl<V: VideoFrame> RequestHandle<V> {
             _ => panic!("ERROR"),
         }
     }
-    fn ioctl<C, T>(&mut self, ctrl: C) -> &mut Self
+    fn ioctl<C, T>(&mut self, ctrl: C) -> StatelessBackendResult<&mut Self>
     where
         C: Into<SafeExtControl<T>>,
         T: ExtControlTrait,
     {
         match self {
-            Self::Init(handle) => handle.ioctl(ctrl),
-            _ => panic!("ERROR"),
+            Self::Init(handle) => handle.ioctl(ctrl)?,
+            _ => {
+                return Err(StatelessBackendError::Other(anyhow::anyhow!(
+                    "incorrect request state"
+                )))
+            }
         };
-        self
+        Ok(self)
     }
     fn write(&mut self, data: &[u8]) -> &mut Self {
         match self {
@@ -211,13 +215,13 @@ impl<V: VideoFrame> V4l2Request<V> {
     pub fn which(&self) -> ioctl::CtrlWhich {
         self.0.which()
     }
-    pub fn ioctl<C, T>(&mut self, ctrl: C) -> &mut Self
+    pub fn ioctl<C, T>(&mut self, ctrl: C) -> StatelessBackendResult<&mut Self>
     where
         C: Into<SafeExtControl<T>>,
         T: ExtControlTrait,
     {
-        self.0.ioctl(ctrl);
-        self
+        self.0.ioctl(ctrl)?;
+        Ok(self)
     }
     pub fn write(&mut self, data: &[u8]) -> &mut Self {
         self.0.write(data);
