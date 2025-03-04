@@ -1,7 +1,0 @@
-{
-    "desktop-postsubmit": [
-        {
-          "name": "libcros_codecs_test"
-        }
-    ]
-}
