@@ -93,7 +93,7 @@ pub fn find_media_device(cap: &Capability) -> Option<PathBuf> {
             // SAFETY: This should be safe, as the `media_ioc_device_info` ioctl is called with
             //  `media_device` - a valid file descriptor  and `media_device_info` - a valid pointer
             //  to `MediaDeviceInfo` struct.
-            match unsafe { media_ioc_device_info(media_device, &mut media_device_info) } {
+            match media_ioc_device_info(media_device, &mut media_device_info) {
                 Ok(_) => Some(media_device_info),
                 Err(_) => None,
             }
