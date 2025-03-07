@@ -32,6 +32,8 @@ use crate::Resolution;
 
 #[cfg(test)]
 mod dummy;
+#[cfg(feature = "v4l2")]
+mod v4l2;
 #[cfg(feature = "vaapi")]
 mod vaapi;
 
