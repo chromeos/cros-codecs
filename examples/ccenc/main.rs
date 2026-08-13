@@ -57,10 +57,17 @@ const PIPELINE_DEPTH: usize = 64;
 fn codec_to_fourcc(codec: &Codec) -> Fourcc {
     match codec {
         Codec::H264 => Fourcc::from(b"H264"),
+        Codec::H265 => Fourcc::from(b"HEVC"),
         Codec::VP8 => Fourcc::from(b"VP80"),
         Codec::VP9 => Fourcc::from(b"VP90"),
         _ => panic!("Unsupported format!"),
     }
+}
+
+/// Whether the codec's elementary stream is wrapped in an IVF container. H.264 and H.265 are
+/// written as plain Annex B byte streams.
+fn codec_uses_ivf(codec: &Codec) -> bool {
+    !matches!(codec, Codec::H264 | Codec::H265)
 }
 
 fn codec_to_ivf_magic(codec: &Codec) -> [u8; 4] {
@@ -229,7 +236,7 @@ fn main() {
     let output_file = Arc::new(Mutex::new(
         File::create(args.output.unwrap()).expect("Error creating output file"),
     ));
-    if codec != Codec::H264 {
+    if codec_uses_ivf(&codec) {
         let hdr = IvfFileHeader::new(
             codec_to_ivf_magic(&codec),
             args.width as u16,
@@ -241,7 +248,7 @@ fn main() {
     }
     let codec_ = codec.clone();
     let work_done_cb = move |job: C2EncodeJob<PooledVideoFrame<GenericDmaVideoFrame>>| {
-        if codec_ != Codec::H264 {
+        if codec_uses_ivf(&codec_) {
             let hdr =
                 IvfFrameHeader { timestamp: job.timestamp, frame_size: job.output.len() as u32 };
             hdr.writo_into(&mut *output_file.lock().unwrap())

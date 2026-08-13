@@ -7,8 +7,10 @@ use std::rc::Rc;
 use crate::c2_wrapper::c2_encoder::C2EncoderBackend;
 use crate::encoder::av1::EncoderConfig as AV1EncoderConfig;
 use crate::encoder::h264::EncoderConfig as H264EncoderConfig;
+use crate::encoder::h265::EncoderConfig as H265EncoderConfig;
 use crate::encoder::stateless::av1;
 use crate::encoder::stateless::h264;
+use crate::encoder::stateless::h265;
 use crate::encoder::stateless::vp9;
 use crate::encoder::vp9::EncoderConfig as VP9EncoderConfig;
 use crate::encoder::VideoEncoder;
@@ -65,6 +67,21 @@ impl C2EncoderBackend for C2VaapiEncoder {
                 let encoder = h264::StatelessEncoder::new_vaapi(
                     self.display.clone(),
                     H264EncoderConfig {
+                        resolution: self.visible_resolution.clone(),
+                        ..Default::default()
+                    },
+                    Fourcc::from(input_format),
+                    self.visible_resolution.clone(),
+                    self.low_power,
+                    BlockingMode::Blocking,
+                )
+                .map_err(|err| format!("Error initializing encoder! {:?}", err))?;
+                (Box::new(encoder), self.visible_resolution.clone(), self.coded_resolution.clone())
+            }
+            EncodedFormat::H265 => {
+                let encoder = h265::StatelessEncoder::new_vaapi(
+                    self.display.clone(),
+                    H265EncoderConfig {
                         resolution: self.visible_resolution.clone(),
                         ..Default::default()
                     },
