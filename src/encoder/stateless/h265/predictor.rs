@@ -37,6 +37,25 @@ pub(crate) const MAX_QP: u8 = 51;
 /// lower than `NumNegativePics` of any short term reference picture set, see H.265 7.4.3.2.1.
 const MAX_DEC_PIC_BUFFERING_MINUS1: u8 = 1;
 
+/// How deep a transform tree may be split below its coding unit. Zero -- the [`SpsBuilder`]
+/// default -- means `split_transform_flag` is never present and a decoder infers no split at
+/// all, which is a promise about the *coded* syntax that no backend here can keep: a hardware
+/// encoder splits transforms wherever the residual asks for it, so the flags it writes are
+/// then read as coefficient data and the picture falls apart from the first coding tree unit
+/// on. The maximum the block sizes allow is `CtbLog2SizeY - MinTbLog2SizeY` = 6 - 2, and
+/// declaring it constrains nothing: an encoder that splits less simply writes zero flags.
+const MAX_TRANSFORM_HIERARCHY_DEPTH: u8 = 4;
+
+/// The luma coding tree block the [`SpsBuilder`] defaults describe: 1 << (`log2_min_luma_
+/// coding_block_size_minus3` + 3 + `log2_diff_max_min_luma_coding_block_size`), neither of
+/// which this predictor overrides. A backend codes whole coding tree blocks, so the picture
+/// it hands back is that size in both directions and the conformance window is what crops it
+/// back to the resolution somebody asked for. Aligning only to `MinCbSizeY`, as
+/// [`SpsBuilder::resolution`] does on its own, leaves a 1080 line picture claiming a 56 line
+/// bottom row where the encoder coded 64, and the last coding tree row of every frame is then
+/// read as coefficient data.
+const CTB_SIZE_Y: u32 = 64;
+
 pub(crate) struct LowDelayH265Delegate {
     /// Current sequence VPS
     vps: Option<Rc<Vps>>,
@@ -106,14 +125,26 @@ impl<Picture, Reference> LowDelayH265<Picture, Reference> {
         short_term_ref_pic_set.delta_poc_s0[0] = -1;
         short_term_ref_pic_set.used_by_curr_pic_s0[0] = true;
 
+        let align = |v: u32| v.div_ceil(CTB_SIZE_Y) * CTB_SIZE_Y;
+        let (coded_width, coded_height) =
+            (align(config.resolution.width), align(config.resolution.height));
+
         // H.265 Table 6-1, the encoder only supports 4:2:0 subsampling. Must be set before
         // `resolution()`, which derives the conformance window from it.
         let sps = SpsBuilder::new(Rc::clone(&vps))
             .seq_parameter_set_id(0)
             .chroma_format_idc(1)
-            .resolution(config.resolution.width, config.resolution.height)
+            .resolution(coded_width, coded_height)
+            .conformance_window(
+                0,
+                coded_width - config.resolution.width,
+                0,
+                coded_height - config.resolution.height,
+            )
             .bit_depth_luma(8)
             .bit_depth_chroma(8)
+            .max_transform_hierarchy_depth_inter(MAX_TRANSFORM_HIERARCHY_DEPTH)
+            .max_transform_hierarchy_depth_intra(MAX_TRANSFORM_HIERARCHY_DEPTH)
             .max_dec_pic_buffering_minus1(MAX_DEC_PIC_BUFFERING_MINUS1)
             .max_num_reorder_pics(0)
             .max_latency_increase_plus1(0)
@@ -136,6 +167,14 @@ impl<Picture, Reference> LowDelayH265<Picture, Reference> {
         let pps = PpsBuilder::new(Rc::clone(&sps))
             .pic_parameter_set_id(0)
             .init_qp(init_qp as i8)
+            // The driver's rate controller moves the quantizer between coding tree
+            // blocks, and `cu_qp_delta_abs` is how a stream says so. Left off -- the
+            // [`PpsBuilder`] default -- the deltas it writes are read as coefficient
+            // data instead and the picture is noise from the first block on.
+            .cu_qp_delta_enabled_flag(true)
+            // One quantization group per coding tree block, which is what a rate
+            // controller working in those units needs and nothing finer.
+            .diff_cu_qp_delta_depth(0)
             .deblocking_filter_control_present_flag(true)
             .num_ref_idx_l0_default_active_minus1(0)
             // Unused, P slices rely only on list0
