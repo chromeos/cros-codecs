@@ -496,6 +496,115 @@ impl Default for Vps {
     }
 }
 
+/// A builder for a [`Vps`], covering the syntax elements an encoder is
+/// expected to set. Anything else is left at its specification default.
+pub struct VpsBuilder(Vps);
+
+impl VpsBuilder {
+    pub fn new() -> Self {
+        VpsBuilder(Vps {
+            base_layer_internal_flag: true,
+            base_layer_available_flag: true,
+            temporal_id_nesting_flag: true,
+            sub_layer_ordering_info_present_flag: true,
+            profile_tier_level: ProfileTierLevel {
+                general_progressive_source_flag: true,
+                general_frame_only_constraint_flag: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+    }
+
+    pub fn video_parameter_set_id(mut self, value: u8) -> Self {
+        self.0.video_parameter_set_id = value;
+        self
+    }
+
+    pub fn max_layers_minus1(mut self, value: u8) -> Self {
+        self.0.max_layers_minus1 = value;
+        self
+    }
+
+    pub fn max_sub_layers_minus1(mut self, value: u8) -> Self {
+        self.0.max_sub_layers_minus1 = value;
+        self
+    }
+
+    pub fn temporal_id_nesting_flag(mut self, value: bool) -> Self {
+        self.0.temporal_id_nesting_flag = value;
+        self
+    }
+
+    pub fn general_profile(mut self, value: Profile) -> Self {
+        self.0.profile_tier_level.general_profile_idc = value as u8;
+        self.0.profile_tier_level.general_profile_compatibility_flag = [false; 32];
+        self.0.profile_tier_level.general_profile_compatibility_flag[value as usize] = true;
+        self
+    }
+
+    pub fn general_tier_flag(mut self, value: bool) -> Self {
+        self.0.profile_tier_level.general_tier_flag = value;
+        self
+    }
+
+    pub fn general_level_idc(mut self, value: Level) -> Self {
+        self.0.profile_tier_level.general_level_idc = value;
+        self
+    }
+
+    /// Sets `vps_max_dec_pic_buffering_minus1` for the highest sub-layer.
+    pub fn max_dec_pic_buffering_minus1(mut self, value: u32) -> Self {
+        self.0.max_dec_pic_buffering_minus1[usize::from(self.0.max_sub_layers_minus1)] = value;
+        self
+    }
+
+    /// Sets `vps_max_num_reorder_pics` for the highest sub-layer.
+    pub fn max_num_reorder_pics(mut self, value: u32) -> Self {
+        self.0.max_num_reorder_pics[usize::from(self.0.max_sub_layers_minus1)] = value;
+        self
+    }
+
+    /// Sets `vps_max_latency_increase_plus1` for the highest sub-layer.
+    pub fn max_latency_increase_plus1(mut self, value: u32) -> Self {
+        self.0.max_latency_increase_plus1[usize::from(self.0.max_sub_layers_minus1)] = value;
+        self
+    }
+
+    pub fn sub_layer_ordering_info_present_flag(mut self, value: bool) -> Self {
+        self.0.sub_layer_ordering_info_present_flag = value;
+        self
+    }
+
+    pub fn timing_info(mut self, num_units_in_tick: u32, time_scale: u32) -> Self {
+        self.0.timing_info_present_flag = true;
+        self.0.num_units_in_tick = num_units_in_tick;
+        self.0.time_scale = time_scale;
+        self
+    }
+
+    pub fn build(mut self) -> Rc<Vps> {
+        // 7.4.3.1: when vps_sub_layer_ordering_info_present_flag is 0, the
+        // values for the highest sub-layer apply to all sub-layers.
+        if !self.0.sub_layer_ordering_info_present_flag {
+            let max = usize::from(self.0.max_sub_layers_minus1);
+            for i in 0..max {
+                self.0.max_dec_pic_buffering_minus1[i] = self.0.max_dec_pic_buffering_minus1[max];
+                self.0.max_num_reorder_pics[i] = self.0.max_num_reorder_pics[max];
+                self.0.max_latency_increase_plus1[i] = self.0.max_latency_increase_plus1[max];
+            }
+        }
+
+        Rc::new(self.0)
+    }
+}
+
+impl Default for VpsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProfileTierLevel {
     /// Specifies the context for the interpretation of general_profile_idc and
@@ -1003,6 +1112,325 @@ impl Sps {
     }
 }
 
+/// A builder for a [`Sps`], covering the syntax elements an encoder is expected
+/// to set. Anything else is left at its specification default.
+pub struct SpsBuilder(Sps);
+
+impl SpsBuilder {
+    /// Starts a SPS referring to `vps`, inheriting its profile_tier_level() and
+    /// its sub-layer configuration.
+    pub fn new(vps: Rc<Vps>) -> Self {
+        SpsBuilder(Sps {
+            video_parameter_set_id: vps.video_parameter_set_id,
+            max_sub_layers_minus1: vps.max_sub_layers_minus1,
+            temporal_id_nesting_flag: vps.temporal_id_nesting_flag,
+            profile_tier_level: vps.profile_tier_level.clone(),
+            chroma_format_idc: 1,
+            // MaxPicOrderCntLsb = 256.
+            log2_max_pic_order_cnt_lsb_minus4: 4,
+            sub_layer_ordering_info_present_flag: true,
+            // MinCbSizeY = 8, CtbSizeY = 64.
+            log2_min_luma_coding_block_size_minus3: 0,
+            log2_diff_max_min_luma_coding_block_size: 3,
+            // MinTbSizeY = 4, MaxTbSizeY = 32.
+            log2_min_luma_transform_block_size_minus2: 0,
+            log2_diff_max_min_luma_transform_block_size: 3,
+            vps: Some(vps),
+            ..Default::default()
+        })
+    }
+
+    pub fn seq_parameter_set_id(mut self, value: u8) -> Self {
+        self.0.seq_parameter_set_id = value;
+        self
+    }
+
+    pub fn general_profile(mut self, value: Profile) -> Self {
+        self.0.profile_tier_level.general_profile_idc = value as u8;
+        self.0.profile_tier_level.general_profile_compatibility_flag = [false; 32];
+        self.0.profile_tier_level.general_profile_compatibility_flag[value as usize] = true;
+        self
+    }
+
+    pub fn general_tier_flag(mut self, value: bool) -> Self {
+        self.0.profile_tier_level.general_tier_flag = value;
+        self
+    }
+
+    pub fn general_level_idc(mut self, value: Level) -> Self {
+        self.0.profile_tier_level.general_level_idc = value;
+        self
+    }
+
+    pub fn chroma_format_idc(mut self, value: u8) -> Self {
+        self.0.chroma_format_idc = value;
+        self
+    }
+
+    pub fn separate_colour_plane_flag(mut self, value: bool) -> Self {
+        self.0.separate_colour_plane_flag = value;
+        self
+    }
+
+    pub fn bit_depth_luma_minus8(mut self, value: u8) -> Self {
+        self.0.bit_depth_luma_minus8 = value;
+        self
+    }
+
+    pub fn bit_depth_luma(self, value: u8) -> Self {
+        self.bit_depth_luma_minus8(value - 8u8)
+    }
+
+    pub fn bit_depth_chroma_minus8(mut self, value: u8) -> Self {
+        self.0.bit_depth_chroma_minus8 = value;
+        self
+    }
+
+    pub fn bit_depth_chroma(self, value: u8) -> Self {
+        self.bit_depth_chroma_minus8(value - 8u8)
+    }
+
+    /// Sets the conformance cropping window. The offsets are given in luma
+    /// samples and are converted to the units of clause 7.4.3.2.1, so
+    /// [`Self::chroma_format_idc`] must be set beforehand.
+    pub fn conformance_window(mut self, left: u32, right: u32, top: u32, bottom: u32) -> Self {
+        // Table 6-1.
+        let (sub_width_c, sub_height_c) = match self.0.chroma_format_idc {
+            1 => (2, 2),
+            2 => (2, 1),
+            _ => (1, 1),
+        };
+
+        self.0.conformance_window_flag = true;
+        self.0.conf_win_left_offset = left / sub_width_c;
+        self.0.conf_win_right_offset = right / sub_width_c;
+        self.0.conf_win_top_offset = top / sub_height_c;
+        self.0.conf_win_bottom_offset = bottom / sub_height_c;
+        self
+    }
+
+    /// Sets the visible resolution. The coded resolution is aligned to
+    /// MinCbSizeY, the difference being signalled through the conformance
+    /// cropping window.
+    pub fn resolution(mut self, width: u32, height: u32) -> Self {
+        let min_cb_size = 1u32 << (self.0.log2_min_luma_coding_block_size_minus3 + 3);
+
+        let coded_width = (width + min_cb_size - 1) / min_cb_size * min_cb_size;
+        let coded_height = (height + min_cb_size - 1) / min_cb_size * min_cb_size;
+
+        self.0.pic_width_in_luma_samples = coded_width as u16;
+        self.0.pic_height_in_luma_samples = coded_height as u16;
+
+        if coded_width != width || coded_height != height {
+            self = self.conformance_window(0, coded_width - width, 0, coded_height - height);
+        }
+
+        self
+    }
+
+    pub fn log2_max_pic_order_cnt_lsb_minus4(mut self, value: u8) -> Self {
+        self.0.log2_max_pic_order_cnt_lsb_minus4 = value;
+        self
+    }
+
+    pub fn max_pic_order_cnt_lsb(self, value: u32) -> Self {
+        self.log2_max_pic_order_cnt_lsb_minus4(value.ilog2() as u8 - 4u8)
+    }
+
+    pub fn sub_layer_ordering_info_present_flag(mut self, value: bool) -> Self {
+        self.0.sub_layer_ordering_info_present_flag = value;
+        self
+    }
+
+    /// Sets `sps_max_dec_pic_buffering_minus1` for the highest sub-layer.
+    pub fn max_dec_pic_buffering_minus1(mut self, value: u8) -> Self {
+        self.0.max_dec_pic_buffering_minus1[usize::from(self.0.max_sub_layers_minus1)] = value;
+        self
+    }
+
+    /// Sets `sps_max_num_reorder_pics` for the highest sub-layer.
+    pub fn max_num_reorder_pics(mut self, value: u8) -> Self {
+        self.0.max_num_reorder_pics[usize::from(self.0.max_sub_layers_minus1)] = value;
+        self
+    }
+
+    /// Sets `sps_max_latency_increase_plus1` for the highest sub-layer.
+    pub fn max_latency_increase_plus1(mut self, value: u8) -> Self {
+        self.0.max_latency_increase_plus1[usize::from(self.0.max_sub_layers_minus1)] = value;
+        self
+    }
+
+    pub fn log2_min_luma_coding_block_size_minus3(mut self, value: u8) -> Self {
+        self.0.log2_min_luma_coding_block_size_minus3 = value;
+        self
+    }
+
+    pub fn log2_diff_max_min_luma_coding_block_size(mut self, value: u8) -> Self {
+        self.0.log2_diff_max_min_luma_coding_block_size = value;
+        self
+    }
+
+    pub fn log2_min_luma_transform_block_size_minus2(mut self, value: u8) -> Self {
+        self.0.log2_min_luma_transform_block_size_minus2 = value;
+        self
+    }
+
+    pub fn log2_diff_max_min_luma_transform_block_size(mut self, value: u8) -> Self {
+        self.0.log2_diff_max_min_luma_transform_block_size = value;
+        self
+    }
+
+    pub fn max_transform_hierarchy_depth_inter(mut self, value: u8) -> Self {
+        self.0.max_transform_hierarchy_depth_inter = value;
+        self
+    }
+
+    pub fn max_transform_hierarchy_depth_intra(mut self, value: u8) -> Self {
+        self.0.max_transform_hierarchy_depth_intra = value;
+        self
+    }
+
+    /// Enables `scaling_list_enabled_flag` and signals `value` in the SPS.
+    pub fn scaling_list(mut self, value: ScalingLists) -> Self {
+        self.0.scaling_list_enabled_flag = true;
+        self.0.scaling_list_data_present_flag = true;
+        self.0.scaling_list = value;
+        self
+    }
+
+    pub fn scaling_list_enabled_flag(mut self, value: bool) -> Self {
+        self.0.scaling_list_enabled_flag = value;
+        self
+    }
+
+    pub fn amp_enabled_flag(mut self, value: bool) -> Self {
+        self.0.amp_enabled_flag = value;
+        self
+    }
+
+    pub fn sample_adaptive_offset_enabled_flag(mut self, value: bool) -> Self {
+        self.0.sample_adaptive_offset_enabled_flag = value;
+        self
+    }
+
+    /// Appends a st_ref_pic_set() to the SPS. Only sets that do not use inter
+    /// RPS prediction can be synthesized.
+    pub fn short_term_ref_pic_set(mut self, value: ShortTermRefPicSet) -> Self {
+        self.0.short_term_ref_pic_set.push(value);
+        self
+    }
+
+    pub fn long_term_ref_pics_present_flag(mut self, value: bool) -> Self {
+        self.0.long_term_ref_pics_present_flag = value;
+        self
+    }
+
+    pub fn temporal_mvp_enabled_flag(mut self, value: bool) -> Self {
+        self.0.temporal_mvp_enabled_flag = value;
+        self
+    }
+
+    pub fn strong_intra_smoothing_enabled_flag(mut self, value: bool) -> Self {
+        self.0.strong_intra_smoothing_enabled_flag = value;
+        self
+    }
+
+    pub fn vui_parameters_present(mut self) -> Self {
+        self.0.vui_parameters_present_flag = true;
+        self
+    }
+
+    pub fn timing_info(
+        mut self,
+        num_units_in_tick: u32,
+        time_scale: u32,
+        poc_proportional_to_timing_flag: bool,
+    ) -> Self {
+        self = self.vui_parameters_present();
+        self.0.vui_parameters.timing_info_present_flag = true;
+        self.0.vui_parameters.num_units_in_tick = num_units_in_tick;
+        self.0.vui_parameters.time_scale = time_scale;
+        self.0.vui_parameters.poc_proportional_to_timing_flag = poc_proportional_to_timing_flag;
+        self
+    }
+
+    pub fn video_signal_type(mut self, video_format: u8, video_full_range_flag: bool) -> Self {
+        self = self.vui_parameters_present();
+        self.0.vui_parameters.video_signal_type_present_flag = true;
+        self.0.vui_parameters.video_format = video_format;
+        self.0.vui_parameters.video_full_range_flag = video_full_range_flag;
+        self
+    }
+
+    pub fn colour_description(
+        mut self,
+        colour_primaries: u32,
+        transfer_characteristics: u32,
+        matrix_coeffs: u32,
+    ) -> Self {
+        let video_format = self.0.vui_parameters.video_format;
+        let video_full_range_flag = self.0.vui_parameters.video_full_range_flag;
+
+        self = self.video_signal_type(video_format, video_full_range_flag);
+        self.0.vui_parameters.colour_description_present_flag = true;
+        self.0.vui_parameters.colour_primaries = colour_primaries;
+        self.0.vui_parameters.transfer_characteristics = transfer_characteristics;
+        self.0.vui_parameters.matrix_coeffs = matrix_coeffs;
+        self
+    }
+
+    pub fn build(mut self) -> Rc<Sps> {
+        let sps = &mut self.0;
+
+        sps.num_short_term_ref_pic_sets = sps.short_term_ref_pic_set.len() as u8;
+
+        // The same derivations the parser performs, see parse_sps().
+        sps.chroma_array_type =
+            if sps.separate_colour_plane_flag { 0 } else { sps.chroma_format_idc };
+
+        // (7-10)
+        sps.min_cb_log2_size_y = u32::from(sps.log2_min_luma_coding_block_size_minus3 + 3);
+        // (7-11)
+        sps.ctb_log2_size_y =
+            sps.min_cb_log2_size_y + u32::from(sps.log2_diff_max_min_luma_coding_block_size);
+        // (7-12)
+        sps.ctb_size_y = 1 << sps.ctb_log2_size_y;
+        // (7-15)
+        sps.pic_width_in_ctbs_y =
+            (u32::from(sps.pic_width_in_luma_samples) + sps.ctb_size_y - 1) / sps.ctb_size_y;
+        // (7-17)
+        sps.pic_height_in_ctbs_y =
+            (u32::from(sps.pic_height_in_luma_samples) + sps.ctb_size_y - 1) / sps.ctb_size_y;
+        // (7-19)
+        sps.pic_size_in_ctbs_y = sps.pic_width_in_ctbs_y * sps.pic_height_in_ctbs_y;
+
+        sps.max_tb_log2_size_y = u32::from(
+            sps.log2_min_luma_transform_block_size_minus2
+                + 2
+                + sps.log2_diff_max_min_luma_transform_block_size,
+        );
+
+        sps.pic_size_in_samples_y =
+            u32::from(sps.pic_width_in_luma_samples) * u32::from(sps.pic_height_in_luma_samples);
+
+        let shift = if sps.range_extension.high_precision_offsets_enabled_flag {
+            sps.bit_depth_luma_minus8 + 7
+        } else {
+            7
+        };
+        sps.wp_offset_half_range_y = 1 << shift;
+
+        let shift = if sps.range_extension.high_precision_offsets_enabled_flag {
+            sps.bit_depth_chroma_minus8 + 7
+        } else {
+            7
+        };
+        sps.wp_offset_half_range_c = 1 << shift;
+
+        Rc::new(self.0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PpsSccExtension {
     /// When set, specifies that a picture referring to the PPS may be included
@@ -1326,6 +1754,237 @@ pub struct Pps {
 
     /// The SPS referenced by this PPS.
     pub sps: Rc<Sps>,
+}
+
+/// A builder for a [`Pps`], covering the syntax elements an encoder is expected
+/// to set. Anything else is left at its specification default.
+pub struct PpsBuilder(Pps);
+
+impl PpsBuilder {
+    /// Starts a PPS referring to `sps`.
+    pub fn new(sps: Rc<Sps>) -> Self {
+        let mut scaling_list = ScalingLists::default();
+
+        // When pps_scaling_list_data_present_flag is not set and the SPS does
+        // not signal scaling lists either, the default lists apply, see 7.4.5.
+        for size_id in 0..4 {
+            let mut matrix_id = 0;
+            while matrix_id < 6 {
+                Parser::fill_default_scaling_list(&mut scaling_list, size_id, matrix_id);
+                matrix_id += if size_id == 3 { 3 } else { 1 };
+            }
+        }
+
+        PpsBuilder(Pps {
+            pic_parameter_set_id: 0,
+            seq_parameter_set_id: sps.seq_parameter_set_id,
+            dependent_slice_segments_enabled_flag: false,
+            output_flag_present_flag: false,
+            num_extra_slice_header_bits: 0,
+            sign_data_hiding_enabled_flag: false,
+            cabac_init_present_flag: false,
+            num_ref_idx_l0_default_active_minus1: 0,
+            num_ref_idx_l1_default_active_minus1: 0,
+            init_qp_minus26: 0,
+            constrained_intra_pred_flag: false,
+            transform_skip_enabled_flag: false,
+            cu_qp_delta_enabled_flag: false,
+            diff_cu_qp_delta_depth: 0,
+            cb_qp_offset: 0,
+            cr_qp_offset: 0,
+            slice_chroma_qp_offsets_present_flag: false,
+            weighted_pred_flag: false,
+            weighted_bipred_flag: false,
+            transquant_bypass_enabled_flag: false,
+            tiles_enabled_flag: false,
+            entropy_coding_sync_enabled_flag: false,
+            num_tile_columns_minus1: 0,
+            num_tile_rows_minus1: 0,
+            uniform_spacing_flag: true,
+            column_width_minus1: Default::default(),
+            row_height_minus1: Default::default(),
+            loop_filter_across_tiles_enabled_flag: true,
+            loop_filter_across_slices_enabled_flag: false,
+            deblocking_filter_control_present_flag: false,
+            deblocking_filter_override_enabled_flag: false,
+            deblocking_filter_disabled_flag: false,
+            beta_offset_div2: 0,
+            tc_offset_div2: 0,
+            scaling_list_data_present_flag: false,
+            scaling_list,
+            lists_modification_present_flag: false,
+            log2_parallel_merge_level_minus2: 0,
+            slice_segment_header_extension_present_flag: false,
+            extension_present_flag: false,
+            range_extension_flag: false,
+            range_extension: Default::default(),
+            scc_extension_flag: false,
+            scc_extension: Default::default(),
+            // (7-5)
+            qp_bd_offset_y: 6 * u32::from(sps.bit_depth_luma_minus8),
+            sps,
+        })
+    }
+
+    pub fn pic_parameter_set_id(mut self, value: u8) -> Self {
+        self.0.pic_parameter_set_id = value;
+        self
+    }
+
+    pub fn dependent_slice_segments_enabled_flag(mut self, value: bool) -> Self {
+        self.0.dependent_slice_segments_enabled_flag = value;
+        self
+    }
+
+    pub fn output_flag_present_flag(mut self, value: bool) -> Self {
+        self.0.output_flag_present_flag = value;
+        self
+    }
+
+    pub fn num_extra_slice_header_bits(mut self, value: u8) -> Self {
+        self.0.num_extra_slice_header_bits = value;
+        self
+    }
+
+    pub fn sign_data_hiding_enabled_flag(mut self, value: bool) -> Self {
+        self.0.sign_data_hiding_enabled_flag = value;
+        self
+    }
+
+    pub fn cabac_init_present_flag(mut self, value: bool) -> Self {
+        self.0.cabac_init_present_flag = value;
+        self
+    }
+
+    pub fn num_ref_idx_l0_default_active_minus1(mut self, value: u8) -> Self {
+        self.0.num_ref_idx_l0_default_active_minus1 = value;
+        self
+    }
+
+    pub fn num_ref_idx_l1_default_active_minus1(mut self, value: u8) -> Self {
+        self.0.num_ref_idx_l1_default_active_minus1 = value;
+        self
+    }
+
+    pub fn init_qp_minus26(mut self, value: i8) -> Self {
+        self.0.init_qp_minus26 = value;
+        self
+    }
+
+    /// Sets `init_qp_minus26` from the initial SliceQpY value.
+    pub fn init_qp(self, value: i8) -> Self {
+        self.init_qp_minus26(value - 26)
+    }
+
+    pub fn constrained_intra_pred_flag(mut self, value: bool) -> Self {
+        self.0.constrained_intra_pred_flag = value;
+        self
+    }
+
+    pub fn transform_skip_enabled_flag(mut self, value: bool) -> Self {
+        self.0.transform_skip_enabled_flag = value;
+        self
+    }
+
+    pub fn cu_qp_delta_enabled_flag(mut self, value: bool) -> Self {
+        self.0.cu_qp_delta_enabled_flag = value;
+        self
+    }
+
+    pub fn diff_cu_qp_delta_depth(mut self, value: u8) -> Self {
+        self.0.diff_cu_qp_delta_depth = value;
+        self
+    }
+
+    pub fn cb_qp_offset(mut self, value: i8) -> Self {
+        self.0.cb_qp_offset = value;
+        self
+    }
+
+    pub fn cr_qp_offset(mut self, value: i8) -> Self {
+        self.0.cr_qp_offset = value;
+        self
+    }
+
+    pub fn slice_chroma_qp_offsets_present_flag(mut self, value: bool) -> Self {
+        self.0.slice_chroma_qp_offsets_present_flag = value;
+        self
+    }
+
+    pub fn weighted_pred_flag(mut self, value: bool) -> Self {
+        self.0.weighted_pred_flag = value;
+        self
+    }
+
+    pub fn weighted_bipred_flag(mut self, value: bool) -> Self {
+        self.0.weighted_bipred_flag = value;
+        self
+    }
+
+    pub fn transquant_bypass_enabled_flag(mut self, value: bool) -> Self {
+        self.0.transquant_bypass_enabled_flag = value;
+        self
+    }
+
+    pub fn entropy_coding_sync_enabled_flag(mut self, value: bool) -> Self {
+        self.0.entropy_coding_sync_enabled_flag = value;
+        self
+    }
+
+    pub fn loop_filter_across_slices_enabled_flag(mut self, value: bool) -> Self {
+        self.0.loop_filter_across_slices_enabled_flag = value;
+        self
+    }
+
+    pub fn deblocking_filter_control_present_flag(mut self, value: bool) -> Self {
+        self.0.deblocking_filter_control_present_flag = value;
+        self
+    }
+
+    pub fn deblocking_filter_override_enabled_flag(mut self, value: bool) -> Self {
+        self.0.deblocking_filter_override_enabled_flag = value;
+        self
+    }
+
+    pub fn deblocking_filter_disabled_flag(mut self, value: bool) -> Self {
+        self.0.deblocking_filter_disabled_flag = value;
+        self
+    }
+
+    /// Sets the default deblocking parameter offsets, which are only signalled
+    /// when the deblocking filter is not disabled.
+    pub fn deblocking_filter_offsets(mut self, beta_div2: i8, tc_div2: i8) -> Self {
+        self.0.deblocking_filter_control_present_flag = true;
+        self.0.beta_offset_div2 = beta_div2;
+        self.0.tc_offset_div2 = tc_div2;
+        self
+    }
+
+    /// Signals `value` in the PPS, overriding the scaling lists of the SPS.
+    pub fn scaling_list(mut self, value: ScalingLists) -> Self {
+        self.0.scaling_list_data_present_flag = true;
+        self.0.scaling_list = value;
+        self
+    }
+
+    pub fn lists_modification_present_flag(mut self, value: bool) -> Self {
+        self.0.lists_modification_present_flag = value;
+        self
+    }
+
+    pub fn log2_parallel_merge_level_minus2(mut self, value: u8) -> Self {
+        self.0.log2_parallel_merge_level_minus2 = value;
+        self
+    }
+
+    pub fn slice_segment_header_extension_present_flag(mut self, value: bool) -> Self {
+        self.0.slice_segment_header_extension_present_flag = value;
+        self
+    }
+
+    pub fn build(self) -> Rc<Pps> {
+        Rc::new(self.0)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
