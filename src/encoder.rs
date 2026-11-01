@@ -15,6 +15,7 @@ pub mod stateless;
 
 use crate::codec::av1::synthesizer::SynthesizerError as AV1SynthesizerError;
 use crate::codec::h264::synthesizer::SynthesizerError as H264SynthesizerError;
+use crate::codec::h265::synthesizer::SynthesizerError as H265SynthesizerError;
 use crate::encoder::stateful::StatefulBackendError;
 use crate::encoder::stateless::StatelessBackendError;
 use crate::FrameLayout;
@@ -113,6 +114,7 @@ pub enum EncodeError {
     StatelessBackendError(StatelessBackendError),
     StatefulBackendError(StatefulBackendError),
     H264SynthesizerError(H264SynthesizerError),
+    H265SynthesizerError(H265SynthesizerError),
     AV1SynthesizerError(AV1SynthesizerError),
 }
 
@@ -126,6 +128,7 @@ impl fmt::Display for EncodeError {
             EncodeError::StatelessBackendError(x) => write!(f, "{}", x.to_string()),
             EncodeError::StatefulBackendError(x) => write!(f, "{}", x.to_string()),
             EncodeError::H264SynthesizerError(x) => write!(f, "{}", x.to_string()),
+            EncodeError::H265SynthesizerError(x) => write!(f, "{}", x.to_string()),
             EncodeError::AV1SynthesizerError(x) => write!(f, "{}", x.to_string()),
         }
     }
@@ -146,6 +149,12 @@ impl From<StatefulBackendError> for EncodeError {
 impl From<H264SynthesizerError> for EncodeError {
     fn from(err: H264SynthesizerError) -> Self {
         EncodeError::H264SynthesizerError(err)
+    }
+}
+
+impl From<H265SynthesizerError> for EncodeError {
+    fn from(err: H265SynthesizerError) -> Self {
+        EncodeError::H265SynthesizerError(err)
     }
 }
 

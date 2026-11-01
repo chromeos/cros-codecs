@@ -24,8 +24,10 @@ impl<W: Write> EmulationPrevention<W> {
     fn write_byte(&mut self, curr_byte: u8) -> std::io::Result<()> {
         if self.prev_bytes[1] == Some(0x00) && self.prev_bytes[0] == Some(0x00) && curr_byte <= 0x03
         {
-            self.out.write_all(&[0x00, 0x00, 0x03, curr_byte])?;
-            self.prev_bytes = [None; 2];
+            self.out.write_all(&[0x00, 0x00, 0x03])?;
+            // `curr_byte` stays pending, so that a following `0x00 0x00` pair
+            // starting with it is escaped as well.
+            self.prev_bytes = [Some(curr_byte), None];
         } else {
             if let Some(byte) = self.prev_bytes[1] {
                 self.out.write_all(&[byte])?;
@@ -295,5 +297,10 @@ mod tests {
         test(&[0x00, 0x00, 0x00, 0x01], &[0x00, 0x00, 0x03, 0x00, 0x01]);
         test(&[0x00, 0x00, 0x00, 0x02], &[0x00, 0x00, 0x03, 0x00, 0x02]);
         test(&[0x00, 0x00, 0x00, 0x03], &[0x00, 0x00, 0x03, 0x00, 0x03]);
+
+        // A run of zeroes must be escaped again every two bytes, i.e. the byte
+        // that followed an escape counts towards the next pair.
+        test(&[0x00; 5], &[0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x00]);
+        test(&[0x00, 0x00, 0x00, 0x00, 0x01], &[0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x01]);
     }
 }
