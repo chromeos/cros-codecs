@@ -3849,6 +3849,17 @@ impl Parser {
                     )?;
 
                     let num_lt = hdr.num_long_term_sps + hdr.num_long_term_pics;
+                    // The long-term arrays of the slice header hold 16 entries. A
+                    // conforming stream never needs more, since the long-term and
+                    // short-term pictures together are bounded by
+                    // sps_max_dec_pic_buffering_minus1, which is at most 15 (7.4.7.1).
+                    if usize::from(num_lt) > hdr.poc_lsb_lt.len() {
+                        return Err(format!(
+                            "Invalid num_long_term_sps + num_long_term_pics {}",
+                            num_lt
+                        ));
+                    }
+
                     for i in 0..usize::from(num_lt) {
                         // The variables `PocLsbLt[ i ]` and `UsedByCurrPicLt[ i ]` are derived as follows:
                         //
@@ -4130,11 +4141,13 @@ impl Parser {
 mod tests {
     use std::io::Cursor;
 
+    use crate::bitstream_utils::BitWriter;
     use crate::codec::h264::nalu::Nalu;
     use crate::codec::h265::parser::Level;
     use crate::codec::h265::parser::NaluHeader;
     use crate::codec::h265::parser::NaluType;
     use crate::codec::h265::parser::Parser;
+    use crate::codec::h265::parser::SliceHeader;
     use crate::codec::h265::parser::SliceType;
 
     const STREAM_BEAR: &[u8] = include_bytes!("test_data/bear.h265");
@@ -4780,5 +4793,146 @@ mod tests {
         assert_eq!(slice.nalu.size, 290);
         // Subtract 2 bytes to account for the header size.
         assert_eq!(hdr.header_bit_size - 16, 80);
+    }
+
+    /// Writes `value` as ue(v). se(v) 0 uses the same code.
+    fn write_ue(w: &mut BitWriter<Vec<u8>>, value: u32) {
+        let code = u64::from(value) + 1;
+        let len = (u64::BITS - code.leading_zeros()) as usize;
+        w.write_f(len - 1, 0u32).unwrap();
+        w.write_f(len, code as u32).unwrap();
+    }
+
+    /// Builds an Annex B NAL unit with `write_rbsp` writing its syntax elements.
+    fn synthesize_nalu(
+        type_: NaluType,
+        write_rbsp: impl FnOnce(&mut BitWriter<Vec<u8>>),
+    ) -> Vec<u8> {
+        let mut w = BitWriter::new(Vec::new());
+        write_rbsp(&mut w);
+        // rbsp_trailing_bits() for parameter sets, byte_alignment() for slices.
+        w.write_bit(true).unwrap();
+        while w.has_data_pending() {
+            w.write_bit(false).unwrap();
+        }
+
+        let mut nalu = vec![0, 0, 0, 1, (type_ as u8) << 1, 1];
+        let mut zeros = 0;
+        for &byte in w.inner() {
+            if zeros >= 2 && byte <= 3 {
+                nalu.push(3); // emulation_prevention_three_byte
+                zeros = 0;
+            }
+            zeros = if byte == 0 { zeros + 1 } else { 0 };
+            nalu.push(byte);
+        }
+        nalu
+    }
+
+    /// A 64x64 Main profile SPS with long-term reference pictures enabled.
+    fn sps_with_long_term_ref_pics() -> Vec<u8> {
+        synthesize_nalu(NaluType::SpsNut, |w| {
+            w.write_f(4, 0u32).unwrap(); // sps_video_parameter_set_id
+            w.write_f(3, 0u32).unwrap(); // sps_max_sub_layers_minus1
+            w.write_bit(true).unwrap(); // sps_temporal_id_nesting_flag
+            w.write_f(2, 0u32).unwrap(); // general_profile_space
+            w.write_bit(false).unwrap(); // general_tier_flag
+            w.write_f(5, 1u32).unwrap(); // general_profile_idc
+            w.write_f(32, 1u32 << 30).unwrap(); // general_profile_compatibility_flag[1]
+            w.write_f(4, 0b1001u32).unwrap(); // progressive_source .. frame_only_constraint
+            w.write_f(32, 0u32).unwrap(); // general_reserved_zero_43bits
+            w.write_f(11, 0u32).unwrap();
+            w.write_bit(false).unwrap(); // general_inbld_flag
+            w.write_f(8, 93u32).unwrap(); // general_level_idc
+            write_ue(w, 0); // sps_seq_parameter_set_id
+            write_ue(w, 1); // chroma_format_idc
+            write_ue(w, 64); // pic_width_in_luma_samples
+            write_ue(w, 64); // pic_height_in_luma_samples
+            w.write_bit(false).unwrap(); // conformance_window_flag
+            write_ue(w, 0); // bit_depth_luma_minus8
+            write_ue(w, 0); // bit_depth_chroma_minus8
+            write_ue(w, 4); // log2_max_pic_order_cnt_lsb_minus4
+            w.write_bit(true).unwrap(); // sps_sub_layer_ordering_info_present_flag
+            write_ue(w, 4); // sps_max_dec_pic_buffering_minus1[0]
+            write_ue(w, 0); // sps_max_num_reorder_pics[0]
+            write_ue(w, 0); // sps_max_latency_increase_plus1[0]
+            write_ue(w, 0); // log2_min_luma_coding_block_size_minus3
+            write_ue(w, 3); // log2_diff_max_min_luma_coding_block_size
+            write_ue(w, 0); // log2_min_luma_transform_block_size_minus2
+            write_ue(w, 3); // log2_diff_max_min_luma_transform_block_size
+            write_ue(w, 0); // max_transform_hierarchy_depth_inter
+            write_ue(w, 0); // max_transform_hierarchy_depth_intra
+            w.write_f(4, 0u32).unwrap(); // scaling_list, amp, sample_adaptive_offset, pcm
+            write_ue(w, 0); // num_short_term_ref_pic_sets
+            w.write_bit(true).unwrap(); // long_term_ref_pics_present_flag
+            write_ue(w, 0); // num_long_term_ref_pics_sps
+            w.write_f(4, 0u32).unwrap(); // temporal_mvp, strong_intra_smoothing, vui, extension
+        })
+    }
+
+    fn pps() -> Vec<u8> {
+        synthesize_nalu(NaluType::PpsNut, |w| {
+            write_ue(w, 0); // pps_pic_parameter_set_id
+            write_ue(w, 0); // pps_seq_parameter_set_id
+            w.write_f(7, 0u32).unwrap(); // dependent_slice_segments .. cabac_init_present
+            write_ue(w, 0); // num_ref_idx_l0_default_active_minus1
+            write_ue(w, 0); // num_ref_idx_l1_default_active_minus1
+            write_ue(w, 0); // init_qp_minus26
+            w.write_f(3, 0u32).unwrap(); // constrained_intra_pred .. cu_qp_delta_enabled
+            write_ue(w, 0); // pps_cb_qp_offset
+            write_ue(w, 0); // pps_cr_qp_offset
+            w.write_f(9, 0u32).unwrap(); // slice_chroma_qp_offsets_present .. scaling_list_data_present
+            w.write_bit(false).unwrap(); // lists_modification_present_flag
+            write_ue(w, 0); // log2_parallel_merge_level_minus2
+            w.write_f(2, 0u32).unwrap(); // slice_segment_header_extension_present, pps_extension_present
+        })
+    }
+
+    /// An I slice of a TRAIL_R picture signalling `num_long_term_pics` long-term pictures.
+    fn slice_with_long_term_pics(num_long_term_pics: u32) -> Vec<u8> {
+        synthesize_nalu(NaluType::TrailR, |w| {
+            w.write_bit(true).unwrap(); // first_slice_segment_in_pic_flag
+            write_ue(w, 0); // slice_pic_parameter_set_id
+            write_ue(w, 2); // slice_type (I)
+            w.write_f(8, 1u32).unwrap(); // slice_pic_order_cnt_lsb
+            w.write_bit(false).unwrap(); // short_term_ref_pic_set_sps_flag
+            write_ue(w, 0); // num_negative_pics
+            write_ue(w, 0); // num_positive_pics
+            write_ue(w, num_long_term_pics);
+            for i in 0..num_long_term_pics {
+                w.write_f(8, 100 + i).unwrap(); // poc_lsb_lt[i]
+                w.write_bit(true).unwrap(); // used_by_curr_pic_lt_flag[i]
+                w.write_bit(false).unwrap(); // delta_poc_msb_present_flag[i]
+            }
+            write_ue(w, 0); // slice_qp_delta
+        })
+    }
+
+    fn parse_slice_with_long_term_pics(num_long_term_pics: u32) -> Result<SliceHeader, String> {
+        let mut parser = Parser::default();
+        let sps = sps_with_long_term_ref_pics();
+        parser.parse_sps(&Nalu::<NaluHeader>::next(&mut Cursor::new(&sps[..])).unwrap()).unwrap();
+        let pps = pps();
+        parser.parse_pps(&Nalu::<NaluHeader>::next(&mut Cursor::new(&pps[..])).unwrap()).unwrap();
+        let slice = slice_with_long_term_pics(num_long_term_pics);
+        let nalu = Nalu::<NaluHeader>::next(&mut Cursor::new(&slice[..])).unwrap();
+        parser.parse_slice_header(nalu).map(|slice| slice.header)
+    }
+
+    #[test]
+    fn slice_header_long_term_pics_up_to_capacity() {
+        let hdr = parse_slice_with_long_term_pics(16).unwrap();
+        assert_eq!(hdr.num_long_term_sps, 0);
+        assert_eq!(hdr.num_long_term_pics, 16);
+        assert_eq!(hdr.poc_lsb_lt[15], 115);
+        assert_eq!(hdr.used_by_curr_pic_lt, [true; 16]);
+    }
+
+    #[test]
+    fn slice_header_too_many_long_term_pics_is_an_error() {
+        // num_long_term_pics is read with an upper bound of 32, but the slice
+        // header only has room for 16 long-term entries.
+        assert!(parse_slice_with_long_term_pics(17).is_err());
+        assert!(parse_slice_with_long_term_pics(32).is_err());
     }
 }
