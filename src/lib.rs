@@ -130,8 +130,9 @@ pub struct Rect {
 }
 
 impl From<Rect> for Resolution {
+    /// Returns the size of the rectangle. `x` and `y` are its origin, not part of its size.
     fn from(value: Rect) -> Self {
-        Self { width: value.width - value.x, height: value.height - value.y }
+        Self { width: value.width, height: value.height }
     }
 }
 

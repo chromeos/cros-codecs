@@ -849,6 +849,8 @@ impl Sps {
         1 << (self.log2_max_frame_num_minus4 + 4)
     }
 
+    /// Returns the visible part of the frame: `min` is the top-left crop offset and `max` is
+    /// the visible width and height, i.e. the size left after cropping all four sides.
     pub fn visible_rectangle(&self) -> Rect<u32> {
         if !self.frame_cropping_flag {
             return Rect {

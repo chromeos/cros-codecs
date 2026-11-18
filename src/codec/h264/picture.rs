@@ -203,10 +203,9 @@ impl PictureData {
 
         let visible_rect = sps.visible_rectangle();
 
-        let display_resolution = Resolution {
-            width: visible_rect.max.x - visible_rect.min.x,
-            height: visible_rect.max.y - visible_rect.min.y,
-        };
+        // `visible_rectangle()` returns the crop offset in `min` and the visible size in `max`.
+        let display_resolution =
+            Resolution { width: visible_rect.max.x, height: visible_rect.max.y };
 
         let mut pic = PictureData {
             pic_order_cnt_type: sps.pic_order_cnt_type,
@@ -411,5 +410,70 @@ impl std::fmt::Debug for PictureData {
             .field("ref_pic_marking", &self.ref_pic_marking)
             .field("field_rank", &self.field_rank)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use crate::codec::h264::parser::Nalu;
+    use crate::codec::h264::parser::Slice;
+    use crate::codec::h264::parser::SliceHeader;
+    use crate::codec::h264::parser::SpsBuilder;
+    use crate::codec::h264::picture::PictureData;
+    use crate::Rect;
+    use crate::Resolution;
+
+    /// Returns the display size of an IDR picture of a `width`x`height` 4:2:0 stream with the
+    /// given frame cropping in pixels, as computed by `PictureData` and by the stateless
+    /// backends, whose `visible_rect()` turns the SPS visible rectangle into a `Rect` that
+    /// `Resolution::from` converts.
+    fn display_sizes(
+        width: u32,
+        height: u32,
+        (top, bottom, left, right): (u32, u32, u32, u32),
+    ) -> (Resolution, Resolution) {
+        let sps = SpsBuilder::new()
+            .chroma_format_idc(1)
+            .frame_mbs_only_flag(true)
+            .resolution(width, height)
+            .frame_crop(top, bottom, left, right)
+            .build();
+
+        let idr = [0, 0, 0, 1, 0x65, 0x88];
+        let nalu = Nalu::next(&mut Cursor::new(&idr[..])).unwrap();
+        let slice = Slice { header: SliceHeader::default(), nalu };
+        let picture = PictureData::new_from_slice(&slice, &sps, 0, None);
+
+        let rect = sps.visible_rectangle();
+        let backend = Resolution::from(Rect {
+            x: rect.min.x,
+            y: rect.min.y,
+            width: rect.max.x,
+            height: rect.max.y,
+        });
+
+        (picture.display_resolution, backend)
+    }
+
+    #[test]
+    fn display_size_with_right_and_bottom_crop() {
+        let expected = Resolution { width: 1916, height: 1080 };
+        assert_eq!(display_sizes(1920, 1088, (0, 8, 0, 4)), (expected, expected));
+    }
+
+    #[test]
+    fn display_size_with_left_and_top_crop() {
+        // 320 - 16 - 32 by 240 - 8 - 0.
+        let expected = Resolution { width: 272, height: 232 };
+        assert_eq!(display_sizes(320, 240, (8, 0, 16, 32)), (expected, expected));
+    }
+
+    #[test]
+    fn display_size_with_left_crop_larger_than_the_visible_width() {
+        // A 200 pixel left crop of a 320 pixel wide frame leaves 120 visible pixels.
+        let expected = Resolution { width: 120, height: 240 };
+        assert_eq!(display_sizes(320, 240, (0, 0, 200, 0)), (expected, expected));
     }
 }
